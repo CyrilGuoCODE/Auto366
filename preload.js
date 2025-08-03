@@ -65,31 +65,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateLocations: (callback) => ipcRenderer.on('update-locations', callback),
   startPoint: () => ipcRenderer.send('start-point'),
   onOperationComplete: (callback) => ipcRenderer.on('operation-complete', callback),
-  deleteAllFiles: () => {
-    if (!fs.existsSync(resourcePath)) {
-      return { error: '资源路径不存在' }
-    }
-    
-    try {
-      const files = fs.readdirSync(resourcePath)
-      let deletedCount = 0
-      
-      for (const file of files) {
-        const filePath = path.join(resourcePath, file)
-        const stats = fs.statSync(filePath)
-        
-        if (stats.isDirectory()) {
-          deleteDirectoryRecursively(filePath)
-          deletedCount++
-        } else {
-          fs.unlinkSync(filePath)
-          deletedCount++
-        }
-      }
-      
-      return { success: true, deletedCount }
-    } catch (e) {
-      return { error: '删除文件时出错: ' + e.message }
-    }
-  }
+     deleteAllFiles: () => {
+     if (!fs.existsSync(resourcePath)) {
+       return { error: '资源路径不存在' }
+     }
+     
+     try {
+       const files = fs.readdirSync(resourcePath)
+       let deletedCount = 0
+       
+       for (const file of files) {
+         // 跳过名为 1944930808082993236 的文件夹
+         if (file === '1944930808082993236') {
+           continue
+         }
+         
+         const filePath = path.join(resourcePath, file)
+         const stats = fs.statSync(filePath)
+         
+         if (stats.isDirectory()) {
+           deleteDirectoryRecursively(filePath)
+           deletedCount++
+         } else {
+           fs.unlinkSync(filePath)
+           deletedCount++
+         }
+       }
+       
+       return { success: true, deletedCount }
+     } catch (e) {
+       return { error: '删除文件时出错: ' + e.message }
+     }
+   }
 })

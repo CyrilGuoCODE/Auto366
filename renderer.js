@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = window.electronAPI.checkSecond(initialFiles)
 
         if (result.error) {
-            resultDiv.innerHTML = `<span class="error">❌ ${result.error}</span>`
+            resultDiv.innerHTML = `<span class="error">${result.error}</span>`
         } else {
             resultDiv.innerHTML = `
                 <strong>再次检测完成！</strong><br>
@@ -101,7 +101,7 @@ window.electronAPI.onOperationComplete((event, result) => {
 document.getElementById('deleteBtn').addEventListener('click', () => {
   const resultDiv = document.getElementById('result');
 
-  if (confirm('⚠️ 警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n确定要继续吗？')) {
+     if (confirm('警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n注意：将保留名为 1944930808082993236 的文件夹\n\n确定要继续吗？')) {
     resultDiv.innerHTML = `
       <strong>正在删除文件...</strong><br>
       请稍候
