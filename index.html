@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+<!--    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'">-->
+    <title>UP366资源检测器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        .buttons {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            min-height: 100px;
+            text-align: left;
+            white-space: pre-wrap;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>UP366资源检测器</h1>
+    <div class="buttons">
+        <button id="firstCheck">首次检测</button>
+        <button id="secondCheck" disabled>再次检测</button>
+        <button id="locationBtn">定位填充数据</button>
+        <button id="startBtn" disabled>开始填充数据</button>
+    </div>
+    <div id="locationData">暂无数据</div>
+    <div id="result">请先点击"首次检测"按钮，然后点击"再次检测"按钮</div>
+
+    <script src="./renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!-- 定位窗口 - location.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>位置选择</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; overflow: hidden; background: transparent }
+    .marker {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background-color: red;
+      border-radius: 50%;
+      cursor: move;
+      user-select: none;
+      z-index: 10;
+    }
+    .marker::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 10px;
+      height: 10px;
+      background: white;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #marker1 { top: 100px; left: 150px; }
+    #marker2 { top: 200px; left: 350px; background-color: blue; }
+    #confirmBtn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <div id="marker1" class="marker"></div>
+  <div id="marker2" class="marker"></div>
+  <button id="confirmBtn">确定</button>
+
+  <script>
+    const markers = {
+      marker1: document.getElementById('marker1'),
+      marker2: document.getElementById('marker2')
+    };
+
+    let activeMarker = null;
+    let offset = { x: 0, y: 0 };
+
+    // 拖拽功能
+    Object.values(markers).forEach(marker => {
+      marker.addEventListener('mousedown', (e) => {
+        activeMarker = marker;
+        offset.x = marker.offsetLeft - e.clientX;
+        offset.y = marker.offsetTop - e.clientY;
+      });
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!activeMarker) return;
+
+      activeMarker.style.left = `${e.clientX + offset.x}px`;
+      activeMarker.style.top = `${e.clientY + offset.y}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      activeMarker = null;
+    });
+
+    // 确认按钮
+    document.getElementById('confirmBtn').addEventListener('click', () => {
+      const locations = {
+        pos1: getPosition(markers.marker1),
+        pos2: getPosition(markers.marker2)
+      };
+
+      window.electronAPI.setLocations(locations);
+      window.close();
+    });
+
+    function getPosition(element) {
+      const rect = element.getBoundingClientRect();
+      return {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2)
+      };
+    }
+  </script>
+</body>
+</html>
