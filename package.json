@@ -1,14 +1,41 @@
 {
-  "name": "up366-auto",
-  "version": "1.0.0",
+  "name": "auto366",
+  "version": "0.1.0",
   "main": "main.js",
+  "author": "Auto366",
+  "license": "GNUV3",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cyrilguocode/Auto366.git"
+  },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder build --win --publish never"
   },
   "dependencies": {
     "@nut-tree/nut-js": "^3.1.2",
     "electron": "^28.0.0",
     "fs": "^0.0.1-security",
     "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.auto366.app",
+    "productName": "Auto366",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "!dist/**/*",
+      "!.git/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    }
   }
 }

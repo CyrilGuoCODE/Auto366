@@ -13,7 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return
         }
 
-        resultDiv.textContent = '首次检测完成，请点击"再次检测"按钮'
+        resultDiv.innerHTML = `
+            <strong>首次检测完成！</strong><br>
+            当前资源目录包含 ${initialFiles.length} 个文件<br>
+            <br>
+            <strong>下一步：</strong><br>
+            1. 在天学网中找到并下载一个未下载的练习<br>
+            2. 确保下载完成后，点击"再次检测"按钮
+        `
         secondCheckBtn.disabled = false
         firstCheckBtn.disabled = true
     })
@@ -22,9 +29,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = window.electronAPI.checkSecond(initialFiles)
 
         if (result.error) {
-            resultDiv.innerHTML = `<span class="error">${result.error}</span>`
+            resultDiv.innerHTML = `<span class="error">❌ ${result.error}</span>`
         } else {
-            resultDiv.textContent = `检测结果:\n${result.answer.join('\n')}`
+            resultDiv.innerHTML = `
+                <strong>再次检测完成！</strong><br>
+                检测到 ${result.answer.length} 个答案<br>
+                <br>
+                <strong>答案列表：</strong><br>
+                ${result.answer.map((ans, index) => `${index + 1}. ${ans}`).join('<br>')}
+                <br>
+                <br>
+                <strong>下一步：</strong><br>
+                点击"定位填充数据"按钮，在练习页面中设置坐标
+            `
         }
 
         // 重置按钮状态
@@ -37,13 +54,46 @@ document.getElementById('locationBtn').addEventListener('click', () => {
 });
 
 window.electronAPI.updateLocations((event, locations) => {
-  const display = `位置1: (${locations.pos1.x}, ${locations.pos1.y})<br>
-                  位置2: (${locations.pos2.x}, ${locations.pos2.y})`;
+  const display = `
+    <strong>坐标设置完成！</strong><br>
+    🔴 输入框位置: (${locations.pos1.x}, ${locations.pos1.y})<br>
+    🔵 下一页按钮位置: (${locations.pos2.x}, ${locations.pos2.y})<br>
+    <br>
+    <strong>下一步：</strong><br>
+    点击"开始填充数据"按钮开始自动填写
+  `;
   document.getElementById('locationData').innerHTML = display;
   document.getElementById('startBtn').disabled = false
 });
 
 document.getElementById('startBtn').addEventListener('click', () => {
+  const resultDiv = document.getElementById('result');
+  resultDiv.innerHTML = `
+    <strong>🔄 正在执行自动填充...</strong><br>
+    ⏳ 请稍候，不要移动鼠标或切换窗口
+  `;
   window.electronAPI.startPoint();
+});
+
+// 监听操作完成事件
+window.electronAPI.onOperationComplete((event, result) => {
+  const resultDiv = document.getElementById('result');
+  if (result.success) {
+    resultDiv.innerHTML = `
+      <strong>自动填充完成！</strong><br>
+      所有答案已成功填写并翻页<br>
+      <br>
+      <strong>可以开始新的练习：</strong><br>
+      1. 重新点击"首次检测"按钮<br>
+      2. 下载新的练习<br>
+      3. 重复上述流程
+    `;
+  } else {
+    resultDiv.innerHTML = `
+      <strong>操作失败</strong><br>
+      错误信息: ${result.error}<br>
+      <br>
+    `;
+  }
 });
 

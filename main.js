@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron')
 const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
 
@@ -10,7 +10,6 @@ let ans
 // 初始化nut.js配置
 async function initNut() {
   try {
-    await nutScreen.config.setResourceDirectory(path.join(__dirname, 'node_modules/@nut-tree/template-matcher/res'));
     console.log('nut.js初始化成功');
   } catch (error) {
     console.error('nut.js初始化失败:', error);
@@ -69,6 +68,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -85,6 +85,10 @@ function createWindow() {
       app.quit()
     }
   })
+
+  globalShortcut.register('Ctrl+Shift+Q', () => {
+    app.quit()
+  })
 }
 
 app.whenReady().then(async () => {
@@ -94,6 +98,13 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('ready', () => {
+  if (process.platform === 'win32') {
+    const { exec } = require('child_process');
+    exec('powershell -Command "Start-Process -FilePath \'' + process.execPath + '\' -Verb RunAs"');
+  }
 })
 
 app.on('window-all-closed', function () {
@@ -111,6 +122,7 @@ ipcMain.on('open-location-window', () => {
     x: 0,
     y: 0,
     modal: true,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: true,

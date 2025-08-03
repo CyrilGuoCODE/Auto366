@@ -3,7 +3,8 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>位置选择</title>
+  <title>Auto366 - 位置选择</title>
+  <link rel="icon" type="image/png" href="icon.png">
   <style>
     body { font-family: Arial, sans-serif; margin: 0; overflow: hidden; background: transparent }
     .marker {
@@ -36,60 +37,113 @@
       padding: 10px 20px;
       z-index: 100;
     }
+         .instructions-panel {
+       position: fixed;
+       top: 20px;
+       left: 20px;
+       background: rgba(0, 0, 0, 0.8);
+       color: white;
+       padding: 15px;
+       border-radius: 8px;
+       z-index: 100;
+       max-width: 300px;
+       cursor: move;
+       user-select: none;
+     }
+    .instructions-panel h3 {
+      margin: 0 0 10px 0;
+      color: #fff;
+    }
+    .instructions-panel p {
+      margin: 5px 0;
+      font-size: 14px;
+    }
+    .tip {
+      color: #ffd700;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
+     <div class="instructions-panel">
+     <h3>定位说明</h3>
+     <p>🔴 <strong>红点</strong>：拖拽到答案输入框位置</p>
+     <p>🔵 <strong>蓝点</strong>：拖拽到"下一页"按钮位置</p>
+     <p class="tip">提示：确保两个点都准确放置在目标位置，然后点击确定</p>
+     <p class="tip">可拖动此面板到其他位置</p>
+   </div>
+  
   <div id="marker1" class="marker"></div>
   <div id="marker2" class="marker"></div>
   <button id="confirmBtn">确定</button>
 
-  <script>
-    const markers = {
-      marker1: document.getElementById('marker1'),
-      marker2: document.getElementById('marker2')
-    };
+     <script>
+     const markers = {
+       marker1: document.getElementById('marker1'),
+       marker2: document.getElementById('marker2')
+     };
 
-    let activeMarker = null;
-    let offset = { x: 0, y: 0 };
+     let activeMarker = null;
+     let offset = { x: 0, y: 0 };
 
-    // 拖拽功能
-    Object.values(markers).forEach(marker => {
-      marker.addEventListener('mousedown', (e) => {
-        activeMarker = marker;
-        offset.x = marker.offsetLeft - e.clientX;
-        offset.y = marker.offsetTop - e.clientY;
-      });
-    });
+     // 说明面板拖拽功能
+     const instructionsPanel = document.querySelector('.instructions-panel');
+     let isDraggingPanel = false;
+     let panelOffset = { x: 0, y: 0 };
 
-    document.addEventListener('mousemove', (e) => {
-      if (!activeMarker) return;
+     instructionsPanel.addEventListener('mousedown', (e) => {
+       isDraggingPanel = true;
+       panelOffset.x = instructionsPanel.offsetLeft - e.clientX;
+       panelOffset.y = instructionsPanel.offsetTop - e.clientY;
+     });
 
-      activeMarker.style.left = `${e.clientX + offset.x}px`;
-      activeMarker.style.top = `${e.clientY + offset.y}px`;
-    });
+     // 拖拽功能
+     Object.values(markers).forEach(marker => {
+       marker.addEventListener('mousedown', (e) => {
+         activeMarker = marker;
+         offset.x = marker.offsetLeft - e.clientX;
+         offset.y = marker.offsetTop - e.clientY;
+       });
+     });
 
-    document.addEventListener('mouseup', () => {
-      activeMarker = null;
-    });
+     document.addEventListener('mousemove', (e) => {
+       // 拖拽说明面板
+       if (isDraggingPanel) {
+         instructionsPanel.style.left = `${e.clientX + panelOffset.x}px`;
+         instructionsPanel.style.top = `${e.clientY + panelOffset.y}px`;
+         return;
+       }
 
-    // 确认按钮
-    document.getElementById('confirmBtn').addEventListener('click', () => {
-      const locations = {
-        pos1: getPosition(markers.marker1),
-        pos2: getPosition(markers.marker2)
-      };
+       // 拖拽标记点
+       if (!activeMarker) return;
 
-      window.electronAPI.setLocations(locations);
-      window.close();
-    });
+       activeMarker.style.left = `${e.clientX + offset.x}px`;
+       activeMarker.style.top = `${e.clientY + offset.y}px`;
+     });
 
-    function getPosition(element) {
-      const rect = element.getBoundingClientRect();
-      return {
-        x: Math.round(rect.left + rect.width / 2),
-        y: Math.round(rect.top + rect.height / 2)
-      };
-    }
-  </script>
+     document.addEventListener('mouseup', () => {
+       activeMarker = null;
+       isDraggingPanel = false;
+     });
+
+     // 确认按钮
+     document.getElementById('confirmBtn').addEventListener('click', () => {
+       const locations = {
+         pos1: getPosition(markers.marker1),
+         pos2: getPosition(markers.marker2)
+       };
+
+       window.electronAPI.setLocations(locations);
+       window.close();
+     });
+
+     function getPosition(element) {
+       const rect = element.getBoundingClientRect();
+       return {
+         x: Math.round(rect.left + rect.width / 2),
+         y: Math.round(rect.top + rect.height / 2)
+       };
+     }
+   </script>
 </body>
 </html>

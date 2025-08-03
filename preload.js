@@ -34,8 +34,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         answer.push(parts[1])
       }
 
-      ipcRenderer.send('set-answer', answer.sort())
-      return { answer: answer.sort() }
+      const sortedAnswer = answer.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+      ipcRenderer.send('set-answer', sortedAnswer)
+      return { answer: sortedAnswer }
     } catch (e) {
       return { error: '处理文件时出错: ' + e.message }
     }
@@ -43,5 +44,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openLocationWindow: () => ipcRenderer.send('open-location-window'),
   setLocations: (locations) => ipcRenderer.send('set-locations', locations),
   updateLocations: (callback) => ipcRenderer.on('update-locations', callback),
-  startPoint: () => ipcRenderer.send('start-point')
+  startPoint: () => ipcRenderer.send('start-point'),
+  onOperationComplete: (callback) => ipcRenderer.on('operation-complete', callback)
 })
