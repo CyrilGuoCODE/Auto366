@@ -4,6 +4,25 @@ const path = require('path')
 
 const resourcePath = 'D:/Up366StudentFiles/resources/'
 
+function deleteDirectoryRecursively(dirPath) {
+  if (fs.existsSync(dirPath)) {
+    const files = fs.readdirSync(dirPath)
+    
+    for (const file of files) {
+      const curPath = path.join(dirPath, file)
+      const stats = fs.statSync(curPath)
+      
+      if (stats.isDirectory()) {
+        deleteDirectoryRecursively(curPath)
+      } else {
+        fs.unlinkSync(curPath)
+      }
+    }
+    
+    fs.rmdirSync(dirPath)
+  }
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   checkFirst: () => {
     if (!fs.existsSync(resourcePath)) return null
@@ -45,5 +64,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLocations: (locations) => ipcRenderer.send('set-locations', locations),
   updateLocations: (callback) => ipcRenderer.on('update-locations', callback),
   startPoint: () => ipcRenderer.send('start-point'),
-  onOperationComplete: (callback) => ipcRenderer.on('operation-complete', callback)
+  onOperationComplete: (callback) => ipcRenderer.on('operation-complete', callback),
+  deleteAllFiles: () => {
+    if (!fs.existsSync(resourcePath)) {
+      return { error: '资源路径不存在' }
+    }
+    
+    try {
+      const files = fs.readdirSync(resourcePath)
+      let deletedCount = 0
+      
+      for (const file of files) {
+        const filePath = path.join(resourcePath, file)
+        const stats = fs.statSync(filePath)
+        
+        if (stats.isDirectory()) {
+          deleteDirectoryRecursively(filePath)
+          deletedCount++
+        } else {
+          fs.unlinkSync(filePath)
+          deletedCount++
+        }
+      }
+      
+      return { success: true, deletedCount }
+    } catch (e) {
+      return { error: '删除文件时出错: ' + e.message }
+    }
+  }
 })

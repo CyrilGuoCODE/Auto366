@@ -18,8 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
             当前资源目录包含 ${initialFiles.length} 个文件<br>
             <br>
             <strong>下一步：</strong><br>
-            1. 在天学网中找到并下载一个未下载的练习<br>
-            2. 确保下载完成后，点击"再次检测"按钮
+            1. 清理资源目录（如果有文件请点击"删除已下载"按钮清理资源目录（必须））<br>
+            2. 在天学网中找到并下载一个未下载的练习<br>
+            3. 确保下载完成后，点击"再次检测"按钮
         `
         secondCheckBtn.disabled = false
         firstCheckBtn.disabled = true
@@ -94,6 +95,36 @@ window.electronAPI.onOperationComplete((event, result) => {
       错误信息: ${result.error}<br>
       <br>
     `;
+  }
+});
+
+document.getElementById('deleteBtn').addEventListener('click', () => {
+  const resultDiv = document.getElementById('result');
+
+  if (confirm('⚠️ 警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n确定要继续吗？')) {
+    resultDiv.innerHTML = `
+      <strong>正在删除文件...</strong><br>
+      请稍候
+    `;
+    
+    const result = window.electronAPI.deleteAllFiles();
+    
+    if (result.error) {
+      resultDiv.innerHTML = `
+        <strong>删除失败</strong><br>
+        错误信息: ${result.error}
+      `;
+    } else {
+      resultDiv.innerHTML = `
+        <strong>删除成功！</strong><br>
+        已删除 ${result.deletedCount} 个文件/目录<br>
+        <br>
+        <strong>现在可以：</strong><br>
+        1. 点击"首次检测"按钮<br>
+        2. 下载新的练习
+        3. 点击再次检测按钮
+      `;
+    }
   }
 });
 
