@@ -7,6 +7,8 @@ let locationWindow
 let pos
 let ans
 
+
+
 // 初始化nut.js配置
 async function initNut() {
   try {
@@ -77,6 +79,8 @@ function createWindow() {
     }
   })
 
+  mainWindow.setMenu(null);
+
   mainWindow.loadFile('index.html')
   // mainWindow.webContents.openDevTools({ mode: 'detach' });
 
@@ -100,12 +104,7 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('ready', () => {
-  if (process.platform === 'win32') {
-    const { exec } = require('child_process');
-    exec('powershell -Command "Start-Process -FilePath \'' + process.execPath + '\' -Verb RunAs"');
-  }
-})
+
 
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
