@@ -1,6 +1,7 @@
 {
   "name": "auto366",
   "version": "0.1.0",
+  "description": "天学网自动化答题工具，支持听音写词练习的自动填写",
   "main": "main.js",
   "author": "Auto366",
   "license": "GNUV3",
@@ -14,11 +15,11 @@
   },
   "dependencies": {
     "@nut-tree/nut-js": "^3.1.2",
-    "electron": "^28.0.0",
     "fs": "^0.0.1-security",
     "path": "^0.12.7"
   },
   "devDependencies": {
+    "electron": "^28.0.0",
     "electron-builder": "^24.6.4"
   },
   "build": {
