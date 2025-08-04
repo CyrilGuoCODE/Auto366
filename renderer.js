@@ -183,6 +183,141 @@ document.getElementById('findPathBtn').addEventListener('click', () => {
   }
 });
 
+document.getElementById('findAnswerPathBtn').addEventListener('click', () => {
+  const resultDiv = document.getElementById('answerResult');
+  const folderPathInput = document.getElementById('answerFolderPath');
+  
+  resultDiv.innerHTML = `
+    <strong>正在寻找可用路径...</strong><br>
+    请稍候
+  `;
+  
+  const result = window.electronAPI.getFlipbooksFolders();
+  
+  if (result.error) {
+    resultDiv.innerHTML = `
+      <strong>寻找失败</strong><br>
+      错误信息: ${result.error}
+    `;
+  } else {
+    if (result.folders.length === 0) {
+      resultDiv.innerHTML = `
+        <strong>未找到可用路径</strong><br>
+        flipbooks目录下没有找到任何文件夹
+      `;
+    } else if (result.folders.length === 1) {
+      folderPathInput.value = result.folders[0];
+      resultDiv.innerHTML = `
+        <strong>自动填写完成！</strong><br>
+        找到1个文件夹：${result.folders[0]}<br>
+        已自动填写到输入框中
+      `;
+    } else {
+      resultDiv.innerHTML = `
+        <strong>找到多个文件夹</strong><br>
+        请从以下列表中选择一个：<br>
+        ${result.folders.map(folder => `• ${folder}`).join('<br>')}<br>
+        <br>
+        请手动输入要使用的文件夹路径
+      `;
+    }
+  }
+});
+
+document.getElementById('getAnswerBtn').addEventListener('click', () => {
+  const resultDiv = document.getElementById('answerResult');
+  const folderPath = document.getElementById('answerFolderPath').value.trim();
+  
+  if (!folderPath) {
+    resultDiv.innerHTML = `
+      <strong>错误</strong><br>
+      请输入文件夹路径
+    `;
+    return;
+  }
+  
+  resultDiv.innerHTML = `
+    <strong>正在获取听力答案...</strong><br>
+    请稍候
+  `;
+  
+  const result = window.electronAPI.getListeningAnswers(folderPath);
+  
+  if (result.error) {
+    resultDiv.innerHTML = `
+      <strong>获取失败</strong><br>
+      错误信息: ${result.error}
+    `;
+  } else {
+    let p2Content = ''
+    if (Object.keys(result.P2).length > 0) {
+      p2Content = '<strong>P2听后回答 - 音频标答文件：</strong><br>'
+      for (const [className, files] of Object.entries(result.P2)) {
+        p2Content += `<strong>${className}：</strong><br>`
+        files.forEach((file, index) => {
+          const audioId = `audio_${className}_${index}`
+          p2Content += `
+            <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+              <div style="margin-bottom: 10px; font-weight: bold; color: #333;">音频 ${index + 1}：</div>
+              <audio id="${audioId}" controls style="width: 100%; max-width: 500px; height: 40px; border-radius: 6px; background: #fff;">
+                <source src="file:///${file}" type="audio/mpeg">
+                您的浏览器不支持音频播放
+              </audio>
+              <div style="margin-top: 10px; font-size: 11px; color: #888; word-wrap: break-word; word-break: break-all; line-height: 1.4; background: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #007bff;">${file}</div>
+            </div>
+          `
+        })
+        p2Content += '<br>'
+      }
+    } else {
+      p2Content = '<strong>P2听后回答 - 音频标答文件：</strong> 未找到音频文件<br><br>'
+    }
+    
+    let p3Content = ''
+    if (result.P3.length > 0) {
+      p3Content = '<strong>P3听后转述 - JSON标答：</strong><br>'
+      result.P3.forEach((item, index) => {
+        p3Content += `<strong>答案文件 ${index + 1}：</strong><br>`
+        p3Content += `<div style="font-size: 11px; color: #888; word-wrap: break-word; word-break: break-all; line-height: 1.4; background: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #28a745; margin: 5px 0;">${item.path}</div>`
+        if (item.error) {
+          p3Content += `<div style="color: #dc3545; margin: 5px 0;">错误: ${item.error}</div>`
+        } else {
+          const filteredData = {}
+          if (item.data.OriginalStandard) {
+            filteredData.OriginalStandard = item.data.OriginalStandard
+          }
+          if (item.data.OriginalReference) {
+            filteredData.OriginalReference = item.data.OriginalReference
+          }
+          if (item.data.Standard) {
+            filteredData.Standard = item.data.Standard
+          }
+          if (item.data.Reference) {
+            filteredData.Reference = item.data.Reference
+          }
+          if (item.data.Answer) {
+            filteredData.Answer = item.data.Answer
+          }
+          if (item.data.Content) {
+            filteredData.Content = item.data.Content
+          }
+          p3Content += `<pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; margin: 5px 0;">${JSON.stringify(filteredData, null, 2)}</pre>`
+        }
+        p3Content += '<br>'
+      })
+    } else {
+      p3Content = '<strong>P3听后转述 - JSON标答：</strong> 未找到答案文件<br>'
+    }
+    
+    resultDiv.innerHTML = `
+      <strong>获取成功！</strong><br>
+      已找到听力答案数据<br><br>
+      ${p2Content}
+      ${p3Content}
+    `;
+  }
+});
+
 document.getElementById('replaceBtn').addEventListener('click', () => {
   const resultDiv = document.getElementById('replaceResult');
   const folderPath = document.getElementById('folderPath').value.trim();

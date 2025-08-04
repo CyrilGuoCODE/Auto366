@@ -1,6 +1,6 @@
 {
   "name": "auto366",
-  "version": "0.1.2",
+  "version": "0.1.5",
   "description": "天学网自动化答题工具，支持听音写词练习的自动填写",
   "main": "main.js",
   "author": "Auto366",

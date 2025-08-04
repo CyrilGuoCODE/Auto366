@@ -29,6 +29,10 @@
                     <h3>听力替换</h3>
                     <p>等待时音频文件替换3秒空白音频</p>
                 </div>
+                <div class="feature-card" onclick="showFeature('get-answer')">
+                    <h3>听力答案获取</h3>
+                    <p>自动获取听后回答和转述的标准答案</p>
+                </div>
             </div>
             
             <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
@@ -144,6 +148,45 @@
                 此功能用于将等待时间缩小到3秒，时间利用更高效<br>
                 请按照上方教程步骤操作<br>
                 输入文件夹路径后点击相应按钮执行操作
+            </div>
+            
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
+                <p><strong>免责声明</strong>：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
+                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
+                <p>许可证：GNU General Public License v3.0</p>
+            </div>
+        </div>
+
+        <div id="get-answer-content" class="content-area">
+            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <h1>听力答案获取</h1>
+            
+            <div class="tutorial">
+                <h2>使用教程</h2>
+                <ol>
+                    <li><strong>自动寻找路径：</strong>点击"自动寻找"按钮，系统会自动扫描flipbooks目录下的文件夹</li>
+                    <li><strong>输入路径：</strong>如果只有一个文件夹会自动填写，多个文件夹请手动选择输入</li>
+                    <li><strong>获取答案：</strong>点击"获取答案"按钮，系统将扫描并提取听力答案</li>
+                    <li><strong>查看结果：</strong>P2听后回答部分显示音频标答文件，P3听后转述部分显示解析的JSON答案</li>
+                </ol>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <label for="answerFolderPath" style="display: block; margin-bottom: 10px; font-weight: bold;">文件夹路径：</label>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <input type="text" id="answerFolderPath" placeholder="请输入文件夹路径" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    <button id="findAnswerPathBtn" style="padding: 10px 20px; border: 1px solid #ddd; background: white; cursor: pointer; border-radius: 4px; white-space: nowrap;">自动寻找</button>
+                </div>
+            </div>
+            
+            <div class="buttons">
+                <button id="getAnswerBtn">获取答案</button>
+            </div>
+            <div id="answerResult">
+                <strong>欢迎使用听力答案获取功能！</strong><br>
+                此功能用于获取听后回答和转述的标准答案<br>
+                请按照上方教程步骤操作<br>
+                输入文件夹路径后点击获取答案按钮
             </div>
             
             <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">

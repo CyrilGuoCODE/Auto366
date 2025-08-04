@@ -192,5 +192,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
      } catch (e) {
        return { error: '读取目录失败: ' + e.message }
      }
+   },
+   getListeningAnswers: (choosePath) => {
+     const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
+     const targetFolder = flipbooksPath + choosePath
+     
+     if (!fs.existsSync(targetFolder)) {
+       return { error: '目标路径不存在: ' + targetFolder }
+     }
+
+     try {
+       let results = {'P2': {}, 'P3': []}
+       
+       function findFilesByExtension(dir) {
+         let list = fs.readdirSync(dir)
+         let pending = list.length
+         if (pending === 0) return
+
+         for (let dirent of list) {
+           const dirName = path.resolve(dir, dirent)
+           if (fs.statSync(dirName).isDirectory()) {
+             findFilesByExtension(dirName)
+           } else {
+             if (dirent.includes('A') && dirent.toLowerCase().includes('.mp3')) {
+               let len = dirent.length
+               let className = dirent.substring(1, len-6)
+               if (!(className in results['P2'])) results['P2'][className] = [dirName]
+               else results['P2'][className].push(dirName)
+             }
+             if (dirName.includes('psdata_new') && dirent === 'answer.json') {
+               results['P3'].push(dirName)
+             }
+           }
+         }
+       }
+
+       findFilesByExtension(targetFolder)
+       
+       const p3Answers = []
+       for (const answerPath of results['P3']) {
+         try {
+           const answerContent = fs.readFileSync(answerPath, 'utf8')
+           const answerData = JSON.parse(answerContent)
+           p3Answers.push({
+             path: answerPath,
+             data: answerData
+           })
+         } catch (e) {
+           p3Answers.push({
+             path: answerPath,
+             error: '解析JSON失败: ' + e.message
+           })
+         }
+       }
+       
+       const p2WithProtocol = {}
+       for (const [className, files] of Object.entries(results['P2'])) {
+         p2WithProtocol[className] = files.map(file => file.replace(/\\/g, '/'))
+       }
+       
+       return {
+         success: true,
+         P2: p2WithProtocol,
+         P3: p3Answers
+       }
+     } catch (e) {
+       return { error: '获取答案失败: ' + e.message }
+     }
    }
 })
