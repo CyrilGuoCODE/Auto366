@@ -282,26 +282,30 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
         if (item.error) {
           p3Content += `<div style="color: #dc3545; margin: 5px 0;">错误: ${item.error}</div>`
         } else {
-          const filteredData = {}
-          if (item.data.OriginalStandard) {
-            filteredData.OriginalStandard = item.data.OriginalStandard
+          if (item.data.Data.OriginalStandard) {
+		    p3Content += `
+			  <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+			    <div style="margin-bottom: 10px; font-weight: bold; color: #333;">标准答案：</div>
+		    `
+			item.data.Data.OriginalStandard.forEach((item1, index) => {
+				p3Content += `<p>${item1}</p>`
+			})
+		    p3Content += `
+			  </div>
+		    `
           }
-          if (item.data.OriginalReference) {
-            filteredData.OriginalReference = item.data.OriginalReference
+          if (item.data.Data.OriginalReference) {
+		    p3Content += `
+			  <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+			    <div style="margin-bottom: 10px; font-weight: bold; color: #333;">参考答案：</div>
+		    `
+			item.data.Data.OriginalReference.forEach((item1, index) => {
+				p3Content += `<p>${item1}</p>`
+			})
+		    p3Content += `
+			  </div>
+		    `
           }
-          if (item.data.Standard) {
-            filteredData.Standard = item.data.Standard
-          }
-          if (item.data.Reference) {
-            filteredData.Reference = item.data.Reference
-          }
-          if (item.data.Answer) {
-            filteredData.Answer = item.data.Answer
-          }
-          if (item.data.Content) {
-            filteredData.Content = item.data.Content
-          }
-          p3Content += `<pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; margin: 5px 0;">${JSON.stringify(filteredData, null, 2)}</pre>`
         }
         p3Content += '<br>'
       })

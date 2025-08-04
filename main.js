@@ -73,7 +73,7 @@ function createWindow() {
   mainWindow.setMenu(null);
 
   mainWindow.loadFile('index.html')
-  // mainWindow.webContents.openDevTools({ mode: 'detach' });
+//  mainWindow.webContents.openDevTools({ mode: 'detach' });
 
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.control && input.shift && input.key.toLowerCase() === 'q') {
@@ -82,7 +82,6 @@ function createWindow() {
   })
 
   globalShortcut.register('Ctrl+Shift+Q', () => {
-//    app.quit()
     flag = 0
   })
 }
