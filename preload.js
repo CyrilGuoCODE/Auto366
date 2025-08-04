@@ -259,5 +259,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
      } catch (e) {
        return { error: '获取答案失败: ' + e.message }
      }
-   }
+   },
+   openLocationWindowPk: () => ipcRenderer.send('open-location-window-pk'),
+   setLocationsPk1: ()=> ipcRenderer.send('set-locations-pk-1'),
+   setLocationsPk2: ()=> ipcRenderer.send('set-locations-pk-2'),
+   startChoose: () => ipcRenderer.send('start-choose')
 })

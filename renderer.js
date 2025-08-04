@@ -396,3 +396,15 @@ document.getElementById('restoreBtn').addEventListener('click', () => {
   }
 });
 
+document.getElementById('locationBtn-pk').addEventListener('click', () => {
+  window.electronAPI.openLocationWindowPk();
+});
+
+document.getElementById('startBtn-pk').addEventListener('click', () => {
+  const resultDiv = document.getElementById('result');
+  resultDiv.innerHTML = `
+    <strong>正在执行自动选择...</strong><br>
+    请稍候，不要移动鼠标或切换窗口
+  `;
+  window.electronAPI.startChoose();
+});

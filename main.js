@@ -1,10 +1,13 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron')
 const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
+const { spawn } = require('child_process')
 
 let mainWindow
 let locationWindow
+let locationWindowPk
 let pos
+let pos_pk = {}
 let ans
 let flag = 0;
 
@@ -189,4 +192,107 @@ ipcMain.on('start-point', async () => {
 
 ipcMain.on('set-answer', (event, answer) => {
   ans = answer
+})
+
+ipcMain.on('open-location-window-pk', () => {
+  if (locationWindowPk) locationWindowPk.close();
+
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
+  locationWindowPk = new BrowserWindow({
+    width: width,
+    height: height,
+    x: 0,
+    y: 0,
+    modal: true,
+    icon: path.join(__dirname, 'icon.png'),
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      preload: `${__dirname}/preload.js`
+    },
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: true,
+    type: 'panel',
+    titleBarStyle: 'hidden',
+    visualEffectState: 'active',
+    transparent: true,
+    hasShadow: false,
+    skipTaskbar: true,
+  });
+
+  locationWindowPk.loadFile('selection1.html');
+  locationWindowPk.setMenu(null);
+  locationWindowPk.setAlwaysOnTop(true, 'screen-saver', 1);
+
+  locationWindowPk.on('closed', () => {
+    locationWindowPk = null;
+  });
+});
+
+ipcMain.on('set-locations-pk-1', (event, pos1) => {
+  pos_pk.pos1 = pos1
+  
+  if (locationWindowPk) locationWindowPk.close();
+
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
+  locationWindowPk = new BrowserWindow({
+    width: width,
+    height: height,
+    x: 0,
+    y: 0,
+    modal: true,
+    icon: path.join(__dirname, 'icon.png'),
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      preload: `${__dirname}/preload.js`
+    },
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: true,
+    type: 'panel',
+    titleBarStyle: 'hidden',
+    visualEffectState: 'active',
+    transparent: true,
+    hasShadow: false,
+    skipTaskbar: true,
+  });
+
+  locationWindowPk.loadFile('selection2.html');
+  locationWindowPk.setMenu(null);
+  locationWindowPk.setAlwaysOnTop(true, 'screen-saver', 1);
+
+  locationWindowPk.on('closed', () => {
+    locationWindowPk = null;
+  });
+})
+
+ipcMain.on('set-locations-pk-1', (event, pos2) => {
+  pos_pk.pos2 = pos2
+  mainWindow.webContents.send('update-locations-pk', pos_pk);
+})
+
+ipcMain.on('start-choose', () => {
+  const pythonProcess = spawn('python', ['backend.py', pos_pk])
+
+  pythonProcess.stdout.on('data', (data) => {
+    const result = JSON.parse(data.toString())
+    // mainWindow.webContents.send('translation-result', result)
+	console.log(result)
+  })
+
+  pythonProcess.stderr.on('data', (data) => {
+    console.error(`Python error: ${data}`)
+  })
 })
