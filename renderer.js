@@ -1,3 +1,18 @@
+function showFeature(feature) {
+    document.getElementById('main-menu').style.display = 'none';
+    document.querySelectorAll('.content-area').forEach(area => {
+        area.classList.remove('active');
+    });
+    document.getElementById(feature + '-content').classList.add('active');
+}
+
+function showMainMenu() {
+    document.getElementById('main-menu').style.display = 'block';
+    document.querySelectorAll('.content-area').forEach(area => {
+        area.classList.remove('active');
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const firstCheckBtn = document.getElementById('firstCheck')
     const secondCheckBtn = document.getElementById('secondCheck')
@@ -45,11 +60,11 @@ document.addEventListener('DOMContentLoaded', () => {
             `
         }
 
-        // 重置按钮状态
         secondCheckBtn.disabled = true
         firstCheckBtn.disabled = false
     })
 })
+
 document.getElementById('locationBtn').addEventListener('click', () => {
   window.electronAPI.openLocationWindow();
 });
@@ -70,13 +85,12 @@ window.electronAPI.updateLocations((event, locations) => {
 document.getElementById('startBtn').addEventListener('click', () => {
   const resultDiv = document.getElementById('result');
   resultDiv.innerHTML = `
-    <strong>🔄 正在执行自动填充...</strong><br>
-    ⏳ 请稍候，不要移动鼠标或切换窗口
+    <strong>正在执行自动填充...</strong><br>
+    请稍候，不要移动鼠标或切换窗口
   `;
   window.electronAPI.startPoint();
 });
 
-// 监听操作完成事件
 window.electronAPI.onOperationComplete((event, result) => {
   const resultDiv = document.getElementById('result');
   if (result.success) {

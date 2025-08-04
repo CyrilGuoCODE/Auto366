@@ -2,7 +2,6 @@
 <html>
 <head>
     <meta charset="UTF-8">
-<!--    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'">-->
     <title>Auto366</title>
     <link rel="icon" type="image/png" href="icon.png">
     <style>
@@ -10,6 +9,66 @@
             font-family: Arial, sans-serif;
             padding: 20px;
             text-align: center;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .feature-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            border-color: #007bff;
+            box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+        }
+        .feature-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .feature-card p {
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        .back-btn:hover {
+            border-color: #007bff;
+            box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+        }
+        .content-area {
+            display: none;
+        }
+        .content-area.active {
+            display: block;
         }
         .buttons {
             margin: 20px 0;
@@ -19,6 +78,13 @@
             margin: 0 10px;
             font-size: 16px;
             cursor: pointer;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         #result {
             margin-top: 20px;
@@ -27,6 +93,7 @@
             min-height: 100px;
             text-align: left;
             white-space: pre-wrap;
+            background: #f9f9f9;
         }
         .error {
             color: red;
@@ -62,41 +129,120 @@
     </style>
 </head>
 <body>
-    <h1>Auto366 - 天学网自动化</h1>
-    
-    <div class="tutorial">
-        <h2>使用教程</h2>
-        <ol>
-            <li><strong>首次检测：</strong>点击"首次检测"按钮，记录当前资源目录状态</li>
-            <li><strong>清理文件：</strong>如果有文件请点击"删除已下载"按钮清理资源目录（将保留系统文件夹）</li>
-            <li><strong>下载练习：</strong>在天学网中找到并下载一个未下载的练习（必须是新下载的）</li>
-            <li><strong>再次检测：</strong>点击"再次检测"按钮，检测新下载的练习并提取答案</li>
-            <li><strong>定位坐标：</strong>点击"定位填充数据"按钮，在练习页面中：
-                <ul>
-                    <li>🔴 <strong>红点</strong>：拖拽到答案输入框位置</li>
-                    <li>🔵 <strong>蓝点</strong>：拖拽到"下一页"按钮位置</li>
-                    <li>点击右下角确定</li>
-                </ul>
-            </li>
-                         <li><strong>开始填充：</strong>点击"开始填充数据"按钮，自动填写答案并翻页</li>
-             <li><strong>清理文件：</strong>完成后可点击"删除已下载"按钮清理资源目录（将保留系统文件夹）</li>
-         </ol>
-    </div>
-    
-    <div class="buttons">
-        <button id="firstCheck">首次检测</button>
-        <button id="secondCheck" disabled>再次检测</button>
-        <button id="locationBtn">定位填充数据</button>
-        <button id="startBtn" disabled>开始填充数据</button>
-        <button id="deleteBtn" style="background-color: #dc3545; color: white;">删除已下载</button>
-    </div>
-    <div id="locationData">暂无数据</div>
-    <div id="result">
-        <strong>欢迎使用 Auto366！</strong><br>
-        请按照上方教程步骤操作<br>
-        目前Auto366仅支持听音写词练习，其他练习类型暂不支持
-        <hr>
-        <strong>第一步：</strong>点击"首次检测"按钮开始
+    <div class="container">
+        <div id="main-menu">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="icon_black.png" alt="Auto366" style="width: 80px; height: 80px; margin-bottom: 10px;">
+            </div>
+            <h1>Auto366</h1>
+            <h2>天学网自动化工具</h2>
+            <p>请选择要使用的功能：</p>
+            
+            <div class="feature-grid">
+                <div class="feature-card" onclick="showFeature('listening')">
+                    <h3>听音写词</h3>
+                    <p>自动提取答案，并自动填写答案</p>
+                </div>
+                <div class="feature-card" onclick="showFeature('wordpk')">
+                    <h3>单词PK</h3>
+                    <p>自动完成单词PK练习</p>
+                </div>
+                <div class="feature-card" onclick="showFeature('listening-replace')">
+                    <h3>听力替换</h3>
+                    <p>听力音频文件替换3秒空白音频</p>
+                </div>
+            </div>
+            
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
+                <p><strong>免责声明</strong>：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
+                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
+                <p>许可证：GNU General Public License v3.0</p>
+            </div>
+        </div>
+
+        <div id="listening-content" class="content-area">
+            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <h1>听音写词</h1>
+            
+            <div class="tutorial">
+                <h2>使用教程</h2>
+                <ol>
+                    <li><strong>首次检测：</strong>点击"首次检测"按钮，记录当前资源目录状态</li>
+                    <li><strong>清理文件：</strong>如果有文件请点击"删除已下载"按钮清理资源目录（将保留系统文件夹）</li>
+                    <li><strong>下载练习：</strong>在天学网中找到并下载一个未下载的练习（必须是新下载的）</li>
+                    <li><strong>再次检测：</strong>点击"再次检测"按钮，检测新下载的练习并提取答案</li>
+                    <li><strong>定位坐标：</strong>点击"定位填充数据"按钮，在练习页面中：
+                        <ul>
+                            <li>🔴 拖拽到答案输入框位置</li>
+                            <li>🔵 拖拽到"下一页"按钮位置</li>
+                            <li>点击右下角确定</li>
+                        </ul>
+                    </li>
+                    <li><strong>开始填充：</strong>点击"开始填充数据"按钮，自动填写答案并翻页</li>
+                    <li><strong>清理文件：</strong>完成后可点击"删除已下载"按钮清理资源目录（将保留系统文件夹）</li>
+                </ol>
+            </div>
+            
+            <div class="buttons">
+                <button id="firstCheck">首次检测</button>
+                <button id="secondCheck" disabled>再次检测</button>
+                <button id="locationBtn">定位填充数据</button>
+                <button id="startBtn" disabled>开始填充数据</button>
+                <button id="deleteBtn" style="background-color: #dc3545; color: white;">删除已下载</button>
+            </div>
+            <div id="locationData">暂无数据</div>
+            <div id="result">
+                <strong>欢迎使用听音写词功能！</strong><br>
+                请按照上方教程步骤操作<br>
+                目前仅支持听音写词练习，其他练习类型暂不支持
+                <hr>
+                <strong>第一步：</strong>点击"首次检测"按钮开始
+            </div>
+        </div>
+
+        <div id="wordpk-content" class="content-area">
+            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <h1>单词PK</h1>
+            
+            <div class="tutorial">
+                <h2>使用教程</h2>
+                <ol>
+                    <li><strong>功能开发中：</strong>单词PK功能正在开发中，敬请期待</li>
+                    <li><strong>预计功能：</strong>自动完成单词PK练习</li>
+                </ol>
+            </div>
+            
+            <div class="buttons">
+                <button disabled>功能开发中</button>
+            </div>
+            <div id="result">
+                <strong>单词PK功能正在开发中</strong><br>
+                该功能将支持自动完成单词PK练习<br>
+                敬请期待后续版本更新
+            </div>
+        </div>
+
+        <div id="listening-replace-content" class="content-area">
+            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <h1>听力替换</h1>
+            
+            <div class="tutorial">
+                <h2>使用教程</h2>
+                <ol>
+                    <li><strong>功能开发中：</strong>听力替换功能正在开发中，敬请期待</li>
+                    <li><strong>预计功能：</strong>听力音频文件替换3秒空白音频</li>
+                </ol>
+            </div>
+            
+            <div class="buttons">
+                <button disabled>功能开发中</button>
+            </div>
+            <div id="result">
+                <strong>听力替换功能正在开发中</strong><br>
+                该功能将支持自动完成听力替换练习<br>
+                敬请期待后续版本更新
+            </div>
+        </div>
     </div>
 
     <script src="./renderer.js"></script>
