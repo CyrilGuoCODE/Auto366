@@ -10,7 +10,7 @@
     <div class="container">
         <div id="main-menu">
             <div style="text-align: center; margin-bottom: 20px;">
-                <img src="icon_black.png" alt="Auto366" style="width: 80px; height: 80px; margin-bottom: 10px;">
+                <img src="icon_black.png" alt="Auto366" style="width: 87px; height: 87px; margin-bottom: 10px;">
             </div>
             <h1>Auto366</h1>
             <h2>天学网自动化工具</h2>
@@ -27,7 +27,7 @@
                 </div>
                 <div class="feature-card" onclick="showFeature('listening-replace')">
                     <h3>听力替换</h3>
-                    <p>听力音频文件替换3秒空白音频</p>
+                    <p>等待时音频文件替换3秒空白音频</p>
                 </div>
             </div>
             
@@ -76,6 +76,12 @@
                 <hr>
                 <strong>第一步：</strong>点击"首次检测"按钮开始
             </div>
+            
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
+                <p><strong>免责声明</strong>：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
+                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
+                <p>许可证：GNU General Public License v3.0</p>
+            </div>
         </div>
 
         <div id="wordpk-content" class="content-area">
@@ -98,27 +104,52 @@
                 该功能将支持自动完成单词PK练习<br>
                 敬请期待后续版本更新
             </div>
+            
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
+                <p><strong>免责声明</strong>：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
+                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
+                <p>许可证：GNU General Public License v3.0</p>
+            </div>
         </div>
 
         <div id="listening-replace-content" class="content-area">
             <button class="back-btn" onclick="showMainMenu()">返回</button>
-            <h1>听力替换</h1>
+            <h1>等待听力替换</h1>
             
             <div class="tutorial">
                 <h2>使用教程</h2>
                 <ol>
-                    <li><strong>功能开发中：</strong>听力替换功能正在开发中，敬请期待</li>
-                    <li><strong>预计功能：</strong>听力音频文件替换3秒空白音频</li>
+                    <li><strong>自动寻找路径：</strong>点击"自动寻找"按钮，系统会自动扫描flipbooks目录下的文件夹如果出错请手动填写</li>
+                    <li><strong>输入路径：</strong>如果只有一个文件夹会自动填写，多个文件夹请手动选择输入</li>
+                    <li><strong>替换音频：</strong>点击"替换音频"按钮，将指定文件夹中的所有MP3文件替换为3秒空白音频</li>
+                    <li><strong>还原音频：</strong>完成后可点击"还原音频"按钮，恢复原始音频文件</li>
+                    <li><strong>注意事项：</strong>替换前会自动备份原文件，还原时会删除备份文件</li>
                 </ol>
             </div>
             
-            <div class="buttons">
-                <button disabled>功能开发中</button>
+            <div style="margin: 20px 0;">
+                <label for="folderPath" style="display: block; margin-bottom: 10px; font-weight: bold;">文件夹路径：</label>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <input type="text" id="folderPath" placeholder="请输入文件夹路径" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    <button id="findPathBtn" style="padding: 10px 20px; border: 1px solid #ddd; background: white; cursor: pointer; border-radius: 4px; white-space: nowrap;">自动寻找</button>
+                </div>
             </div>
-            <div id="result">
-                <strong>听力替换功能正在开发中</strong><br>
-                该功能将支持自动完成听力替换练习<br>
-                敬请期待后续版本更新
+            
+            <div class="buttons">
+                <button id="replaceBtn">替换音频</button>
+                <button id="restoreBtn">还原音频</button>
+            </div>
+            <div id="replaceResult">
+                <strong>欢迎使用听力替换功能！</strong>
+                此功能用于将等待时间缩小到3秒，时间利用更高效<br>
+                请按照上方教程步骤操作<br>
+                输入文件夹路径后点击相应按钮执行操作
+            </div>
+            
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
+                <p><strong>免责声明</strong>：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
+                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
+                <p>许可证：GNU General Public License v3.0</p>
             </div>
         </div>
     </div>

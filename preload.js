@@ -23,6 +23,48 @@ function deleteDirectoryRecursively(dirPath) {
   }
 }
 
+function replaceMp3FilesSync(folder, audioFile) {
+  const files = fs.readdirSync(folder, { withFileTypes: true })
+  let replacedCount = 0
+
+  for (const file of files) {
+    const fullPath = path.join(folder, file.name)
+
+    if (file.isDirectory()) {
+      replacedCount += replaceMp3FilesSync(fullPath, audioFile)
+    } else if (file.isFile() && path.extname(file.name).toLowerCase() === '.mp3') {
+      const newPath = path.join(folder, file.name)
+      const backupsPath = path.join(folder, file.name + '_1')
+      fs.copyFileSync(newPath, backupsPath)
+      fs.copyFileSync(audioFile, newPath)
+      replacedCount++
+    }
+  }
+  
+  return replacedCount
+}
+
+function restoreMp3FilesSync(folder) {
+  const files = fs.readdirSync(folder, { withFileTypes: true })
+  let restoredCount = 0
+
+  for (const file of files) {
+    const fullPath = path.join(folder, file.name)
+
+    if (file.isDirectory()) {
+      restoredCount += restoreMp3FilesSync(fullPath)
+    } else if (file.isFile() && path.extname(file.name).toLowerCase() === '.mp3_1') {
+      const backupsPath = path.join(folder, file.name)
+      const oldPath = path.join(folder, file.name.replace('_1', ''))
+      fs.copyFileSync(backupsPath, oldPath)
+      fs.unlinkSync(backupsPath)
+      restoredCount++
+    }
+  }
+  
+  return restoredCount
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   checkFirst: () => {
     if (!fs.existsSync(resourcePath)) return null
@@ -95,6 +137,60 @@ contextBridge.exposeInMainWorld('electronAPI', {
        return { success: true, deletedCount }
      } catch (e) {
        return { error: '删除文件时出错: ' + e.message }
+     }
+   },
+   replaceAudioFiles: (choosePath) => {
+     const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
+     const innerPath = '/bookres/media/'
+     const targetFolder = flipbooksPath + choosePath + innerPath
+     const specificAudio = path.join(__dirname, 'init.mp3')
+
+     if (!fs.existsSync(targetFolder)) {
+       return { error: '目标路径不存在: ' + targetFolder }
+     }
+
+     if (!fs.existsSync(specificAudio)) {
+       return { error: '音频文件不存在: ' + specificAudio }
+     }
+
+     try {
+       const replacedCount = replaceMp3FilesSync(targetFolder, specificAudio)
+       return { success: true, message: '音频替换完成', replacedCount }
+     } catch (e) {
+       return { error: '音频替换失败: ' + e.message }
+     }
+   },
+   restoreAudioFiles: (choosePath) => {
+     const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
+     const innerPath = '/bookres/media/'
+     const targetFolder = flipbooksPath + choosePath + innerPath
+
+     if (!fs.existsSync(targetFolder)) {
+       return { error: '目标路径不存在: ' + targetFolder }
+     }
+
+     try {
+       const restoredCount = restoreMp3FilesSync(targetFolder)
+       return { success: true, message: '音频还原完成', restoredCount }
+     } catch (e) {
+       return { error: '音频还原失败: ' + e.message }
+     }
+   },
+   getFlipbooksFolders: () => {
+     const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
+     
+     if (!fs.existsSync(flipbooksPath)) {
+       return { error: 'flipbooks目录不存在: ' + flipbooksPath }
+     }
+
+     try {
+       const folders = fs.readdirSync(flipbooksPath, { withFileTypes: true })
+         .filter(item => item.isDirectory())
+         .map(item => item.name)
+       
+       return { success: true, folders }
+     } catch (e) {
+       return { error: '读取目录失败: ' + e.message }
      }
    }
 })
