@@ -6,17 +6,8 @@ let mainWindow
 let locationWindow
 let pos
 let ans
+let flag = 0;
 
-
-
-// 初始化nut.js配置
-async function initNut() {
-  try {
-    console.log('nut.js初始化成功');
-  } catch (error) {
-    console.error('nut.js初始化失败:', error);
-  }
-}
 
 // 增强的点击函数
 async function robustClick(x, y, retries = 3) {
@@ -91,12 +82,12 @@ function createWindow() {
   })
 
   globalShortcut.register('Ctrl+Shift+Q', () => {
-    app.quit()
+//    app.quit()
+    flag = 0
   })
 }
 
 app.whenReady().then(async () => {
-  await initNut(); // 初始化nut.js
   createWindow()
 
   app.on('activate', function () {
@@ -160,12 +151,18 @@ ipcMain.on('set-locations', (event, locations) => {
 ipcMain.on('start-point', async () => {
   console.log('开始执行，坐标信息:', pos);
   console.log('答案数组:', ans);
+  flag = 1
 
   try {
     // 先激活目标窗口
     await robustActivateWindow(pos.pos1.x, pos.pos1.y);
 
     for (let i = 0; i < ans.length; i++) {
+      if (!flag){
+        mainWindow.webContents.send('operation-complete', { success: false, error: '填充被用户取消' });
+        return
+      }
+
       console.log(`处理第${i+1}个答案: ${ans[i]}`);
 
       // 再次确保窗口激活

@@ -75,8 +75,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
        let deletedCount = 0
        
        for (const file of files) {
-         // 跳过名为 1944930808082993236 的文件夹
-         if (file === '1944930808082993236') {
+         // 跳过名为 1944930808082993236 的文件夹和缓存文件夹
+         if (file === '1944930808082993236' || file === 'cache') {
            continue
          }
          
