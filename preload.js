@@ -261,7 +261,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      }
    },
    openLocationWindowPk: () => ipcRenderer.send('open-location-window-pk'),
-   setLocationsPk1: ()=> ipcRenderer.send('set-locations-pk-1'),
-   setLocationsPk2: ()=> ipcRenderer.send('set-locations-pk-2'),
+   setLocationsPk1: (pos)=> ipcRenderer.send('set-locations-pk-1', pos),
+   setLocationsPk2: (pos)=> ipcRenderer.send('set-locations-pk-2', pos),
    startChoose: () => ipcRenderer.send('start-choose')
 })

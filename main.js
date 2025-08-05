@@ -278,13 +278,13 @@ ipcMain.on('set-locations-pk-1', (event, pos1) => {
   });
 })
 
-ipcMain.on('set-locations-pk-1', (event, pos2) => {
+ipcMain.on('set-locations-pk-2', (event, pos2) => {
   pos_pk.pos2 = pos2
   mainWindow.webContents.send('update-locations-pk', pos_pk);
 })
 
 ipcMain.on('start-choose', () => {
-  const pythonProcess = spawn('python', ['backend.py', pos_pk])
+  const pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
 
   pythonProcess.stdout.on('data', (data) => {
     const result = JSON.parse(data.toString())
