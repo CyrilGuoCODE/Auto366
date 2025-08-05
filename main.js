@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron')
 const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
-const { spawn } = require('child_process')
+const { spawn, kill } = require('child_process')
 
 let mainWindow
 let locationWindow
@@ -10,6 +10,7 @@ let pos
 let pos_pk = {}
 let ans
 let flag = 0;
+let pythonProcess
 
 
 // 增强的点击函数
@@ -86,6 +87,7 @@ function createWindow() {
 
   globalShortcut.register('Ctrl+Shift+Q', () => {
     flag = 0
+    stopPythonScript()
   })
 }
 
@@ -284,15 +286,29 @@ ipcMain.on('set-locations-pk-2', (event, pos2) => {
 })
 
 ipcMain.on('start-choose', () => {
-  const pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
+  pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
 
   pythonProcess.stdout.on('data', (data) => {
     const result = JSON.parse(data.toString())
-    // mainWindow.webContents.send('translation-result', result)
-	console.log(result)
+    console.log(result)
+    if (result.matched_position){
+      let x = result.matched_position.x + result.matched_position.width/2
+      let y = result.matched_position.y + result.matched_position.height/2
+      robustClick(x, y)
+    }
+    else {
+      console.log('定位失败，请手动选择')
+    }
   })
 
   pythonProcess.stderr.on('data', (data) => {
     console.error(`Python error: ${data}`)
   })
 })
+
+function stopPythonScript() {
+  if (pythonProcess) {
+    pythonProcess.kill('SIGTERM'); // 或 'SIGKILL' 强制终止
+    pythonProcess = null;
+  }
+}

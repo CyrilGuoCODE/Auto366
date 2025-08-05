@@ -1,5 +1,7 @@
 import sys
 import json
+import time
+
 import pyautogui
 import re
 from PIL import Image
@@ -91,5 +93,8 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         raise ValueError('需要提供两个位置区域参数')
 
-    result = capture_and_translate(eval(sys.argv[1])['pos1'], eval(sys.argv[1])['pos2'])
-    print(json.dumps(result))
+    while True:
+        result = capture_and_translate(eval(sys.argv[1])['pos1'], eval(sys.argv[1])['pos2'])
+        print(json.dumps(result))
+        sys.stdout.flush()
+        time.sleep(0.5)
