@@ -275,7 +275,7 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
     
     let p3Content = ''
     if (result.P3.length > 0) {
-      p3Content = '<strong>P3听后转述 - JSON标答：</strong><br>'
+      p3Content = '<strong>P3听后转述 - 听力标答：</strong><br>'
       result.P3.forEach((item, index) => {
         p3Content += `<strong>答案文件 ${index + 1}：</strong><br>`
         p3Content += `<div style="font-size: 11px; color: #888; word-wrap: break-word; word-break: break-all; line-height: 1.4; background: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #28a745; margin: 5px 0;">${item.path}</div>`
@@ -285,7 +285,7 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
           if (item.data.Data.OriginalStandard) {
 		    p3Content += `
 			  <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
-			    <div style="margin-bottom: 10px; font-weight: bold; color: #333;">标准答案：</div>
+			    <div style="margin-bottom: 10px; font-weight: bold; color: #333;">听力音频：</div>
 		    `
 			item.data.Data.OriginalStandard.forEach((item1, index) => {
 				p3Content += `<p>${item1}</p>`
@@ -310,7 +310,7 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
         p3Content += '<br>'
       })
     } else {
-      p3Content = '<strong>P3听后转述 - JSON标答：</strong> 未找到答案文件<br>'
+      p3Content = '<strong>P3听后转述 - 听力标答：</strong> 未找到听力标答文件<br>'
     }
     
     resultDiv.innerHTML = `
