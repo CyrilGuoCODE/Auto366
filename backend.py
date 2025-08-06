@@ -8,8 +8,11 @@ from translate import Translator
 from pytesseract import Output
 
 # 设置Tesseract路径
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'.\tesseract\tesseract.exe'
 
+# 设置语言包路径
+import os
+os.environ['TESSDATA_PREFIX'] = r'.\tessdata'
 
 def detect_language(text):
     """检测文本语言（简体中文或英文）"""

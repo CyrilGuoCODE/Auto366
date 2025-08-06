@@ -284,7 +284,7 @@ ipcMain.on('set-locations-pk-2', (event, pos2) => {
 })
 
 ipcMain.on('start-choose', () => {
-  const pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
+  const pythonProcess = spawn('backend.exe', [JSON.stringify(pos_pk)])
 
   pythonProcess.stdout.on('data', (data) => {
     const result = JSON.parse(data.toString())

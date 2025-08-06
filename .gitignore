@@ -3,6 +3,9 @@
 **/dist/
 **/dist-ssr/
 **/build/
+**/tessdata/
+**/tesseract/
+backend.exe
 
 # 日志文件
 logs
