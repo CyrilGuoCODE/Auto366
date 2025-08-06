@@ -47,13 +47,13 @@ npm run build
 
 ### 资源路径
 
-默认资源路径：`D:/Up366StudentFiles/resources/`
+windows默认资源路径：`D:/Up366StudentFiles/resources/`
 
 如需修改，请编辑 `preload.js` 文件中的 `resourcePath` 变量。
 
 ### 快捷键
 
-- `Ctrl+Shift+Q` - 全局退出应用
+- `Ctrl+Shift+Q` - 终止填充（数据会保留）
 
 ## 许可证
 
