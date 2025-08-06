@@ -402,9 +402,9 @@ function updatePkStepGuide(step) {
   const guide = document.getElementById('pk-step-guide')
   if (!guide) return
   if (step === 1) {
-    guide.innerHTML = '<strong>第一步：</strong>点击“设置截图位置”按钮，按提示完成截图区域设置'
+    guide.innerHTML = '<strong>第一步：</strong>请确保屏幕缩放为100%，否则自动选择可能会出现偏差(很重要)'
   } else if (step === 2) {
-    guide.innerHTML = '<strong>第二步：</strong>请确保屏幕缩放为100%，然后点击“开始自动选择”按钮'
+    guide.innerHTML = '<strong>第二步：</strong>点击“设置截图位置”按钮，按提示完成截图区域设置，然后点击“开始自动选择”按钮'
   } else if (step === 3) {
     guide.innerHTML = '<strong>第三步：</strong>程序正在自动选择，请勿操作鼠标和键盘，等待完成提示'
   }
