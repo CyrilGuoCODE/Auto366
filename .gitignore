@@ -6,6 +6,7 @@
 **/tessdata/
 **/tesseract/
 backend.exe
+backend.spec
 
 # 日志文件
 logs
