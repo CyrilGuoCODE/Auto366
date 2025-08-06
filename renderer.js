@@ -396,8 +396,24 @@ document.getElementById('restoreBtn').addEventListener('click', () => {
   }
 });
 
+let pkStep = 1
+
+function updatePkStepGuide(step) {
+  const guide = document.getElementById('pk-step-guide')
+  if (!guide) return
+  if (step === 1) {
+    guide.innerHTML = '<strong>第一步：</strong>点击“设置截图位置”按钮，按提示完成截图区域设置'
+  } else if (step === 2) {
+    guide.innerHTML = '<strong>第二步：</strong>请确保屏幕缩放为100%，然后点击“开始自动选择”按钮'
+  } else if (step === 3) {
+    guide.innerHTML = '<strong>第三步：</strong>程序正在自动选择，请勿操作鼠标和键盘，等待完成提示'
+  }
+}
+
 document.getElementById('locationBtn-pk').addEventListener('click', () => {
   window.electronAPI.openLocationWindowPk();
+  pkStep = 2
+  setTimeout(() => updatePkStepGuide(pkStep), 300)
 });
 
 document.getElementById('startBtn-pk').addEventListener('click', () => {
@@ -405,6 +421,14 @@ document.getElementById('startBtn-pk').addEventListener('click', () => {
   resultDiv.innerHTML = `
     <strong>正在执行自动选择...</strong><br>
     请稍候，不要移动鼠标或切换窗口
+    <span id="pk-step-guide"></span>
   `;
+  pkStep = 3
+  setTimeout(() => updatePkStepGuide(pkStep), 300)
   window.electronAPI.startChoose();
 });
+
+// 页面加载时初始化分步引导
+if (document.getElementById('pk-step-guide')) {
+  updatePkStepGuide(1)
+}
