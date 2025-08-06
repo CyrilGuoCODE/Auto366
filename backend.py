@@ -16,6 +16,23 @@ import os
 
 os.environ['TESSDATA_PREFIX'] = r'.\tessdata'
 
+def longest_common_substring(s1, s2):
+    m, n = len(s1), len(s2)
+    # DP 表，dp[i][j] 表示 s1[0..i-1] 和 s2[0..j-1] 的最长公共子串长度
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    max_len = 0  # 最长公共子串的长度
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if s1[i - 1] == s2[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+                if dp[i][j] > max_len:
+                    max_len = dp[i][j]
+            else:
+                dp[i][j] = 0
+
+    return max_len
+
 
 def detect_language(text):
     """检测文本语言（简体中文或英文）"""
@@ -60,8 +77,9 @@ def capture_and_translate(pos1, pos2):
         from_lang = 'en'
 
     # 翻译文本
-    translator = Translator(from_lang=from_lang, to_lang=target_lang)
-    translated_text = translator.translate(original_text)
+    translator1 = Translator(from_lang=from_lang, to_lang='DE')
+    translator2 = Translator(from_lang=target_lang, to_lang='DE')
+    translated_text = translator1.translate(original_text)
 
     # 获取pos2区域的OCR详细数据
     ocr_data = pytesseract.image_to_data(
@@ -76,24 +94,28 @@ def capture_and_translate(pos1, pos2):
     # 在pos2区域查找匹配的文本位置
     matched_position = None
     min_required_length = 1  # 降低最小匹配字符长度以适应中文
+    max_lcs = 0
+    ocr_data['translate_text'] = ['']*len(ocr_data['text'])
 
     for i in range(len(ocr_data['text'])):
         text = ocr_data['text'][i].strip()
         conf = int(ocr_data['conf'][i])
 
         # 检查置信度和文本长度
-        if conf > 60 and len(text) >= min_required_length:
-            processed_text = preprocess_text(text)
+        if conf >= 60 and len(text) >= min_required_length:
+            processed_text = preprocess_text(translator2.translate(text))
+            ocr_data['translate_text'][i] = processed_text
 
+            lcs = longest_common_substring(processed_text, processed_translated)
             # 检查是否在翻译文本中出现（忽略大小写和标点）
-            if processed_text in processed_translated:
+            if lcs > max_lcs:
+                max_lcs = lcs
                 matched_position = {
                     'x': ocr_data['left'][i] + pos2['x'],
                     'y': ocr_data['top'][i] + pos2['y'],
                     'width': ocr_data['width'][i],
                     'height': ocr_data['height'][i]
                 }
-                break
 
     return {
         'original_text': original_text,
@@ -108,7 +130,7 @@ if __name__ == '__main__':
     # 解析命令行参数（两个位置区域）
     if len(sys.argv) < 2:
         raise ValueError('需要提供两个位置区域参数')
-    sys.argv[1] = '{"pos1":{"x":862,"y":261,"width":192,"height":41},"pos2":{"x":632,"y":356,"width":649,"height":616}}'
+
     while True:
         result = capture_and_translate(eval(sys.argv[1])['pos1'], eval(sys.argv[1])['pos2'])
         print(json.dumps(result))

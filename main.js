@@ -147,15 +147,15 @@ ipcMain.on('open-location-window', () => {
 });
 
 ipcMain.on('set-locations', (event, locations) => {
-  console.log('Received locations:', locations);
+//  console.log('Received locations:', locations);
   pos = locations
   mainWindow.webContents.send('update-locations', locations);
 });
 
 ipcMain.on('start-point', async () => {
   if (mainWindow) mainWindow.minimize()
-  console.log('开始执行，坐标信息:', pos);
-  console.log('答案数组:', ans);
+//  console.log('开始执行，坐标信息:', pos);
+//  console.log('答案数组:', ans);
   flag = 1
 
   try {
@@ -168,7 +168,7 @@ ipcMain.on('start-point', async () => {
         return
       }
 
-      console.log(`处理第${i+1}个答案: ${ans[i]}`);
+//      console.log(`处理第${i+1}个答案: ${ans[i]}`);
 
       // 再次确保窗口激活
       await robustActivateWindow(pos.pos1.x, pos.pos1.y);
@@ -291,11 +291,10 @@ ipcMain.on('start-choose', () => {
   if (mainWindow) mainWindow.minimize()
   //const pythonProcess = spawn('backend.exe', [JSON.stringify(pos_pk)])
   pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
-  console.log(JSON.stringify(pos_pk))
 
   pythonProcess.stdout.on('data', (data) => {
     const result = JSON.parse(data.toString())
-    console.log(result)
+//    console.log(result)
     if (result.matched_position){
       let x = result.matched_position.x + result.matched_position.width/2
       let y = result.matched_position.y + result.matched_position.height/2
@@ -303,11 +302,13 @@ ipcMain.on('start-choose', () => {
     }
     else {
       console.log('定位失败，请手动选择')
+      mainWindow.webContents.send('choose-error', '定位失败，请手动选择');
     }
   })
 
   pythonProcess.stderr.on('data', (data) => {
     console.error(`Python error: ${data}`)
+    mainWindow.webContents.send('choose-error', `Python error: ${data}`);
   })
 })
 
