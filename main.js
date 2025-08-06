@@ -153,6 +153,7 @@ ipcMain.on('set-locations', (event, locations) => {
 });
 
 ipcMain.on('start-point', async () => {
+  if (mainWindow) mainWindow.minimize()
   console.log('开始执行，坐标信息:', pos);
   console.log('答案数组:', ans);
   flag = 1
@@ -198,6 +199,7 @@ ipcMain.on('set-answer', (event, answer) => {
 
 ipcMain.on('open-location-window-pk', () => {
   if (locationWindowPk) locationWindowPk.close();
+  if (mainWindow) mainWindow.minimize()
 
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -286,8 +288,10 @@ ipcMain.on('set-locations-pk-2', (event, pos2) => {
 })
 
 ipcMain.on('start-choose', () => {
+  if (mainWindow) mainWindow.minimize()
   //const pythonProcess = spawn('backend.exe', [JSON.stringify(pos_pk)])
   pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
+  console.log(JSON.stringify(pos_pk))
 
   pythonProcess.stdout.on('data', (data) => {
     const result = JSON.parse(data.toString())
