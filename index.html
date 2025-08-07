@@ -36,7 +36,8 @@
             </div>
             
             <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
-                <h3>如果程序出现任何错误与异常，请使用 <strong>Ctrl+Shift+Q</strong> 退出当前正在执行的操作</h3> <br>
+                <h3>如果程序出现任何错误与异常，请使用 <strong>Ctrl+Shift+Q</strong> 退出当前正在执行的操作</h3> 
+                <h4>使用 <strong>Ctrl+F12</strong> 打开开发者工具</h4> <br>
                 <p><strong>免责声明</strong>：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
                 <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
                 <p>许可证：GNU General Public License v3.0</p>
@@ -68,12 +69,12 @@
             </div>
             
             <div class="scale-input-container">
-                <label for="listeningScale">屏幕缩放率（%）：</label>
+                <label for="scaleInput">屏幕缩放率（%）：</label>
                 <div class="scale-input-wrapper">
-                    <input type="number" id="listeningScale" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="100">
-                    <button id="clearListeningScale" class="clear-memory-btn">清除记忆</button>
+                    <input type="number" id="scaleInput" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="100">
+                    <button id="getScale" class="clear-memory-btn">获取当前</button>
                 </div>
-                <div class="scale-help-text">程序会自动读取屏幕缩放率，也会记住上次设置的缩放率，点击"清除记忆"可重置为默认值</div>
+                <div class="scale-help-text">程序会自动读取屏幕缩放率，也会记住上次设置的缩放率，点击“获取当前”可重新获取系统缩放率</div>
             </div>
             
             <div class="buttons">
@@ -113,10 +114,10 @@
             </div>
             
             <div class="scale-input-container">
-                <label for="wordpkScale">屏幕缩放率（%）：</label>
+                <label for="scaleInput">屏幕缩放率（%）：</label>
                 <div class="scale-input-wrapper">
-                    <input type="number" id="wordpkScale" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="100">
-                    <button id="clearWordpkScale" class="clear-memory-btn">清除记忆</button>
+                    <input type="number" id="scaleInput" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="100">
+                    <button id="clearScale" class="clear-memory-btn">清除记忆</button>
                 </div>
                 <div class="scale-help-text">程序会自动读取屏幕缩放率，也会记住上次设置的缩放率，点击"清除记忆"可重置为默认值</div>
             </div>

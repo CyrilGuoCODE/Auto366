@@ -17,102 +17,61 @@ document.addEventListener('DOMContentLoaded', async () => {
     const firstCheckBtn = document.getElementById('firstCheck')
     const secondCheckBtn = document.getElementById('secondCheck')
     const resultDiv = document.getElementById('result')
-    const listeningScaleInput = document.getElementById('listeningScale')
-    const wordpkScaleInput = document.getElementById('wordpkScale')
+    const scaleInput = document.getElementById('scaleInput')
+    const getScaleBtn = document.getElementById('getScale')
 
     let initialFiles = []
 
-    // 自动获取并设置屏幕缩放率
-    if (window.electronAPI.getScaleFactor) {
-        const scaleFactor = await window.electronAPI.getScaleFactor();
-        const scalePercent = Math.round(scaleFactor * 100);
-        if (listeningScaleInput) {
-            listeningScaleInput.value = scalePercent;
-            window.electronAPI.setListeningScale(scalePercent);
-        }
-        if (wordpkScaleInput) {
-            wordpkScaleInput.value = scalePercent;
-            window.electronAPI.setWordpkScale(scalePercent);
-        }
-    }
-
-    // 从LocalStorage恢复缩放率设置
-    function restoreScaleSettings() {
-        const savedListeningScale = localStorage.getItem('listeningScale')
-        const savedWordpkScale = localStorage.getItem('wordpkScale')
-        
-        if (savedListeningScale && listeningScaleInput) {
-            listeningScaleInput.value = savedListeningScale
-            window.electronAPI.setListeningScale(parseInt(savedListeningScale))
-        }
-        
-        if (savedWordpkScale && wordpkScaleInput) {
-            wordpkScaleInput.value = savedWordpkScale
-            window.electronAPI.setWordpkScale(parseInt(savedWordpkScale))
-        }
-    }
-
-    // 保存缩放率设置到LocalStorage
-    function saveScaleSettings(type, value) {
-        if (type === 'listening') {
-            localStorage.setItem('listeningScale', value.toString())
-        } else if (type === 'wordpk') {
-            localStorage.setItem('wordpkScale', value.toString())
-        }
-    }
-
-    // 页面加载时恢复设置
-    restoreScaleSettings()
-
-    // 添加清除记忆按钮事件
-    const clearListeningScaleBtn = document.getElementById('clearListeningScale')
-    const clearWordpkScaleBtn = document.getElementById('clearWordpkScale')
-
-    if (clearListeningScaleBtn) {
-        clearListeningScaleBtn.addEventListener('click', () => {
-            localStorage.removeItem('listeningScale')
-            if (listeningScaleInput) {
-                listeningScaleInput.value = '100'
-                window.electronAPI.setListeningScale(100)
+    async function setScaleToCurrent() {
+        if (window.electronAPI.getScaleFactor) {
+            const scaleFactor = await window.electronAPI.getScaleFactor();
+            const scalePercent = Math.round(scaleFactor * 100);
+            if (scaleInput) {
+                scaleInput.value = scalePercent;
+                window.electronAPI.setListeningScale(scalePercent);
+                localStorage.setItem('scale', scalePercent.toString());
             }
-            alert('听音写词缩放率记忆已清除，已重置为100%')
-        })
+        }
     }
 
-    if (clearWordpkScaleBtn) {
-        clearWordpkScaleBtn.addEventListener('click', () => {
-            localStorage.removeItem('wordpkScale')
-            if (wordpkScaleInput) {
-                wordpkScaleInput.value = '100'
-                window.electronAPI.setWordpkScale(100)
-            }
-            alert('单词PK缩放率记忆已清除，已重置为100%')
-        })
+    await setScaleToCurrent();
+
+    function restoreScaleSetting() {
+        const savedScale = localStorage.getItem('scale');
+        if (savedScale && scaleInput) {
+            scaleInput.value = savedScale;
+            window.electronAPI.setListeningScale(parseInt(savedScale));
+        }
+    }
+    restoreScaleSetting();
+
+    // 保存设置
+    function saveScaleSetting(value) {
+        localStorage.setItem('scale', value.toString());
     }
 
-    // 监听听音写词缩放率变化
-    if (listeningScaleInput) {
-        listeningScaleInput.addEventListener('change', () => {
-            const scale = parseInt(listeningScaleInput.value) || 100
-            window.electronAPI.setListeningScale(scale)
-            saveScaleSettings('listening', scale)
-        })
+    // 监听缩放率变化
+    if (scaleInput) {
+        scaleInput.addEventListener('change', () => {
+            const scale = parseInt(scaleInput.value) || 100;
+            window.electronAPI.setListeningScale(scale);
+            saveScaleSetting(scale);
+        });
     }
 
-    // 监听单词PK缩放率变化
-    if (wordpkScaleInput) {
-        wordpkScaleInput.addEventListener('change', () => {
-            const scale = parseInt(wordpkScaleInput.value) || 100
-            window.electronAPI.setWordpkScale(scale)
-            saveScaleSettings('wordpk', scale)
-        })
+    // 获取当前按钮
+    if (getScaleBtn) {
+        getScaleBtn.addEventListener('click', async () => {
+            await setScaleToCurrent();
+            alert('已获取当前屏幕缩放率');
+        });
     }
 
     firstCheckBtn.addEventListener('click', async () => {
         // 获取并设置缩放率
-        const scale = parseInt(listeningScaleInput.value) || 100
+        const scale = parseInt(scaleInput.value) || 100
         window.electronAPI.setListeningScale(scale)
-        saveScaleSettings('listening', scale)
+        saveScaleSetting(scale)
         
         initialFiles = window.electronAPI.checkFirst()
 
@@ -506,9 +465,9 @@ function updatePkStepGuide(step) {
 
 document.getElementById('locationBtn-pk').addEventListener('click', () => {
   // 获取并设置缩放率
-  const scale = parseInt(wordpkScaleInput.value) || 100
-  window.electronAPI.setWordpkScale(scale)
-  saveScaleSettings('wordpk', scale)
+  const scale = parseInt(scaleInput.value) || 100
+  window.electronAPI.setListeningScale(scale)
+  saveScaleSetting(scale)
   
   window.electronAPI.openLocationWindowPk();
   pkStep = 2
@@ -517,9 +476,9 @@ document.getElementById('locationBtn-pk').addEventListener('click', () => {
 
 document.getElementById('startBtn-pk').addEventListener('click', () => {
   // 获取并设置缩放率
-  const scale = parseInt(wordpkScaleInput.value) || 100
-  window.electronAPI.setWordpkScale(scale)
-  saveScaleSettings('wordpk', scale)
+  const scale = parseInt(scaleInput.value) || 100
+  window.electronAPI.setListeningScale(scale)
+  saveScaleSetting(scale)
   
   const resultDiv = document.getElementById('result');
   resultDiv.innerHTML = `

@@ -55,6 +55,8 @@ windows默认资源路径：`D:/Up366StudentFiles/resources/`
 
 - `Ctrl+Shift+Q` - 终止填充（数据会保留）
 
+- `Ctrl+F12` - 打开开发者工具
+
 ## 许可证
 
 本项目采用 GNU General Public License v3.0 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。

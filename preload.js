@@ -107,8 +107,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateLocations: (callback) => ipcRenderer.on('update-locations', callback),
   startPoint: () => ipcRenderer.send('start-point'),
   onOperationComplete: (callback) => ipcRenderer.on('operation-complete', callback),
+  getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
   setListeningScale: (scale) => ipcRenderer.send('set-listening-scale', scale),
-  setWordpkScale: (scale) => ipcRenderer.send('set-wordpk-scale', scale),
   deleteAllFiles: () => {
     if (!fs.existsSync(resourcePath)) {
       return { error: '资源路径不存在' }

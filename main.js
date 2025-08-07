@@ -23,6 +23,10 @@ function adjustCoordinates(x, y, scale) {
   }
 }
 
+ipcMain.handle('get-scale-factor', () => {
+  return screen.getPrimaryDisplay().scaleFactor;
+});
+
 // 增强的点击函数
 async function robustClick(x, y, retries = 3, scale = 100) {
   try {
@@ -89,11 +93,11 @@ function createWindow() {
   mainWindow.setMenu(null);
 
   mainWindow.loadFile('index.html')
-//  mainWindow.webContents.openDevTools({ mode: 'detach' });
 
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.control && input.shift && input.key.toLowerCase() === 'q') {
-      app.quit()
+    if (input.control && input.key === 'F12') {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+      event.preventDefault();
     }
   })
 
@@ -345,17 +349,8 @@ ipcMain.on('start-choose', () => {
 
 // 添加缩放率设置事件
 ipcMain.on('set-listening-scale', (event, scale) => {
-  listeningScale = scale
-  console.log('听音写词缩放率设置为:', scale)
-})
-
-ipcMain.on('set-wordpk-scale', (event, scale) => {
-  wordpkScale = scale
-  console.log('单词PK缩放率设置为:', scale)
-})
-
-ipcMain.handle('get-scale-factor', () => {
-  return screen.getPrimaryDisplay().scaleFactor;
+  global.sharedScale = scale;
+  console.log('缩放率设置为:', scale)
 });
 
 function stopPythonScript() {
