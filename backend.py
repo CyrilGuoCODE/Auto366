@@ -5,8 +5,18 @@ import pyautogui
 import re
 from PIL import Image
 import pytesseract
-from translate import Translator
+from deep_translator import PonsTranslator
 from pytesseract import Output
+
+# 设置UTF-8编码输出
+import os
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+
+# 设置控制台编码
+if sys.platform.startswith('win'):
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
 
 # 设置Tesseract路径
 pytesseract.pytesseract.tesseract_cmd = r'.\tesseract\tesseract.exe'
@@ -37,8 +47,8 @@ def longest_common_substring(s1, s2):
 def detect_language(text):
     """检测文本语言（简体中文或英文）"""
     if re.search(r'[\u4e00-\u9fff]', text):  # 检测中文字符
-        return 'zh'
-    return 'en'
+        return 'zh-CN'
+    return 'en-GB'
 
 
 def preprocess_text(text):
@@ -69,17 +79,16 @@ def capture_and_translate(pos1, pos2):
 
     # 检测语言并设置翻译方向
     lang = detect_language(original_text)
-    if lang == 'zh':
+    if lang == 'zh-CN':
         target_lang = 'en'
-        from_lang = 'zh'
+        from_lang = 'zh-cn'
     else:
-        target_lang = 'zh'
+        target_lang = 'zh-cn'
         from_lang = 'en'
 
     # 翻译文本
-    translator1 = Translator(from_lang=from_lang, to_lang='DE')
-    translator2 = Translator(from_lang=target_lang, to_lang='DE')
-    translated_text = translator1.translate(original_text)
+    translator = PonsTranslator(source=from_lang, target=target_lang)
+    translated_text = translator.translate(original_text)
 
     # 获取pos2区域的OCR详细数据
     ocr_data = pytesseract.image_to_data(
@@ -103,7 +112,7 @@ def capture_and_translate(pos1, pos2):
 
         # 检查置信度和文本长度
         if conf >= 60 and len(text) >= min_required_length:
-            processed_text = preprocess_text(translator2.translate(text))
+            processed_text = preprocess_text(text)
             ocr_data['translate_text'][i] = processed_text
 
             lcs = longest_common_substring(processed_text, processed_translated)
@@ -132,7 +141,20 @@ if __name__ == '__main__':
         raise ValueError('需要提供两个位置区域参数')
 
     while True:
-        result = capture_and_translate(eval(sys.argv[1])['pos1'], eval(sys.argv[1])['pos2'])
-        print(json.dumps(result))
-        sys.stdout.flush()
+        try:
+            result = capture_and_translate(eval(sys.argv[1])['pos1'], eval(sys.argv[1])['pos2'])
+            # 确保输出完整的JSON，添加换行符
+            print(json.dumps(result, ensure_ascii=False), flush=True)
+        except Exception as e:
+            # 输出错误信息
+            error_result = {
+                'error': str(e),
+                'original_text': '',
+                'translated_text': '',
+                'original_data': {},
+                'target_lang': '',
+                'matched_position': None
+            }
+            print(json.dumps(error_result, ensure_ascii=False), flush=True)
+        
         time.sleep(0.5)

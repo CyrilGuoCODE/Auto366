@@ -292,17 +292,36 @@ ipcMain.on('start-choose', () => {
   //const pythonProcess = spawn('backend.exe', [JSON.stringify(pos_pk)])
   pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
 
+  let buffer = '';
+
   pythonProcess.stdout.on('data', (data) => {
-    const result = JSON.parse(data.toString())
-//    console.log(result)
-    if (result.matched_position){
-      let x = result.matched_position.x + result.matched_position.width/2
-      let y = result.matched_position.y + result.matched_position.height/2
-      robustClick(x, y)
-    }
-    else {
-      console.log('定位失败，请手动选择')
-      mainWindow.webContents.send('choose-error', '定位失败，请手动选择');
+    buffer += data.toString();
+    
+    // 尝试解析完整的JSON
+    try {
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // 保留最后一个可能不完整的行
+      
+      for (const line of lines) {
+        if (line.trim()) {
+          const result = JSON.parse(line);
+          console.log('Received result:', result);
+          
+          if (result.error) {
+            console.log('Python error:', result.error);
+            mainWindow.webContents.send('choose-error', `Python error: ${result.error}`);
+          } else if (result.matched_position) {
+            let x = result.matched_position.x + result.matched_position.width/2
+            let y = result.matched_position.y + result.matched_position.height/2
+            robustClick(x, y)
+          } else {
+            console.log('定位失败，请手动选择')
+            mainWindow.webContents.send('choose-error', '定位失败，请手动选择');
+          }
+        }
+      }
+    } catch (e) {
+      console.log('JSON parsing error:', e);
     }
   })
 
