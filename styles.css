@@ -141,3 +141,100 @@ button:disabled {
 .tutorial ul li {
     margin-bottom: 5px;
 }
+
+/* 缩放率输入框样式 */
+.scale-input-container {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.scale-input-container label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.scale-input-wrapper {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    max-width: 400px;
+}
+
+.scale-input {
+    width: 200px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.clear-memory-btn {
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+    background: #f8f9fa;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.clear-memory-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.scale-help-text {
+    color: #666;
+    font-size: 12px;
+    margin-top: 5px;
+    text-align: center;
+}
+
+/* 路径输入框样式 */
+.path-input-container {
+    margin: 20px 0;
+}
+
+.path-input-container label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.path-input-wrapper {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.path-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.find-path-btn {
+    padding: 10px 20px;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+/* 删除按钮样式 */
+.delete-btn {
+    background-color: #dc3545;
+    color: white;
+}
+
+.delete-btn:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}

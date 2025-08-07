@@ -36,7 +36,7 @@
             </div>
             
             <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
-                <h3>如果程序出现任何错误与异常，请使用 <strong>Ctrl+Shift+Q</strong> 退出程序</h3> <br>
+                <h3>如果程序出现任何错误与异常，请使用 <strong>Ctrl+Shift+Q</strong> 退出当前正在执行的操作</h3> <br>
                 <p><strong>免责声明</strong>：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
                 <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
                 <p>许可证：GNU General Public License v3.0</p>
@@ -50,7 +50,7 @@
             <div class="tutorial">
                 <h2>使用教程</h2>
                 <ol>
-                    <li><strong>设置屏幕缩放：</strong>请确保屏幕缩放为100%，否则自动选择可能会出现偏差</li>
+                    <li><strong>输入或手动设置屏幕缩放率：</strong>在下方输入框中输入当前屏幕缩放率（如：100、125、150等或者手动设置为100%，这非常重要）</li>
                     <li><strong>首次检测：</strong>点击"首次检测"按钮，记录当前资源目录状态</li>
                     <li><strong>清理文件：</strong>如果有文件请点击"删除已下载"按钮清理资源目录（将保留系统文件夹）</li>
                     <li><strong>下载练习：</strong>在天学网中找到并下载一个未下载的练习（必须是新下载的）</li>
@@ -67,20 +67,29 @@
                 </ol>
             </div>
             
+            <div class="scale-input-container">
+                <label for="listeningScale">屏幕缩放率（%）：</label>
+                <div class="scale-input-wrapper">
+                    <input type="number" id="listeningScale" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="100">
+                    <button id="clearListeningScale" class="clear-memory-btn">清除记忆</button>
+                </div>
+                <div class="scale-help-text">程序会自动读取屏幕缩放率，也会记住上次设置的缩放率，点击"清除记忆"可重置为默认值</div>
+            </div>
+            
             <div class="buttons">
                 <button id="firstCheck">首次检测</button>
                 <button id="secondCheck" disabled>再次检测</button>
                 <button id="locationBtn">定位填充数据</button>
                 <button id="startBtn" disabled>开始填充数据</button>
-                <button id="deleteBtn" style="background-color: #dc3545; color: white;">删除已下载</button>
+                <button id="deleteBtn" class="delete-btn">删除已下载</button>
             </div>
             <div id="locationData">暂无数据</div>
             <div id="result">
                 <strong>欢迎使用听音写词功能！</strong><br>
                 请按照上方教程步骤操作<br>
-                请确保屏幕缩放为100%，否则自动选择可能会出现偏差!
+                请在上方输入框中输入你的屏幕缩放率，否则自动选择可能会出现偏差!
                 <hr>
-                <strong>第一步：</strong>点击"首次检测"按钮开始
+                <strong>第一步：</strong>输入屏幕缩放率，然后点击"首次检测"按钮开始
             </div>
             
             <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
@@ -97,11 +106,21 @@
             <div class="tutorial">
                 <h2>使用教程</h2>
                 <ol>
-                    <li><strong>调整屏幕缩放：</strong>截图位置设置完成后，请确保屏幕缩放为100%，否则自动选择可能会出现偏差。</li>
-                    <li><strong>设置截图位置：</strong>点击“设置截图位置”按钮，首先会出现红色框，请拖动到题面单词位置松手即可，然后会出现蓝色框，请拖动到选项区域松手即可。</li>
-                    <li><strong>开始自动选择：</strong>点击“开始自动选择”按钮，程序会自动识别题面单词并选择正确答案。</li>
+                    <li><strong>输入或手动设置屏幕缩放率：</strong>在下方输入框中输入当前屏幕缩放率（如：100、125、150等或者手动设置为100%，这非常重要）</li>
+                    <li><strong>设置截图位置：</strong>点击"设置截图位置"按钮，首先会出现红色框，请拖动到题面单词位置松手即可，然后会出现蓝色框，请拖动到选项区域松手即可。</li>
+                    <li><strong>开始自动选择：</strong>点击"开始自动选择"按钮，程序会自动识别题面单词并选择正确答案。</li>
                 </ol>
             </div>
+            
+            <div class="scale-input-container">
+                <label for="wordpkScale">屏幕缩放率（%）：</label>
+                <div class="scale-input-wrapper">
+                    <input type="number" id="wordpkScale" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="100">
+                    <button id="clearWordpkScale" class="clear-memory-btn">清除记忆</button>
+                </div>
+                <div class="scale-help-text">程序会自动读取屏幕缩放率，也会记住上次设置的缩放率，点击"清除记忆"可重置为默认值</div>
+            </div>
+            
             <div class="buttons">
                 <button id="locationBtn-pk">设置截图位置</button>
                 <button id="startBtn-pk">开始自动选择</button>
@@ -109,7 +128,7 @@
             <div id="result">
                 欢迎使用单词PK功能！此工具支持单词PK自动化填写<br>
                 请按照上方教程步骤操作<br>
-                请确保屏幕缩放为100%，否则自动选择可能会出现偏差<br>
+                请在上方输入框中输入你的屏幕缩放率，否则自动选择可能会出现偏差!<br>
                 <span id="pk-step-guide"></span>
             </div>
             
@@ -135,11 +154,11 @@
                 </ol>
             </div>
             
-            <div style="margin: 20px 0;">
-                <label for="folderPath" style="display: block; margin-bottom: 10px; font-weight: bold;">文件夹路径：</label>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <input type="text" id="folderPath" placeholder="请输入文件夹路径" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                    <button id="findPathBtn" style="padding: 10px 20px; border: 1px solid #ddd; background: white; cursor: pointer; border-radius: 4px; white-space: nowrap;">自动寻找</button>
+            <div class="path-input-container">
+                <label for="folderPath">文件夹路径：</label>
+                <div class="path-input-wrapper">
+                    <input type="text" id="folderPath" placeholder="请输入文件夹路径" class="path-input">
+                    <button id="findPathBtn" class="find-path-btn">自动寻找</button>
                 </div>
             </div>
             
@@ -175,11 +194,11 @@
                 </ol>
             </div>
             
-            <div style="margin: 20px 0;">
-                <label for="answerFolderPath" style="display: block; margin-bottom: 10px; font-weight: bold;">文件夹路径：</label>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <input type="text" id="answerFolderPath" placeholder="请输入文件夹路径" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                    <button id="findAnswerPathBtn" style="padding: 10px 20px; border: 1px solid #ddd; background: white; cursor: pointer; border-radius: 4px; white-space: nowrap;">自动寻找</button>
+            <div class="path-input-container">
+                <label for="answerFolderPath">文件夹路径：</label>
+                <div class="path-input-wrapper">
+                    <input type="text" id="answerFolderPath" placeholder="请输入文件夹路径" class="path-input">
+                    <button id="findAnswerPathBtn" class="find-path-btn">自动寻找</button>
                 </div>
             </div>
             

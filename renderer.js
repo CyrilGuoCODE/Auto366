@@ -13,14 +13,107 @@ function showMainMenu() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const firstCheckBtn = document.getElementById('firstCheck')
     const secondCheckBtn = document.getElementById('secondCheck')
     const resultDiv = document.getElementById('result')
+    const listeningScaleInput = document.getElementById('listeningScale')
+    const wordpkScaleInput = document.getElementById('wordpkScale')
 
     let initialFiles = []
 
+    // 自动获取并设置屏幕缩放率
+    if (window.electronAPI.getScaleFactor) {
+        const scaleFactor = await window.electronAPI.getScaleFactor();
+        const scalePercent = Math.round(scaleFactor * 100);
+        if (listeningScaleInput) {
+            listeningScaleInput.value = scalePercent;
+            window.electronAPI.setListeningScale(scalePercent);
+        }
+        if (wordpkScaleInput) {
+            wordpkScaleInput.value = scalePercent;
+            window.electronAPI.setWordpkScale(scalePercent);
+        }
+    }
+
+    // 从LocalStorage恢复缩放率设置
+    function restoreScaleSettings() {
+        const savedListeningScale = localStorage.getItem('listeningScale')
+        const savedWordpkScale = localStorage.getItem('wordpkScale')
+        
+        if (savedListeningScale && listeningScaleInput) {
+            listeningScaleInput.value = savedListeningScale
+            window.electronAPI.setListeningScale(parseInt(savedListeningScale))
+        }
+        
+        if (savedWordpkScale && wordpkScaleInput) {
+            wordpkScaleInput.value = savedWordpkScale
+            window.electronAPI.setWordpkScale(parseInt(savedWordpkScale))
+        }
+    }
+
+    // 保存缩放率设置到LocalStorage
+    function saveScaleSettings(type, value) {
+        if (type === 'listening') {
+            localStorage.setItem('listeningScale', value.toString())
+        } else if (type === 'wordpk') {
+            localStorage.setItem('wordpkScale', value.toString())
+        }
+    }
+
+    // 页面加载时恢复设置
+    restoreScaleSettings()
+
+    // 添加清除记忆按钮事件
+    const clearListeningScaleBtn = document.getElementById('clearListeningScale')
+    const clearWordpkScaleBtn = document.getElementById('clearWordpkScale')
+
+    if (clearListeningScaleBtn) {
+        clearListeningScaleBtn.addEventListener('click', () => {
+            localStorage.removeItem('listeningScale')
+            if (listeningScaleInput) {
+                listeningScaleInput.value = '100'
+                window.electronAPI.setListeningScale(100)
+            }
+            alert('听音写词缩放率记忆已清除，已重置为100%')
+        })
+    }
+
+    if (clearWordpkScaleBtn) {
+        clearWordpkScaleBtn.addEventListener('click', () => {
+            localStorage.removeItem('wordpkScale')
+            if (wordpkScaleInput) {
+                wordpkScaleInput.value = '100'
+                window.electronAPI.setWordpkScale(100)
+            }
+            alert('单词PK缩放率记忆已清除，已重置为100%')
+        })
+    }
+
+    // 监听听音写词缩放率变化
+    if (listeningScaleInput) {
+        listeningScaleInput.addEventListener('change', () => {
+            const scale = parseInt(listeningScaleInput.value) || 100
+            window.electronAPI.setListeningScale(scale)
+            saveScaleSettings('listening', scale)
+        })
+    }
+
+    // 监听单词PK缩放率变化
+    if (wordpkScaleInput) {
+        wordpkScaleInput.addEventListener('change', () => {
+            const scale = parseInt(wordpkScaleInput.value) || 100
+            window.electronAPI.setWordpkScale(scale)
+            saveScaleSettings('wordpk', scale)
+        })
+    }
+
     firstCheckBtn.addEventListener('click', async () => {
+        // 获取并设置缩放率
+        const scale = parseInt(listeningScaleInput.value) || 100
+        window.electronAPI.setListeningScale(scale)
+        saveScaleSettings('listening', scale)
+        
         initialFiles = window.electronAPI.checkFirst()
 
         if (initialFiles === null) {
@@ -31,6 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultDiv.innerHTML = `
             <strong>首次检测完成！</strong><br>
             当前资源目录包含 ${initialFiles.length} 个文件<br>
+            屏幕缩放率设置为: ${scale}%<br>
             <br>
             <strong>下一步：</strong><br>
             1. 清理资源目录（如果有文件请点击"删除已下载"按钮清理资源目录（必须））<br>
@@ -411,16 +505,27 @@ function updatePkStepGuide(step) {
 }
 
 document.getElementById('locationBtn-pk').addEventListener('click', () => {
+  // 获取并设置缩放率
+  const scale = parseInt(wordpkScaleInput.value) || 100
+  window.electronAPI.setWordpkScale(scale)
+  saveScaleSettings('wordpk', scale)
+  
   window.electronAPI.openLocationWindowPk();
   pkStep = 2
   setTimeout(() => updatePkStepGuide(pkStep), 300)
 });
 
 document.getElementById('startBtn-pk').addEventListener('click', () => {
+  // 获取并设置缩放率
+  const scale = parseInt(wordpkScaleInput.value) || 100
+  window.electronAPI.setWordpkScale(scale)
+  saveScaleSettings('wordpk', scale)
+  
   const resultDiv = document.getElementById('result');
   resultDiv.innerHTML = `
     <strong>正在执行自动选择...</strong><br>
-    请稍候，不要移动鼠标或切换窗口
+    请稍候，不要移动鼠标或切换窗口<br>
+    屏幕缩放率设置为: ${scale}%
     <span id="pk-step-guide"></span>
   `;
   pkStep = 3

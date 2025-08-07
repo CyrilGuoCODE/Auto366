@@ -11,28 +11,40 @@ let pos_pk = {}
 let ans
 let flag = 0;
 let pythonProcess
+let listeningScale = 100
+let wordpkScale = 100
 
+// 根据缩放率调整坐标
+function adjustCoordinates(x, y, scale) {
+  const scaleFactor = scale / 100
+  return {
+    x: Math.round(x * scaleFactor),
+    y: Math.round(y * scaleFactor)
+  }
+}
 
 // 增强的点击函数
-async function robustClick(x, y, retries = 3) {
+async function robustClick(x, y, retries = 3, scale = 100) {
   try {
-    await mouse.setPosition(new Point(x, y));
+    const adjustedCoords = adjustCoordinates(x, y, scale)
+    await mouse.setPosition(new Point(adjustedCoords.x, adjustedCoords.y));
     await mouse.click(Button.LEFT);
     return true;
   } catch (error) {
     if (retries > 0) {
       console.warn(`点击失败，剩余重试次数: ${retries}`);
       await new Promise(resolve => setTimeout(resolve, 500));
-      return robustClick(x, y, retries - 1);
+      return robustClick(x, y, retries - 1, scale);
     }
     throw new Error(`点击操作失败: ${error.message}`);
   }
 }
 
 // 增强的窗口激活函数
-async function robustActivateWindow(x, y, retries = 3) {
+async function robustActivateWindow(x, y, retries = 3, scale = 100) {
   try {
-    await mouse.setPosition(new Point(x, y));
+    const adjustedCoords = adjustCoordinates(x, y, scale)
+    await mouse.setPosition(new Point(adjustedCoords.x, adjustedCoords.y));
     await mouse.click(Button.LEFT);
     await new Promise(resolve => setTimeout(resolve, 300)); // 等待窗口响应
     return true;
@@ -40,7 +52,7 @@ async function robustActivateWindow(x, y, retries = 3) {
     if (retries > 0) {
       console.warn(`窗口激活失败，剩余重试次数: ${retries}`);
       await new Promise(resolve => setTimeout(resolve, 500));
-      return robustActivateWindow(x, y, retries - 1);
+      return robustActivateWindow(x, y, retries - 1, scale);
     }
     throw new Error(`窗口激活失败: ${error.message}`);
   }
@@ -160,7 +172,7 @@ ipcMain.on('start-point', async () => {
 
   try {
     // 先激活目标窗口
-    await robustActivateWindow(pos.pos1.x, pos.pos1.y);
+    await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3, listeningScale);
 
     for (let i = 0; i < ans.length; i++) {
       if (!flag){
@@ -171,13 +183,13 @@ ipcMain.on('start-point', async () => {
 //      console.log(`处理第${i+1}个答案: ${ans[i]}`);
 
       // 再次确保窗口激活
-      await robustActivateWindow(pos.pos1.x, pos.pos1.y);
+      await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3, listeningScale);
 
       // 输入答案
       await robustType(ans[i]);
 
       // 点击提交或确认按钮
-      await robustClick(pos.pos2.x, pos.pos2.y);
+      await robustClick(pos.pos2.x, pos.pos2.y, 3, listeningScale);
 
       // 添加操作间隔
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -313,7 +325,7 @@ ipcMain.on('start-choose', () => {
           } else if (result.matched_position) {
             let x = result.matched_position.x + result.matched_position.width/2
             let y = result.matched_position.y + result.matched_position.height/2
-            robustClick(x, y)
+            robustClick(x, y, 3, wordpkScale)
           } else {
             console.log('定位失败，请手动选择')
             mainWindow.webContents.send('choose-error', '定位失败，请手动选择');
@@ -330,6 +342,21 @@ ipcMain.on('start-choose', () => {
     mainWindow.webContents.send('choose-error', `Python error: ${data}`);
   })
 })
+
+// 添加缩放率设置事件
+ipcMain.on('set-listening-scale', (event, scale) => {
+  listeningScale = scale
+  console.log('听音写词缩放率设置为:', scale)
+})
+
+ipcMain.on('set-wordpk-scale', (event, scale) => {
+  wordpkScale = scale
+  console.log('单词PK缩放率设置为:', scale)
+})
+
+ipcMain.handle('get-scale-factor', () => {
+  return screen.getPrimaryDisplay().scaleFactor;
+});
 
 function stopPythonScript() {
   if (pythonProcess) {
