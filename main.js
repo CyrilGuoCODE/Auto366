@@ -23,14 +23,20 @@ function adjustCoordinates(x, y, scale) {
   }
 }
 
+// 获取全局缩放率
+function getCurrentScale() {
+  return global.sharedScale || 100;
+}
+
 ipcMain.handle('get-scale-factor', () => {
   return screen.getPrimaryDisplay().scaleFactor;
 });
 
 // 增强的点击函数
-async function robustClick(x, y, retries = 3, scale = 100) {
+async function robustClick(x, y, retries = 3) {
   try {
-    const adjustedCoords = adjustCoordinates(x, y, scale)
+    const scale = getCurrentScale();
+    const adjustedCoords = adjustCoordinates(x, y, scale);
     await mouse.setPosition(new Point(adjustedCoords.x, adjustedCoords.y));
     await mouse.click(Button.LEFT);
     return true;
@@ -38,16 +44,17 @@ async function robustClick(x, y, retries = 3, scale = 100) {
     if (retries > 0) {
       console.warn(`点击失败，剩余重试次数: ${retries}`);
       await new Promise(resolve => setTimeout(resolve, 500));
-      return robustClick(x, y, retries - 1, scale);
+      return robustClick(x, y, retries - 1);
     }
     throw new Error(`点击操作失败: ${error.message}`);
   }
 }
 
 // 增强的窗口激活函数
-async function robustActivateWindow(x, y, retries = 3, scale = 100) {
+async function robustActivateWindow(x, y, retries = 3) {
   try {
-    const adjustedCoords = adjustCoordinates(x, y, scale)
+    const scale = getCurrentScale();
+    const adjustedCoords = adjustCoordinates(x, y, scale);
     await mouse.setPosition(new Point(adjustedCoords.x, adjustedCoords.y));
     await mouse.click(Button.LEFT);
     await new Promise(resolve => setTimeout(resolve, 300)); // 等待窗口响应
@@ -56,7 +63,7 @@ async function robustActivateWindow(x, y, retries = 3, scale = 100) {
     if (retries > 0) {
       console.warn(`窗口激活失败，剩余重试次数: ${retries}`);
       await new Promise(resolve => setTimeout(resolve, 500));
-      return robustActivateWindow(x, y, retries - 1, scale);
+      return robustActivateWindow(x, y, retries - 1);
     }
     throw new Error(`窗口激活失败: ${error.message}`);
   }
@@ -176,7 +183,7 @@ ipcMain.on('start-point', async () => {
 
   try {
     // 先激活目标窗口
-    await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3, listeningScale);
+    await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3);
 
     for (let i = 0; i < ans.length; i++) {
       if (!flag){
@@ -187,13 +194,13 @@ ipcMain.on('start-point', async () => {
 //      console.log(`处理第${i+1}个答案: ${ans[i]}`);
 
       // 再次确保窗口激活
-      await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3, listeningScale);
+      await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3);
 
       // 输入答案
       await robustType(ans[i]);
 
       // 点击提交或确认按钮
-      await robustClick(pos.pos2.x, pos.pos2.y, 3, listeningScale);
+      await robustClick(pos.pos2.x, pos.pos2.y, 3);
 
       // 添加操作间隔
       await new Promise(resolve => setTimeout(resolve, 800));
