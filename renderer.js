@@ -449,6 +449,33 @@ document.getElementById('restoreBtn').addEventListener('click', () => {
   }
 });
 
+document.getElementById('deleteFlipbooksBtn').addEventListener('click', () => {
+  const resultDiv = document.getElementById('answerResult');
+  
+  if (confirm('警告：此操作将删除 D:/Up366StudentFiles/flipbooks/ 目录下的所有文件！\n\n确定要继续吗？')) {
+    resultDiv.innerHTML = `
+      <strong>正在删除文件...</strong><br>
+      请稍候
+    `;
+    
+    const result = window.electronAPI.deleteFlipbooksFiles();
+    
+    if (result.error) {
+      resultDiv.innerHTML = `
+        <strong>删除失败</strong><br>
+        错误信息: ${result.error}
+      `;
+    } else {
+      resultDiv.innerHTML = `
+        <strong>删除成功！</strong><br>
+        已删除 ${result.deletedCount} 个文件/目录<br>
+        <br>
+        <strong>操作完成</strong>
+      `;
+    }
+  }
+});
+
 let pkStep = 1
 
 function updatePkStepGuide(step) {

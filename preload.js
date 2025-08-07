@@ -266,5 +266,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLocationsPk1: (pos)=> ipcRenderer.send('set-locations-pk-1', pos),
   setLocationsPk2: (pos)=> ipcRenderer.send('set-locations-pk-2', pos),
   startChoose: () => ipcRenderer.send('start-choose'),
-  getScaleFactor: () => ipcRenderer.invoke('get-scale-factor')
+  getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
+  deleteFlipbooksFiles: () => {
+    const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
+    
+    if (!fs.existsSync(flipbooksPath)) {
+      return { error: 'flipbooks目录不存在: ' + flipbooksPath }
+    }
+    
+    try {
+      const files = fs.readdirSync(flipbooksPath)
+      let deletedCount = 0
+      
+      for (const file of files) {
+        const filePath = path.join(flipbooksPath, file)
+        const stats = fs.statSync(filePath)
+        
+        if (stats.isDirectory()) {
+          deleteDirectoryRecursively(filePath)
+          deletedCount++
+        } else {
+          fs.unlinkSync(filePath)
+          deletedCount++
+        }
+      }
+      
+      return { success: true, deletedCount }
+    } catch (e) {
+      return { error: '删除文件时出错: ' + e.message }
+    }
+  }
 })

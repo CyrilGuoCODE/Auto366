@@ -192,6 +192,8 @@
                     <li><strong>输入路径：</strong>如果只有一个文件夹会自动填写，多个文件夹请手动选择输入</li>
                     <li><strong>获取答案：</strong>点击"获取答案"按钮，系统将扫描并提取听力答案</li>
                     <li><strong>查看结果：</strong>P2听后回答部分显示音频标答文件，P3听后转述部分显示解析的JSON答案</li>
+                    <li><strong>删除文件：</strong>点击"删除文件"按钮，删除flipbooks目录中的所有文件</li>
+                    <li><strong>注意：</strong>听力标答音频排序可能为<strong>乱序</strong>，请根据实际题目判断</li>
                 </ol>
             </div>
             
@@ -205,12 +207,14 @@
             
             <div class="buttons">
                 <button id="getAnswerBtn">获取答案</button>
+                <button id="deleteFlipbooksBtn" class="delete-btn">删除文件</button>
             </div>
             <div id="answerResult">
                 <strong>欢迎使用听力答案获取功能！</strong><br>
                 此功能用于获取听后回答和转述的标准答案<br>
                 请按照上方教程步骤操作<br>
-                输入文件夹路径后点击获取答案按钮
+                输入文件夹路径后点击获取答案按钮<br>
+                <strong>注意：听力标答音频可能为乱序，请根据实际题目判断</strong>
             </div>
             
             <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
