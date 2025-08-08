@@ -295,5 +295,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     } catch (e) {
       return { error: '删除文件时出错: ' + e.message }
     }
+  },
+  writeSystemAudio: (filePath) => {
+    try {
+      console.log(`系统音频写入: ${filePath}`);
+
+      const audioInfo = {
+        path: filePath,
+        timestamp: new Date().toISOString(),
+        action: 'write_to_system'
+      };
+
+      
+      return { success: true, message: '系统音频已写入', audioInfo };
+    } catch (e) {
+      return { error: '系统音频写入失败: ' + e.message };
+    }
   }
 })

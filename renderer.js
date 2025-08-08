@@ -1,3 +1,36 @@
+class SystemAudioSync {
+  constructor() {
+    this.audioContext = null;
+    this.isInitialized = false;
+  }
+
+  async initialize() {
+    if (!this.isInitialized) {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      this.isInitialized = true;
+    }
+  }
+
+  async syncWithSystemAudio(filePath) {
+    await this.initialize();
+    
+    try {
+      console.log(`系统音频同步: ${filePath}`);
+
+      if (window.electronAPI && window.electronAPI.writeSystemAudio) {
+        window.electronAPI.writeSystemAudio(filePath);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('系统音频同步失败:', error);
+      return false;
+    }
+  }
+}
+
+const systemAudioSync = new SystemAudioSync();
+
 function showFeature(feature) {
     document.getElementById('main-menu').style.display = 'none';
     document.querySelectorAll('.content-area').forEach(area => {
@@ -319,6 +352,15 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
               <div style="margin-top: 10px; font-size: 11px; color: #888; word-wrap: break-word; word-break: break-all; line-height: 1.4; background: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #007bff;">${file}</div>
             </div>
           `
+
+          setTimeout(() => {
+            const audioElement = document.getElementById(audioId);
+            if (audioElement) {
+              audioElement.addEventListener('play', async () => {
+                await systemAudioSync.syncWithSystemAudio(file);
+              });
+            }
+          }, 100);
         })
         p2Content += '<br>'
       }
@@ -369,9 +411,14 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
     resultDiv.innerHTML = `
       <strong>获取成功！</strong><br>
       已找到听力答案数据<br><br>
+      
+
+      
       ${p2Content}
       ${p3Content}
     `;
+    
+    
   }
 });
 
