@@ -11,8 +11,7 @@ let pos_pk = {}
 let ans
 let flag = 0;
 let pythonProcess
-let listeningScale = 100
-let wordpkScale = 100
+let globalScale = 100
 
 // 根据缩放率调整坐标
 function adjustCoordinates(x, y, scale) {
@@ -25,7 +24,7 @@ function adjustCoordinates(x, y, scale) {
 
 // 获取全局缩放率
 function getCurrentScale() {
-  return global.sharedScale || 100;
+  return globalScale;
 }
 
 ipcMain.handle('get-scale-factor', () => {
@@ -336,7 +335,7 @@ ipcMain.on('start-choose', () => {
           } else if (result.matched_position) {
             let x = result.matched_position.x + result.matched_position.width/2
             let y = result.matched_position.y + result.matched_position.height/2
-            robustClick(x, y, 3, wordpkScale)
+            robustClick(x, y, 3, globalScale)
           } else {
             console.log('定位失败，请手动选择')
             mainWindow.webContents.send('choose-error', '定位失败，请手动选择');
@@ -354,10 +353,10 @@ ipcMain.on('start-choose', () => {
   })
 })
 
-// 添加缩放率设置事件
-ipcMain.on('set-listening-scale', (event, scale) => {
-  global.sharedScale = scale;
-  console.log('缩放率设置为:', scale)
+// 添加全局缩放率设置事件
+ipcMain.on('set-global-scale', (event, scale) => {
+  globalScale = scale;
+  console.log('全局缩放率设置为:', scale)
 });
 
 function stopPythonScript() {
