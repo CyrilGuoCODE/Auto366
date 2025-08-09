@@ -103,7 +103,7 @@ def capture_and_translate(pos1, pos2):
     # 在pos2区域查找匹配的文本位置
     matched_position = None
     min_required_length = 1  # 降低最小匹配字符长度以适应中文
-    max_lcs = 0
+    max_lcs = -1
     ocr_data['translate_text'] = ['']*len(ocr_data['text'])
 
     for i in range(len(ocr_data['text'])):
