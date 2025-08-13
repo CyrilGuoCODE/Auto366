@@ -295,142 +295,7 @@ class WordPKFeature {
   }
 }
 
-class ListeningReplaceFeature {
-  constructor() {
-    this.initEventListeners();
-  }
-
-  initEventListeners() {
-    document.getElementById('findPathBtn').addEventListener('click', () => {
-      this.handleFindPath();
-    });
-
-    document.getElementById('replaceBtn').addEventListener('click', () => {
-      this.handleReplaceAudio();
-    });
-
-    document.getElementById('restoreBtn').addEventListener('click', () => {
-      this.handleRestoreAudio();
-    });
-  }
-
-  handleFindPath() {
-    const resultDiv = document.getElementById('replaceResult');
-    const folderPathInput = document.getElementById('folderPath');
-    
-    resultDiv.innerHTML = `
-      <strong>正在寻找可用路径...</strong><br>
-      请稍候
-    `;
-    
-    const result = window.electronAPI.getFlipbooksFolders();
-    
-    if (result.error) {
-      resultDiv.innerHTML = `
-        <strong>寻找失败</strong><br>
-        错误信息: ${result.error}
-      `;
-    } else {
-      if (result.folders.length === 0) {
-        resultDiv.innerHTML = `
-          <strong>未找到可用路径</strong><br>
-          flipbooks目录下没有找到任何文件夹
-        `;
-      } else if (result.folders.length === 1) {
-        folderPathInput.value = result.folders[0];
-        resultDiv.innerHTML = `
-          <strong>自动填写完成！</strong><br>
-          找到1个文件夹：${result.folders[0]}<br>
-          已自动填写到输入框中
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>找到多个文件夹</strong><br>
-          请从以下列表中选择一个：<br>
-          ${result.folders.map(folder => `• ${folder}`).join('<br>')}<br>
-          <br>
-          请手动输入要使用的文件夹路径
-        `;
-      }
-    }
-  }
-
-  handleReplaceAudio() {
-    const resultDiv = document.getElementById('replaceResult');
-    const folderPath = document.getElementById('folderPath').value.trim();
-    
-    if (!folderPath) {
-      resultDiv.innerHTML = `
-        <strong>错误</strong><br>
-        请输入文件夹路径
-      `;
-      return;
-    }
-    
-    if (confirm(`警告：此操作将替换 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
-      resultDiv.innerHTML = `
-        <strong>正在替换音频文件...</strong><br>
-        请稍候
-      `;
-      
-      const result = window.electronAPI.replaceAudioFiles(folderPath);
-      
-      if (result.error) {
-        resultDiv.innerHTML = `
-          <strong>替换失败</strong><br>
-          错误信息: ${result.error}
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>替换成功！</strong><br>
-          已替换 ${result.replacedCount} 个音频文件<br>
-          <br>
-          <strong>现在可以：</strong><br>
-          1. 进行听力练习<br>
-          2. 完成后点击"还原音频"按钮恢复原文件
-        `;
-      }
-    }
-  }
-
-  handleRestoreAudio() {
-    const resultDiv = document.getElementById('replaceResult');
-    const folderPath = document.getElementById('folderPath').value.trim();
-    
-    if (!folderPath) {
-      resultDiv.innerHTML = `
-        <strong>错误</strong><br>
-        请输入文件夹路径
-      `;
-      return;
-    }
-    
-    if (confirm(`确定要还原 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
-      resultDiv.innerHTML = `
-        <strong>正在还原音频文件...</strong><br>
-        请稍候
-      `;
-      
-      const result = window.electronAPI.restoreAudioFiles(folderPath);
-      
-      if (result.error) {
-        resultDiv.innerHTML = `
-          <strong>还原失败</strong><br>
-          错误信息: ${result.error}
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>还原成功！</strong><br>
-          已还原 ${result.restoredCount} 个音频文件<br>
-          <br>
-          <strong>操作完成</strong>
-        `;
-      }
-    }
-  }
-}
-
-class GetAnswerFeature {
+class HearingFeature {
   constructor() {
     this.initEventListeners();
   }
@@ -447,6 +312,14 @@ class GetAnswerFeature {
     document.getElementById('deleteFlipbooksBtn').addEventListener('click', () => {
       this.handleDeleteFlipbooks();
     });
+	
+	document.getElementById('replaceBtn').addEventListener('click', () => {
+	  this.handleReplaceAudio();
+	});
+	
+	document.getElementById('restoreBtn').addEventListener('click', () => {
+	  this.handleRestoreAudio();
+	});
   }
 
   handleFindAnswerPath() {
@@ -614,6 +487,80 @@ class GetAnswerFeature {
       }
     }
   }
+  
+  handleReplaceAudio() {
+    const resultDiv = document.getElementById('answerResult');
+    const folderPath = document.getElementById('answerFolderPath').value.trim();
+    
+    if (!folderPath) {
+      resultDiv.innerHTML = `
+        <strong>错误</strong><br>
+        请输入文件夹路径
+      `;
+      return;
+    }
+    
+    if (confirm(`警告：此操作将替换 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
+      resultDiv.innerHTML = `
+        <strong>正在替换音频文件...</strong><br>
+        请稍候
+      `;
+      
+      const result = window.electronAPI.replaceAudioFiles(folderPath);
+      
+      if (result.error) {
+        resultDiv.innerHTML = `
+          <strong>替换失败</strong><br>
+          错误信息: ${result.error}
+        `;
+      } else {
+        resultDiv.innerHTML = `
+          <strong>替换成功！</strong><br>
+          已替换 ${result.replacedCount} 个音频文件<br>
+          <br>
+          <strong>现在可以：</strong><br>
+          1. 进行听力练习<br>
+          2. 完成后点击"还原音频"按钮恢复原文件
+        `;
+      }
+    }
+  }
+  
+  handleRestoreAudio() {
+    const resultDiv = document.getElementById('answerResult');
+    const folderPath = document.getElementById('answerFolderPath').value.trim();
+    
+    if (!folderPath) {
+      resultDiv.innerHTML = `
+        <strong>错误</strong><br>
+        请输入文件夹路径
+      `;
+      return;
+    }
+    
+    if (confirm(`确定要还原 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
+      resultDiv.innerHTML = `
+        <strong>正在还原音频文件...</strong><br>
+        请稍候
+      `;
+      
+      const result = window.electronAPI.restoreAudioFiles(folderPath);
+      
+      if (result.error) {
+        resultDiv.innerHTML = `
+          <strong>还原失败</strong><br>
+          错误信息: ${result.error}
+        `;
+      } else {
+        resultDiv.innerHTML = `
+          <strong>还原成功！</strong><br>
+          已还原 ${result.restoredCount} 个音频文件<br>
+          <br>
+          <strong>操作完成</strong>
+        `;
+      }
+    }
+  }
 }
 
 // 初始化所有功能类
@@ -622,6 +569,5 @@ document.addEventListener('DOMContentLoaded', () => {
   new MainMenu();
   new ListeningFeature();
   new WordPKFeature();
-  new ListeningReplaceFeature();
-  new GetAnswerFeature();
+  new HearingFeature();
 });

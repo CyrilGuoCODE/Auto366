@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell } = require('electron')
 const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
 const { spawn, kill } = require('child_process')
@@ -101,6 +101,12 @@ function createWindow() {
       event.preventDefault();
     }
   })
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // 所有链接都在外部浏览器打开
+    shell.openExternal(url);
+    return { action: 'deny' }; // 阻止在Electron中打开
+  });
 
   globalShortcut.register('Ctrl+Shift+Q', () => {
     flag = 0
