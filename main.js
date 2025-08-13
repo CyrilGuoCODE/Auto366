@@ -130,6 +130,7 @@ app.on('window-all-closed', function () {
 
 ipcMain.on('open-location-window', () => {
   if (locationWindow) return;
+  if (mainWindow) mainWindow.minimize()
 
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -171,6 +172,7 @@ ipcMain.on('open-location-window', () => {
 
 ipcMain.on('set-locations', (event, locations) => {
 //  console.log('Received locations:', locations);
+  if (mainWindow) mainWindow.restore()
   pos = locations
   mainWindow.webContents.send('update-locations', locations);
 });
@@ -306,6 +308,7 @@ ipcMain.on('set-locations-pk-1', (event, pos1) => {
 })
 
 ipcMain.on('set-locations-pk-2', (event, pos2) => {
+  if (mainWindow) mainWindow.restore()
   pos_pk.pos2 = pos2
   mainWindow.webContents.send('update-locations-pk', pos_pk);
 })
