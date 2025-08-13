@@ -17,19 +17,19 @@
             <p>请选择要使用的功能：</p>
             
             <div class="feature-grid">
-                <div class="feature-card" onclick="showFeature('listening')">
+                <div class="feature-card" data-type="listening">
                     <h3>听音写词</h3>
                     <p>自动提取答案，并自动填写答案</p>
                 </div>
-                <div class="feature-card" onclick="showFeature('wordpk')">
+                <div class="feature-card" data-type="wordpk">
                     <h3>单词PK</h3>
                     <p>自动完成单词PK练习</p>
                 </div>
-                <div class="feature-card" onclick="showFeature('listening-replace')">
+                <div class="feature-card" data-type="listening-replace">
                     <h3>听力替换</h3>
                     <p>等待时音频文件替换3秒空白音频</p>
                 </div>
-                <div class="feature-card" onclick="showFeature('get-answer')">
+                <div class="feature-card" data-type="get-answer">
                     <h3>听力答案获取</h3>
                     <p>自动获取听后回答和转述的标准答案</p>
                 </div>
@@ -45,7 +45,7 @@
         </div>
 
         <div id="listening-content" class="content-area">
-            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <button class="back-btn">返回</button>
             <h1>听音写词</h1>
             
             <div class="tutorial">
@@ -74,7 +74,7 @@
                     <input type="number" id="scaleInput" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="0">
                     <button id="getScale" class="clear-memory-btn">获取当前</button>
                 </div>
-                <div class="scale-help-text">程序会自动读取屏幕缩放率，也会记住上次设置的缩放率，点击"获取当前"可重新获取系统缩放率</div>
+                <div class="scale-help-text" id="scaleHelpText">程序会自动读取屏幕缩放率，点击"获取当前"可重新获取系统缩放率</div>
             </div>
             
             <div class="buttons">
@@ -101,7 +101,7 @@
         </div>
 
         <div id="wordpk-content" class="content-area">
-            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <button class="back-btn">返回</button>
             <h1>单词PK</h1>
             
             <div class="tutorial">
@@ -119,7 +119,7 @@
                     <input type="number" id="scaleInput-pk" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="0">
                     <button id="getScale-pk" class="clear-memory-btn">获取当前</button>
                 </div>
-                <div class="scale-help-text">程序会自动读取屏幕缩放率，也会记住上次设置的缩放率，点击"获取当前"可重新获取系统缩放率</div>
+                <div class="scale-help-text" id="scaleHelpText-pk">程序会自动读取屏幕缩放率，点击"获取当前"可重新获取系统缩放率</div>
             </div>
             
             <div class="buttons">
@@ -141,7 +141,7 @@
         </div>
 
         <div id="listening-replace-content" class="content-area">
-            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <button class="back-btn">返回</button>
             <h1>等待听力替换</h1>
             
             <div class="tutorial">
@@ -182,7 +182,7 @@
         </div>
 
         <div id="get-answer-content" class="content-area">
-            <button class="back-btn" onclick="showMainMenu()">返回</button>
+            <button class="back-btn">返回</button>
             <h1>听力答案获取</h1>
             
             <div class="tutorial">
