@@ -77,9 +77,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 过滤掉cache目录
     const filteredAppend = append.filter(file => file !== 'cache')
 
-    // if (filteredAppend.length !== 1) {
-    //   return { error: '检测错误' }
-    // }
+     if (filteredAppend.length < 1) {
+       return { error: '检测错误' }
+     }
 
     const nPath = path.join(resourcePath, filteredAppend[0])
     const answer = []
@@ -119,11 +119,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       let deletedCount = 0
       
       for (const file of files) {
-        // 跳过名为 1944930808082993236 的文件夹
-        if (file === '1944930808082993236') {
-          continue
-        }
-        
         const filePath = path.join(resourcePath, file)
         const stats = fs.statSync(filePath)
         

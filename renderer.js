@@ -29,7 +29,7 @@ class SystemAudioSync {
   }
 }
 
-const systemAudioSync = new SystemAudioSync();
+//const systemAudioSync = new SystemAudioSync();
 
 function showFeature(feature) {
     document.getElementById('main-menu').style.display = 'none';
@@ -45,111 +45,6 @@ function showMainMenu() {
         area.classList.remove('active');
     });
 }
-
-document.addEventListener('DOMContentLoaded', async () => {
-    const firstCheckBtn = document.getElementById('firstCheck')
-    const secondCheckBtn = document.getElementById('secondCheck')
-    const resultDiv = document.getElementById('result')
-    const scaleInput = document.getElementById('scaleInput')
-    const getScaleBtn = document.getElementById('getScale')
-
-    let initialFiles = []
-
-    async function setScaleToCurrent() {
-        if (window.electronAPI.getScaleFactor) {
-            const scaleFactor = await window.electronAPI.getScaleFactor();
-            const scalePercent = Math.round(scaleFactor * 100);
-            if (scaleInput) {
-                scaleInput.value = scalePercent;
-                window.electronAPI.setGlobalScale(scalePercent);
-                localStorage.setItem('scale', scalePercent.toString());
-            }
-        }
-    }
-
-    await setScaleToCurrent();
-
-    function restoreScaleSetting() {
-        const savedScale = localStorage.getItem('scale');
-        if (savedScale && scaleInput) {
-            scaleInput.value = savedScale;
-            window.electronAPI.setGlobalScale(parseInt(savedScale));
-        }
-    }
-    restoreScaleSetting();
-
-    // 保存设置
-    function saveScaleSetting(value) {
-        localStorage.setItem('scale', value.toString());
-    }
-
-    // 监听缩放率变化
-    if (scaleInput) {
-        scaleInput.addEventListener('change', () => {
-            const scale = parseInt(scaleInput.value) || 100;
-            window.electronAPI.setGlobalScale(scale);
-            saveScaleSetting(scale);
-        });
-    }
-
-    // 获取当前按钮
-    if (getScaleBtn) {
-        getScaleBtn.addEventListener('click', async () => {
-            await setScaleToCurrent();
-            alert('已获取当前屏幕缩放率');
-        });
-    }
-
-    firstCheckBtn.addEventListener('click', async () => {
-        // 获取并设置缩放率
-        const scale = parseInt(scaleInput.value) || 100
-        window.electronAPI.setGlobalScale(scale)
-        saveScaleSetting(scale)
-        
-        initialFiles = window.electronAPI.checkFirst()
-
-        if (initialFiles === null) {
-            resultDiv.innerHTML = '<span class="error">资源路径不存在: D:/Up366StudentFiles/resources/</span>'
-            return
-        }
-
-        resultDiv.innerHTML = `
-            <strong>首次检测完成！</strong><br>
-            当前资源目录包含 ${initialFiles.length} 个文件<br>
-            屏幕缩放率设置为: ${scale}%<br>
-            <br>
-            <strong>下一步：</strong><br>
-            1. 清理资源目录（如果有文件请点击"删除已下载"按钮清理资源目录（必须））<br>
-            2. 在天学网中找到并下载一个未下载的练习<br>
-            3. 确保下载完成后，点击"再次检测"按钮
-        `
-        secondCheckBtn.disabled = false
-        firstCheckBtn.disabled = true
-    })
-
-    secondCheckBtn.addEventListener('click', () => {
-        const result = window.electronAPI.checkSecond(initialFiles)
-
-        if (result.error) {
-            resultDiv.innerHTML = `<span class="error">${result.error}</span>`
-        } else {
-            resultDiv.innerHTML = `
-                <strong>再次检测完成！</strong><br>
-                检测到 ${result.answer.length} 个答案<br>
-                <br>
-                <strong>答案列表：</strong><br>
-                ${result.answer.map((ans, index) => `${index + 1}. ${ans}`).join('<br>')}
-                <br>
-                <br>
-                <strong>下一步：</strong><br>
-                点击"定位填充数据"按钮，在练习页面中设置坐标
-            `
-        }
-
-        secondCheckBtn.disabled = true
-        firstCheckBtn.disabled = false
-    })
-})
 
 document.getElementById('locationBtn').addEventListener('click', () => {
   window.electronAPI.openLocationWindow();
@@ -357,7 +252,7 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
             const audioElement = document.getElementById(audioId);
             if (audioElement) {
               audioElement.addEventListener('play', async () => {
-                await systemAudioSync.syncWithSystemAudio(file);
+//                await systemAudioSync.syncWithSystemAudio(file);
               });
             }
           }, 100);
@@ -411,14 +306,9 @@ document.getElementById('getAnswerBtn').addEventListener('click', () => {
     resultDiv.innerHTML = `
       <strong>获取成功！</strong><br>
       已找到听力答案数据<br><br>
-      
-
-      
       ${p2Content}
       ${p3Content}
     `;
-    
-    
   }
 });
 
@@ -538,29 +428,16 @@ function updatePkStepGuide(step) {
 }
 
 document.getElementById('locationBtn-pk').addEventListener('click', () => {
-  // 获取并设置缩放率
-  const scaleInput = document.getElementById('scaleInput-pk')
-  const scale = parseInt(scaleInput.value) || 100
-  window.electronAPI.setGlobalScale(scale)
-  localStorage.setItem('wordpk-scale', scale.toString());
-  
   window.electronAPI.openLocationWindowPk();
   pkStep = 2
   setTimeout(() => updatePkStepGuide(pkStep), 300)
 });
 
 document.getElementById('startBtn-pk').addEventListener('click', () => {
-  // 获取并设置缩放率
-  const scaleInput = document.getElementById('scaleInput-pk')
-  const scale = parseInt(scaleInput.value) || 100
-  window.electronAPI.setGlobalScale(scale)
-  localStorage.setItem('wordpk-scale', scale.toString());
-  
   const resultDiv = document.getElementById('result');
   resultDiv.innerHTML = `
     <strong>正在执行自动选择...</strong><br>
-    请稍候，不要移动鼠标或切换窗口<br>
-    屏幕缩放率设置为: ${scale}%
+    请稍候，不要移动鼠标或切换窗口
     <span id="pk-step-guide"></span>
   `;
   pkStep = 3
@@ -573,58 +450,85 @@ if (document.getElementById('pk-step-guide')) {
   updatePkStepGuide(1)
 }
 
-// 为单词PK功能添加缩放获取功能
-document.addEventListener('DOMContentLoaded', async () => {
-    // 检查是否在单词PK页面
-    const wordpkContent = document.getElementById('wordpk-content');
-    if (!wordpkContent) return;
-    
-    const scaleInput = document.getElementById('scaleInput-pk')
-    const clearScaleBtn = document.getElementById('clearScale-pk')
+const firstCheckBtn = document.getElementById('firstCheck')
+const secondCheckBtn = document.getElementById('secondCheck')
+const resultDiv = document.getElementById('result')
 
-    async function setScaleToCurrent() {
-        if (window.electronAPI.getScaleFactor) {
-            const scaleFactor = await window.electronAPI.getScaleFactor();
-            const scalePercent = Math.round(scaleFactor * 100);
-            if (scaleInput) {
-                scaleInput.value = scalePercent;
-                window.electronAPI.setGlobalScale(scalePercent);
-                localStorage.setItem('wordpk-scale', scalePercent.toString());
-            }
-        }
+firstCheckBtn.addEventListener('click', async () => {
+    // 获取并设置缩放率
+    const scale = parseInt(scaleInput.value) || 100
+    window.electronAPI.setGlobalScale(scale)
+    saveScaleSetting(scale)
+
+    initialFiles = window.electronAPI.checkFirst()
+
+    if (initialFiles === null) {
+        resultDiv.innerHTML = '<span class="error">资源路径不存在: D:/Up366StudentFiles/resources/</span>'
+        return
     }
 
-    // 初始化时获取当前缩放率
-    await setScaleToCurrent();
+    resultDiv.innerHTML = `
+        <strong>首次检测完成！</strong><br>
+        当前资源目录包含 ${initialFiles.length} 个文件<br>
+        屏幕缩放率设置为: ${scale}%<br>
+        <br>
+        <strong>下一步：</strong><br>
+        1. 清理资源目录（如果有文件请点击"删除已下载"按钮清理资源目录（必须））<br>
+        2. 在天学网中找到并下载一个未下载的练习<br>
+        3. 确保下载完成后，点击"再次检测"按钮
+    `
+    secondCheckBtn.disabled = false
+    firstCheckBtn.disabled = true
+})
 
-    function restoreScaleSetting() {
-        const savedScale = localStorage.getItem('wordpk-scale');
-        if (savedScale && scaleInput) {
-            scaleInput.value = savedScale;
-            window.electronAPI.setGlobalScale(parseInt(savedScale));
-        }
-    }
-    restoreScaleSetting();
+secondCheckBtn.addEventListener('click', () => {
+    const result = window.electronAPI.checkSecond(initialFiles)
 
-    // 保存设置
-    function saveScaleSetting(value) {
-        localStorage.setItem('wordpk-scale', value.toString());
-    }
-
-    // 监听缩放率变化
-    if (scaleInput) {
-        scaleInput.addEventListener('change', () => {
-            const scale = parseInt(scaleInput.value) || 100;
-            window.electronAPI.setGlobalScale(scale);
-            saveScaleSetting(scale);
-        });
+    if (result.error) {
+        resultDiv.innerHTML = `<span class="error">${result.error}</span>`
+    } else {
+        resultDiv.innerHTML = `
+            <strong>再次检测完成！</strong><br>
+            检测到 ${result.answer.length} 个答案<br>
+            <br>
+            <strong>答案列表：</strong><br>
+            ${result.answer.map((ans, index) => `${index + 1}. ${ans}`).join('<br>')}
+            <br>
+            <br>
+            <strong>下一步：</strong><br>
+            点击"定位填充数据"按钮，在练习页面中设置坐标
+        `
     }
 
-    // 获取当前缩放率按钮
-    if (clearScaleBtn) {
-        clearScaleBtn.addEventListener('click', async () => {
-            await setScaleToCurrent();
-            alert('已获取当前屏幕缩放率');
-        });
-    }
-});
+    secondCheckBtn.disabled = true
+    firstCheckBtn.disabled = false
+})
+
+let scale = null
+async function getScale(){
+	scale = await window.electronAPI.getScaleFactor()
+	const scaleInput = document.getElementById('scaleInput')
+	const scaleInputPk = document.getElementById('scaleInput-pk')
+	scaleInput.value = scaleInputPk.value = scale
+	
+	const getScale = document.getElementById('getScale')
+	const getScalePk = document.getElementById('getScale-pk')
+	getScale.addEventListener('click', async () => {
+		scale = await window.electronAPI.getScaleFactor()
+		scaleInput.value = scaleInputPk.value = scale
+	})
+	getScalePk.addEventListener('click', async () => {
+		scale = await window.electronAPI.getScaleFactor()
+		scaleInput.value = scaleInputPk.value = scale
+	})
+	scaleInput.addEventListener('change', async () => {
+		scale = scaleInput.value
+		window.electronAPI.setGlobalScale(scale)
+	})
+	scaleInputPk.addEventListener('change', async () => {
+		scale = scaleInputPk.value
+		window.electronAPI.setGlobalScale(scale)
+	})
+}
+
+getScale()
