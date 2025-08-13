@@ -96,7 +96,7 @@ window.electronAPI.onOperationComplete((event, result) => {
 document.getElementById('deleteBtn').addEventListener('click', () => {
   const resultDiv = document.getElementById('result');
 
-     if (confirm('警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n注意：将保留名为 1944930808082993236 的文件夹\n\n确定要继续吗？')) {
+     if (confirm('警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n确定要继续吗？')) {
     resultDiv.innerHTML = `
       <strong>正在删除文件...</strong><br>
       请稍候
@@ -455,11 +455,6 @@ const secondCheckBtn = document.getElementById('secondCheck')
 const resultDiv = document.getElementById('result')
 
 firstCheckBtn.addEventListener('click', async () => {
-    // 获取并设置缩放率
-    const scale = parseInt(scaleInput.value) || 100
-    window.electronAPI.setGlobalScale(scale)
-    saveScaleSetting(scale)
-
     initialFiles = window.electronAPI.checkFirst()
 
     if (initialFiles === null) {
@@ -470,7 +465,6 @@ firstCheckBtn.addEventListener('click', async () => {
     resultDiv.innerHTML = `
         <strong>首次检测完成！</strong><br>
         当前资源目录包含 ${initialFiles.length} 个文件<br>
-        屏幕缩放率设置为: ${scale}%<br>
         <br>
         <strong>下一步：</strong><br>
         1. 清理资源目录（如果有文件请点击"删除已下载"按钮清理资源目录（必须））<br>
