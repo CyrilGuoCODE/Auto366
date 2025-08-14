@@ -7,9 +7,10 @@ from PIL import Image
 import pytesseract
 from deep_translator import PonsTranslator
 from pytesseract import Output
+import linecache
+import os
 
 # 设置UTF-8编码输出
-import os
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 # 设置控制台编码
@@ -22,9 +23,31 @@ if sys.platform.startswith('win'):
 pytesseract.pytesseract.tesseract_cmd = r'.\tesseract\tesseract.exe'
 
 # 设置语言包路径
-import os
 
 os.environ['TESSDATA_PREFIX'] = r'.\tessdata'
+
+
+def find_first_occurrence(filename, search_text):
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            for line_num, line in enumerate(file, 1):
+                if search_text in line:
+                    return line_num
+        return -1
+    except FileNotFoundError:
+        ValueError(f"错误: 文件 {filename} 未找到")
+        return -1
+    except Exception as e:
+        ValueError(f"读取文件时发生错误: {e}")
+        return -1
+
+def get_line_with_linecache(filename, line_number):
+    try:
+        line = linecache.getline(filename, line_number)
+        return line.rstrip('\n') if line else None
+    except Exception as e:
+        ValueError(f"读取文件时发生错误: {e}")
+        return None
 
 def longest_common_substring(s1, s2):
     m, n = len(s1), len(s2)
@@ -47,12 +70,13 @@ def longest_common_substring(s1, s2):
 def detect_language(text):
     """检测文本语言（简体中文或英文）"""
     if re.search(r'[\u4e00-\u9fff]', text):  # 检测中文字符
-        return 'zh-CN'
-    return 'en-GB'
+        return 'zh'
+    return 'en'
 
 
 def preprocess_text(text):
     """预处理文本：移除标点、空格，统一为小写"""
+    text = re.sub(r'\b[a-zA-Z]+\.\s*', '', text)
     text = re.sub(r'[^\w\u4e00-\u9fff]', '', text)  # 保留字母数字和中文字符
     return text.lower()
 
@@ -79,16 +103,16 @@ def capture_and_translate(pos1, pos2):
 
     # 检测语言并设置翻译方向
     lang = detect_language(original_text)
-    if lang == 'zh-CN':
+    if lang == 'zh':
         target_lang = 'en'
-        from_lang = 'zh-cn'
+        from_lang = 'zh'
     else:
-        target_lang = 'zh-cn'
+        target_lang = 'zh'
         from_lang = 'en'
 
     # 翻译文本
-    translator = PonsTranslator(source=from_lang, target=target_lang)
-    translated_text = translator.translate(original_text)
+    line = find_first_occurrence(f'translate-{from_lang}.txt', preprocess_text(original_text))
+    processed_translated = get_line_with_linecache(f'translate-{target_lang}.txt', line)
 
     # 获取pos2区域的OCR详细数据
     ocr_data = pytesseract.image_to_data(
@@ -97,14 +121,10 @@ def capture_and_translate(pos1, pos2):
         output_type=Output.DICT
     )
 
-    # 预处理翻译文本
-    processed_translated = preprocess_text(translated_text)
-
     # 在pos2区域查找匹配的文本位置
     matched_position = None
     min_required_length = 1  # 降低最小匹配字符长度以适应中文
     max_lcs = -1
-    ocr_data['translate_text'] = ['']*len(ocr_data['text'])
 
     for i in range(len(ocr_data['text'])):
         text = ocr_data['text'][i].strip()
@@ -113,7 +133,6 @@ def capture_and_translate(pos1, pos2):
         # 检查置信度和文本长度
         if conf >= 60 and len(text) >= min_required_length:
             processed_text = preprocess_text(text)
-            ocr_data['translate_text'][i] = processed_text
 
             lcs = longest_common_substring(processed_text, processed_translated)
             # 检查是否在翻译文本中出现（忽略大小写和标点）
@@ -128,7 +147,7 @@ def capture_and_translate(pos1, pos2):
 
     return {
         'original_text': original_text,
-        'translated_text': translated_text,
+        'translated_text': processed_translated,
         'original_data': ocr_data,
         'target_lang': target_lang,
         'matched_position': matched_position
@@ -157,4 +176,4 @@ if __name__ == '__main__':
             }
             print(json.dumps(error_result, ensure_ascii=False), flush=True)
         
-        time.sleep(0.5)
+        time.sleep(2)

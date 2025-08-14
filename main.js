@@ -332,7 +332,7 @@ ipcMain.on('start-choose', () => {
         if (line.trim()) {
           const result = JSON.parse(line);
           console.log('Received result:', result);
-          
+
           if (result.error) {
             console.log('Python error:', result.error);
             mainWindow.webContents.send('choose-error', `Python error: ${result.error}`);
