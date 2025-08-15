@@ -203,8 +203,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       
       function findFilesByExtension(dir) {
         let list = fs.readdirSync(dir)
-        let pending = list.length
-        if (pending === 0) return
+        if (list.length === 0) return
 
         for (let dirent of list) {
           const dirName = path.resolve(dir, dirent)
@@ -212,8 +211,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
             findFilesByExtension(dirName)
           } else {
             if (dirent.includes('A') && dirent.toLowerCase().includes('.mp3')) {
-              let len = dirent.length
-              let className = dirent.substring(1, len-6)
+              let className = dirent.substring(1).split('.').slice(0, -2).join('.');
               if (!(className in results['P2'])) results['P2'][className] = [dirName]
               else results['P2'][className].push(dirName)
             }
