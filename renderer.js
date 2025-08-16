@@ -786,7 +786,7 @@ class UniversalAnswerFeature {
   }
 }
 
-// 更新初始化代码
+// 初始化代码
 document.addEventListener('DOMContentLoaded', () => {
   new Global();
   new MainMenu();
