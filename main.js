@@ -503,6 +503,14 @@ function startAnswerProxy() {
           serverSocket.end();
       });
   });
+
+  proxyServer.listen(5291, '127.0.0.1', () => {
+    console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291')
+    mainWindow.webContents.send('proxy-status', {
+      running: true,
+      message: '代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:5291'
+    })
+  })
 }
 
 function processRequestBody(body, hostname, path) {
