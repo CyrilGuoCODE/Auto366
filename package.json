@@ -20,7 +20,7 @@
     "fs-extra": "^11.1.1",
     "node-stream-zip": "^1.15.0",
     "path": "^0.12.7",
-    "socks": "^2.8.7",
+    "socksv5": "^0.0.6",
     "ws": "^8.14.2"
   },
   "devDependencies": {

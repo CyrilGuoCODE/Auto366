@@ -9,7 +9,7 @@ const url = require('url')
 const fs = require('fs-extra')
 const axios = require('axios')
 const StreamZip = require('node-stream-zip')
-const socks = require('socks') // 新增SOCKS模块
+const socks = require('socksv5'); // 使用稳定的 socksv5 包
 
 let mainWindow
 let locationWindow
@@ -382,58 +382,55 @@ function startAnswerProxy() {
     stopAnswerProxy();
   }
 
-  // 创建SOCKS5代理服务器
-  proxyServer = socks.createServer({
-    type: 5, // SOCKS5
-    auths: [ socks.auth.None() ] // 无需认证
-  });
-
-  // 处理客户端连接
-  proxyServer.on('proxyConnect', (info, destination) => {
-    const { host, port } = info;
-    console.log(`SOCKS5代理连接: ${host}:${port}`);
+  // 创建SOCKS5服务器
+  proxyServer = socks.createServer((info, accept, deny) => {
+    // 允许所有连接
+    accept();
 
     // 记录连接信息
     const requestInfo = {
       method: 'SOCKS5',
-      url: `${host}:${port}`,
-      host: host,
-      port: port,
+      url: `${info.dstAddr}:${info.dstPort}`,
+      host: info.dstAddr,
+      port: info.dstPort,
       timestamp: new Date().toISOString()
     };
 
-    // 发送流量信息到渲染进程
     mainWindow.webContents.send('traffic-log', requestInfo);
+  });
 
-    destination.on('data', (data) => {
-      // 检查是否需要监听响应内容
-      if (isCapturing) {
-        const dataStr = data.toString();
-        if (dataStr.includes('downloadUrl') || dataStr.includes('.zip') ||
-            dataStr.includes('fileinfo') || dataStr.includes('exam') ||
-            dataStr.includes('question')) {
-          mainWindow.webContents.send('important-request', {
-            url: `${host}:${port}`,
-            data: dataStr.substring(0, 500)
-          });
-          extractDownloadUrl(dataStr);
-        }
+  // 设置无认证
+  proxyServer.useAuth(socks.auth.None());
+
+  // 监听数据
+  proxyServer.on('proxyData', (data) => {
+    if (isCapturing) {
+      const dataStr = data.toString();
+      if (dataStr.includes('downloadUrl') || dataStr.includes('.zip') ||
+          dataStr.includes('fileinfo') || dataStr.includes('exam') ||
+          dataStr.includes('question')) {
+        mainWindow.webContents.send('important-request', {
+          data: dataStr.substring(0, 500)
+        });
+        extractDownloadUrl(dataStr);
       }
-    });
+    }
   });
 
-  proxyServer.on('proxyError', (err) => {
-    console.error('SOCKS5代理错误:', err);
-    mainWindow.webContents.send('proxy-error', {
-      error: `SOCKS5代理错误: ${err.message}`
-    });
-  });
-
+  // 启动服务器
   proxyServer.listen(5291, '127.0.0.1', () => {
     console.log('SOCKS5代理服务器已启动: 127.0.0.1:5291');
     mainWindow.webContents.send('proxy-status', {
       running: true,
-      message: 'SOCKS5代理服务器已启动，请设置天学网客户端代理为 socks5://127.0.0.1:5291'
+      message: 'SOCKS5代理服务器已启动，请设置代理为 socks5://127.0.0.1:5291'
+    });
+  });
+
+  // 错误处理
+  proxyServer.on('error', (err) => {
+    console.error('SOCKS5代理错误:', err);
+    mainWindow.webContents.send('proxy-error', {
+      error: `SOCKS5代理错误: ${err.message}`
     });
   });
 }
