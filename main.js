@@ -9,6 +9,7 @@ const url = require('url')
 const fs = require('fs-extra')
 const axios = require('axios')
 const StreamZip = require('node-stream-zip')
+const CRLF = '\r\n';
 
 let mainWindow
 let locationWindow
@@ -398,88 +399,125 @@ function startAnswerProxy() {
 
   // 处理HTTPS CONNECT请求
   proxyServer.on('connect', (req, clientSocket, head) => {
-    const { hostname, port } = parseUrl(req.url)
-    const targetPort = port || 443
+      const { hostname, port } = parseUrl(req.url);
+      const targetPort = port || 443;
   
-    // 记录HTTPS连接请求
-    const requestInfo = {
-      method: 'HTTPS',
-      url: `https://${hostname}:${targetPort}`,
-      host: hostname,
-      timestamp: new Date().toISOString()
-    }
-    
-    // 发送HTTPS流量信息到渲染进程
-    mainWindow.webContents.send('traffic-log', requestInfo)
+      // 记录HTTPS连接请求
+      const requestInfo = {
+          method: 'HTTPS',
+          url: `https://${hostname}:${targetPort}`,
+          host: hostname,
+          timestamp: new Date().toISOString()
+      };
+      mainWindow.webContents.send('traffic-log', requestInfo);
   
-    const serverSocket = net.createConnection(targetPort, hostname, () => {
-      clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-      serverSocket.write(head)
-      
-      // 监听HTTPS请求数据
-      let httpsRequestData = Buffer.from([])
-      let isRequestCaptured = false
-      
-      clientSocket.on('data', (data) => {
-        if (!isRequestCaptured) {
-          httpsRequestData = Buffer.concat([httpsRequestData, data])
-          
-          // 尝试解析HTTPS请求头
-          const dataStr = httpsRequestData.toString()
-          if (dataStr.includes('\r\n\r\n')) {
-            isRequestCaptured = true
-            
-            // 提取请求方法、路径和主机
-            const firstLine = dataStr.split('\r\n')[0]
-            const method = firstLine.split(' ')[0]
-            const path = firstLine.split(' ')[1]
-            
-            // 记录HTTPS请求详情
-            const httpsRequestInfo = {
-              method: method,
-              url: `https://${hostname}${path}`,
-              host: hostname,
-              timestamp: new Date().toISOString(),
-              isHttps: true
-            }
-            
-            mainWindow.webContents.send('traffic-log', httpsRequestInfo)
-            
-            // 检查是否需要捕获答案下载
-            if (isCapturing && path.includes('/download/') && hostname.includes('fs.')) {
-              const fullUrl = `https://${hostname}${path}`
-              downloadUrl = fullUrl
-              console.log('发现HTTPS答案下载链接:', fullUrl)
-              mainWindow.webContents.send('download-found', { url: downloadUrl })
-              downloadAndProcessFile(downloadUrl)
-            }
-          }
-        }
-        
-        serverSocket.write(data)
-      })
-      
-      serverSocket.pipe(clientSocket)
-    })
+      const serverSocket = net.createConnection(targetPort, hostname, () => {
+          clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+          serverSocket.write(head);
   
-    serverSocket.on('error', (err) => {
-      console.error('HTTPS代理错误:', err)
-      clientSocket.end()
-    })
-    
-    clientSocket.on('error', (err) => {
-      console.error('客户端HTTPS连接错误:', err)
-      serverSocket.end()
-    })
-  })
+          // 解析TLS隧道中的HTTP请求
+          let buffer = Buffer.from([]);
+          let requestHeaders = '';
+          let body = '';
+          let contentLength = 0;
+          let isBodyParsing = false;
+  
+          clientSocket.on('data', (data) => {
+              if (!isBodyParsing) {
+                  buffer = Buffer.concat([buffer, data]);
+                  const bufferStr = buffer.toString();
+                  
+                  // 检查请求头是否结束
+                  const headerEndIndex = bufferStr.indexOf(CRLF + CRLF);
+                  if (headerEndIndex !== -1) {
+                      requestHeaders = bufferStr.substring(0, headerEndIndex);
+                      const remainingData = bufferStr.substring(headerEndIndex + (CRLF + CRLF).length);
+                      
+                      // 解析请求头获取Content-Length
+                      const headerLines = requestHeaders.split(CRLF);
+                      const contentLengthLine = headerLines.find(line => line.toLowerCase().startsWith('content-length:'));
+                      if (contentLengthLine) {
+                          contentLength = parseInt(contentLengthLine.split(':')[1].trim());
+                      }
+                      
+                      // 获取请求方法、路径和协议
+                      const requestLine = headerLines[0];
+                      const [method, path, protocol] = requestLine.split(' ');
+                      
+                      // 记录完整的HTTPS请求URL
+                      const fullUrl = `https://${hostname}${path}`;
+                      const httpsRequestInfo = {
+                          method: method,
+                          url: fullUrl,
+                          host: hostname,
+                          path: path,
+                          timestamp: new Date().toISOString(),
+                          isHttps: true
+                      };
+                      mainWindow.webContents.send('traffic-log', httpsRequestInfo);
+                      
+                      // 检查是否是答案下载链接
+                      if (isCapturing && hostname.includes('fs.') && path.includes('/download/')) {
+                          downloadUrl = fullUrl;
+                          console.log('发现HTTPS答案下载链接:', fullUrl);
+                          mainWindow.webContents.send('download-found', { url: downloadUrl });
+                          downloadAndProcessFile(downloadUrl);
+                      }
+                      
+                      // 如果有请求体，开始解析
+                      if (contentLength > 0) {
+                          isBodyParsing = true;
+                          body = remainingData;
+                          
+                          // 如果剩余数据已经包含完整请求体
+                          if (body.length >= contentLength) {
+                              processRequestBody(body.substring(0, contentLength), hostname, path);
+                              body = body.substring(contentLength);
+                              isBodyParsing = false;
+                          }
+                      }
+                  }
+              } else {
+                  // 正在解析请求体
+                  body += data.toString();
+                  if (body.length >= contentLength) {
+                      processRequestBody(body.substring(0, contentLength), hostname, path);
+                      body = body.substring(contentLength);
+                      isBodyParsing = false;
+                  }
+              }
+              
+              serverSocket.write(data);
+          });
+  
+          serverSocket.pipe(clientSocket);
+      });
+  
+      serverSocket.on('error', (err) => {
+          console.error('HTTPS代理错误:', err);
+          clientSocket.end();
+      });
+      
+      clientSocket.on('error', (err) => {
+          console.error('客户端HTTPS连接错误:', err);
+          serverSocket.end();
+      });
+  });
+}
 
-  proxyServer.listen(5291, '127.0.0.1', () => {
-    console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291')
-    mainWindow.webContents.send('proxy-status', {
-      running: true,
-      message: '代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:5291'
-    })
-  })
+function processRequestBody(body, hostname, path) {
+    if (body.includes('downloadUrl') || body.includes('download') || body.includes('fileinfo')) {
+        mainWindow.webContents.send('important-request', {
+            url: `https://${hostname}${path}`,
+            body: body.substring(0, 500),
+            isHttps: true
+        });
+
+        if (body.includes('fs.') && body.includes('/download/')) {
+            console.log('HTTPS请求体包含答案下载信息');
+            extractDownloadUrl(body);
+        }
+    }
 }
 
 function stopAnswerProxy() {
