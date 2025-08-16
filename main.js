@@ -399,16 +399,78 @@ function startAnswerProxy() {
   // 处理HTTPS CONNECT请求
   proxyServer.on('connect', (req, clientSocket, head) => {
     const { hostname, port } = parseUrl(req.url)
-
-    const serverSocket = net.createConnection(port || 443, hostname, () => {
+    const targetPort = port || 443
+  
+    // 记录HTTPS连接请求
+    const requestInfo = {
+      method: 'HTTPS',
+      url: `https://${hostname}:${targetPort}`,
+      host: hostname,
+      timestamp: new Date().toISOString()
+    }
+    
+    // 发送HTTPS流量信息到渲染进程
+    mainWindow.webContents.send('traffic-log', requestInfo)
+  
+    const serverSocket = net.createConnection(targetPort, hostname, () => {
       clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
       serverSocket.write(head)
+      
+      // 监听HTTPS请求数据
+      let httpsRequestData = Buffer.from([])
+      let isRequestCaptured = false
+      
+      clientSocket.on('data', (data) => {
+        if (!isRequestCaptured) {
+          httpsRequestData = Buffer.concat([httpsRequestData, data])
+          
+          // 尝试解析HTTPS请求头
+          const dataStr = httpsRequestData.toString()
+          if (dataStr.includes('\r\n\r\n')) {
+            isRequestCaptured = true
+            
+            // 提取请求方法、路径和主机
+            const firstLine = dataStr.split('\r\n')[0]
+            const method = firstLine.split(' ')[0]
+            const path = firstLine.split(' ')[1]
+            
+            // 记录HTTPS请求详情
+            const httpsRequestInfo = {
+              method: method,
+              url: `https://${hostname}${path}`,
+              host: hostname,
+              timestamp: new Date().toISOString(),
+              isHttps: true
+            }
+            
+            mainWindow.webContents.send('traffic-log', httpsRequestInfo)
+            
+            // 检查是否需要捕获答案下载
+            if (isCapturing && path.includes('/download/') && hostname.includes('fs.')) {
+              const fullUrl = `https://${hostname}${path}`
+              downloadUrl = fullUrl
+              console.log('发现HTTPS答案下载链接:', fullUrl)
+              mainWindow.webContents.send('download-found', { url: downloadUrl })
+              downloadAndProcessFile(downloadUrl)
+            }
+          }
+        }
+        
+        serverSocket.write(data)
+      })
+      
       serverSocket.pipe(clientSocket)
-      clientSocket.pipe(serverSocket)
     })
-
-    serverSocket.on('error', () => clientSocket.end())
-    clientSocket.on('error', () => serverSocket.end())
+  
+    serverSocket.on('error', (err) => {
+      console.error('HTTPS代理错误:', err)
+      clientSocket.end()
+    })
+    
+    clientSocket.on('error', (err) => {
+      console.error('客户端HTTPS连接错误:', err)
+      serverSocket.end()
+    })
   })
 
   proxyServer.listen(5291, '127.0.0.1', () => {
@@ -439,37 +501,39 @@ function parseUrl(urlStr) {
 }
 
 function handleProxyRequest(req, res) {
-  const targetUrl = req.url.startsWith('http') ? req.url : `http://${req.headers.host}${req.url}`
+  const isHttps = req.connection.encrypted || req.headers['x-forwarded-proto'] === 'https'
+  const protocol = isHttps ? 'https:' : 'http:'
+  const targetUrl = req.url.startsWith('http') ? req.url : `${protocol}//${req.headers.host}${req.url}`
+  
+  // 在这里正确定义 parsedUrl
   const parsedUrl = url.parse(targetUrl)
-
-  // 记录请求信息
+  
+  // 记录请求信息（包含协议信息）
   const requestInfo = {
     method: req.method,
-    url: req.url,
+    url: targetUrl,
     host: req.headers.host,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    isHttps: isHttps
   }
 
   // 发送流量信息到渲染进程
   mainWindow.webContents.send('traffic-log', requestInfo)
 
-  if (isCapturing && req.url.includes('fs.') && req.url.includes('/download/')) {
-    const fullUrl = req.url.startsWith('http') ? req.url : `http://${req.headers.host}${req.url}`
-    downloadUrl = fullUrl
-    mainWindow.webContents.send('download-found', { url: downloadUrl })
-    downloadAndProcessFile(downloadUrl)
-  } else if (isCapturing) {
-    if (req.url.includes('fs.')) {
-      console.log('🔍 包含fs.但不包含/download/:', req.url)
-    }
-    if (req.url.includes('/download/')) {
-      console.log('🔍 包含/download/但不包含fs.:', req.url)
+  if (isCapturing) {
+    const isDownloadUrl = parsedUrl.hostname.includes('fs.') && parsedUrl.path.includes('/download/')
+    
+    if (isDownloadUrl) {
+      downloadUrl = targetUrl
+      console.log('发现答案下载链接:', targetUrl)
+      mainWindow.webContents.send('download-found', { url: downloadUrl })
+      downloadAndProcessFile(downloadUrl)
     }
   }
 
   const options = {
     hostname: parsedUrl.hostname,
-    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+    port: parsedUrl.port || (isHttps ? 443 : 80),
     path: parsedUrl.path,
     method: req.method,
     headers: { ...req.headers }
@@ -478,9 +542,9 @@ function handleProxyRequest(req, res) {
   delete options.headers.host
   delete options.headers['proxy-connection']
 
-  const protocol = parsedUrl.protocol === 'https:' ? https : http
+  const protocolModule = isHttps ? https : http
 
-  const proxyReq = protocol.request(options, (proxyRes) => {
+  const proxyReq = protocolModule.request(options, (proxyRes) => {
     res.writeHead(proxyRes.statusCode, proxyRes.headers)
 
     // 检查是否需要监听响应内容
@@ -506,29 +570,13 @@ function handleProxyRequest(req, res) {
             console.log('发现JSON中的答案下载链接:', url)
             mainWindow.webContents.send('download-found', { url: downloadUrl })
             downloadAndProcessFile(downloadUrl)
-          } else {
-            console.log('跳过非答案下载链接:', url)
-            mainWindow.webContents.send('traffic-log', {
-              method: 'INFO',
-              url: `跳过链接: ${url} (不符合 fs.域名/download/ 格式)`,
-              timestamp: new Date().toISOString()
-            })
           }
         }
         catch (e) {
-          // 检查文本中的下载链接
           if (body.includes('downloadUrl') || body.includes('download')) {
-            // 只有当包含 fs. 和 /download/ 时才提取
             if (body.includes('fs.') && body.includes('/download/')) {
               console.log('响应体包含答案下载信息')
               extractDownloadUrl(body)
-            } else {
-              console.log('响应包含下载信息但不符合格式要求')
-              mainWindow.webContents.send('traffic-log', {
-                method: 'INFO',
-                url: `响应包含下载信息但不符合 fs.域名/download/ 格式`,
-                timestamp: new Date().toISOString()
-              })
             }
           }
         }
@@ -558,19 +606,15 @@ function handleProxyRequest(req, res) {
 
     req.on('end', () => {
       if (body.includes('downloadUrl') || body.includes('download') || body.includes('fileinfo')) {
-        mainWindow.webContents.send('important-request', { url: req.url, body: body.substring(0, 500) })
+        mainWindow.webContents.send('important-request', { 
+          url: targetUrl, 
+          body: body.substring(0, 500),
+          isHttps: isHttps
+        })
 
-        // 只有当包含 fs. 和 /download/ 时才提取
         if (body.includes('fs.') && body.includes('/download/')) {
           console.log('请求体包含答案下载信息')
           extractDownloadUrl(body)
-        } else {
-          console.log('请求体包含下载信息但不符合格式要求')
-          mainWindow.webContents.send('traffic-log', {
-            method: 'INFO',
-            url: `请求体包含下载信息但不符合 fs.域名/download/ 格式: ${req.url}`,
-            timestamp: new Date().toISOString()
-          })
         }
       }
       proxyReq.end()
