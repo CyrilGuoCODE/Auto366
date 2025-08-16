@@ -9,6 +9,7 @@ const url = require('url')
 const fs = require('fs-extra')
 const axios = require('axios')
 const StreamZip = require('node-stream-zip')
+const socks = require('socks') // 新增SOCKS模块
 
 let mainWindow
 let locationWindow
@@ -135,8 +136,6 @@ app.whenReady().then(async () => {
   })
 })
 
-
-
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
 })
@@ -184,7 +183,6 @@ ipcMain.on('open-location-window', () => {
 });
 
 ipcMain.on('set-locations', (event, locations) => {
-//  console.log('Received locations:', locations);
   if (mainWindow) mainWindow.restore()
   pos = locations
   mainWindow.webContents.send('update-locations', locations);
@@ -192,8 +190,6 @@ ipcMain.on('set-locations', (event, locations) => {
 
 ipcMain.on('start-point', async () => {
   if (mainWindow) mainWindow.minimize()
-//  console.log('开始执行，坐标信息:', pos);
-//  console.log('答案数组:', ans);
   flag = 1
 
   try {
@@ -205,8 +201,6 @@ ipcMain.on('start-point', async () => {
         mainWindow.webContents.send('operation-complete', { success: false, error: '填充被用户取消' });
         return
       }
-
-//      console.log(`处理第${i+1}个答案: ${ans[i]}`);
 
       // 再次确保窗口激活
       await robustClick(pos.pos1.x, pos.pos1.y);
@@ -279,7 +273,7 @@ ipcMain.on('open-location-window-pk', () => {
 
 ipcMain.on('set-locations-pk-1', (event, pos1) => {
   pos_pk.pos1 = pos1
-  
+
   if (locationWindowPk) locationWindowPk.close();
 
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -328,19 +322,18 @@ ipcMain.on('set-locations-pk-2', (event, pos2) => {
 
 ipcMain.on('start-choose', () => {
   if (mainWindow) mainWindow.minimize()
-  //const pythonProcess = spawn('backend.exe', [JSON.stringify(pos_pk)])
   pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
 
   let buffer = '';
 
   pythonProcess.stdout.on('data', (data) => {
     buffer += data.toString();
-    
+
     // 尝试解析完整的JSON
     try {
       const lines = buffer.split('\n');
       buffer = lines.pop(); // 保留最后一个可能不完整的行
-      
+
       for (const line of lines) {
         if (line.trim()) {
           const result = JSON.parse(line);
@@ -383,162 +376,78 @@ function stopPythonScript() {
   }
 }
 
-// 答案获取功能
+// ===================== SOCKS5代理实现 =====================
 function startAnswerProxy() {
   if (proxyServer) {
-    stopAnswerProxy()
+    stopAnswerProxy();
   }
 
-  proxyServer = http.createServer()
-  
-  // 处理HTTP请求
-  proxyServer.on('request', (req, res) => {
-    handleProxyRequest(req, res)
-  })
-  
-  // 处理HTTPS CONNECT请求
-  proxyServer.on('connect', (req, clientSocket, head) => {
-    const { hostname, port } = parseUrl(req.url)
-    
-    const serverSocket = net.createConnection(port || 443, hostname, () => {
-      clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-      serverSocket.write(head)
-      serverSocket.pipe(clientSocket)
-      clientSocket.pipe(serverSocket)
-    })
-    
-    serverSocket.on('error', () => clientSocket.end())
-    clientSocket.on('error', () => serverSocket.end())
-  })
-  
+  // 创建SOCKS5代理服务器
+  proxyServer = socks.createServer({
+    type: 5, // SOCKS5
+    auths: [ socks.auth.None() ] // 无需认证
+  });
+
+  // 处理客户端连接
+  proxyServer.on('proxyConnect', (info, destination) => {
+    const { host, port } = info;
+    console.log(`SOCKS5代理连接: ${host}:${port}`);
+
+    // 记录连接信息
+    const requestInfo = {
+      method: 'SOCKS5',
+      url: `${host}:${port}`,
+      host: host,
+      port: port,
+      timestamp: new Date().toISOString()
+    };
+
+    // 发送流量信息到渲染进程
+    mainWindow.webContents.send('traffic-log', requestInfo);
+
+    destination.on('data', (data) => {
+      // 检查是否需要监听响应内容
+      if (isCapturing) {
+        const dataStr = data.toString();
+        if (dataStr.includes('downloadUrl') || dataStr.includes('.zip') ||
+            dataStr.includes('fileinfo') || dataStr.includes('exam') ||
+            dataStr.includes('question')) {
+          mainWindow.webContents.send('important-request', {
+            url: `${host}:${port}`,
+            data: dataStr.substring(0, 500)
+          });
+          extractDownloadUrl(dataStr);
+        }
+      }
+    });
+  });
+
+  proxyServer.on('proxyError', (err) => {
+    console.error('SOCKS5代理错误:', err);
+    mainWindow.webContents.send('proxy-error', {
+      error: `SOCKS5代理错误: ${err.message}`
+    });
+  });
+
   proxyServer.listen(5291, '127.0.0.1', () => {
-    console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291')
-    mainWindow.webContents.send('proxy-status', { 
-      running: true, 
-      message: '代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:5291' 
-    })
-  })
+    console.log('SOCKS5代理服务器已启动: 127.0.0.1:5291');
+    mainWindow.webContents.send('proxy-status', {
+      running: true,
+      message: 'SOCKS5代理服务器已启动，请设置天学网客户端代理为 socks5://127.0.0.1:5291'
+    });
+  });
 }
 
 function stopAnswerProxy() {
   if (proxyServer) {
-    proxyServer.close()
-    proxyServer = null
-    isCapturing = false
-    console.log('万能答案获取代理服务器已停止')
-    mainWindow.webContents.send('proxy-status', { running: false, message: '代理服务器已停止' })
-  }
-}
-
-function parseUrl(urlStr) {
-  const parts = urlStr.split(':')
-  return {
-    hostname: parts[0],
-    port: parseInt(parts[1]) || 80
-  }
-}
-
-function handleProxyRequest(req, res) {
-  const targetUrl = req.url.startsWith('http') ? req.url : `http://${req.headers.host}${req.url}`
-  const parsedUrl = url.parse(targetUrl)
-
-  // 记录请求信息
-  const requestInfo = {
-    method: req.method,
-    url: req.url,
-    host: req.headers.host,
-    timestamp: new Date().toISOString()
-  }
-
-  // 发送流量信息到渲染进程
-  mainWindow.webContents.send('traffic-log', requestInfo)
-
-  const options = {
-    hostname: parsedUrl.hostname,
-    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-    path: parsedUrl.path,
-    method: req.method,
-    headers: { ...req.headers }
-  }
-
-  delete options.headers.host
-  delete options.headers['proxy-connection']
-
-  const protocol = parsedUrl.protocol === 'https:' ? https : http
-
-  const proxyReq = protocol.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers)
-
-    // 检查是否需要监听响应内容
-    const shouldMonitor = isCapturing && (
-      req.url.includes('fileinfo') ||
-      req.url.includes('download') ||
-      req.url.includes('.zip') ||
-      req.url.includes('exam') ||
-      req.url.includes('question')
-    )
-
-    if (shouldMonitor) {
-      let body = ''
-      proxyRes.on('data', (chunk) => {
-        body += chunk
-        res.write(chunk)
-      })
-
-      proxyRes.on('end', () => {
-        try {
-          const responseData = JSON.parse(body)
-          
-          // 查找下载链接
-          const downloadPatterns = ['downloadUrl', 'download_url', 'fileUrl', 'file_url', 'zipUrl', 'zip_url']
-          
-          for (const pattern of downloadPatterns) {
-            if (responseData[pattern]) {
-              downloadUrl = responseData[pattern]
-              mainWindow.webContents.send('download-found', { url: downloadUrl })
-              downloadAndProcessFile(downloadUrl)
-              break
-            }
-          }
-        } catch (e) {
-          // 检查文本中的下载链接
-          if (body.includes('downloadUrl') || body.includes('.zip')) {
-            extractDownloadUrl(body)
-          }
-        }
-        res.end()
-      })
-    } else {
-      proxyRes.pipe(res)
-    }
-  })
-
-  proxyReq.on('error', (err) => {
-    console.error('代理请求错误:', err.message)
-    if (!res.headersSent) {
-      res.writeHead(502)
-      res.end('Proxy Error')
-    }
-  })
-
-  // 监听POST请求体
-  if (isCapturing && req.method === 'POST') {
-    let body = ''
-    req.on('data', chunk => {
-      const chunkStr = chunk.toString()
-      body += chunkStr
-      proxyReq.write(chunk)
-    })
-
-    req.on('end', () => {
-      if (body.includes('downloadUrl') || body.includes('.zip') || body.includes('fileinfo')) {
-        mainWindow.webContents.send('important-request', { url: req.url, body: body.substring(0, 500) })
-        extractDownloadUrl(body)
-      }
-      proxyReq.end()
-    })
-  } else {
-    req.pipe(proxyReq)
+    proxyServer.close();
+    proxyServer = null;
+    isCapturing = false;
+    console.log('SOCKS5代理服务器已停止');
+    mainWindow.webContents.send('proxy-status', {
+      running: false,
+      message: 'SOCKS5代理服务器已停止'
+    });
   }
 }
 
