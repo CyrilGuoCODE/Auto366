@@ -2,6 +2,13 @@ const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell } = require('
 const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
 const { spawn, kill } = require('child_process')
+const http = require('http')
+const https = require('https')
+const net = require('net')
+const url = require('url')
+const fs = require('fs-extra')
+const axios = require('axios')
+const StreamZip = require('node-stream-zip')
 
 let mainWindow
 let locationWindow
@@ -12,6 +19,12 @@ let ans
 let flag = 0;
 let pythonProcess
 let globalScale = 100
+
+// 答案获取相关变量
+let proxyServer = null
+let isCapturing = false
+let extractedAnswers = []
+let downloadUrl = ''
 
 // 根据缩放率调整坐标
 function adjustCoordinates(x, y, scale) {
@@ -369,3 +382,321 @@ function stopPythonScript() {
     pythonProcess = null;
   }
 }
+
+// 答案获取功能
+function startAnswerProxy() {
+  if (proxyServer) {
+    stopAnswerProxy()
+  }
+
+  proxyServer = http.createServer()
+  
+  // 处理HTTP请求
+  proxyServer.on('request', (req, res) => {
+    handleProxyRequest(req, res)
+  })
+  
+  // 处理HTTPS CONNECT请求
+  proxyServer.on('connect', (req, clientSocket, head) => {
+    const { hostname, port } = parseUrl(req.url)
+    
+    const serverSocket = net.createConnection(port || 443, hostname, () => {
+      clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+      serverSocket.write(head)
+      serverSocket.pipe(clientSocket)
+      clientSocket.pipe(serverSocket)
+    })
+    
+    serverSocket.on('error', () => clientSocket.end())
+    clientSocket.on('error', () => serverSocket.end())
+  })
+  
+  proxyServer.listen(5291, '127.0.0.1', () => {
+    console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291')
+    mainWindow.webContents.send('proxy-status', { 
+      running: true, 
+      message: '代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:5291' 
+    })
+  })
+}
+
+function stopAnswerProxy() {
+  if (proxyServer) {
+    proxyServer.close()
+    proxyServer = null
+    isCapturing = false
+    console.log('万能答案获取代理服务器已停止')
+    mainWindow.webContents.send('proxy-status', { running: false, message: '代理服务器已停止' })
+  }
+}
+
+function parseUrl(urlStr) {
+  const parts = urlStr.split(':')
+  return {
+    hostname: parts[0],
+    port: parseInt(parts[1]) || 80
+  }
+}
+
+function handleProxyRequest(req, res) {
+  const targetUrl = req.url.startsWith('http') ? req.url : `http://${req.headers.host}${req.url}`
+  const parsedUrl = url.parse(targetUrl)
+
+  // 记录请求信息
+  const requestInfo = {
+    method: req.method,
+    url: req.url,
+    host: req.headers.host,
+    timestamp: new Date().toISOString()
+  }
+
+  // 发送流量信息到渲染进程
+  mainWindow.webContents.send('traffic-log', requestInfo)
+
+  const options = {
+    hostname: parsedUrl.hostname,
+    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+    path: parsedUrl.path,
+    method: req.method,
+    headers: { ...req.headers }
+  }
+
+  delete options.headers.host
+  delete options.headers['proxy-connection']
+
+  const protocol = parsedUrl.protocol === 'https:' ? https : http
+
+  const proxyReq = protocol.request(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+
+    // 检查是否需要监听响应内容
+    const shouldMonitor = isCapturing && (
+      req.url.includes('fileinfo') ||
+      req.url.includes('download') ||
+      req.url.includes('.zip') ||
+      req.url.includes('exam') ||
+      req.url.includes('question')
+    )
+
+    if (shouldMonitor) {
+      let body = ''
+      proxyRes.on('data', (chunk) => {
+        body += chunk
+        res.write(chunk)
+      })
+
+      proxyRes.on('end', () => {
+        try {
+          const responseData = JSON.parse(body)
+          
+          // 查找下载链接
+          const downloadPatterns = ['downloadUrl', 'download_url', 'fileUrl', 'file_url', 'zipUrl', 'zip_url']
+          
+          for (const pattern of downloadPatterns) {
+            if (responseData[pattern]) {
+              downloadUrl = responseData[pattern]
+              mainWindow.webContents.send('download-found', { url: downloadUrl })
+              downloadAndProcessFile(downloadUrl)
+              break
+            }
+          }
+        } catch (e) {
+          // 检查文本中的下载链接
+          if (body.includes('downloadUrl') || body.includes('.zip')) {
+            extractDownloadUrl(body)
+          }
+        }
+        res.end()
+      })
+    } else {
+      proxyRes.pipe(res)
+    }
+  })
+
+  proxyReq.on('error', (err) => {
+    console.error('代理请求错误:', err.message)
+    if (!res.headersSent) {
+      res.writeHead(502)
+      res.end('Proxy Error')
+    }
+  })
+
+  // 监听POST请求体
+  if (isCapturing && req.method === 'POST') {
+    let body = ''
+    req.on('data', chunk => {
+      const chunkStr = chunk.toString()
+      body += chunkStr
+      proxyReq.write(chunk)
+    })
+
+    req.on('end', () => {
+      if (body.includes('downloadUrl') || body.includes('.zip') || body.includes('fileinfo')) {
+        mainWindow.webContents.send('important-request', { url: req.url, body: body.substring(0, 500) })
+        extractDownloadUrl(body)
+      }
+      proxyReq.end()
+    })
+  } else {
+    req.pipe(proxyReq)
+  }
+}
+
+function extractDownloadUrl(data) {
+  try {
+    const patterns = [
+      /"downloadUrl":"(.*?)"/,
+      /"downloadUrl":\s*"(.*?)"/,
+      /downloadUrl['"]\s*:\s*['"]([^'"]+)['"]/
+    ]
+
+    for (const pattern of patterns) {
+      const match = data.match(pattern)
+      if (match && match[1]) {
+        downloadUrl = match[1].replace(/\\"/g, '"').replace(/\\\//g, '/')
+        mainWindow.webContents.send('download-found', { url: downloadUrl })
+        downloadAndProcessFile(downloadUrl)
+        return
+      }
+    }
+  } catch (error) {
+    console.error('提取下载链接失败:', error)
+  }
+}
+
+async function downloadAndProcessFile(url) {
+  try {
+    mainWindow.webContents.send('process-status', { status: 'downloading', message: '正在下载文件...' })
+
+    const tempDir = path.join(__dirname, 'temp')
+    const ansDir = path.join(__dirname, 'answers')
+    fs.ensureDirSync(tempDir)
+    fs.ensureDirSync(ansDir)
+
+    const timestamp = Date.now()
+    const zipPath = path.join(tempDir, `exam_${timestamp}.zip`)
+
+    const response = await axios({
+      method: 'GET',
+      url: url,
+      responseType: 'stream',
+      timeout: 30000
+    })
+
+    const writer = fs.createWriteStream(zipPath)
+    response.data.pipe(writer)
+
+    writer.on('finish', () => {
+      mainWindow.webContents.send('process-status', { status: 'extracting', message: '正在解压文件...' })
+      extractZipFile(zipPath)
+    })
+
+    writer.on('error', (err) => {
+      mainWindow.webContents.send('process-error', { error: `文件下载失败: ${err.message}` })
+    })
+
+  } catch (error) {
+    mainWindow.webContents.send('process-error', { error: `下载失败: ${error.message}` })
+  }
+}
+
+async function extractZipFile(zipPath) {
+  try {
+    const extractDir = zipPath.replace('.zip', '')
+
+    if (fs.existsSync(extractDir)) {
+      fs.removeSync(extractDir)
+    }
+
+    fs.ensureDirSync(extractDir)
+
+    const zip = new StreamZip.async({ file: zipPath })
+    await zip.extract(null, extractDir)
+    await zip.close()
+
+    mainWindow.webContents.send('process-status', { status: 'processing', message: '正在提取答案...' })
+
+    const page1Path = path.join(extractDir, '1', 'page1.js')
+    if (fs.existsSync(page1Path)) {
+      extractAnswers(page1Path)
+    } else {
+      throw new Error('找不到 page1.js 文件')
+    }
+
+  } catch (error) {
+    mainWindow.webContents.send('process-error', { error: `解压失败: ${error.message}` })
+  }
+}
+
+function extractAnswers(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+
+    const pattern = /"answer_text"(.*?)"knowledge"/gs
+    const matches = content.match(pattern) || []
+
+    const answers = []
+    let questionNum = 1
+
+    for (const match of matches) {
+      try {
+        const optionMatch = match.match(/[A-D]/)
+        if (optionMatch) {
+          const option = optionMatch[0]
+          const contentPattern = new RegExp(`"id":"${option}".*?"content":"(.*?)"`, 's')
+          const contentMatch = match.match(contentPattern)
+
+          if (contentMatch) {
+            answers.push({
+              question: questionNum,
+              answer: option,
+              content: contentMatch[1].replace(/\\"/g, '"')
+            })
+            questionNum++
+          }
+        }
+      } catch (e) {
+        console.log(`处理第${questionNum}题时出错:`, e.message)
+      }
+    }
+
+    extractedAnswers = answers
+
+    // 保存答案到文件
+    const answerFile = path.join(__dirname, 'answers', `answers_${Date.now()}.txt`)
+    const answerText = answers.map((item, index) =>
+      `${index + 1}. ${item.answer}: ${item.content}`
+    ).join('\n\n')
+
+    fs.writeFileSync(answerFile, answerText, 'utf-8')
+
+    mainWindow.webContents.send('answers-extracted', { 
+      answers: answers,
+      count: answers.length,
+      file: answerFile
+    })
+
+  } catch (error) {
+    mainWindow.webContents.send('process-error', { error: `提取答案失败: ${error.message}` })
+  }
+}
+
+// IPC事件处理
+ipcMain.on('start-answer-proxy', () => {
+  isCapturing = true
+  startAnswerProxy()
+})
+
+ipcMain.on('stop-answer-proxy', () => {
+  stopAnswerProxy()
+})
+
+ipcMain.on('start-capturing', () => {
+  isCapturing = true
+  mainWindow.webContents.send('capture-status', { capturing: true })
+})
+
+ipcMain.on('stop-capturing', () => {
+  isCapturing = false
+  mainWindow.webContents.send('capture-status', { capturing: false })
+})

@@ -571,3 +571,234 @@ document.addEventListener('DOMContentLoaded', () => {
   new WordPKFeature();
   new HearingFeature();
 });
+class UniversalAnswerFeature {
+  constructor() {
+    this.isProxyRunning = false;
+    this.isCapturing = false;
+    this.initEventListeners();
+    this.initIpcListeners();
+  }
+
+  initEventListeners() {
+    document.getElementById('startProxyBtn').addEventListener('click', () => {
+      this.startProxy();
+    });
+
+    document.getElementById('stopProxyBtn').addEventListener('click', () => {
+      this.stopProxy();
+    });
+
+    document.getElementById('startCaptureBtn').addEventListener('click', () => {
+      this.startCapture();
+    });
+
+    document.getElementById('stopCaptureBtn').addEventListener('click', () => {
+      this.stopCapture();
+    });
+  }
+
+  initIpcListeners() {
+    // 监听代理状态
+    window.electronAPI.onProxyStatus((event, data) => {
+      this.updateProxyStatus(data);
+    });
+
+    // 监听流量日志
+    window.electronAPI.onTrafficLog((event, data) => {
+      this.addTrafficLog(data);
+    });
+
+    // 监听重要请求
+    window.electronAPI.onImportantRequest((event, data) => {
+      this.addImportantLog(data);
+    });
+
+    // 监听下载发现
+    window.electronAPI.onDownloadFound((event, data) => {
+      this.addSuccessLog(`发现下载链接: ${data.url}`);
+    });
+
+    // 监听处理状态
+    window.electronAPI.onProcessStatus((event, data) => {
+      this.updateProcessStatus(data);
+    });
+
+    // 监听处理错误
+    window.electronAPI.onProcessError((event, data) => {
+      this.addErrorLog(data.error);
+    });
+
+    // 监听答案提取
+    window.electronAPI.onAnswersExtracted((event, data) => {
+      this.displayAnswers(data);
+    });
+
+    // 监听捕获状态
+    window.electronAPI.onCaptureStatus((event, data) => {
+      this.updateCaptureStatus(data);
+    });
+  }
+
+  startProxy() {
+    window.electronAPI.startAnswerProxy();
+    this.addInfoLog('正在启动代理服务器...');
+  }
+
+  stopProxy() {
+    window.electronAPI.stopAnswerProxy();
+    this.addInfoLog('正在停止代理服务器...');
+  }
+
+  startCapture() {
+    window.electronAPI.startCapturing();
+    this.addInfoLog('开始监听网络请求...');
+  }
+
+  stopCapture() {
+    window.electronAPI.stopCapturing();
+    this.addInfoLog('停止监听网络请求');
+  }
+
+  updateProxyStatus(data) {
+    const statusElement = document.getElementById('proxyStatus');
+    const startBtn = document.getElementById('startProxyBtn');
+    const stopBtn = document.getElementById('stopProxyBtn');
+    const captureBtn = document.getElementById('startCaptureBtn');
+
+    if (data.running) {
+      this.isProxyRunning = true;
+      statusElement.textContent = '运行中';
+      statusElement.className = 'status-value running';
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      captureBtn.disabled = false;
+      this.addSuccessLog(data.message);
+    } else {
+      this.isProxyRunning = false;
+      statusElement.textContent = '已停止';
+      statusElement.className = 'status-value stopped';
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      captureBtn.disabled = true;
+      document.getElementById('stopCaptureBtn').disabled = true;
+      this.addInfoLog(data.message);
+    }
+  }
+
+  updateCaptureStatus(data) {
+    const statusElement = document.getElementById('captureStatus');
+    const startBtn = document.getElementById('startCaptureBtn');
+    const stopBtn = document.getElementById('stopCaptureBtn');
+
+    if (data.capturing) {
+      this.isCapturing = true;
+      statusElement.textContent = '监听中';
+      statusElement.className = 'status-value running';
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+    } else {
+      this.isCapturing = false;
+      statusElement.textContent = '未开始';
+      statusElement.className = 'status-value stopped';
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+  }
+
+  updateProcessStatus(data) {
+    const statusElement = document.getElementById('processStatus');
+    
+    if (data.status === 'downloading') {
+      statusElement.textContent = '下载中';
+      statusElement.className = 'status-value processing';
+    } else if (data.status === 'extracting') {
+      statusElement.textContent = '解压中';
+      statusElement.className = 'status-value processing';
+    } else if (data.status === 'processing') {
+      statusElement.textContent = '处理中';
+      statusElement.className = 'status-value processing';
+    }
+    
+    this.addInfoLog(data.message);
+  }
+
+  addTrafficLog(data) {
+    const timestamp = new Date(data.timestamp).toLocaleTimeString();
+    const logText = `[${timestamp}] ${data.method} ${data.url}`;
+    this.addLogItem(logText, 'normal');
+  }
+
+  addImportantLog(data) {
+    const logText = `[重要] ${data.url} - 包含关键数据`;
+    this.addLogItem(logText, 'important');
+  }
+
+  addSuccessLog(message) {
+    this.addLogItem(`[成功] ${message}`, 'success');
+  }
+
+  addErrorLog(message) {
+    this.addLogItem(`[错误] ${message}`, 'error');
+  }
+
+  addInfoLog(message) {
+    this.addLogItem(`[信息] ${message}`, 'normal');
+  }
+
+  addLogItem(text, type) {
+    const trafficLog = document.getElementById('trafficLog');
+    const logItem = document.createElement('div');
+    logItem.className = `log-item ${type}`;
+    logItem.textContent = text;
+    
+    trafficLog.appendChild(logItem);
+    trafficLog.scrollTop = trafficLog.scrollHeight;
+    
+    // 限制日志数量
+    const logItems = trafficLog.querySelectorAll('.log-item');
+    if (logItems.length > 100) {
+      trafficLog.removeChild(logItems[0]);
+    }
+  }
+
+  displayAnswers(data) {
+    const container = document.getElementById('answersContainer');
+    const processStatus = document.getElementById('processStatus');
+    
+    // 更新处理状态
+    processStatus.textContent = '完成';
+    processStatus.className = 'status-value running';
+    
+    // 清空容器
+    container.innerHTML = '';
+    
+    if (data.answers.length === 0) {
+      container.innerHTML = '<div class="no-answers">未找到答案数据</div>';
+      return;
+    }
+    
+    // 显示答案
+    data.answers.forEach((answer, index) => {
+      const answerItem = document.createElement('div');
+      answerItem.className = 'answer-item';
+      answerItem.innerHTML = `
+        <div class="answer-number">第 ${index + 1} 题</div>
+        <div class="answer-option">${answer.answer}</div>
+        <div class="answer-content">${answer.content || '暂无内容'}</div>
+      `;
+      container.appendChild(answerItem);
+    });
+    
+    this.addSuccessLog(`答案提取完成！共 ${data.count} 题，已保存到: ${data.file}`);
+  }
+}
+
+// 更新初始化代码
+document.addEventListener('DOMContentLoaded', () => {
+  new Global();
+  new MainMenu();
+  new ListeningFeature();
+  new WordPKFeature();
+  new HearingFeature();
+  new UniversalAnswerFeature();
+});

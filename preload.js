@@ -255,6 +255,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return { error: '获取答案失败: ' + e.message }
     }
   },
+  
+  //答案获取相关API
+  startAnswerProxy: () => ipcRenderer.send('start-answer-proxy'),
+  stopAnswerProxy: () => ipcRenderer.send('stop-answer-proxy'),
+  startCapturing: () => ipcRenderer.send('start-capturing'),
+  stopCapturing: () => ipcRenderer.send('stop-capturing'),
+
+  // 监听事件
+  onProxyStatus: (callback) => ipcRenderer.on('proxy-status', callback),
+  onTrafficLog: (callback) => ipcRenderer.on('traffic-log', callback),
+  onImportantRequest: (callback) => ipcRenderer.on('important-request', callback),
+  onDownloadFound: (callback) => ipcRenderer.on('download-found', callback),
+  onProcessStatus: (callback) => ipcRenderer.on('process-status', callback),
+  onProcessError: (callback) => ipcRenderer.on('process-error', callback),
+  onAnswersExtracted: (callback) => ipcRenderer.on('answers-extracted', callback),
+  onCaptureStatus: (callback) => ipcRenderer.on('capture-status', callback),
+
   openLocationWindowPk: () => ipcRenderer.send('open-location-window-pk'),
   setLocationsPk1: (pos)=> ipcRenderer.send('set-locations-pk-1', pos),
   setLocationsPk2: (pos)=> ipcRenderer.send('set-locations-pk-2', pos),
@@ -289,20 +306,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return { error: '删除文件时出错: ' + e.message }
     }
   },
+  
   writeSystemAudio: (filePath) => {
     try {
       console.log(`系统音频写入: ${filePath}`);
-
       const audioInfo = {
         path: filePath,
         timestamp: new Date().toISOString(),
         action: 'write_to_system'
-      };
-
-      
+      }; 
       return { success: true, message: '系统音频已写入', audioInfo };
-    } catch (e) {
+    } 
+    catch (e) {
       return { error: '系统音频写入失败: ' + e.message };
     }
-  }
-})
+    }
+  })

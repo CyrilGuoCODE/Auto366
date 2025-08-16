@@ -16,7 +16,11 @@
   "dependencies": {
     "@nut-tree/nut-js": "^3.1.2",
     "fs": "^0.0.1-security",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "axios": "^1.6.0",
+    "fs-extra": "^11.1.1",
+    "node-stream-zip": "^1.15.0",
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "electron": "^28.0.0",
