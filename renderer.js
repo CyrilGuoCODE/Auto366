@@ -563,14 +563,6 @@ class HearingFeature {
   }
 }
 
-// 初始化所有功能类
-document.addEventListener('DOMContentLoaded', () => {
-  new Global();
-  new MainMenu();
-  new ListeningFeature();
-  new WordPKFeature();
-  new HearingFeature();
-});
 class UniversalAnswerFeature {
   constructor() {
     this.isProxyRunning = false;
