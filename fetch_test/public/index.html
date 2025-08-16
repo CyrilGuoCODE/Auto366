@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天学网考试题目自动化处理工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>天学网考试题目自动化处理工具</h1>
+        </header>
+
+        <div class="main-content">
+            <!-- 状态卡片区域 -->
+            <div class="status-cards">
+                <div class="status-card" id="capture-status">
+                    <div class="status-info">
+                        <h3>抓包状态</h3>
+                        <p id="capture-text">未开始</p>
+                    </div>
+                </div>
+                
+                <div class="status-card" id="download-status">
+                    <div class="status-info">
+                        <h3>下载状态</h3>
+                        <p id="download-text">等待中</p>
+                    </div>
+                </div>
+                
+                <div class="status-card" id="process-status">
+                    <div class="status-info">
+                        <h3>处理状态</h3>
+                        <p id="process-text">等待中</p>
+                    </div>
+                </div>
+                
+                <div class="status-card" id="answer-status">
+                    <div class="status-info">
+                        <h3>答案状态</h3>
+                        <p id="answer-text">未提取</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 控制面板 -->
+            <div class="control-panel">
+                <div class="setup-instructions">
+                    <h3>设置说明</h3>
+                    <p>请将天学网客户端代理设置为：<strong>127.0.0.1:5291</strong></p>
+                    <p>设置完成后，点击"开始抓包"按钮，然后在天学网客户端下载题目</p>
+                </div>
+                
+                <div class="control-buttons">
+                    <button id="start-btn" class="btn btn-primary">开始抓包</button>
+                    <button id="stop-btn" class="btn btn-secondary" disabled>停止抓包</button>
+                    <button id="clear-btn" class="btn btn-outline">清空日志</button>
+                </div>
+            </div>
+
+            <!-- 实时日志 -->
+            <div class="log-section">
+                <h3>实时日志</h3>
+                <div class="log-container" id="log-container">
+                    <div class="log-item info">系统已启动，等待开始抓包...</div>
+                </div>
+            </div>
+
+            <!-- 答案显示区域 -->
+            <div class="answers-section" id="answers-section" style="display: none;">
+                <h3>提取的答案</h3>
+                <div class="answers-container" id="answers-container">
+                    <!-- 答案将在这里动态显示 -->
+                </div>
+                <button id="download-answers-btn" class="btn btn-success">下载答案文件</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

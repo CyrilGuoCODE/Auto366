@@ -38,6 +38,8 @@ pnpm-debug.log*
 # 缓存
 .cache/
 .temp/
+**/temp/
+**/answers/
 .eslintcache
 
 # 测试覆盖率
