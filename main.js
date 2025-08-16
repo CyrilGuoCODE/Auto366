@@ -830,11 +830,12 @@ function findAnswerFiles(dirPath) {
           const ext = path.extname(item).toLowerCase()
           const name = item.toLowerCase()
 
-          // 查找可能包含答案的文件类型
-          if (ext === '.js' || ext === '.json' || ext === '.txt' ||
-            name.includes('answer') || name.includes('page') ||
-            name.includes('question') || name.includes('exam')) {
-            answerFiles.push(itemPath)
+          // 只处理 XML 和 JSON 文件
+          if (ext === '.xml' || ext === '.json') {
+            // 特别关注包含 answer、paper、question 等关键词的文件
+            if (name.includes('answer') || name.includes('paper') || name.includes('question')) {
+              answerFiles.push(itemPath)
+            }
           }
         }
       }
@@ -850,319 +851,157 @@ function findAnswerFiles(dirPath) {
 // 从单个文件提取答案
 function extractAnswersFromFile(filePath) {
   try {
+    const ext = path.extname(filePath).toLowerCase()
     const content = fs.readFileSync(filePath, 'utf-8')
-    const answers = []
-
-    // 尝试多种答案提取模式
-    const patterns = [
-      // 原有的模式
-      {
-        name: 'answer_text模式',
-        pattern: /"answer_text"(.*?)"knowledge"/gs,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              const optionMatch = match.match(/[A-D]/)
-              if (optionMatch) {
-                const option = optionMatch[0]
-                const contentPattern = new RegExp(`"id":"${option}".*?"content":"(.*?)"`, 's')
-                const contentMatch = match.match(contentPattern)
-
-                if (contentMatch) {
-                  results.push({
-                    question: questionNum,
-                    answer: option,
-                    content: contentMatch[1].replace(/\\"/g, '"'),
-                    pattern: 'answer_text模式'
-                  })
-                  questionNum++
-                }
-              }
-            } catch (e) {
-              console.log(`处理第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // JSON格式答案
-      {
-        name: 'JSON答案模式',
-        pattern: /"answer"\s*:\s*"([A-D])"/g,
-        extract: (matches, content) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              const answer = match[1]
-              // 尝试找到对应的题目内容
-              const questionPattern = new RegExp(`"question"\\s*:\\s*"(.*?)"`, 'g')
-              const questionMatches = [...content.matchAll(questionPattern)]
-
-              if (questionMatches[questionNum - 1]) {
-                results.push({
-                  question: questionNum,
-                  answer: answer,
-                  content: questionMatches[questionNum - 1][1].replace(/\\"/g, '"'),
-                  pattern: 'JSON答案模式'
-                })
-              } else {
-                results.push({
-                  question: questionNum,
-                  answer: answer,
-                  content: `答案: ${answer}`,
-                  pattern: 'JSON答案模式'
-                })
-              }
-              questionNum++
-            } catch (e) {
-              console.log(`处理JSON答案第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 选择题模式
-      {
-        name: '选择题模式',
-        pattern: /([A-D])\.\s*([^\n\r]+)/g,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              results.push({
-                question: questionNum,
-                answer: match[1],
-                content: match[2].trim(),
-                pattern: '选择题模式'
-              })
-              questionNum++
-            } catch (e) {
-              console.log(`处理选择题第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 句子跟读题型
-      {
-        name: '句子跟读模式',
-        pattern: /"text"\s*:\s*"([^"]+)"/g,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              if (match[1] && match[1].length > 2) { // 过滤掉太短的文本
-                results.push({
-                  question: questionNum,
-                  answer: match[1],
-                  content: `请朗读: ${match[1]}`,
-                  pattern: '句子跟读模式'
-                })
-                questionNum++
-              }
-            } catch (e) {
-              console.log(`处理句子跟读第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 单词发音题型
-      {
-        name: '单词发音模式',
-        pattern: /"words"\s*:\s*\[\s*"([^"]+)"\s*\]/g,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              if (match[1] && match[1].length > 1) { // 过滤掉太短的单词
-                results.push({
-                  question: questionNum,
-                  answer: match[1],
-                  content: `请朗读单词: ${match[1]}`,
-                  pattern: '单词发音模式'
-                })
-                questionNum++
-              }
-            } catch (e) {
-              console.log(`处理单词发音第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 图片描述题型
-      {
-        name: '图片描述模式',
-        pattern: /"content"\s*:\s*"([^"]+)"\s*,\s*"answer"\s*:\s*"([^"]+)"/g,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              if (match[1] && match[2]) {
-                results.push({
-                  question: questionNum,
-                  answer: match[2],
-                  content: `图片描述: ${match[1]}`,
-                  pattern: '图片描述模式'
-                })
-                questionNum++
-              }
-            } catch (e) {
-              console.log(`处理图片描述第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 听力选择题
-      {
-        name: '听力选择题模式',
-        pattern: /"correct_answer"\s*:\s*"([A-D])".*?"question"\s*:\s*"([^"]+)"/gs,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              const answerMatch = match.match(/"correct_answer"\s*:\s*"([A-D])"/)
-              const questionMatch = match.match(/"question"\s*:\s*"([^"]+)"/)
-              
-              if (answerMatch && questionMatch) {
-                results.push({
-                  question: questionNum,
-                  answer: answerMatch[1],
-                  content: questionMatch[1],
-                  pattern: '听力选择题模式'
-                })
-                questionNum++
-              }
-            } catch (e) {
-              console.log(`处理听力选择题第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 填空题
-      {
-        name: '填空题模式',
-        pattern: /"blank_answer"\s*:\s*\[\s*\{\s*"answer"\s*:\s*"([^"]+)"\s*\}\s*\]/g,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              const answerMatch = match.match(/"blank_answer"\s*:\s*\[\s*\{\s*"answer"\s*:\s*"([^"]+)"\s*\}\s*\]/)
-              if (answerMatch && answerMatch[1]) {
-                results.push({
-                  question: questionNum,
-                  answer: answerMatch[1],
-                  content: `填空答案: ${answerMatch[1]}`,
-                  pattern: '填空题模式'
-                })
-                questionNum++
-              }
-            } catch (e) {
-              console.log(`处理填空题第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 判断题
-      {
-        name: '判断题模式',
-        pattern: /"is_correct"\s*:\s*(true|false).*?"statement"\s*:\s*"([^"]+)"/gs,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              const correctMatch = match.match(/"is_correct"\s*:\s*(true|false)/)
-              const statementMatch = match.match(/"statement"\s*:\s*"([^"]+)"/)
-              
-              if (correctMatch && statementMatch) {
-                const answer = correctMatch[1] === 'true' ? '正确' : '错误'
-                results.push({
-                  question: questionNum,
-                  answer: answer,
-                  content: statementMatch[1],
-                  pattern: '判断题模式'
-                })
-                questionNum++
-              }
-            } catch (e) {
-              console.log(`处理判断题第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      },
-      // 短文填空
-      {
-        name: '短文填空模式',
-        pattern: /"fill_answer"\s*:\s*\[\s*\{\s*"answer"\s*:\s*"([^"]+)"\s*,\s*"position"\s*:\s*(\d+)\s*\}\s*\]/g,
-        extract: (matches) => {
-          const results = []
-          let questionNum = 1
-
-          for (const match of matches) {
-            try {
-              const answerMatch = match.match(/"fill_answer"\s*:\s*\[\s*\{\s*"answer"\s*:\s*"([^"]+)"\s*,\s*"position"\s*:\s*(\d+)\s*\}\s*\]/)
-              if (answerMatch && answerMatch[1]) {
-                results.push({
-                  question: questionNum,
-                  answer: answerMatch[1],
-                  content: `短文填空答案（第${answerMatch[2]}空）: ${answerMatch[1]}`,
-                  pattern: '短文填空模式'
-                })
-                questionNum++
-              }
-            } catch (e) {
-              console.log(`处理短文填空第${questionNum}题时出错:`, e.message)
-            }
-          }
-          return results
-        }
-      }
-    ]
-
-    // 尝试所有模式
-    for (const patternConfig of patterns) {
-      try {
-        const matches = [...content.matchAll(patternConfig.pattern)]
-        if (matches.length > 0) {
-          const extracted = patternConfig.extract(matches, content)
-          if (extracted.length > 0) {
-            console.log(`文件 ${path.basename(filePath)} 使用 ${patternConfig.name} 提取到 ${extracted.length} 个答案`)
-            answers.push(...extracted)
-          }
-        }
-      } catch (error) {
-        console.log(`模式 ${patternConfig.name} 处理失败:`, error.message)
-      }
+    
+    // 根据文件类型选择不同的处理方法
+    if (ext === '.json') {
+      return extractFromJSON(content, filePath)
+    } else if (ext === '.xml') {
+      return extractFromXML(content, filePath)
     }
-
-    return answers
-
+    
+    return []
   } catch (error) {
     console.error(`读取文件失败: ${filePath}`, error)
+    return []
+  }
+}
+
+// 从JSON文件提取答案
+function extractFromJSON(content, filePath) {
+  const answers = []
+  
+  try {
+    const jsonData = JSON.parse(content)
+    
+    // 处理句子跟读题型
+    if (jsonData.Data && jsonData.Data.sentences) {
+      jsonData.Data.sentences.forEach((sentence, index) => {
+        if (sentence.text && sentence.text.length > 2) {
+          answers.push({
+            question: index + 1,
+            answer: sentence.text,
+            content: `请朗读: ${sentence.text}`,
+            pattern: 'JSON句子跟读模式'
+          })
+        }
+      })
+    }
+    
+    // 处理答案字段
+    if (jsonData.answers) {
+      jsonData.answers.forEach((answerObj, index) => {
+        if (answerObj.id && answerObj.answer) {
+          answers.push({
+            question: index + 1,
+            answer: answerObj.answer,
+            content: `答案: ${answerObj.answer}`,
+            pattern: 'JSON答案模式'
+          })
+        }
+      })
+    }
+    
+    // 处理单词发音题型
+    if (jsonData.Data && jsonData.Data.words) {
+      jsonData.Data.words.forEach((word, index) => {
+        if (word && word.length > 1) {
+          answers.push({
+            question: index + 1,
+            answer: word,
+            content: `请朗读单词: ${word}`,
+            pattern: 'JSON单词发音模式'
+          })
+        }
+      })
+    }
+    
+    // 尝试通用JSON答案提取
+    const jsonAnswerMatches = [...content.matchAll(/"answer"\s*:\s*"([^"]+)"/g)]
+    jsonAnswerMatches.forEach((match, index) => {
+      if (match[1]) {
+        answers.push({
+          question: index + 1,
+          answer: match[1],
+          content: `答案: ${match[1]}`,
+          pattern: '通用JSON答案模式'
+        })
+      }
+    })
+    
+    return answers
+  } catch (error) {
+    console.error(`解析JSON文件失败: ${filePath}`, error)
+    return []
+  }
+}
+
+// 从XML文件提取答案
+function extractFromXML(content, filePath) {
+  const answers = []
+  
+  try {
+    // 处理correctAnswer.xml文件
+    if (filePath.includes('correctAnswer')) {
+      // 使用正则表达式提取所有<answer>标签中的内容
+      const answerMatches = content.match(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/g)
+      
+      if (answerMatches) {
+        answerMatches.forEach((match, index) => {
+          const answerText = match.replace(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/, '$1')
+          if (answerText && answerText.trim().length > 0) {
+            answers.push({
+              question: index + 1,
+              answer: answerText.trim(),
+              content: `答案: ${answerText.trim()}`,
+              pattern: 'XML正确答案模式'
+            })
+          }
+        })
+      }
+    }
+    
+    // 处理paper.xml文件
+    if (filePath.includes('paper')) {
+      // 提取所有<element>标签中的题目和答案
+      const elementMatches = content.match(/<element[^>]*id="([^"]+)".*?<question_no>(\d+)<\/question_no>.*?<question_text>(.*?)<\/question_text>.*?<knowledge>(.*?)<\/knowledge>/gs)
+      
+      if (elementMatches) {
+        elementMatches.forEach((match, index) => {
+          const idMatch = match.match(/id="([^"]+)"/)
+          const questionNoMatch = match.match(/<question_no>(\d+)<\/question_no>/)
+          const questionTextMatch = match.match(/<question_text>(.*?)<\/question_text>/)
+          const knowledgeMatch = match.match(/<knowledge>(.*?)<\/knowledge>/)
+          
+          if (idMatch && questionNoMatch && questionTextMatch && knowledgeMatch) {
+            answers.push({
+              question: parseInt(questionNoMatch[1]),
+              answer: knowledgeMatch[1].trim(),
+              content: `题目: ${questionTextMatch[1].trim()}\n答案: ${knowledgeMatch[1].trim()}`,
+              pattern: 'XML题目答案模式'
+            })
+          }
+        })
+      }
+    }
+    
+    // 尝试通用XML答案提取
+    const xmlAnswerMatches = [...content.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>/g)]
+    xmlAnswerMatches.forEach((match, index) => {
+      if (match[1]) {
+        answers.push({
+          question: index + 1,
+          answer: match[1].trim(),
+          content: `答案: ${match[1].trim()}`,
+          pattern: '通用XML答案模式'
+        })
+      }
+    })
+    
+    return answers
+  } catch (error) {
+    console.error(`解析XML文件失败: ${filePath}`, error)
     return []
   }
 }
