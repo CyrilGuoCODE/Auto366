@@ -7,18 +7,18 @@ const resourcePath = 'D:/Up366StudentFiles/resources/'
 function deleteDirectoryRecursively(dirPath) {
   if (fs.existsSync(dirPath)) {
     const files = fs.readdirSync(dirPath)
-    
+
     for (const file of files) {
       const curPath = path.join(dirPath, file)
       const stats = fs.statSync(curPath)
-      
+
       if (stats.isDirectory()) {
         deleteDirectoryRecursively(curPath)
       } else {
         fs.unlinkSync(curPath)
       }
     }
-    
+
     fs.rmdirSync(dirPath)
   }
 }
@@ -40,7 +40,7 @@ function replaceMp3FilesSync(folder, audioFile) {
       replacedCount++
     }
   }
-  
+
   return replacedCount
 }
 
@@ -61,7 +61,7 @@ function restoreMp3FilesSync(folder) {
       restoredCount++
     }
   }
-  
+
   return restoredCount
 }
 
@@ -77,9 +77,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 过滤掉cache目录
     const filteredAppend = append.filter(file => file !== 'cache')
 
-     if (filteredAppend.length < 1) {
-       return { error: '检测错误' }
-     }
+    if (filteredAppend.length < 1) {
+      return { error: '检测错误' }
+    }
 
     const nPath = path.join(resourcePath, filteredAppend[0])
     const answer = []
@@ -113,15 +113,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (!fs.existsSync(resourcePath)) {
       return { error: '资源路径不存在' }
     }
-    
+
     try {
       const files = fs.readdirSync(resourcePath)
       let deletedCount = 0
-      
+
       for (const file of files) {
         const filePath = path.join(resourcePath, file)
         const stats = fs.statSync(filePath)
-        
+
         if (stats.isDirectory()) {
           deleteDirectoryRecursively(filePath)
           deletedCount++
@@ -130,7 +130,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           deletedCount++
         }
       }
-      
+
       return { success: true, deletedCount }
     } catch (e) {
       return { error: '删除文件时出错: ' + e.message }
@@ -175,7 +175,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getFlipbooksFolders: () => {
     const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
-    
+
     if (!fs.existsSync(flipbooksPath)) {
       return { error: 'flipbooks目录不存在: ' + flipbooksPath }
     }
@@ -184,7 +184,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const folders = fs.readdirSync(flipbooksPath, { withFileTypes: true })
         .filter(item => item.isDirectory())
         .map(item => item.name)
-      
+
       return { success: true, folders }
     } catch (e) {
       return { error: '读取目录失败: ' + e.message }
@@ -193,14 +193,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getListeningAnswers: (choosePath) => {
     const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
     const targetFolder = flipbooksPath + choosePath
-    
+
     if (!fs.existsSync(targetFolder)) {
       return { error: '目标路径不存在: ' + targetFolder }
     }
 
     try {
-      let results = {'P2': {}, 'P3': []}
-      
+      let results = { 'P2': {}, 'P3': [] }
+
       function findFilesByExtension(dir) {
         let list = fs.readdirSync(dir)
         if (list.length === 0) return
@@ -223,7 +223,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
 
       findFilesByExtension(targetFolder)
-      
+
       const p3Answers = []
       for (const answerPath of results['P3']) {
         try {
@@ -240,12 +240,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
           })
         }
       }
-      
+
       const p2WithProtocol = {}
       for (const [className, files] of Object.entries(results['P2'])) {
         p2WithProtocol[className] = files.map(file => file.replace(/\\/g, '/'))
       }
-      
+
       return {
         success: true,
         P2: p2WithProtocol,
@@ -255,7 +255,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return { error: '获取答案失败: ' + e.message }
     }
   },
-  
+
   //答案获取相关API
   startAnswerProxy: () => ipcRenderer.send('start-answer-proxy'),
   stopAnswerProxy: () => ipcRenderer.send('stop-answer-proxy'),
@@ -271,27 +271,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onProcessError: (callback) => ipcRenderer.on('process-error', callback),
   onAnswersExtracted: (callback) => ipcRenderer.on('answers-extracted', callback),
   onCaptureStatus: (callback) => ipcRenderer.on('capture-status', callback),
+  onFileStructure: (callback) => ipcRenderer.on('file-structure', callback),
+  onFilesProcessed: (callback) => ipcRenderer.on('files-processed', callback),
 
   openLocationWindowPk: () => ipcRenderer.send('open-location-window-pk'),
-  setLocationsPk1: (pos)=> ipcRenderer.send('set-locations-pk-1', pos),
-  setLocationsPk2: (pos)=> ipcRenderer.send('set-locations-pk-2', pos),
+  setLocationsPk1: (pos) => ipcRenderer.send('set-locations-pk-1', pos),
+  setLocationsPk2: (pos) => ipcRenderer.send('set-locations-pk-2', pos),
   startChoose: () => ipcRenderer.send('start-choose'),
   getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
   deleteFlipbooksFiles: () => {
     const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
-    
+
     if (!fs.existsSync(flipbooksPath)) {
       return { error: 'flipbooks目录不存在: ' + flipbooksPath }
     }
-    
+
     try {
       const files = fs.readdirSync(flipbooksPath)
       let deletedCount = 0
-      
+
       for (const file of files) {
         const filePath = path.join(flipbooksPath, file)
         const stats = fs.statSync(filePath)
-        
+
         if (stats.isDirectory()) {
           deleteDirectoryRecursively(filePath)
           deletedCount++
@@ -300,13 +302,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
           deletedCount++
         }
       }
-      
+
       return { success: true, deletedCount }
     } catch (e) {
       return { error: '删除文件时出错: ' + e.message }
     }
   },
-  
+
   writeSystemAudio: (filePath) => {
     try {
       console.log(`系统音频写入: ${filePath}`);
@@ -314,11 +316,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         path: filePath,
         timestamp: new Date().toISOString(),
         action: 'write_to_system'
-      }; 
+      };
       return { success: true, message: '系统音频已写入', audioInfo };
-    } 
+    }
     catch (e) {
       return { error: '系统音频写入失败: ' + e.message };
     }
-    }
-  })
+  }
+})

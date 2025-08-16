@@ -630,6 +630,16 @@ class UniversalAnswerFeature {
     window.electronAPI.onCaptureStatus((event, data) => {
       this.updateCaptureStatus(data);
     });
+
+    // 监听文件结构
+    window.electronAPI.onFileStructure((event, data) => {
+      this.displayFileStructure(data);
+    });
+
+    // 监听文件处理结果
+    window.electronAPI.onFilesProcessed((event, data) => {
+      this.displayProcessedFiles(data);
+    });
   }
 
   startProxy() {
@@ -754,6 +764,56 @@ class UniversalAnswerFeature {
     }
   }
 
+  displayFileStructure(data) {
+    this.addInfoLog(`文件结构分析完成，解压目录: ${data.extractDir}`);
+
+    // 可以在这里添加文件结构的可视化显示
+    const structureInfo = this.formatFileStructure(data.structure);
+    this.addInfoLog(`文件结构: ${structureInfo}`);
+  }
+
+  displayProcessedFiles(data) {
+    this.addInfoLog(`文件处理完成，共处理 ${data.processedFiles.length} 个文件，提取到 ${data.totalAnswers} 个答案`);
+
+    // 显示每个文件的处理结果
+    data.processedFiles.forEach(file => {
+      if (file.success) {
+        this.addSuccessLog(`✓ ${file.file}: 提取到 ${file.answerCount} 个答案`);
+      } else {
+        this.addErrorLog(`✗ ${file.file}: ${file.error}`);
+      }
+    });
+  }
+
+  formatFileStructure(structure, depth = 0) {
+    const indent = '  '.repeat(depth);
+    let result = `${indent}${structure.name}`;
+
+    if (structure.type === 'file') {
+      result += ` (${structure.ext}, ${this.formatFileSize(structure.size)})`;
+    }
+
+    if (structure.children && structure.children.length > 0) {
+      const childrenInfo = structure.children.slice(0, 3).map(child =>
+        this.formatFileStructure(child, depth + 1)
+      ).join(', ');
+
+      if (structure.children.length > 3) {
+        result += ` [${structure.children.length} items: ${childrenInfo}, ...]`;
+      } else {
+        result += ` [${childrenInfo}]`;
+      }
+    }
+
+    return result;
+  }
+
+  formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
+    return Math.round(bytes / (1024 * 1024)) + 'MB';
+  }
+
   displayAnswers(data) {
     const container = document.getElementById('answersContainer');
     const processStatus = document.getElementById('processStatus');
@@ -770,19 +830,45 @@ class UniversalAnswerFeature {
       return;
     }
 
-    // 显示答案
-    data.answers.forEach((answer, index) => {
-      const answerItem = document.createElement('div');
-      answerItem.className = 'answer-item';
-      answerItem.innerHTML = `
-        <div class="answer-number">第 ${index + 1} 题</div>
-        <div class="answer-option">${answer.answer}</div>
-        <div class="answer-content">${answer.content || '暂无内容'}</div>
-      `;
-      container.appendChild(answerItem);
+    // 按来源文件分组显示答案
+    const answersByFile = {};
+    data.answers.forEach(answer => {
+      const sourceFile = answer.sourceFile || '未知文件';
+      if (!answersByFile[sourceFile]) {
+        answersByFile[sourceFile] = [];
+      }
+      answersByFile[sourceFile].push(answer);
     });
 
-    this.addSuccessLog(`答案提取完成！共 ${data.count} 题，已保存到: ${data.file}`);
+    // 显示每个文件的答案
+    Object.keys(answersByFile).forEach(sourceFile => {
+      const fileSection = document.createElement('div');
+      fileSection.className = 'file-section';
+
+      const fileHeader = document.createElement('div');
+      fileHeader.className = 'file-header';
+      fileHeader.innerHTML = `
+        <h4>📁 ${sourceFile}</h4>
+        <span class="answer-count">${answersByFile[sourceFile].length} 个答案</span>
+      `;
+      fileSection.appendChild(fileHeader);
+
+      answersByFile[sourceFile].forEach((answer, index) => {
+        const answerItem = document.createElement('div');
+        answerItem.className = 'answer-item';
+        answerItem.innerHTML = `
+          <div class="answer-number">第 ${answer.question || index + 1} 题</div>
+          <div class="answer-option">${answer.answer}</div>
+          <div class="answer-content">${answer.content || '暂无内容'}</div>
+          ${answer.pattern ? `<div class="answer-pattern">提取模式: ${answer.pattern}</div>` : ''}
+        `;
+        fileSection.appendChild(answerItem);
+      });
+
+      container.appendChild(fileSection);
+    });
+
+    this.addSuccessLog(`答案提取完成！共 ${data.count} 题，来自 ${Object.keys(answersByFile).length} 个文件，已保存到: ${data.file}`);
   }
 }
 

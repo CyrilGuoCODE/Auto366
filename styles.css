@@ -238,6 +238,7 @@ button:disabled {
     background-color: #c82333;
     border-color: #bd2130;
 }
+
 /* 万能答案获取样式 */
 .proxy-notice {
     background: #fff3cd;
@@ -396,7 +397,7 @@ button:disabled {
     margin-bottom: 10px;
     border-radius: 6px;
     border-left: 4px solid #007bff;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .answer-item:last-child {
@@ -431,24 +432,26 @@ button:disabled {
     .container {
         padding: 10px;
     }
-    
+
     .feature-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .buttons {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .buttons button {
         margin: 5px 0;
     }
-    
+
     .status-indicators {
         grid-template-columns: 1fr;
     }
-}/*
+}
+
+/*
  修复内联样式 */
 .logo-container {
     text-align: center;
@@ -477,4 +480,62 @@ button:disabled {
 .project-link:hover {
     color: #0056b3;
     text-decoration: underline;
+}
+
+/* 文件分组显示
+样式 */
+.file-section {
+    margin-bottom: 25px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.file-header {
+    background: #f8f9fa;
+    padding: 12px 15px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.file-header h4 {
+    margin: 0;
+    color: #495057;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.answer-count {
+    background: #007bff;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.file-section .answer-item {
+    margin: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+.file-section .answer-item:last-child {
+    border-bottom: none;
+}
+
+.answer-pattern {
+    margin-top: 5px;
+    font-size: 11px;
+    color: #6c757d;
+    font-style: italic;
+    background: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
 }
