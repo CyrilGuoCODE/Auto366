@@ -1,5 +1,5 @@
 
-![Auto366 Logo](icon_black.png)
+<div align=center><img src="icon_black.png"></div>
 
 # Auto366
 

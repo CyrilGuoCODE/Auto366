@@ -13,14 +13,14 @@ class SystemAudioSync {
 
   async syncWithSystemAudio(filePath) {
     await this.initialize();
-    
+
     try {
       console.log(`系统音频同步: ${filePath}`);
 
       if (window.electronAPI && window.electronAPI.writeSystemAudio) {
         window.electronAPI.writeSystemAudio(filePath);
       }
-      
+
       return true;
     } catch (error) {
       console.error('系统音频同步失败:', error);
@@ -36,12 +36,12 @@ class Global {
     this.scale = null;
   }
 
-  async initScale(){
+  async initScale() {
     this.scale = await window.electronAPI.getScaleFactor()
     const scaleInput = document.getElementById('scaleInput')
     const scaleInputPk = document.getElementById('scaleInput-pk')
     scaleInput.value = scaleInputPk.value = this.scale
-    
+
     const getScale = document.getElementById('getScale')
     const getScalePk = document.getElementById('getScale-pk')
     getScale.addEventListener('click', async () => {
@@ -63,8 +63,8 @@ class Global {
       window.electronAPI.setGlobalScale(this.scale)
     })
   }
-  
-  initBackBtn(){
+
+  initBackBtn() {
     document.querySelectorAll('.back-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         new MainMenu().showMainMenu();
@@ -159,9 +159,9 @@ class ListeningFeature {
         <strong>正在删除文件...</strong><br>
         请稍候
       `;
-      
+
       const result = window.electronAPI.deleteAllFiles();
-      
+
       if (result.error) {
         resultDiv.innerHTML = `
           <strong>删除失败</strong><br>
@@ -312,27 +312,27 @@ class HearingFeature {
     document.getElementById('deleteFlipbooksBtn').addEventListener('click', () => {
       this.handleDeleteFlipbooks();
     });
-	
-	document.getElementById('replaceBtn').addEventListener('click', () => {
-	  this.handleReplaceAudio();
-	});
-	
-	document.getElementById('restoreBtn').addEventListener('click', () => {
-	  this.handleRestoreAudio();
-	});
+
+    document.getElementById('replaceBtn').addEventListener('click', () => {
+      this.handleReplaceAudio();
+    });
+
+    document.getElementById('restoreBtn').addEventListener('click', () => {
+      this.handleRestoreAudio();
+    });
   }
 
   handleFindAnswerPath() {
     const resultDiv = document.getElementById('answerResult');
     const folderPathInput = document.getElementById('answerFolderPath');
-    
+
     resultDiv.innerHTML = `
       <strong>正在寻找可用路径...</strong><br>
       请稍候
     `;
-    
+
     const result = window.electronAPI.getFlipbooksFolders();
-    
+
     if (result.error) {
       resultDiv.innerHTML = `
         <strong>寻找失败</strong><br>
@@ -366,7 +366,7 @@ class HearingFeature {
   handleGetAnswers() {
     const resultDiv = document.getElementById('answerResult');
     const folderPath = document.getElementById('answerFolderPath').value.trim();
-    
+
     if (!folderPath) {
       resultDiv.innerHTML = `
         <strong>错误</strong><br>
@@ -374,14 +374,14 @@ class HearingFeature {
       `;
       return;
     }
-    
+
     resultDiv.innerHTML = `
       <strong>正在获取听力答案...</strong><br>
       请稍候
     `;
-    
+
     const result = window.electronAPI.getListeningAnswers(folderPath);
-    
+
     if (result.error) {
       resultDiv.innerHTML = `
         <strong>获取失败</strong><br>
@@ -411,7 +411,7 @@ class HearingFeature {
       } else {
         p2Content = '<strong>P2听后回答 - 音频标答文件：</strong> 未找到音频文件<br><br>';
       }
-      
+
       let p3Content = '';
       if (result.P3.length > 0) {
         p3Content = '<strong>P3听后转述 - 听力标答：</strong><br>';
@@ -451,7 +451,7 @@ class HearingFeature {
       } else {
         p3Content = '<strong>P3听后转述 - 听力标答：</strong> 未找到听力标答文件<br>';
       }
-      
+
       resultDiv.innerHTML = `
         <strong>获取成功！</strong><br>
         已找到听力答案数据<br><br>
@@ -463,15 +463,15 @@ class HearingFeature {
 
   handleDeleteFlipbooks() {
     const resultDiv = document.getElementById('answerResult');
-    
+
     if (confirm('警告：此操作将删除 D:/Up366StudentFiles/flipbooks/ 目录下的所有文件！\n\n确定要继续吗？')) {
       resultDiv.innerHTML = `
         <strong>正在删除文件...</strong><br>
         请稍候
       `;
-      
+
       const result = window.electronAPI.deleteFlipbooksFiles();
-      
+
       if (result.error) {
         resultDiv.innerHTML = `
           <strong>删除失败</strong><br>
@@ -487,11 +487,11 @@ class HearingFeature {
       }
     }
   }
-  
+
   handleReplaceAudio() {
     const resultDiv = document.getElementById('answerResult');
     const folderPath = document.getElementById('answerFolderPath').value.trim();
-    
+
     if (!folderPath) {
       resultDiv.innerHTML = `
         <strong>错误</strong><br>
@@ -499,15 +499,15 @@ class HearingFeature {
       `;
       return;
     }
-    
+
     if (confirm(`警告：此操作将替换 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在替换音频文件...</strong><br>
         请稍候
       `;
-      
+
       const result = window.electronAPI.replaceAudioFiles(folderPath);
-      
+
       if (result.error) {
         resultDiv.innerHTML = `
           <strong>替换失败</strong><br>
@@ -525,11 +525,11 @@ class HearingFeature {
       }
     }
   }
-  
+
   handleRestoreAudio() {
     const resultDiv = document.getElementById('answerResult');
     const folderPath = document.getElementById('answerFolderPath').value.trim();
-    
+
     if (!folderPath) {
       resultDiv.innerHTML = `
         <strong>错误</strong><br>
@@ -537,15 +537,15 @@ class HearingFeature {
       `;
       return;
     }
-    
+
     if (confirm(`确定要还原 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在还原音频文件...</strong><br>
         请稍候
       `;
-      
+
       const result = window.electronAPI.restoreAudioFiles(folderPath);
-      
+
       if (result.error) {
         resultDiv.innerHTML = `
           <strong>还原失败</strong><br>
@@ -563,14 +563,7 @@ class HearingFeature {
   }
 }
 
-// 初始化所有功能类
-document.addEventListener('DOMContentLoaded', () => {
-  new Global();
-  new MainMenu();
-  new ListeningFeature();
-  new WordPKFeature();
-  new HearingFeature();
-});
+// 初始化所有功能类已移至文件末尾
 class UniversalAnswerFeature {
   constructor() {
     this.isProxyRunning = false;
@@ -707,7 +700,7 @@ class UniversalAnswerFeature {
 
   updateProcessStatus(data) {
     const statusElement = document.getElementById('processStatus');
-    
+
     if (data.status === 'downloading') {
       statusElement.textContent = '下载中';
       statusElement.className = 'status-value processing';
@@ -718,7 +711,7 @@ class UniversalAnswerFeature {
       statusElement.textContent = '处理中';
       statusElement.className = 'status-value processing';
     }
-    
+
     this.addInfoLog(data.message);
   }
 
@@ -750,10 +743,10 @@ class UniversalAnswerFeature {
     const logItem = document.createElement('div');
     logItem.className = `log-item ${type}`;
     logItem.textContent = text;
-    
+
     trafficLog.appendChild(logItem);
     trafficLog.scrollTop = trafficLog.scrollHeight;
-    
+
     // 限制日志数量
     const logItems = trafficLog.querySelectorAll('.log-item');
     if (logItems.length > 100) {
@@ -764,19 +757,19 @@ class UniversalAnswerFeature {
   displayAnswers(data) {
     const container = document.getElementById('answersContainer');
     const processStatus = document.getElementById('processStatus');
-    
+
     // 更新处理状态
     processStatus.textContent = '完成';
     processStatus.className = 'status-value running';
-    
+
     // 清空容器
     container.innerHTML = '';
-    
+
     if (data.answers.length === 0) {
       container.innerHTML = '<div class="no-answers">未找到答案数据</div>';
       return;
     }
-    
+
     // 显示答案
     data.answers.forEach((answer, index) => {
       const answerItem = document.createElement('div');
@@ -788,7 +781,7 @@ class UniversalAnswerFeature {
       `;
       container.appendChild(answerItem);
     });
-    
+
     this.addSuccessLog(`答案提取完成！共 ${data.count} 题，已保存到: ${data.file}`);
   }
 }
