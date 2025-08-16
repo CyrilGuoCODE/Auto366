@@ -184,6 +184,166 @@ body {
     margin-top: 20px;
 }
 
+/* 流量监控样式 */
+.traffic-section {
+    margin-bottom: 30px;
+}
+
+.traffic-section h3 {
+    color: #7c3aed;
+    margin-bottom: 15px;
+    font-size: 1.3em;
+}
+
+.traffic-controls {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.traffic-controls label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9em;
+    color: #6b7280;
+    cursor: pointer;
+}
+
+.traffic-controls input[type="checkbox"] {
+    margin: 0;
+}
+
+.traffic-container {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85em;
+    border: 1px solid #334155;
+}
+
+.traffic-item {
+    padding: 10px 0;
+    border-bottom: 1px solid #1e293b;
+    color: #e2e8f0;
+}
+
+.traffic-item:last-child {
+    border-bottom: none;
+}
+
+.traffic-request {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.traffic-method {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.8em;
+    margin-right: 10px;
+    min-width: 50px;
+    text-align: center;
+}
+
+.traffic-method.GET {
+    background: #059669;
+    color: white;
+}
+
+.traffic-method.POST {
+    background: #dc2626;
+    color: white;
+}
+
+.traffic-method.PUT {
+    background: #d97706;
+    color: white;
+}
+
+.traffic-method.DELETE {
+    background: #7c2d12;
+    color: white;
+}
+
+.traffic-url {
+    color: #60a5fa;
+    word-break: break-all;
+    flex: 1;
+}
+
+.traffic-timestamp {
+    color: #94a3b8;
+    font-size: 0.8em;
+    margin-left: 10px;
+}
+
+.traffic-details {
+    margin-left: 60px;
+    color: #94a3b8;
+    font-size: 0.8em;
+}
+
+.traffic-response {
+    margin-top: 5px;
+    padding-left: 10px;
+    border-left: 2px solid #374151;
+}
+
+.traffic-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    margin-right: 8px;
+}
+
+.traffic-status.success {
+    background: #059669;
+    color: white;
+}
+
+.traffic-status.error {
+    background: #dc2626;
+    color: white;
+}
+
+.traffic-status.redirect {
+    background: #d97706;
+    color: white;
+}
+
+.traffic-body {
+    margin-top: 5px;
+    padding: 8px;
+    background: #1e293b;
+    border-radius: 4px;
+    color: #fbbf24;
+    font-size: 0.8em;
+    max-height: 100px;
+    overflow-y: auto;
+    word-break: break-all;
+}
+
+.traffic-highlight {
+    background: #7c3aed !important;
+    color: white !important;
+    animation: highlight 2s ease-in-out;
+}
+
+@keyframes highlight {
+    0% { background: #7c3aed !important; }
+    50% { background: #a855f7 !important; }
+    100% { background: #7c3aed !important; }
+}
+
 /* 日志区域样式 */
 .log-section {
     margin-bottom: 30px;

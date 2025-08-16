@@ -258,8 +258,20 @@ function extractAnswers(filePath) {
 
 // 处理HTTP请求的代理逻辑
 server.on('request', (req, res) => {
+  // 添加CORS头
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // 处理OPTIONS预检请求
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
   // 处理本地管理界面请求
-  if (req.headers.host && req.headers.host.includes('localhost')) {
+  if (req.headers.host && (req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1'))) {
     handleLocalRequest(req, res);
     return;
   }
@@ -290,6 +302,7 @@ function handleLocalRequest(req, res) {
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
+      console.error('文件读取错误:', err);
       res.writeHead(404);
       res.end('Not Found');
       return;
@@ -297,13 +310,16 @@ function handleLocalRequest(req, res) {
 
     const ext = path.extname(filePath);
     const contentType = {
-      '.html': 'text/html',
-      '.css': 'text/css',
-      '.js': 'application/javascript',
-      '.json': 'application/json'
-    }[ext] || 'text/plain';
+      '.html': 'text/html; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8'
+    }[ext] || 'text/plain; charset=utf-8';
 
-    res.writeHead(200, { 'Content-Type': contentType });
+    res.writeHead(200, { 
+      'Content-Type': contentType,
+      'Cache-Control': 'no-cache'
+    });
     res.end(data);
   });
 }
@@ -359,6 +375,26 @@ function handleProxyRequest(req, res) {
   const targetUrl = req.url.startsWith('http') ? req.url : `http://${req.headers.host}${req.url}`;
   const parsedUrl = url.parse(targetUrl);
 
+  // 记录所有请求详情
+  const requestInfo = {
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    url: req.url,
+    host: req.headers.host,
+    targetUrl: targetUrl,
+    userAgent: req.headers['user-agent'] || 'Unknown',
+    contentType: req.headers['content-type'] || 'None',
+    contentLength: req.headers['content-length'] || '0'
+  };
+
+  // 广播请求详情到前端
+  broadcast({
+    type: 'traffic',
+    data: requestInfo
+  });
+
+  console.log(`[${requestInfo.timestamp}] ${req.method} ${targetUrl}`);
+
   // 构建代理请求选项
   const options = {
     hostname: parsedUrl.hostname,
@@ -375,11 +411,37 @@ function handleProxyRequest(req, res) {
   const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
   const proxyReq = protocol.request(options, (proxyRes) => {
+    // 记录响应信息
+    const responseInfo = {
+      statusCode: proxyRes.statusCode,
+      statusMessage: proxyRes.statusMessage,
+      contentType: proxyRes.headers['content-type'] || 'Unknown',
+      contentLength: proxyRes.headers['content-length'] || 'Unknown'
+    };
+
+    broadcast({
+      type: 'response',
+      data: {
+        request: requestInfo,
+        response: responseInfo
+      }
+    });
+
     // 设置响应头
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
-    // 如果正在抓包且是fileinfo请求，监听响应数据
-    if (isCapturing && req.url && req.url.includes('fileinfo')) {
+    // 检查是否需要监听响应内容
+    const shouldMonitorResponse = isCapturing && (
+      req.url.includes('fileinfo') ||
+      req.url.includes('download') ||
+      req.url.includes('.zip') ||
+      req.url.includes('page1') ||
+      req.url.includes('exam') ||
+      req.url.includes('question') ||
+      (proxyRes.headers['content-type'] && proxyRes.headers['content-type'].includes('application/json'))
+    );
+
+    if (shouldMonitorResponse) {
       let body = '';
       proxyRes.on('data', (chunk) => {
         body += chunk;
@@ -387,18 +449,85 @@ function handleProxyRequest(req, res) {
       });
 
       proxyRes.on('end', () => {
+        // 记录响应内容
+        broadcast({
+          type: 'responseBody',
+          data: {
+            url: req.url,
+            body: body.substring(0, 1000), // 只显示前1000字符
+            fullLength: body.length
+          }
+        });
+
         try {
+          // 尝试解析JSON响应
           const responseData = JSON.parse(body);
-          if (responseData.downloadUrl) {
-            downloadUrl = responseData.downloadUrl;
+          
+          // 查找下载链接的多种模式
+          const downloadPatterns = [
+            'downloadUrl',
+            'download_url',
+            'fileUrl',
+            'file_url',
+            'zipUrl',
+            'zip_url',
+            'resourceUrl',
+            'resource_url'
+          ];
+
+          for (const pattern of downloadPatterns) {
+            if (responseData[pattern]) {
+              downloadUrl = responseData[pattern];
+              broadcast({
+                type: 'log',
+                message: `从响应中发现下载链接 (${pattern}): ${downloadUrl}`
+              });
+              downloadAndProcess(downloadUrl);
+              break;
+            }
+          }
+
+          // 递归查找嵌套对象中的下载链接
+          function findDownloadUrl(obj, path = '') {
+            if (typeof obj !== 'object' || obj === null) return;
+            
+            for (const [key, value] of Object.entries(obj)) {
+              const currentPath = path ? `${path}.${key}` : key;
+              
+              if (typeof value === 'string' && (
+                value.includes('.zip') || 
+                value.includes('download') ||
+                value.includes('file')
+              )) {
+                broadcast({
+                  type: 'log',
+                  message: `发现可能的文件链接 (${currentPath}): ${value}`
+                });
+                
+                if (value.includes('.zip')) {
+                  downloadUrl = value;
+                  downloadAndProcess(downloadUrl);
+                  return;
+                }
+              }
+              
+              if (typeof value === 'object') {
+                findDownloadUrl(value, currentPath);
+              }
+            }
+          }
+
+          findDownloadUrl(responseData);
+
+        } catch (e) {
+          // 如果不是JSON，检查是否包含下载链接
+          if (body.includes('downloadUrl') || body.includes('.zip')) {
             broadcast({
               type: 'log',
-              message: `从响应中发现下载链接: ${downloadUrl}`
+              message: `响应内容包含潜在下载信息: ${body.substring(0, 200)}...`
             });
-            downloadAndProcess(downloadUrl);
+            extractDownloadUrl(body);
           }
-        } catch (e) {
-          console.log('解析响应数据失败:', e.message);
         }
         res.end();
       });
@@ -409,27 +538,58 @@ function handleProxyRequest(req, res) {
 
   proxyReq.on('error', (err) => {
     console.error('代理请求错误:', err.message);
+    broadcast({
+      type: 'error',
+      message: `代理请求错误: ${err.message} - ${targetUrl}`
+    });
+    
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'text/plain' });
       res.end('Proxy Error: ' + err.message);
     }
   });
 
-  // 如果正在抓包且是POST请求包含fileinfo，监听请求数据
-  if (isCapturing && req.method === 'POST' && req.url && req.url.includes('fileinfo')) {
+  // 监听请求体内容
+  const shouldMonitorRequest = isCapturing && (
+    req.method === 'POST' || 
+    req.method === 'PUT' ||
+    req.url.includes('fileinfo') ||
+    req.url.includes('download') ||
+    req.url.includes('exam') ||
+    req.url.includes('question')
+  );
+
+  if (shouldMonitorRequest) {
     let body = '';
     req.on('data', chunk => {
-      body += chunk.toString();
+      const chunkStr = chunk.toString();
+      body += chunkStr;
       proxyReq.write(chunk);
     });
 
     req.on('end', () => {
-      console.log('检测到 fileinfo 请求:', req.url);
+      // 记录请求体内容
       broadcast({
-        type: 'log',
-        message: `检测到目标请求: ${req.url}`
+        type: 'requestBody',
+        data: {
+          url: req.url,
+          method: req.method,
+          body: body.substring(0, 1000), // 只显示前1000字符
+          fullLength: body.length
+        }
       });
-      extractDownloadUrl(body);
+
+      console.log(`[POST数据] ${req.url}: ${body.substring(0, 200)}...`);
+      
+      // 检查请求体中的下载链接
+      if (body.includes('downloadUrl') || body.includes('.zip') || body.includes('fileinfo')) {
+        broadcast({
+          type: 'log',
+          message: `请求体包含潜在下载信息: ${req.url}`
+        });
+        extractDownloadUrl(body);
+      }
+      
       proxyReq.end();
     });
   } else {

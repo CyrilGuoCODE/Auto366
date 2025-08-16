@@ -24,9 +24,7 @@ pnpm-debug.log*
 **/.env.production.local
 
 # 编辑器文件
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
+**/.vscode/
 .idea/
 *.suo
 *.ntvs*

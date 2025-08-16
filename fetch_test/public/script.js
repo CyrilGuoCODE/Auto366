@@ -3,6 +3,11 @@ class TianxueToolApp {
         this.ws = null;
         this.isCapturing = false;
         this.answers = [];
+        this.trafficFilters = {
+            showAll: true,
+            postOnly: false,
+            jsonOnly: false
+        };
         
         this.initializeWebSocket();
         this.bindEvents();
@@ -68,6 +73,22 @@ class TianxueToolApp {
                 this.displayAnswers(message.data);
                 break;
             
+            case 'traffic':
+                this.addTrafficLog(message.data);
+                break;
+            
+            case 'response':
+                this.addResponseLog(message.data);
+                break;
+            
+            case 'requestBody':
+                this.addRequestBodyLog(message.data);
+                break;
+            
+            case 'responseBody':
+                this.addResponseBodyLog(message.data);
+                break;
+            
             default:
                 console.log('未知消息类型:', message);
         }
@@ -79,11 +100,32 @@ class TianxueToolApp {
         const stopBtn = document.getElementById('stop-btn');
         const clearBtn = document.getElementById('clear-btn');
         const downloadAnswersBtn = document.getElementById('download-answers-btn');
+        
+        // 流量过滤器
+        const showAllTraffic = document.getElementById('show-all-traffic');
+        const showPostOnly = document.getElementById('show-post-only');
+        const showJsonOnly = document.getElementById('show-json-only');
 
         startBtn.addEventListener('click', () => this.startCapture());
         stopBtn.addEventListener('click', () => this.stopCapture());
         clearBtn.addEventListener('click', () => this.clearLogs());
         downloadAnswersBtn.addEventListener('click', () => this.downloadAnswers());
+        
+        // 流量过滤器事件
+        showAllTraffic.addEventListener('change', (e) => {
+            this.trafficFilters.showAll = e.target.checked;
+            this.applyTrafficFilters();
+        });
+        
+        showPostOnly.addEventListener('change', (e) => {
+            this.trafficFilters.postOnly = e.target.checked;
+            this.applyTrafficFilters();
+        });
+        
+        showJsonOnly.addEventListener('change', (e) => {
+            this.trafficFilters.jsonOnly = e.target.checked;
+            this.applyTrafficFilters();
+        });
     }
 
     // 开始抓包
@@ -244,6 +286,175 @@ class TianxueToolApp {
         const logContainer = document.getElementById('log-container');
         logContainer.innerHTML = '';
         this.addLog('日志已清空', 'info');
+    }
+
+    // 添加流量日志
+    addTrafficLog(data) {
+        const trafficContainer = document.getElementById('traffic-container');
+        const timestamp = new Date(data.timestamp).toLocaleTimeString();
+        
+        const trafficItem = document.createElement('div');
+        trafficItem.className = 'traffic-item';
+        trafficItem.dataset.method = data.method;
+        trafficItem.dataset.url = data.url;
+        
+        // 检查是否包含关键词
+        const isImportant = this.isImportantRequest(data);
+        if (isImportant) {
+            trafficItem.classList.add('traffic-highlight');
+        }
+        
+        trafficItem.innerHTML = `
+            <div class="traffic-request">
+                <span class="traffic-method ${data.method}">${data.method}</span>
+                <span class="traffic-url">${data.url}</span>
+                <span class="traffic-timestamp">${timestamp}</span>
+            </div>
+            <div class="traffic-details">
+                Host: ${data.host} | Content-Type: ${data.contentType} | Size: ${data.contentLength}
+            </div>
+        `;
+        
+        trafficContainer.appendChild(trafficItem);
+        trafficContainer.scrollTop = trafficContainer.scrollHeight;
+        
+        // 限制流量日志数量
+        const trafficItems = trafficContainer.querySelectorAll('.traffic-item');
+        if (trafficItems.length > 200) {
+            trafficContainer.removeChild(trafficItems[0]);
+        }
+        
+        this.applyTrafficFilters();
+    }
+
+    // 添加响应日志
+    addResponseLog(data) {
+        const trafficContainer = document.getElementById('traffic-container');
+        const lastItem = trafficContainer.lastElementChild;
+        
+        if (lastItem && lastItem.dataset.url === data.request.url) {
+            const statusClass = this.getStatusClass(data.response.statusCode);
+            
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'traffic-response';
+            responseDiv.innerHTML = `
+                <span class="traffic-status ${statusClass}">${data.response.statusCode}</span>
+                ${data.response.statusMessage} | ${data.response.contentType} | ${data.response.contentLength}
+            `;
+            
+            lastItem.appendChild(responseDiv);
+        }
+    }
+
+    // 添加请求体日志
+    addRequestBodyLog(data) {
+        const trafficContainer = document.getElementById('traffic-container');
+        const lastItem = trafficContainer.lastElementChild;
+        
+        if (lastItem && lastItem.dataset.url === data.url) {
+            const bodyDiv = document.createElement('div');
+            bodyDiv.className = 'traffic-body';
+            bodyDiv.innerHTML = `
+                <strong>请求体 (${data.fullLength} bytes):</strong><br>
+                ${this.escapeHtml(data.body)}
+                ${data.fullLength > 1000 ? '<br><em>...内容已截断</em>' : ''}
+            `;
+            
+            lastItem.appendChild(bodyDiv);
+            
+            // 如果包含重要信息，高亮显示
+            if (this.containsImportantData(data.body)) {
+                lastItem.classList.add('traffic-highlight');
+                this.addLog(`发现重要请求数据: ${data.url}`, 'warning');
+            }
+        }
+    }
+
+    // 添加响应体日志
+    addResponseBodyLog(data) {
+        const trafficContainer = document.getElementById('traffic-container');
+        const lastItem = trafficContainer.lastElementChild;
+        
+        if (lastItem && lastItem.dataset.url === data.url) {
+            const bodyDiv = document.createElement('div');
+            bodyDiv.className = 'traffic-body';
+            bodyDiv.innerHTML = `
+                <strong>响应体 (${data.fullLength} bytes):</strong><br>
+                ${this.escapeHtml(data.body)}
+                ${data.fullLength > 1000 ? '<br><em>...内容已截断</em>' : ''}
+            `;
+            
+            lastItem.appendChild(bodyDiv);
+            
+            // 如果包含重要信息，高亮显示
+            if (this.containsImportantData(data.body)) {
+                lastItem.classList.add('traffic-highlight');
+                this.addLog(`发现重要响应数据: ${data.url}`, 'warning');
+            }
+        }
+    }
+
+    // 检查是否是重要请求
+    isImportantRequest(data) {
+        const importantKeywords = [
+            'fileinfo', 'download', 'page1', 'exam', 'question', 
+            'answer', 'zip', 'tianxue', 'test', 'quiz'
+        ];
+        
+        const url = data.url.toLowerCase();
+        return importantKeywords.some(keyword => url.includes(keyword));
+    }
+
+    // 检查是否包含重要数据
+    containsImportantData(text) {
+        const importantKeywords = [
+            'downloadUrl', 'download_url', 'fileUrl', 'file_url',
+            'zipUrl', 'zip_url', 'page1.js', '.zip', 'answer_text',
+            'question', 'exam', 'test'
+        ];
+        
+        const lowerText = text.toLowerCase();
+        return importantKeywords.some(keyword => lowerText.includes(keyword.toLowerCase()));
+    }
+
+    // 获取状态码样式类
+    getStatusClass(statusCode) {
+        if (statusCode >= 200 && statusCode < 300) return 'success';
+        if (statusCode >= 300 && statusCode < 400) return 'redirect';
+        return 'error';
+    }
+
+    // 应用流量过滤器
+    applyTrafficFilters() {
+        const trafficItems = document.querySelectorAll('.traffic-item');
+        
+        trafficItems.forEach(item => {
+            let show = true;
+            
+            if (!this.trafficFilters.showAll) {
+                show = false;
+            }
+            
+            if (this.trafficFilters.postOnly && item.dataset.method !== 'POST') {
+                show = false;
+            }
+            
+            if (this.trafficFilters.jsonOnly) {
+                const hasJsonContent = item.textContent.includes('application/json');
+                if (!hasJsonContent) {
+                    show = false;
+                }
+            }
+            
+            item.style.display = show ? 'block' : 'none';
+        });
+    }
+
+    // HTML转义
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     // 下载答案文件

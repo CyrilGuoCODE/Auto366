@@ -59,6 +59,25 @@
                 </div>
             </div>
 
+            <!-- 流量监控 -->
+            <div class="traffic-section">
+                <h3>流量监控</h3>
+                <div class="traffic-controls">
+                    <label>
+                        <input type="checkbox" id="show-all-traffic" checked> 显示所有流量
+                    </label>
+                    <label>
+                        <input type="checkbox" id="show-post-only"> 仅显示POST请求
+                    </label>
+                    <label>
+                        <input type="checkbox" id="show-json-only"> 仅显示JSON响应
+                    </label>
+                </div>
+                <div class="traffic-container" id="traffic-container">
+                    <div class="traffic-item info">等待流量数据...</div>
+                </div>
+            </div>
+
             <!-- 实时日志 -->
             <div class="log-section">
                 <h3>实时日志</h3>
