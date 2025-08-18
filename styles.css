@@ -559,3 +559,37 @@ button:disabled {
     border-radius: 3px;
     display: inline-block;
 }
+
+#settingsBtn {
+    position: absolute;
+    width: 40px;
+    right: 35px;
+    top: 35px;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+    border-radius: 100px;
+    transition: all 0.3s ease;
+    padding: 5px;
+}
+
+#settingsBtn:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+}
+
+#showIpt{
+	display: none;
+}
+
+#settingsDiv{
+	display: none;
+	position: fixed;
+    left: 50%;
+    top: 50%;
+    background: white;
+    border: 1px black solid;
+    border-radius: 5px;
+    padding: 10px;
+    transform: translateX(-50%) translateY(-50%);
+}

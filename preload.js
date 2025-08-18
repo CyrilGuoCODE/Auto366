@@ -1,8 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const Store = require('electron-store');
+const store = new Store();
 
-const resourcePath = 'D:/Up366StudentFiles/resources/'
+const resourcePath = store.get('resourcePath') || 'D:/Up366StudentFiles/resources/'
 
 function deleteDirectoryRecursively(dirPath) {
   if (fs.existsSync(dirPath)) {
@@ -322,5 +324,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     catch (e) {
       return { error: '系统音频写入失败: ' + e.message };
     }
+  },
+  
+  openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
+  chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
+  getResourcePath: () => {
+	return resourcePath
+  },
+  setResourcePath: (path) => {
+	store.set('resourcePath', path)
+	resourcePath = path
   }
 })

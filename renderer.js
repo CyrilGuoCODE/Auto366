@@ -33,6 +33,7 @@ class Global {
   constructor() {
     this.initScale();
     this.initBackBtn();
+	this.initSettingsBtn()
     this.scale = null;
   }
 
@@ -70,6 +71,29 @@ class Global {
         new MainMenu().showMainMenu();
       });
     });
+  }
+  
+  initSettingsBtn(){
+	document.getElementById('settingsBtn').addEventListener('click', () => {
+	  document.getElementById('settingsDiv').style.display = 'block'
+	  document.getElementById('pathIpt').value = window.electronAPI.getResourcePath()
+	})
+	document.getElementById('closeBtn').addEventListener('click', () => {
+	  document.getElementById('settingsDiv').style.display = 'none'
+	})
+	document.getElementById('showBtn').addEventListener('click', function() {
+	  window.electronAPI.openDirectoryChoosing()
+	})
+	window.electronAPI.chooseDirectory((event, path) => {
+	  document.getElementById('pathIpt').value = path
+	})
+	document.getElementById('cancelBtn').addEventListener('click', function() {
+	  document.getElementById('settingsDiv').style.display = 'none'
+	})
+	document.getElementById('setBtn').addEventListener('click', function() {
+	  window.electronAPI.setResourcePath(document.getElementById('pathIpt').value)
+	  document.getElementById('settingsDiv').style.display = 'none'
+	})
   }
 }
 
