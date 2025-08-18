@@ -9,6 +9,7 @@ const url = require('url')
 const fs = require('fs-extra')
 const axios = require('axios')
 const StreamZip = require('node-stream-zip')
+const mitmproxy = require('node-mitmproxy')
 const CRLF = '\r\n';
 
 let mainWindow
@@ -21,8 +22,32 @@ let flag = 0;
 let pythonProcess
 let globalScale = 100
 
+// URL处理工具函数
+function isValidAndCompleteUrl(urlString) {
+  try {
+    // 检查是否是完整URL
+    if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
+      new URL(urlString); // 验证URL格式
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+// 构建完整URL
+function buildCompleteUrl(rOptions, ssl) {
+  try {
+    return `${rOptions.protocol || 'http'}//${rOptions.hostname}:${rOptions.port || (ssl ? 443 : 80)}${rOptions.path || ''}`;
+  } catch (e) {
+    console.error('构建URL失败:', e);
+    return null;
+  }
+}
+
 // 答案获取相关变量
-let proxyServer = null
+let proxyAgent = null
 let isCapturing = false
 let extractedAnswers = []
 let downloadUrl = ''
@@ -196,7 +221,6 @@ ipcMain.on('start-point', async () => {
   //  console.log('开始执行，坐标信息:', pos);
   //  console.log('答案数组:', ans);
   flag = 1
-
   try {
     // 先激活目标窗口
     await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3);
@@ -386,131 +410,221 @@ function stopPythonScript() {
 
 // 答案获取功能
 function startAnswerProxy() {
-  if (proxyServer) {
+  if (proxyAgent) {
     stopAnswerProxy()
   }
 
-  proxyServer = http.createServer()
+  // 创建MITM代理实例
+  proxyAgent = mitmproxy.createProxy({
+    port: 5291,
+    ssl: {
+      rejectUnauthorized: false
+    },
+    // 添加错误处理
+    onError: (err, req, res) => {
+      console.error('代理错误:', err);
+      mainWindow.webContents.send('proxy-error', {
+        message: `代理错误: ${err.message}`,
+        timestamp: new Date().toISOString()
+      });
+      // 如果发生严重错误，尝试重新启动代理
+      if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
+        console.log('代理端口被占用或无权限访问，尝试重新启动...');
+        setTimeout(() => {
+          stopAnswerProxy();
+          startAnswerProxy();
+        }, 2000);
+      }
+    },
+    sslConnectInterceptor: (req, cltSocket, head) => {
+      try {
+        console.log('SSL连接请求:', req.url);
+        // 检查是否为合法的HTTPS请求
+        if (req && req.url && typeof req.url === 'string') {
+          return true; // 返回true表示拦截此连接
+        }
+        return false;
+      } catch (error) {
+        console.error('SSL连接拦截器错误:', error);
+        return false;
+      }
+    },
+    requestInterceptor: (rOptions, req, res, ssl, next) => {
+      try {
+        // 处理HTTP请求
+        if (rOptions && rOptions.hostname) {
+          // 构建并验证URL
+          const fullUrl = buildCompleteUrl(rOptions, ssl);
+          if (!fullUrl || !isValidAndCompleteUrl(fullUrl)) {
+            console.warn('无效的URL格式，跳过处理:', fullUrl);
+            next();
+            return;
+          }
 
-  // 处理HTTP请求
-  proxyServer.on('request', (req, res) => {
-    handleProxyRequest(req, res)
-  })
+          const requestInfo = {
+            method: req.method,
+            url: fullUrl,
+            host: rOptions.hostname,
+            path: rOptions.path || '',
+            timestamp: new Date().toISOString(),
+            isHttps: ssl
+          };
+          mainWindow.webContents.send('traffic-log', requestInfo);
 
-  // 处理HTTPS CONNECT请求
-  proxyServer.on('connect', (req, clientSocket, head) => {
-      const { hostname, port } = parseUrl(req.url);
-      const targetPort = port || 443;
-  
-      // 记录HTTPS连接请求
-      const requestInfo = {
-          method: 'HTTPS',
-          url: `https://${hostname}:${targetPort}`,
-          host: hostname,
-          timestamp: new Date().toISOString()
-      };
-      mainWindow.webContents.send('traffic-log', requestInfo);
-  
-      const serverSocket = net.createConnection(targetPort, hostname, () => {
-          clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-          serverSocket.write(head);
-  
-          // 解析TLS隧道中的HTTP请求
-          let buffer = Buffer.from([]);
-          let requestHeaders = '';
-          let body = '';
-          let contentLength = 0;
-          let isBodyParsing = false;
-  
-          clientSocket.on('data', (data) => {
-              if (!isBodyParsing) {
-                  buffer = Buffer.concat([buffer, data]);
-                  const bufferStr = buffer.toString();
-                  
-                  // 检查请求头是否结束
-                  const headerEndIndex = bufferStr.indexOf(CRLF + CRLF);
-                  if (headerEndIndex !== -1) {
-                      requestHeaders = bufferStr.substring(0, headerEndIndex);
-                      const remainingData = bufferStr.substring(headerEndIndex + (CRLF + CRLF).length);
-                      
-                      // 解析请求头获取Content-Length
-                      const headerLines = requestHeaders.split(CRLF);
-                      const contentLengthLine = headerLines.find(line => line.toLowerCase().startsWith('content-length:'));
-                      if (contentLengthLine) {
-                          contentLength = parseInt(contentLengthLine.split(':')[1].trim());
-                      }
-                      
-                      // 获取请求方法、路径和协议
-                      const requestLine = headerLines[0];
-                      const [method, path, protocol] = requestLine.split(' ');
-                      
-                      // 记录完整的HTTPS请求URL
-                      const fullUrl = `https://${hostname}${path}`;
-                      const httpsRequestInfo = {
-                          method: method,
-                          url: fullUrl,
-                          host: hostname,
-                          path: path,
-                          timestamp: new Date().toISOString(),
-                          isHttps: true
-                      };
-                      mainWindow.webContents.send('traffic-log', httpsRequestInfo);
-                      
-                      // 检查是否是答案下载链接
-                      if (isCapturing && hostname.includes('fs.') && path.includes('/download/')) {
-                          downloadUrl = fullUrl;
-                          console.log('发现HTTPS答案下载链接:', fullUrl);
-                          mainWindow.webContents.send('download-found', { url: downloadUrl });
-                          downloadAndProcessFile(downloadUrl);
-                      }
-                      
-                      // 如果有请求体，开始解析
-                      if (contentLength > 0) {
-                          isBodyParsing = true;
-                          body = remainingData;
-                          
-                          // 如果剩余数据已经包含完整请求体
-                          if (body.length >= contentLength) {
-                              processRequestBody(body.substring(0, contentLength), hostname, path);
-                              body = body.substring(contentLength);
-                              isBodyParsing = false;
-                          }
-                      }
-                  }
-              } else {
-                  // 正在解析请求体
-                  body += data.toString();
-                  if (body.length >= contentLength) {
-                      processRequestBody(body.substring(0, contentLength), hostname, path);
-                      body = body.substring(contentLength);
-                      isBodyParsing = false;
-                  }
+        // 检查是否是答案下载链接
+        if (isCapturing && rOptions.hostname && rOptions.hostname.includes('fs.') && rOptions.path && rOptions.path.includes('/download/')) {
+          try {
+            downloadUrl = buildCompleteUrl(rOptions, ssl);
+            if (downloadUrl && isValidAndCompleteUrl(downloadUrl)) {
+              console.log('发现答案下载链接:', downloadUrl);
+              mainWindow.webContents.send('download-found', { url: downloadUrl });
+              downloadAndProcessFile(downloadUrl);
+            } else {
+              console.warn('构建的下载链接无效，跳过处理:', downloadUrl);
+            }
+          } catch (e) {
+            console.error('处理答案下载链接时出错:', e);
+          }
+        }
+
+        // 处理POST请求体
+        if (req.method === 'POST' && req.body) {
+          try {
+            if (typeof req.body === 'string' && req.body.includes('downloadUrl')) {
+              processRequestBody(req.body, rOptions.hostname, rOptions.path);
+            }
+          } catch (e) {
+            console.error('处理POST请求体错误:', e);
+          }
+        }
+      }
+
+      // 必须调用next()才能继续请求
+      next();
+
+      // 处理响应
+      if (res && res.response) {
+        const response = res.response;
+
+        // 监听响应内容
+        if (isCapturing && req.url) {
+          const parsedUrl = new URL(req.url);
+
+          if (parsedUrl.hostname.includes('fs.') && (
+            parsedUrl.pathname.includes('/download/') || 
+            req.url.includes('fileinfo') ||
+            req.url.includes('downloadUrl')
+          )) {
+            let body = '';
+
+            response.on('data', (chunk) => {
+              body += chunk;
+              res.write(chunk);
+            });
+
+            response.on('end', () => {
+              try {
+                // 尝试解析JSON响应
+                const jsonData = JSON.parse(body);
+                if (jsonData && typeof jsonData === 'string' && jsonData.includes('fs.') && jsonData.includes('/download/')) {
+                  downloadUrl = jsonData;
+                  console.log('发现JSON中的答案下载链接:', jsonData);
+                  mainWindow.webContents.send('download-found', { url: downloadUrl });
+                  downloadAndProcessFile(downloadUrl);
+                }
+              } catch (e) {
+                // 如果不是JSON，尝试直接提取下载链接
+                if (body.includes('downloadUrl') || body.includes('download')) {
+                  extractDownloadUrl(body);
+                }
               }
-              
-              serverSocket.write(data);
-          });
-  
-          serverSocket.pipe(clientSocket);
-      });
-  
-      serverSocket.on('error', (err) => {
-          console.error('HTTPS代理错误:', err);
-          clientSocket.end();
-      });
-      
-      clientSocket.on('error', (err) => {
-          console.error('客户端HTTPS连接错误:', err);
-          serverSocket.end();
-      });
+              res.end();
+            });
+          } else {
+            response.pipe(res);
+          }
+        } else {
+          response.pipe(res);
+        }
+      }
+    } catch (error) {
+      console.error('请求拦截器错误:', error);
+      next();
+    }
+    },
+    responseInterceptor: (req, res, proxyReq, proxyRes, ssl, next) => {
+      try {
+        // 监听响应内容
+        if (isCapturing && req && req.url) {
+          // 使用工具函数验证URL
+          if (!isValidAndCompleteUrl(req.url)) {
+            console.log('跳过非完整URL处理:', req.url);
+            proxyRes.pipe(res);
+            next();
+            return;
+          }
+
+          const parsedUrl = new URL(req.url);
+
+          if (parsedUrl.hostname.includes('fs.') && (
+            parsedUrl.pathname.includes('/download/') ||
+            req.url.includes('fileinfo') ||
+            req.url.includes('downloadUrl')
+          )) {
+            let body = '';
+
+            proxyRes.on('data', (chunk) => {
+              body += chunk;
+              res.write(chunk);
+            });
+
+            proxyRes.on('end', () => {
+              try {
+                // 尝试解析JSON响应
+                const jsonData = JSON.parse(body);
+                if (jsonData && typeof jsonData === 'string' && jsonData.includes('fs.') && jsonData.includes('/download/')) {
+                  // 验证JSON中的URL是否有效
+                  if (isValidAndCompleteUrl(jsonData)) {
+                    downloadUrl = jsonData;
+                    console.log('发现JSON中的答案下载链接:', jsonData);
+                    mainWindow.webContents.send('download-found', { url: downloadUrl });
+                    downloadAndProcessFile(downloadUrl);
+                  } else {
+                    console.warn('JSON中的URL无效，跳过处理:', jsonData);
+                  }
+                }
+              } catch (e) {
+                // 如果不是JSON，尝试直接提取下载链接
+                if (body.includes('downloadUrl') || body.includes('download')) {
+                  try {
+                    extractDownloadUrl(body);
+                  } catch (extractError) {
+                    console.error('提取下载链接失败:', extractError);
+                  }
+                }
+              }
+              res.end();
+            });
+          } else {
+            proxyRes.pipe(res);
+          }
+        } else {
+          proxyRes.pipe(res);
+        }
+      } catch (error) {
+        console.error('响应拦截器错误:', error);
+      }
+
+      // 必须调用next()才能继续响应
+      next();
+    }
   });
 
-  proxyServer.listen(5291, '127.0.0.1', () => {
-    console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291')
-    mainWindow.webContents.send('proxy-status', {
-      running: true,
-      message: '代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:5291'
-    })
-  })
+  console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291');
+  mainWindow.webContents.send('proxy-status', {
+    running: true,
+    message: '代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:5291'
+  });
 }
 
 function processRequestBody(body, hostname, path) {
@@ -529,12 +643,34 @@ function processRequestBody(body, hostname, path) {
 }
 
 function stopAnswerProxy() {
-  if (proxyServer) {
-    proxyServer.close()
-    proxyServer = null
-    isCapturing = false
-    console.log('万能答案获取代理服务器已停止')
-    mainWindow.webContents.send('proxy-status', { running: false, message: '代理服务器已停止' })
+  if (proxyAgent) {
+    try {
+      // 尝试多种方式关闭代理
+      if (typeof proxyAgent.close === 'function') {
+        proxyAgent.close()
+      } else if (typeof proxyAgent.destroy === 'function') {
+        proxyAgent.destroy()
+      } else if (typeof proxyAgent.abort === 'function') {
+        proxyAgent.abort()
+      }
+
+      // 清理所有相关资源
+      proxyAgent.removeAllListeners && proxyAgent.removeAllListeners()
+      proxyAgent = null
+      isCapturing = false
+      downloadUrl = ''
+      console.log('万能答案获取代理服务器已停止')
+      mainWindow.webContents.send('proxy-status', { running: false, message: '代理服务器已停止' })
+    } catch (error) {
+      console.error('停止代理时出错:', error)
+      mainWindow.webContents.send('proxy-error', { 
+        message: `停止代理时出错: ${error.message}`,
+        timestamp: new Date().toISOString()
+      })
+      // 即使出错，也尝试重置状态
+      proxyAgent = null
+      isCapturing = false
+    }
   }
 }
 
@@ -550,10 +686,10 @@ function handleProxyRequest(req, res) {
   const isHttps = req.connection.encrypted || req.headers['x-forwarded-proto'] === 'https'
   const protocol = isHttps ? 'https:' : 'http:'
   const targetUrl = req.url.startsWith('http') ? req.url : `${protocol}//${req.headers.host}${req.url}`
-  
+
   // 在这里正确定义 parsedUrl
   const parsedUrl = url.parse(targetUrl)
-  
+
   // 记录请求信息（包含协议信息）
   const requestInfo = {
     method: req.method,
@@ -568,7 +704,7 @@ function handleProxyRequest(req, res) {
 
   if (isCapturing) {
     const isDownloadUrl = parsedUrl.hostname.includes('fs.') && parsedUrl.path.includes('/download/')
-    
+
     if (isDownloadUrl) {
       downloadUrl = targetUrl
       console.log('发现答案下载链接:', targetUrl)
@@ -652,8 +788,8 @@ function handleProxyRequest(req, res) {
 
     req.on('end', () => {
       if (body.includes('downloadUrl') || body.includes('download') || body.includes('fileinfo')) {
-        mainWindow.webContents.send('important-request', { 
-          url: targetUrl, 
+        mainWindow.webContents.send('important-request', {
+          url: targetUrl,
           body: body.substring(0, 500),
           isHttps: isHttps
         })
@@ -681,7 +817,7 @@ function extractDownloadUrl(data) {
     for (const pattern of patterns) {
       const match = data.match(pattern)
       if (match && match[1]) {
-        const url = match[1].replace(/\\"/g, '"').replace(/\\\//g, '/')
+        const url = match[1].replace(/\"/g, '"').replace(/\\//g, '/')
 
         // 只处理 fs.域名/download/ 格式的链接（不要求.zip后缀）
         if (url.includes('fs.') && url.includes('/download/')) {
@@ -713,10 +849,10 @@ async function downloadAndProcessFile(url) {
     const appPath = app.isPackaged ? process.resourcesPath : __dirname
     const tempDir = path.join(appPath, 'temp')
     const ansDir = path.join(appPath, 'answers')
-    
+
     let finalTempDir = tempDir
     let finalAnsDir = ansDir
-    
+
     try {
       fs.ensureDirSync(tempDir)
       fs.ensureDirSync(ansDir)
@@ -962,14 +1098,14 @@ function extractAnswersFromFile(filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase()
     const content = fs.readFileSync(filePath, 'utf-8')
-    
+
     // 根据文件类型选择不同的处理方法
     if (ext === '.json') {
       return extractFromJSON(content, filePath)
     } else if (ext === '.xml') {
       return extractFromXML(content, filePath)
     }
-    
+
     return []
   } catch (error) {
     console.error(`读取文件失败: ${filePath}`, error)
@@ -980,10 +1116,10 @@ function extractAnswersFromFile(filePath) {
 // 从JSON文件提取答案
 function extractFromJSON(content, filePath) {
   const answers = []
-  
+
   try {
     const jsonData = JSON.parse(content)
-    
+
     // 处理句子跟读题型
     if (jsonData.Data && jsonData.Data.sentences) {
       jsonData.Data.sentences.forEach((sentence, index) => {
@@ -997,7 +1133,7 @@ function extractFromJSON(content, filePath) {
         }
       })
     }
-    
+
     // 处理答案字段
     if (jsonData.answers) {
       jsonData.answers.forEach((answerObj, index) => {
@@ -1011,7 +1147,7 @@ function extractFromJSON(content, filePath) {
         }
       })
     }
-    
+
     // 处理单词发音题型
     if (jsonData.Data && jsonData.Data.words) {
       jsonData.Data.words.forEach((word, index) => {
@@ -1025,7 +1161,7 @@ function extractFromJSON(content, filePath) {
         }
       })
     }
-    
+
     // 尝试通用JSON答案提取
     const jsonAnswerMatches = [...content.matchAll(/"answer"\s*:\s*"([^"]+)"/g)]
     jsonAnswerMatches.forEach((match, index) => {
@@ -1038,7 +1174,7 @@ function extractFromJSON(content, filePath) {
         })
       }
     })
-    
+
     return answers
   } catch (error) {
     console.error(`解析JSON文件失败: ${filePath}`, error)
@@ -1049,13 +1185,13 @@ function extractFromJSON(content, filePath) {
 // 从XML文件提取答案
 function extractFromXML(content, filePath) {
   const answers = []
-  
+
   try {
     // 处理correctAnswer.xml文件
     if (filePath.includes('correctAnswer')) {
       // 使用正则表达式提取所有<answer>标签中的内容
       const answerMatches = content.match(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/g)
-      
+
       if (answerMatches) {
         answerMatches.forEach((match, index) => {
           const answerText = match.replace(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/, '$1')
@@ -1070,19 +1206,19 @@ function extractFromXML(content, filePath) {
         })
       }
     }
-    
+
     // 处理paper.xml文件
     if (filePath.includes('paper')) {
       // 提取所有<element>标签中的题目和答案
       const elementMatches = content.match(/<element[^>]*id="([^"]+)".*?<question_no>(\d+)<\/question_no>.*?<question_text>(.*?)<\/question_text>.*?<knowledge>(.*?)<\/knowledge>/gs)
-      
+
       if (elementMatches) {
         elementMatches.forEach((match, index) => {
           const idMatch = match.match(/id="([^"]+)"/)
           const questionNoMatch = match.match(/<question_no>(\d+)<\/question_no>/)
           const questionTextMatch = match.match(/<question_text>(.*?)<\/question_text>/)
           const knowledgeMatch = match.match(/<knowledge>(.*?)<\/knowledge>/)
-          
+
           if (idMatch && questionNoMatch && questionTextMatch && knowledgeMatch) {
             answers.push({
               question: parseInt(questionNoMatch[1]),
@@ -1094,7 +1230,7 @@ function extractFromXML(content, filePath) {
         })
       }
     }
-    
+
     // 尝试通用XML答案提取
     const xmlAnswerMatches = [...content.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>/g)]
     xmlAnswerMatches.forEach((match, index) => {
@@ -1107,7 +1243,7 @@ function extractFromXML(content, filePath) {
         })
       }
     })
-    
+
     return answers
   } catch (error) {
     console.error(`解析XML文件失败: ${filePath}`, error)
