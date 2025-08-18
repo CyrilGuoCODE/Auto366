@@ -52,7 +52,7 @@ h1 {
 
 .back-btn {
     position: absolute;
-    top: 20px;
+    top: 30px;
     left: 20px;
     padding: 8px 16px;
     border: 1px solid #ddd;
@@ -327,8 +327,28 @@ button:disabled {
     color: #e2e8f0;
     padding: 5px 0;
     border-bottom: 1px solid #333;
-    display: flex;
-    align-items: center;
+    text-align: left;
+    white-space: nowrap;
+    width: 100%;
+    overflow: auto;
+}
+
+.log-item::-webkit-scrollbar {
+  height: 4px; /* 水平滚动条高度 */
+}
+
+.log-item::-webkit-scrollbar-thumb {
+  background: rgba(255,255, 255, 0.4); /* 半透明黑色 */
+  border-radius: 3px;
+  transition: background 0.3s; /* 悬停动画 */
+}
+
+.log-item::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255, 255, 0.55); /* 悬停加深 */
+}
+
+.log-item::-webkit-scrollbar-track {
+  background: transparent; /* 透明轨道 */
 }
 
 .log-item:last-child {

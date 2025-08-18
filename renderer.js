@@ -104,7 +104,16 @@ class MainMenu {
 class ListeningFeature {
   constructor() {
     this.initialFiles = null;
+	this.initLocations()
     this.initEventListeners();
+  }
+  
+  initLocations(){
+	let locations = localStorage.getItem('pos-listening')
+	if (locations){
+	  locations = JSON.parse(locations)
+	  window.electronAPI.setLocations(locations);
+	}
   }
 
   initEventListeners() {
@@ -134,6 +143,7 @@ class ListeningFeature {
     });
 
     window.electronAPI.updateLocations((event, locations) => {
+      localStorage.setItem('pos-listening', JSON.stringify(locations))
       const display = `
         <strong>坐标设置完成！</strong><br>
         🔴 输入框位置: (${locations.pos1.x}, ${locations.pos1.y})<br>
