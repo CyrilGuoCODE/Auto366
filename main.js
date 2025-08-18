@@ -709,13 +709,32 @@ async function downloadAndProcessFile(url) {
   try {
     mainWindow.webContents.send('process-status', { status: 'downloading', message: '正在下载文件...' })
 
-    const tempDir = path.join(__dirname, 'temp')
-    const ansDir = path.join(__dirname, 'answers')
-    fs.ensureDirSync(tempDir)
-    fs.ensureDirSync(ansDir)
+    // 使用更可靠的路径处理方式，确保在打包后也能正确创建目录
+    const appPath = app.isPackaged ? process.resourcesPath : __dirname
+    const tempDir = path.join(appPath, 'temp')
+    const ansDir = path.join(appPath, 'answers')
+    
+    let finalTempDir = tempDir
+    let finalAnsDir = ansDir
+    
+    try {
+      fs.ensureDirSync(tempDir)
+      fs.ensureDirSync(ansDir)
+    } catch (dirError) {
+      console.error('创建目录失败，尝试使用用户目录:', dirError)
+      // 如果在应用目录创建失败，尝试使用用户目录
+      const userDataPath = app.getPath('userData')
+      const tempDirAlt = path.join(userDataPath, 'temp')
+      const ansDirAlt = path.join(userDataPath, 'answers')
+      fs.ensureDirSync(tempDirAlt)
+      fs.ensureDirSync(ansDirAlt)
+      // 使用备用目录
+      finalTempDir = tempDirAlt
+      finalAnsDir = ansDirAlt
+    }
 
     const timestamp = Date.now()
-    const zipPath = path.join(tempDir, `exam_${timestamp}.zip`)
+    const zipPath = path.join(finalTempDir, `exam_${timestamp}.zip`)
 
     const response = await axios({
       method: 'GET',
@@ -729,7 +748,7 @@ async function downloadAndProcessFile(url) {
 
     writer.on('finish', () => {
       mainWindow.webContents.send('process-status', { status: 'extracting', message: '正在解压文件...' })
-      extractZipFile(zipPath)
+      extractZipFile(zipPath, finalAnsDir)
     })
 
     writer.on('error', (err) => {
@@ -741,7 +760,7 @@ async function downloadAndProcessFile(url) {
   }
 }
 
-async function extractZipFile(zipPath) {
+async function extractZipFile(zipPath, ansDir) {
   try {
     const extractDir = zipPath.replace('.zip', '')
 
@@ -825,7 +844,7 @@ async function extractZipFile(zipPath) {
 
       if (allAnswers.length > 0) {
         // 保存所有答案到文件
-        const answerFile = path.join(__dirname, 'answers', `answers_${Date.now()}.txt`)
+        const answerFile = path.join(ansDir, `answers_${Date.now()}.txt`)
         const answerText = allAnswers.map((item, index) =>
           `${index + 1}. [${item.sourceFile}] ${item.answer}: ${item.content}`
         ).join('\n\n')
@@ -840,7 +859,7 @@ async function extractZipFile(zipPath) {
         })
       } else {
         // 未找到有效答案数据时，展示所有文件内容
-        const allContentFile = path.join(__dirname, 'answers', `all_content_${Date.now()}.txt`)
+        const allContentFile = path.join(ansDir, `all_content_${Date.now()}.txt`)
         const allContentText = allFilesContent.map(item =>
           `文件: ${item.file}\n内容:\n${item.content}\n\n${'='.repeat(50)}\n\n`
         ).join('\n')
