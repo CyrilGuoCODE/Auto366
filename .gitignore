@@ -47,3 +47,4 @@ coverage/
 # Electron 输出
 **/out/
 **/release/
+.env
