@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell } = require('electron')
 const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
 const { spawn, kill } = require('child_process')
@@ -1486,9 +1486,4 @@ ipcMain.on('start-capturing', () => {
 ipcMain.on('stop-capturing', () => {
   isCapturing = false
   mainWindow.webContents.send('capture-status', { capturing: false })
-})
-
-ipcMain.on('open-directory-choosing', async () => {
-  const result = await dialog.showOpenDialog({properties: ['openDirectory']});
-  if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
 })

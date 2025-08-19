@@ -16,7 +16,7 @@
   "dependencies": {
     "@nut-tree/nut-js": "^3.1.2",
     "axios": "^1.6.0",
-    "electron-store": "^7.0.0",
+    "electron-store": "^10.1.0",
     "fs": "^0.0.1-security",
     "fs-extra": "^11.1.1",
     "node-mitmproxy": "^3.1.1",
