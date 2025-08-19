@@ -823,8 +823,90 @@ class UniversalAnswerFeature {
 
   addTrafficLog(data) {
     const timestamp = new Date(data.timestamp).toLocaleTimeString();
-    const logText = `[${timestamp}] ${data.method} ${data.url}`;
-    this.addLogItem(logText, 'normal');
+    const logText = `${data.method} [${timestamp}] ${data.url}`;
+    
+    // 创建可展开的日志项
+    const logItem = document.createElement('div');
+    logItem.className = `log-item request-item ${data.method.toLowerCase()}`;
+    
+    // 创建请求行
+    const requestLine = document.createElement('div');
+    requestLine.className = 'request-line';
+    requestLine.innerHTML = `<span class="log-method ${data.method}">${data.method} [${timestamp}]</span> ${data.url}`;
+    logItem.appendChild(requestLine);
+    
+    // 创建详情容器（默认隐藏）
+    const detailsContainer = document.createElement('div');
+    detailsContainer.className = 'request-details';
+    
+    // 添加时间戳
+    const timestampDiv = document.createElement('div');
+    timestampDiv.className = 'detail-item';
+    timestampDiv.innerHTML = `<strong>时间:</strong> ${timestamp}`;
+    detailsContainer.appendChild(timestampDiv);
+    
+    // 添加主机信息
+    const hostDiv = document.createElement('div');
+    hostDiv.className = 'detail-item';
+    hostDiv.innerHTML = `<strong>主机:</strong> ${data.host}`;
+    detailsContainer.appendChild(hostDiv);
+    
+    // 添加请求头（如果有）
+    if (data.requestHeaders) {
+      const headersDiv = document.createElement('div');
+      headersDiv.className = 'detail-item';
+      headersDiv.innerHTML = `<strong>请求头:</strong><pre class="headers">${JSON.stringify(data.requestHeaders, null, 2)}</pre>`;
+      detailsContainer.appendChild(headersDiv);
+    }
+    
+    // 添加请求体（如果有）
+    if (data.requestBody) {
+      const bodyDiv = document.createElement('div');
+      bodyDiv.className = 'detail-item';
+      bodyDiv.innerHTML = `<strong>请求体:</strong><pre class="request-body">${data.requestBody}</pre>`;
+      detailsContainer.appendChild(bodyDiv);
+    }
+    
+    // 添加Cookie（如果有）
+    if (data.cookies) {
+      const cookiesDiv = document.createElement('div');
+      cookiesDiv.className = 'detail-item';
+      cookiesDiv.innerHTML = `<strong>Cookie:</strong><pre class="cookies">${data.cookies}</pre>`;
+      detailsContainer.appendChild(cookiesDiv);
+    }
+    
+    // 添加响应头（如果有）
+    if (data.responseHeaders) {
+      const responseHeadersDiv = document.createElement('div');
+      responseHeadersDiv.className = 'detail-item';
+      responseHeadersDiv.innerHTML = `<strong>响应头:</strong><pre class="response-headers">${JSON.stringify(data.responseHeaders, null, 2)}</pre>`;
+      detailsContainer.appendChild(responseHeadersDiv);
+    }
+    
+    // 添加响应体（如果有）
+    if (data.responseBody) {
+      const responseBodyDiv = document.createElement('div');
+      responseBodyDiv.className = 'detail-item';
+      responseBodyDiv.innerHTML = `<strong>响应体:</strong><pre class="response-body">${data.responseBody}</pre>`;
+      detailsContainer.appendChild(responseBodyDiv);
+    }
+    
+    logItem.appendChild(detailsContainer);
+    
+    // 添加点击事件以展开/折叠详情
+    requestLine.addEventListener('click', () => {
+      detailsContainer.style.display = detailsContainer.style.display === 'none' ? 'block' : 'none';
+    });
+    
+    const trafficLog = document.getElementById('trafficLog');
+    trafficLog.appendChild(logItem);
+    trafficLog.scrollTop = trafficLog.scrollHeight;
+    
+    // 限制日志数量
+    const logItems = trafficLog.querySelectorAll('.log-item');
+    if (logItems.length > 100) {
+      trafficLog.removeChild(logItems[0]);
+    }
   }
 
   addImportantLog(data) {
