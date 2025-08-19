@@ -529,11 +529,12 @@ button:disabled {
     height: 100%;
     background-color: rgba(0,0,0,0.4);
     overflow: auto;
+	justify-content: center;
+	align-items: center;
 }
 
 .modal-content {
     background-color: #fefefe;
-    margin: 10% auto;
     padding: 30px;
     border: 1px solid #888;
     width: 80%;
@@ -633,6 +634,11 @@ button:disabled {
 .project-link:hover {
     color: #0056b3;
     text-decoration: underline;
+}
+
+#error-message{
+	margin: 0;
+	color: red;
 }
 
 /* 文件分组显示

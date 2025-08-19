@@ -9,12 +9,13 @@
 </head>
 
 <body>
+    <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
+
     <div class="container">
         <div id="main-menu">
             <div style="text-align: center; margin-bottom: 20px;">
                 <img src="icon_black.png" alt="Auto366" style="width: 87px; height: 87px; margin-bottom: 10px;">
             </div>
-            <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
             <h1>Auto366</h1>
             <h2>天学网自动化工具</h2>
             <p>请选择要使用的功能：</p>
@@ -51,7 +52,6 @@
 
         <div id="listening-content" class="content-area">
             <button class="back-btn">返回</button>
-            <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
             <h1>听音写词</h1>
 
             <div class="tutorial">
@@ -110,7 +110,6 @@
 
         <div id="wordpk-content" class="content-area">
             <button class="back-btn">返回</button>
-            <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
             <h1>单词PK</h1>
 
             <div class="tutorial">
@@ -154,7 +153,6 @@
 
         <div id="hearing-content" class="content-area">
             <button class="back-btn">返回</button>
-            <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
             <h1>听力测试</h1>
 
             <div class="tutorial">
@@ -206,7 +204,6 @@
 
         <div id="universal-answer-content" class="content-area">
             <button class="back-btn">返回</button>
-            <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
             <h1>万能答案获取</h1>
 
             <div class="tutorial">
@@ -277,8 +274,6 @@
         </div>
     </div>
 
-    <script src="./renderer.js"></script>
-
     <div id="settings-modal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
@@ -295,11 +290,12 @@
                     <button id="save-settings" class="save-btn">保存设置</button>
                     <button id="reset-settings" class="reset-btn">重置为默认</button>
                 </div>
+				<p id="error-message"></p>
             </div>
         </div>
     </div>
-    
-    <script src="./settings.js"></script>
+
+    <script src="./renderer.js"></script>
 </body>
 
 </html>

@@ -22,9 +22,6 @@ let flag = 0;
 let pythonProcess
 let globalScale = 100
 
-let resourcePath = 'D:/Up366StudentFiles/resources/'
-let flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
-
 // URL处理工具函数
 function isValidAndCompleteUrl(urlString) {
   try {
@@ -145,77 +142,14 @@ function createWindow() {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // 所有链接都在外部浏览器打开
     shell.openExternal(url);
-    return { action: 'deny' };
+    return { action: 'deny' }; // 阻止在Electron中打开
   });
 
   globalShortcut.register('Ctrl+Shift+Q', () => {
     flag = 0
     stopPythonScript()
-  })
-
-  ipcMain.handle('show-open-dialog', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openDirectory']
-    })
-    return result
-  })
-
-  ipcMain.handle('update-cache-path', async (event, cachePath) => {
-    try {
-      resourcePath = `${cachePath}/resources/`
-      flipbooksPath = `${cachePath}/flipbooks/`
-
-      // 使用 Electron 的 app.getPath('userData') 获取用户数据目录
-      const userDataPath = app.getPath('userData');
-      const settingsFile = require('path').join(userDataPath, 'settings.json');
-      
-      // 读取现有设置或创建新设置对象
-      let settings = {};
-      try {
-        if (fs.existsSync(settingsFile)) {
-          settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-        }
-      } catch (readError) {
-        console.error('读取设置文件失败:', readError);
-      }
-      
-      // 更新缓存路径设置
-      settings.cachePath = cachePath;
-      
-      // 保存设置到文件
-      fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('cache-path-updated', { path, resourcePath, flipbooksPath })
-      }
-      
-      return { success: true, message: '缓存路径已更新' }
-    } catch (e) {
-      return { error: '更新缓存路径失败: ' + e.message }
-    }
-  })
-
-  ipcMain.handle('get-cache-path', async () => {
-    try {
-      // 从设置文件中读取缓存路径
-      let cachePath = resourcePath.replace('/resources/', '');
-      try {
-        const userDataPath = app.getPath('userData');
-        const settingsFile = require('path').join(userDataPath, 'settings.json');
-        if (fs.existsSync(settingsFile)) {
-          const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-          if (settings.cachePath) {
-            cachePath = settings.cachePath;
-          }
-        }
-      } catch (readError) {
-        console.error('读取缓存路径失败:', readError);
-      }
-      return { success: true, path: cachePath }
-    } catch (e) {
-      return { error: '获取缓存路径失败: ' + e.message }
-    }
   })
 }
 
@@ -1552,4 +1486,9 @@ ipcMain.on('start-capturing', () => {
 ipcMain.on('stop-capturing', () => {
   isCapturing = false
   mainWindow.webContents.send('capture-status', { capturing: false })
+})
+
+ipcMain.on('open-directory-choosing', async () => {
+  const result = await dialog.showOpenDialog({properties: ['openDirectory']});
+  if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
 })

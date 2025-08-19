@@ -1,39 +1,8 @@
-class SystemAudioSync {
-  constructor() {
-    this.audioContext = null;
-    this.isInitialized = false;
-  }
-
-  async initialize() {
-    if (!this.isInitialized) {
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      this.isInitialized = true;
-    }
-  }
-
-  async syncWithSystemAudio(filePath) {
-    await this.initialize();
-
-    try {
-      console.log(`系统音频同步: ${filePath}`);
-
-      if (window.electronAPI && window.electronAPI.writeSystemAudio) {
-        window.electronAPI.writeSystemAudio(filePath);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('系统音频同步失败:', error);
-      return false;
-    }
-  }
-}
-
 class Global {
   constructor() {
     this.initScale();
     this.initBackBtn();
-    this.initCachePath();
+	this.initSettingsBtn()
     this.scale = null;
   }
 
@@ -71,43 +40,35 @@ class Global {
         new MainMenu().showMainMenu();
       });
     });
-
-    document.querySelectorAll('.settings-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.getElementById('settings-modal').style.display = 'block';
-      });
-    });
   }
   
-  initCachePath() {
-    if (window.electronAPI && window.electronAPI.getCachePath) {
-      window.electronAPI.getCachePath().then(result => {
-        if (result.success) {
-          document.getElementById('cache-path').value = result.path;
-          // 同时更新所有使用缓存路径的UI元素
-          this.updateCachePathUI(result.path);
-        }
-      }).catch(err => {
-        console.error('获取缓存路径失败:', err);
-      });
-    }
-
-    if (window.electronAPI) {
-      window.electronAPI.onCachePathUpdated((event, data) => {
-        console.log('缓存路径已更新:', data);
-        document.getElementById('cache-path').value = data.path;
-        // 同时更新所有使用缓存路径的UI元素
-        this.updateCachePathUI(data.path);
-      });
-    }
-  }
-
-  // 更新所有使用缓存路径的UI元素
-  updateCachePathUI(cachePath) {
-    // 可以在这里更新任何需要显示缓存路径的UI元素
-    // 例如，更新某些提示信息中的路径显示
-    console.log('缓存路径已更新为:', cachePath);
-    // 这里可以添加更多UI更新逻辑
+  initSettingsBtn(){
+	window.electronAPI.setCachePath(localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/')
+	document.getElementsByClassName('settings-btn')[0].addEventListener('click', () => {
+	  document.getElementById('settings-modal').style.display = 'flex'
+	  document.getElementById('cache-path').value = localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/'
+	})
+	document.getElementsByClassName('close')[0].addEventListener('click', () => {
+	  document.getElementById('settings-modal').style.display = 'none'
+	})
+	document.getElementById('browse-cache').addEventListener('click', function() {
+	  window.electronAPI.openDirectoryChoosing()
+	})
+	window.electronAPI.chooseDirectory((event, path) => {
+	  document.getElementById('cache-path').value = path
+	})
+	document.getElementById('save-settings').addEventListener('click', function() {
+	  if (window.electronAPI.setCachePath(document.getElementById('cache-path').value)){
+		localStorage.setItem('cache-path', document.getElementById('cache-path').value)
+		document.getElementById('settings-modal').style.display = 'none'
+	  }
+	  else{
+		document.getElementById('error-message').textContent = '路径不正确，请设置正确的路径'
+	  }
+	})
+	document.getElementById('reset-settings').addEventListener('click', function() {
+	  document.getElementById('cache-path').value = 'D:/Up366StudentFiles/'
+	})
   }
 }
 
@@ -199,23 +160,10 @@ class ListeningFeature {
     });
   }
 
-  async handleDeleteFiles() {
+  handleDeleteFiles() {
     const resultDiv = document.getElementById('result');
-    
-    // 获取当前缓存路径
-    let currentCachePath = 'D:/Up366StudentFiles';
-    if (window.electronAPI && window.electronAPI.getCachePath) {
-      try {
-        const result = await window.electronAPI.getCachePath();
-        if (result.success) {
-          currentCachePath = result.path;
-        }
-      } catch (err) {
-        console.error('获取缓存路径失败:', err);
-      }
-    }
 
-    if (confirm(`警告：此操作将删除 ${currentCachePath}/resources/ 目录下的所有文件！\n\n确定要继续吗？`)) {
+    if (confirm('警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n确定要继续吗？')) {
       resultDiv.innerHTML = `
         <strong>正在删除文件...</strong><br>
         请稍候
@@ -522,23 +470,10 @@ class HearingFeature {
     }
   }
 
-  async handleDeleteFlipbooks() {
+  handleDeleteFlipbooks() {
     const resultDiv = document.getElementById('answerResult');
 
-    // 获取当前缓存路径
-    let currentCachePath = 'D:/Up366StudentFiles';
-    if (window.electronAPI && window.electronAPI.getCachePath) {
-      try {
-        const result = await window.electronAPI.getCachePath();
-        if (result.success) {
-            currentCachePath = result.path;
-        }
-      } catch (err) {
-        console.error('获取缓存路径失败:', err);
-      }
-    }
-    
-    if (confirm(`警告：此操作将删除 ${currentCachePath}/flipbooks/ 目录下的所有文件！\n\n确定要继续吗？`)) {
+    if (confirm('警告：此操作将删除 D:/Up366StudentFiles/flipbooks/ 目录下的所有文件！\n\n确定要继续吗？')) {
       resultDiv.innerHTML = `
         <strong>正在删除文件...</strong><br>
         请稍候
@@ -562,7 +497,7 @@ class HearingFeature {
     }
   }
 
-  async handleReplaceAudio() {
+  handleReplaceAudio() {
     const resultDiv = document.getElementById('answerResult');
     const folderPath = document.getElementById('answerFolderPath').value.trim();
 
@@ -574,16 +509,7 @@ class HearingFeature {
       return;
     }
 
-    let currentCachePath = 'D:/Up366StudentFiles';
-    if (window.electronAPI && window.electronAPI.getCachePath) {
-      window.electronAPI.getCachePath().then(result => {
-        if (result.success) {
-            currentCachePath = result.path;
-        }
-      });
-    }
-    
-    if (confirm(`警告：此操作将替换 ${currentCachePath}/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
+    if (confirm(`警告：此操作将替换 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在替换音频文件...</strong><br>
         请稍候
@@ -609,7 +535,7 @@ class HearingFeature {
     }
   }
 
-  async handleRestoreAudio() {
+  handleRestoreAudio() {
     const resultDiv = document.getElementById('answerResult');
     const folderPath = document.getElementById('answerFolderPath').value.trim();
 
@@ -621,20 +547,7 @@ class HearingFeature {
       return;
     }
 
-    // 获取当前缓存路径
-    let currentCachePath = 'D:/Up366StudentFiles';
-    if (window.electronAPI && window.electronAPI.getCachePath) {
-      try {
-        const result = await window.electronAPI.getCachePath();
-        if (result.success) {
-            currentCachePath = result.path;
-        }
-      } catch (err) {
-        console.error('获取缓存路径失败:', err);
-      }
-    }
-    
-    if (confirm(`确定要还原 ${currentCachePath}/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
+    if (confirm(`确定要还原 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在还原音频文件...</strong><br>
         请稍候
