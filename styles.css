@@ -72,6 +72,15 @@ h1 {
     cursor: pointer;
     border-radius: 4px;
     transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.settings-icon {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
 }
 
 .back-btn:hover, .settings-btn:hover {
