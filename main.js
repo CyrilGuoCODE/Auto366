@@ -161,12 +161,30 @@ function createWindow() {
     return result
   })
 
-  ipcMain.handle('update-cache-path', async (event, path) => {
+  ipcMain.handle('update-cache-path', async (event, cachePath) => {
     try {
-      resourcePath = `${path}/resources/`
-      flipbooksPath = `${path}/flipbooks/`
+      resourcePath = `${cachePath}/resources/`
+      flipbooksPath = `${cachePath}/flipbooks/`
 
-      localStorage.setItem('cachePath', path)
+      // 使用 Electron 的 app.getPath('userData') 获取用户数据目录
+      const userDataPath = app.getPath('userData');
+      const settingsFile = require('path').join(userDataPath, 'settings.json');
+      
+      // 读取现有设置或创建新设置对象
+      let settings = {};
+      try {
+        if (fs.existsSync(settingsFile)) {
+          settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        }
+      } catch (readError) {
+        console.error('读取设置文件失败:', readError);
+      }
+      
+      // 更新缓存路径设置
+      settings.cachePath = cachePath;
+      
+      // 保存设置到文件
+      fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
 
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('cache-path-updated', { path, resourcePath, flipbooksPath })
@@ -180,8 +198,21 @@ function createWindow() {
 
   ipcMain.handle('get-cache-path', async () => {
     try {
-      const path = localStorage.getItem('cachePath') || resourcePath.replace('/resources/', '')
-      return { success: true, path }
+      // 从设置文件中读取缓存路径
+      let cachePath = resourcePath.replace('/resources/', '');
+      try {
+        const userDataPath = app.getPath('userData');
+        const settingsFile = require('path').join(userDataPath, 'settings.json');
+        if (fs.existsSync(settingsFile)) {
+          const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+          if (settings.cachePath) {
+            cachePath = settings.cachePath;
+          }
+        }
+      } catch (readError) {
+        console.error('读取缓存路径失败:', readError);
+      }
+      return { success: true, path: cachePath }
     } catch (e) {
       return { error: '获取缓存路径失败: ' + e.message }
     }
