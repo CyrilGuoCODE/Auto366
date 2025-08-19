@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell, dialog } = require('electron')
 const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
 const { spawn, kill } = require('child_process')
@@ -21,6 +21,9 @@ let ans
 let flag = 0;
 let pythonProcess
 let globalScale = 100
+
+let resourcePath = 'D:/Up366StudentFiles/resources/'
+let flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
 
 // URL处理工具函数
 function isValidAndCompleteUrl(urlString) {
@@ -142,14 +145,46 @@ function createWindow() {
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    // 所有链接都在外部浏览器打开
     shell.openExternal(url);
-    return { action: 'deny' }; // 阻止在Electron中打开
+    return { action: 'deny' };
   });
 
   globalShortcut.register('Ctrl+Shift+Q', () => {
     flag = 0
     stopPythonScript()
+  })
+
+  ipcMain.handle('show-open-dialog', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory']
+    })
+    return result
+  })
+
+  ipcMain.handle('update-cache-path', async (event, path) => {
+    try {
+      resourcePath = `${path}/resources/`
+      flipbooksPath = `${path}/flipbooks/`
+
+      localStorage.setItem('cachePath', path)
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('cache-path-updated', { path, resourcePath, flipbooksPath })
+      }
+      
+      return { success: true, message: '缓存路径已更新' }
+    } catch (e) {
+      return { error: '更新缓存路径失败: ' + e.message }
+    }
+  })
+
+  ipcMain.handle('get-cache-path', async () => {
+    try {
+      const path = localStorage.getItem('cachePath') || resourcePath.replace('/resources/', '')
+      return { success: true, path }
+    } catch (e) {
+      return { error: '获取缓存路径失败: ' + e.message }
+    }
   })
 }
 

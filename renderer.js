@@ -33,6 +33,7 @@ class Global {
   constructor() {
     this.initScale();
     this.initBackBtn();
+    this.initCachePath();
     this.scale = null;
   }
 
@@ -70,6 +71,35 @@ class Global {
         new MainMenu().showMainMenu();
       });
     });
+
+    document.querySelectorAll('.settings-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('settings-modal').style.display = 'block';
+      });
+    });
+  }
+  
+  initCachePath() {
+    if (window.electronAPI && window.electronAPI.getCachePath) {
+      window.electronAPI.getCachePath().then(result => {
+        if (result.success) {
+          document.getElementById('cache-path').value = result.path;
+          // 同时更新所有使用缓存路径的UI元素
+          this.updateCachePathUI(result.path);
+        }
+      }).catch(err => {
+        console.error('获取缓存路径失败:', err);
+      });
+    }
+
+    if (window.electronAPI) {
+      window.electronAPI.onCachePathUpdated((event, data) => {
+        console.log('缓存路径已更新:', data);
+        document.getElementById('cache-path').value = data.path;
+        // 同时更新所有使用缓存路径的UI元素
+        this.updateCachePathUI(data.path);
+      });
+    }
   }
 }
 
@@ -164,7 +194,7 @@ class ListeningFeature {
   handleDeleteFiles() {
     const resultDiv = document.getElementById('result');
 
-    if (confirm('警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n确定要继续吗？')) {
+    if (confirm('警告：此操作将删除 ${cachePath}/resources/ 目录下的所有文件！\n\n确定要继续吗？')) {
       resultDiv.innerHTML = `
         <strong>正在删除文件...</strong><br>
         请稍候
@@ -474,7 +504,17 @@ class HearingFeature {
   handleDeleteFlipbooks() {
     const resultDiv = document.getElementById('answerResult');
 
-    if (confirm('警告：此操作将删除 D:/Up366StudentFiles/flipbooks/ 目录下的所有文件！\n\n确定要继续吗？')) {
+    // 获取当前缓存路径
+    let currentCachePath = 'D:/Up366StudentFiles';
+    if (window.electronAPI && window.electronAPI.getCachePath) {
+      window.electronAPI.getCachePath().then(result => {
+        if (result.success) {
+            currentCachePath = result.path;
+        }
+      });
+    }
+    
+    if (confirm(`警告：此操作将删除 ${currentCachePath}/flipbooks/ 目录下的所有文件！\n\n确定要继续吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在删除文件...</strong><br>
         请稍候
@@ -510,7 +550,16 @@ class HearingFeature {
       return;
     }
 
-    if (confirm(`警告：此操作将替换 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
+    let currentCachePath = 'D:/Up366StudentFiles';
+    if (window.electronAPI && window.electronAPI.getCachePath) {
+      window.electronAPI.getCachePath().then(result => {
+        if (result.success) {
+            currentCachePath = result.path;
+        }
+      });
+    }
+    
+    if (confirm(`警告：此操作将替换 ${currentCachePath}/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在替换音频文件...</strong><br>
         请稍候
@@ -548,7 +597,17 @@ class HearingFeature {
       return;
     }
 
-    if (confirm(`确定要还原 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
+    // 获取当前缓存路径
+    let currentCachePath = 'D:/Up366StudentFiles';
+    if (window.electronAPI && window.electronAPI.getCachePath) {
+      window.electronAPI.getCachePath().then(result => {
+        if (result.success) {
+            currentCachePath = result.path;
+        }
+      });
+    }
+    
+    if (confirm(`确定要还原 ${currentCachePath}/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在还原音频文件...</strong><br>
         请稍候

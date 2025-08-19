@@ -14,6 +14,7 @@
             <div style="text-align: center; margin-bottom: 20px;">
                 <img src="icon_black.png" alt="Auto366" style="width: 87px; height: 87px; margin-bottom: 10px;">
             </div>
+            <button class="settings-btn">设置</button>
             <h1>Auto366</h1>
             <h2>天学网自动化工具</h2>
             <p>请选择要使用的功能：</p>
@@ -50,6 +51,7 @@
 
         <div id="listening-content" class="content-area">
             <button class="back-btn">返回</button>
+            <button class="settings-btn">设置</button>
             <h1>听音写词</h1>
 
             <div class="tutorial">
@@ -108,6 +110,7 @@
 
         <div id="wordpk-content" class="content-area">
             <button class="back-btn">返回</button>
+            <button class="settings-btn">设置</button>
             <h1>单词PK</h1>
 
             <div class="tutorial">
@@ -151,6 +154,7 @@
 
         <div id="hearing-content" class="content-area">
             <button class="back-btn">返回</button>
+            <button class="settings-btn">设置</button>
             <h1>听力测试</h1>
 
             <div class="tutorial">
@@ -202,6 +206,7 @@
 
         <div id="universal-answer-content" class="content-area">
             <button class="back-btn">返回</button>
+            <button class="settings-btn">设置</button>
             <h1>万能答案获取</h1>
 
             <div class="tutorial">
@@ -273,6 +278,28 @@
     </div>
 
     <script src="./renderer.js"></script>
+
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>设置</h2>
+            <div class="settings-container">
+                <div class="setting-item">
+                    <label for="cache-path">天学网缓存文件夹路径：</label>
+                    <div class="path-input-wrapper">
+                        <input type="text" id="cache-path" placeholder="请输入缓存文件夹路径" class="path-input">
+                        <button id="browse-cache" class="browse-btn">浏览</button>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <button id="save-settings" class="save-btn">保存设置</button>
+                    <button id="reset-settings" class="reset-btn">重置为默认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="./settings.js"></script>
 </body>
 
 </html>

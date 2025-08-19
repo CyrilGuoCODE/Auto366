@@ -2,7 +2,11 @@ const { contextBridge, ipcRenderer } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
-const resourcePath = 'D:/Up366StudentFiles/resources/'
+const defaultCachePath = 'D:/Up366StudentFiles';
+// 从本地存储获取缓存路径，如果没有则使用默认值
+const savedPath = localStorage.getItem('cachePath');
+const resourcePath = savedPath ? `${savedPath}/resources/` : (global.resourcePath || `${defaultCachePath}/resources/`);
+const flipbooksPath = savedPath ? `${savedPath}/flipbooks/` : (global.flipbooksPath || `${defaultCachePath}/flipbooks/`);
 
 function deleteDirectoryRecursively(dirPath) {
   if (fs.existsSync(dirPath)) {
@@ -137,7 +141,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   replaceAudioFiles: (choosePath) => {
-    const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
     const innerPath = '/bookres/media/'
     const targetFolder = flipbooksPath + choosePath + innerPath
     const specificAudio = path.join(__dirname, 'init.mp3')
@@ -158,7 +161,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   restoreAudioFiles: (choosePath) => {
-    const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
     const innerPath = '/bookres/media/'
     const targetFolder = flipbooksPath + choosePath + innerPath
 
@@ -174,8 +176,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   getFlipbooksFolders: () => {
-    const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
-
     if (!fs.existsSync(flipbooksPath)) {
       return { error: 'flipbooks目录不存在: ' + flipbooksPath }
     }
@@ -191,7 +191,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   getListeningAnswers: (choosePath) => {
-    const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
     const targetFolder = flipbooksPath + choosePath
 
     if (!fs.existsSync(targetFolder)) {
@@ -280,8 +279,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startChoose: () => ipcRenderer.send('start-choose'),
   getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
   deleteFlipbooksFiles: () => {
-    const flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
-
     if (!fs.existsSync(flipbooksPath)) {
       return { error: 'flipbooks目录不存在: ' + flipbooksPath }
     }
@@ -322,5 +319,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     catch (e) {
       return { error: '系统音频写入失败: ' + e.message };
     }
-  }
+  },
+
+  updateCachePath: (path) => {
+    try {
+      localStorage.setItem('cachePath', path);
+      return ipcRenderer.invoke('update-cache-path', path);
+    } catch (e) {
+      return { error: '更新缓存路径失败: ' + e.message };
+    }
+  },
+
+  getCachePath: () => {
+    try {
+      return ipcRenderer.invoke('get-cache-path');
+    } catch (e) {
+      return { error: '获取缓存路径失败: ' + e.message };
+    }
+  },
+
+  showOpenDialog: () => {
+    return ipcRenderer.invoke('show-open-dialog');
+  },
+
+  onCachePathUpdated: (callback) => ipcRenderer.on('cache-path-updated', callback)
 })
