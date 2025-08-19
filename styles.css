@@ -354,22 +354,23 @@ button:disabled {
     overflow: auto;
 }
 
-.log-item::-webkit-scrollbar {
-  height: 4px; /* 水平滚动条高度 */
+.traffic-monitor *::-webkit-scrollbar {
+  width: 6px;
+  height: 4px;
 }
 
-.log-item::-webkit-scrollbar-thumb {
-  background: rgba(255,255, 255, 0.4); /* 半透明黑色 */
+.traffic-monitor *::-webkit-scrollbar-thumb {
+  background: rgba(255,255, 255, 0.4);
   border-radius: 3px;
-  transition: background 0.3s; /* 悬停动画 */
+  transition: background 0.3s;
 }
 
-.log-item::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255, 255, 0.55); /* 悬停加深 */
+.traffic-monitor *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255, 255, 0.55);
 }
 
-.log-item::-webkit-scrollbar-track {
-  background: transparent; /* 透明轨道 */
+.traffic-monitor *::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* 请求详情样式 */
@@ -382,9 +383,8 @@ button:disabled {
 
 .request-line {
   padding: 8px 12px;
-  display: flex;
-  align-items: center;
   transition: background-color 0.2s;
+  overflow: auto;
 }
 
 .request-line:hover {
