@@ -450,6 +450,7 @@ function startAnswerProxy() {
         const protocol = ssl ? "https" : "http";
         // 修复URL重复问题，确保不会重复添加协议
         let urlPath = req.url;
+        let fullUrl;
         if (urlPath.startsWith(protocol + "://")) {
           // 如果URL已经包含协议，直接使用
           fullUrl = urlPath;
@@ -457,7 +458,7 @@ function startAnswerProxy() {
           // 否则构建完整URL
           fullUrl = protocol + "://" + (req.headers.host || "") + urlPath;
         }
-        
+
         const requestInfo = {
           method: req.method,
           url: fullUrl,
@@ -470,9 +471,10 @@ function startAnswerProxy() {
         // 检查内容类型，判断是否为HTML内容
         const contentType = proxyRes.headers['content-type'] || '';
         const isHtml = /text\/html|application\/xhtml\+xml/.test(contentType);
+        const isJson = /application\/json/.test(contentType);
         const contentLengthIsZero = proxyRes.headers['content-length'] == 0;
 
-        if (!isHtml || contentLengthIsZero) {
+        if (contentLengthIsZero) {
           // 非HTML内容或空内容，直接转发
           Object.keys(proxyRes.headers).forEach(function (key) {
             if (proxyRes.headers[key] != undefined) {
@@ -489,7 +491,7 @@ function startAnswerProxy() {
           requestInfo.contentType = contentType;
           safeIpcSend('traffic-log', requestInfo);
         } else {
-          // HTML内容，捕获响应体
+          // 捕获响应体
           Object.keys(proxyRes.headers).forEach(function (key) {
             if (proxyRes.headers[key] != undefined) {
               if (key === 'content-length') {
@@ -512,7 +514,16 @@ function startAnswerProxy() {
             requestInfo.statusCode = proxyRes.statusCode;
             requestInfo.statusMessage = proxyRes.statusMessage;
             requestInfo.responseHeaders = proxyRes.headers;
-            requestInfo.responseBody = responseBody;
+            // 根据内容类型格式化响应体
+            if (isJson && responseBody) {
+              try {
+                requestInfo.responseBody = JSON.stringify(JSON.parse(responseBody), null, 2);
+              } catch (e) {
+                requestInfo.responseBody = responseBody;
+              }
+            } else {
+              requestInfo.responseBody = responseBody;
+            }
             requestInfo.contentType = contentType;
             requestInfo.bodySize = responseBody.length;
             safeIpcSend('traffic-log', requestInfo);
@@ -628,6 +639,16 @@ function handleProxyRequest(req, res) {
     cookies: null
   };
 
+  // 存储响应详情
+  let responseDetails = {
+    statusCode: null,
+    statusMessage: null,
+    responseHeaders: {},
+    responseBody: null,
+    contentType: null,
+    bodySize: 0
+  };
+
   // 收集请求头
   if (req.headers) {
     requestDetails.requestHeaders = { ...req.headers };
@@ -663,39 +684,14 @@ function handleProxyRequest(req, res) {
         }
       }
 
-      // 发送请求详情到前端
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('traffic-log', requestDetails);
-        }
-      } catch (sendError) {
-        console.error('发送流量日志失败:', sendError);
-      }
+      // 不在这里发送请求详情，等响应完成后一起发送
     });
 
     // 如果没有请求体数据，直接发送请求信息
     req.on('error', () => {
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('traffic-log', requestDetails);
-        }
-      } catch (sendError) {
-        console.error('发送流量日志失败:', sendError);
-      }
+      // 错误时也不立即发送，等响应处理完成
     });
-  } else {
-    // 没有请求体的请求，直接发送请求信息
-    try {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('traffic-log', requestDetails);
-      }
-    } catch (sendError) {
-      console.error('发送流量日志失败:', sendError);
-    }
   }
-
-  // 发送流量信息到渲染进程
-  mainWindow.webContents.send('traffic-log', requestDetails)
 
   if (isCapturing) {
     const isDownloadUrl = parsedUrl.hostname.includes('fs.') && parsedUrl.path.includes('/download/')
@@ -722,6 +718,15 @@ function handleProxyRequest(req, res) {
   const protocolModule = isHttps ? https : http
 
   const proxyReq = protocolModule.request(options, (proxyRes) => {
+    // 收集响应信息
+    responseDetails.statusCode = proxyRes.statusCode;
+    responseDetails.statusMessage = proxyRes.statusMessage;
+    responseDetails.responseHeaders = { ...proxyRes.headers };
+    responseDetails.contentType = proxyRes.headers['content-type'] || '';
+
+    const isJson = /application\/json/.test(responseDetails.contentType);
+    let responseData = '';
+
     res.writeHead(proxyRes.statusCode, proxyRes.headers)
 
     // 检查是否需要监听响应内容
@@ -730,81 +735,17 @@ function handleProxyRequest(req, res) {
       (targetUrl.includes('fs.') && targetUrl.includes('/download/'))
     )
 
-    if (shouldMonitor) {
-      let body = ''
+    // 统一处理所有响应
+    proxyRes.on('data', (chunk) => {
+      responseData += chunk.toString();
+      res.write(chunk);
+    });
 
-      proxyRes.on('data', (chunk) => {
-        body += chunk
-        res.write(chunk)
-        responseData += chunk.toString()
-      })
-
-      proxyRes.on('end', () => {
-        try {
-          // 处理响应体数据
-          if (responseData) {
-            // 尝试解析JSON响应
-            if (isJson) {
-              try {
-                responseDetails.responseBody = JSON.stringify(JSON.parse(responseData), null, 2);
-              } catch (e) {
-                responseDetails.responseBody = responseData;
-              }
-            } else {
-              responseDetails.responseBody = responseData;
-            }
-          }
-
-          // 发送完整的请求和响应详情
-          try {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('traffic-log', {
-                ...requestDetails,
-                ...responseDetails
-              });
-            }
-          } catch (sendError) {
-            console.error('发送流量日志失败:', sendError);
-          }
-
-          // 尝试提取下载链接
-          try {
-            const downloadUrlData = JSON.parse(body)
-            const url = downloadUrlData
-
-            if (url.includes('fs.') && url.includes('/download/')) {
-              downloadUrl = url
-              console.log('发现JSON中的答案下载链接:', url)
-              safeIpcSend('download-found', { url: downloadUrl })
-              downloadAndProcessFile(downloadUrl)
-            }
-          }
-          catch (e) {
-            if (body.includes('downloadUrl') || body.includes('download')) {
-              if (body.includes('fs.') && body.includes('/download/')) {
-                console.log('响应体包含答案下载信息')
-                extractDownloadUrl(body)
-              }
-            }
-          }
-          res.end()
-        } catch (e) {
-          console.error('处理响应数据时出错:', e);
-          res.end();
-        }
-      })
-    } else {
-      // 非重要响应，但仍然需要收集响应体并发送基本信息
-      let hasResponseData = false;
-      proxyRes.on('data', (chunk) => {
-        responseData += chunk.toString();
-        hasResponseData = true;
-        res.write(chunk);
-      });
-
-      proxyRes.on('end', () => {
+    proxyRes.on('end', () => {
+      try {
         // 处理响应体数据
-        if (hasResponseData && responseData) {
+        if (responseData) {
+          responseDetails.bodySize = responseData.length;
           // 尝试解析JSON响应
           if (isJson) {
             try {
@@ -817,7 +758,7 @@ function handleProxyRequest(req, res) {
           }
         }
 
-        // 发送完整的请求和响应详情（至少包含基本信息）
+        // 发送完整的请求和响应详情
         try {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('traffic-log', {
@@ -829,11 +770,52 @@ function handleProxyRequest(req, res) {
           console.error('发送流量日志失败:', sendError);
         }
 
-        res.end();
-      });
+        // 如果需要监听特殊内容，进行额外处理
+        if (shouldMonitor && responseData) {
+          try {
+            const downloadUrlData = JSON.parse(responseData)
+            const url = downloadUrlData
 
-      proxyRes.pipe(res)
-    }
+            if (url.includes('fs.') && url.includes('/download/')) {
+              downloadUrl = url
+              console.log('发现JSON中的答案下载链接:', url)
+              safeIpcSend('download-found', { url: downloadUrl })
+              downloadAndProcessFile(downloadUrl)
+            }
+          }
+          catch (e) {
+            if (responseData.includes('downloadUrl') || responseData.includes('download')) {
+              if (responseData.includes('fs.') && responseData.includes('/download/')) {
+                console.log('响应体包含答案下载信息')
+                extractDownloadUrl(responseData)
+              }
+            }
+          }
+        }
+
+        res.end()
+      } catch (e) {
+        console.error('处理响应数据时出错:', e);
+        res.end();
+      }
+    });
+
+    proxyRes.on('error', (error) => {
+      console.error('响应流错误:', error);
+      // 即使出错也要发送日志
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('traffic-log', {
+            ...requestDetails,
+            ...responseDetails,
+            error: error.message
+          });
+        }
+      } catch (sendError) {
+        console.error('发送错误日志失败:', sendError);
+      }
+      res.end();
+    });
   })
 
   proxyReq.on('error', (err) => {
@@ -842,86 +824,24 @@ function handleProxyRequest(req, res) {
       res.writeHead(502)
       res.end('Proxy Error')
     }
+
+    // 发送错误信息
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('traffic-log', {
+          ...requestDetails,
+          error: `代理请求错误: ${err.message}`
+        });
+      }
+    } catch (sendError) {
+      console.error('发送错误日志失败:', sendError);
+    }
   })
 
   // 监听POST请求体
   if (req.method === 'POST') {
-    let body = ''
-    let hasBodyData = false
-
-    // 先暂停请求流，以便收集数据
-    req.pause()
-
-    req.on('data', chunk => {
-      const chunkStr = chunk.toString()
-      body += chunkStr
-      hasBodyData = true
-      proxyReq.write(chunk)
-    })
-
-    req.on('end', () => {
-      // 处理请求体数据
-      if (hasBodyData && body) {
-        // 尝试解析JSON或URL编码的数据
-        try {
-          if (body.includes('{')) {
-            // 可能是JSON数据
-            requestDetails.requestBody = JSON.stringify(JSON.parse(body), null, 2);
-          } else {
-            // 可能是URL编码数据
-            requestDetails.requestBody = body;
-          }
-        } catch (e) {
-          // 解析失败，直接显示原始数据
-          requestDetails.requestBody = body;
-        }
-      }
-
-      // 发送请求详情到前端
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('traffic-log', requestDetails);
-        }
-      } catch (sendError) {
-        console.error('发送流量日志失败:', sendError);
-      }
-
-      // 检查是否包含重要信息
-      if (isCapturing && (body.includes('downloadUrl') || body.includes('download') || body.includes('fileinfo'))) {
-        safeIpcSend('important-request', {
-          url: targetUrl,
-          body: body.substring(0, 500),
-          isHttps: isHttps
-        })
-
-        if (body.includes('fs.') && body.includes('/download/')) {
-          console.log('请求体包含答案下载信息')
-          extractDownloadUrl(body)
-        }
-      }
-
-      // 收集完数据后继续处理请求
-      req.resume()
-      proxyReq.end()
-    })
-
-    // 错误处理
-    req.on('error', (err) => {
-      console.error('请求体处理错误:', err)
-
-      // 发送请求详情到前端（即使出错）
-      try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('traffic-log', requestDetails);
-        }
-      } catch (sendError) {
-        console.error('发送流量日志失败:', sendError);
-      }
-
-      // 发生错误时也要继续处理请求
-      req.resume()
-      proxyReq.end()
-    })
+    // POST请求的请求体已经在上面处理过了，这里直接转发
+    req.pipe(proxyReq)
   } else {
     req.pipe(proxyReq)
   }
