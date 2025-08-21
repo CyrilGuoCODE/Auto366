@@ -2,7 +2,7 @@ class Global {
   constructor() {
     this.initScale();
     this.initBackBtn();
-	this.initSettingsBtn()
+    this.initSettingsBtn()
     this.scale = null;
   }
 
@@ -41,34 +41,34 @@ class Global {
       });
     });
   }
-  
-  initSettingsBtn(){
-	window.electronAPI.setCachePath(localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/')
-	document.getElementsByClassName('settings-btn')[0].addEventListener('click', () => {
-	  document.getElementById('settings-modal').style.display = 'flex'
-	  document.getElementById('cache-path').value = localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/'
-	})
-	document.getElementsByClassName('close')[0].addEventListener('click', () => {
-	  document.getElementById('settings-modal').style.display = 'none'
-	})
-	document.getElementById('browse-cache').addEventListener('click', function() {
-	  window.electronAPI.openDirectoryChoosing()
-	})
-	window.electronAPI.chooseDirectory((event, path) => {
-	  document.getElementById('cache-path').value = path
-	})
-	document.getElementById('save-settings').addEventListener('click', function() {
-	  if (window.electronAPI.setCachePath(document.getElementById('cache-path').value)){
-		localStorage.setItem('cache-path', document.getElementById('cache-path').value)
-		document.getElementById('settings-modal').style.display = 'none'
-	  }
-	  else{
-		document.getElementById('error-message').textContent = '路径不正确，请设置正确的路径'
-	  }
-	})
-	document.getElementById('reset-settings').addEventListener('click', function() {
-	  document.getElementById('cache-path').value = 'D:/Up366StudentFiles/'
-	})
+
+  initSettingsBtn() {
+    window.electronAPI.setCachePath(localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/')
+    document.getElementsByClassName('settings-btn')[0].addEventListener('click', () => {
+      document.getElementById('settings-modal').style.display = 'flex'
+      document.getElementById('cache-path').value = localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/'
+    })
+    document.getElementsByClassName('close')[0].addEventListener('click', () => {
+      document.getElementById('settings-modal').style.display = 'none'
+    })
+    document.getElementById('browse-cache').addEventListener('click', function () {
+      window.electronAPI.openDirectoryChoosing()
+    })
+    window.electronAPI.chooseDirectory((event, path) => {
+      document.getElementById('cache-path').value = path
+    })
+    document.getElementById('save-settings').addEventListener('click', function () {
+      if (window.electronAPI.setCachePath(document.getElementById('cache-path').value)) {
+        localStorage.setItem('cache-path', document.getElementById('cache-path').value)
+        document.getElementById('settings-modal').style.display = 'none'
+      }
+      else {
+        document.getElementById('error-message').textContent = '路径不正确，请设置正确的路径'
+      }
+    })
+    document.getElementById('reset-settings').addEventListener('click', function () {
+      document.getElementById('cache-path').value = 'D:/Up366StudentFiles/'
+    })
   }
 }
 
@@ -103,16 +103,16 @@ class MainMenu {
 class ListeningFeature {
   constructor() {
     this.initialFiles = null;
-	this.initLocations()
+    this.initLocations()
     this.initEventListeners();
   }
-  
-  initLocations(){
-	let locations = localStorage.getItem('pos-listening')
-	if (locations){
-	  locations = JSON.parse(locations)
-	  window.electronAPI.setLocations(locations);
-	}
+
+  initLocations() {
+    let locations = localStorage.getItem('pos-listening')
+    if (locations) {
+      locations = JSON.parse(locations)
+      window.electronAPI.setLocations(locations);
+    }
   }
 
   initEventListeners() {
@@ -610,6 +610,16 @@ class UniversalAnswerFeature {
       this.addTrafficLog(data);
     });
 
+    // 监听响应捕获
+    window.electronAPI.onResponseCaptured((event, data) => {
+      this.addTrafficLog(data);
+    });
+
+    // 监听响应错误
+    window.electronAPI.onResponseError((event, data) => {
+      this.addErrorLog(`响应错误: ${data.error} - ${data.url}`);
+    });
+
     // 监听重要请求
     window.electronAPI.onImportantRequest((event, data) => {
       this.addImportantLog(data);
@@ -736,90 +746,174 @@ class UniversalAnswerFeature {
 
   addTrafficLog(data) {
     const timestamp = new Date(data.timestamp).toLocaleTimeString();
-    const logText = `${data.method} [${timestamp}] ${data.url}`;
-    
+    const method = data.method || 'UNKNOWN';
+    const url = data.url || 'Unknown URL';
+
     // 创建可展开的日志项
     const logItem = document.createElement('div');
-    logItem.className = `log-item request-item ${data.method.toLowerCase()}`;
-    
+    logItem.className = `log-item request-item ${method.toLowerCase()}`;
+
     // 创建请求行
     const requestLine = document.createElement('div');
     requestLine.className = 'request-line';
-    requestLine.innerHTML = `<span class="log-method ${data.method}">${data.method} [${timestamp}]</span> ${data.url}`;
+
+    // 添加状态码显示
+    let statusDisplay = '';
+    if (data.statusCode) {
+      const statusClass = data.statusCode >= 200 && data.statusCode < 300 ? 'success' :
+        data.statusCode >= 400 ? 'error' : 'warning';
+      statusDisplay = ` <span class="status-${statusClass}">[${data.statusCode}]</span>`;
+    }
+
+    requestLine.innerHTML = `<span class="log-method ${method}">${method} [${timestamp}]</span>${statusDisplay} ${url}`;
     logItem.appendChild(requestLine);
-    
+
     // 创建详情容器（默认隐藏）
     const detailsContainer = document.createElement('div');
     detailsContainer.className = 'request-details';
-    
+    detailsContainer.style.display = 'none';
+
     // 添加时间戳
     const timestampDiv = document.createElement('div');
     timestampDiv.className = 'detail-item';
     timestampDiv.innerHTML = `<strong>时间:</strong> ${timestamp}`;
     detailsContainer.appendChild(timestampDiv);
-    
+
     // 添加主机信息
-    const hostDiv = document.createElement('div');
-    hostDiv.className = 'detail-item';
-    hostDiv.innerHTML = `<strong>主机:</strong> ${data.host}`;
-    detailsContainer.appendChild(hostDiv);
-    
-    // 添加请求头（如果有）
+    if (data.host) {
+      const hostDiv = document.createElement('div');
+      hostDiv.className = 'detail-item';
+      hostDiv.innerHTML = `<strong>主机:</strong> ${data.host}`;
+      detailsContainer.appendChild(hostDiv);
+    }
+
+    // 添加协议信息
+    if (data.isHttps !== undefined) {
+      const protocolDiv = document.createElement('div');
+      protocolDiv.className = 'detail-item';
+      protocolDiv.innerHTML = `<strong>协议:</strong> ${data.isHttps ? 'HTTPS' : 'HTTP'}`;
+      detailsContainer.appendChild(protocolDiv);
+    }
+
+    // 添加请求头
     if (data.requestHeaders) {
       const headersDiv = document.createElement('div');
       headersDiv.className = 'detail-item';
       headersDiv.innerHTML = `<strong>请求头:</strong><pre class="headers">${JSON.stringify(data.requestHeaders, null, 2)}</pre>`;
       detailsContainer.appendChild(headersDiv);
     }
-    
+
+    // 添加Cookie（从请求头中提取）
+    if (data.requestHeaders && data.requestHeaders.cookie) {
+      const cookiesDiv = document.createElement('div');
+      cookiesDiv.className = 'detail-item';
+      cookiesDiv.innerHTML = `<strong>Cookie:</strong><pre class="cookies">${data.requestHeaders.cookie}</pre>`;
+      detailsContainer.appendChild(cookiesDiv);
+    }
+
     // 添加请求体（如果有）
     if (data.requestBody) {
       const bodyDiv = document.createElement('div');
       bodyDiv.className = 'detail-item';
-      bodyDiv.innerHTML = `<strong>请求体:</strong><pre class="request-body">${data.requestBody}</pre>`;
+      bodyDiv.innerHTML = `<strong>请求体:</strong><pre class="request-body">${this.formatBody(data.requestBody)}</pre>`;
       detailsContainer.appendChild(bodyDiv);
     }
-    
-    // 添加Cookie（如果有）
-    if (data.cookies) {
-      const cookiesDiv = document.createElement('div');
-      cookiesDiv.className = 'detail-item';
-      cookiesDiv.innerHTML = `<strong>Cookie:</strong><pre class="cookies">${data.cookies}</pre>`;
-      detailsContainer.appendChild(cookiesDiv);
+
+    // 添加响应状态（如果有）
+    if (data.statusCode) {
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'detail-item';
+      const statusClass = data.statusCode >= 200 && data.statusCode < 300 ? 'success' :
+        data.statusCode >= 400 ? 'error' : 'warning';
+      statusDiv.innerHTML = `<strong>响应状态:</strong> <span class="status-${statusClass}">${data.statusCode} ${data.statusMessage || ''}</span>`;
+      detailsContainer.appendChild(statusDiv);
     }
-    
-    // 添加响应头（如果有）
+
+    // 添加响应头
     if (data.responseHeaders) {
       const responseHeadersDiv = document.createElement('div');
       responseHeadersDiv.className = 'detail-item';
       responseHeadersDiv.innerHTML = `<strong>响应头:</strong><pre class="response-headers">${JSON.stringify(data.responseHeaders, null, 2)}</pre>`;
       detailsContainer.appendChild(responseHeadersDiv);
     }
-    
-    // 添加响应体（如果有）
+
+    // 添加内容类型（如果有）
+    if (data.contentType) {
+      const contentTypeDiv = document.createElement('div');
+      contentTypeDiv.className = 'detail-item';
+      contentTypeDiv.innerHTML = `<strong>内容类型:</strong> ${data.contentType}`;
+      detailsContainer.appendChild(contentTypeDiv);
+    }
+
+    // 添加响应体
     if (data.responseBody) {
       const responseBodyDiv = document.createElement('div');
       responseBodyDiv.className = 'detail-item';
-      responseBodyDiv.innerHTML = `<strong>响应体:</strong><pre class="response-body">${data.responseBody}</pre>`;
+      responseBodyDiv.innerHTML = `<strong>响应体:</strong><pre class="response-body">${this.formatBody(data.responseBody)}</pre>`;
       detailsContainer.appendChild(responseBodyDiv);
     }
-    
+
+    // 添加响应体大小（如果有）
+    if (data.bodySize) {
+      const bodySizeDiv = document.createElement('div');
+      bodySizeDiv.className = 'detail-item';
+      bodySizeDiv.innerHTML = `<strong>响应体大小:</strong> ${this.formatFileSize(data.bodySize)}`;
+      detailsContainer.appendChild(bodySizeDiv);
+    }
+
+    // 添加错误信息（如果有）
+    if (data.error) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'detail-item error';
+      errorDiv.innerHTML = `<strong>错误:</strong> <span class="error-text">${data.error}</span>`;
+      detailsContainer.appendChild(errorDiv);
+    }
+
     logItem.appendChild(detailsContainer);
-    
+
     // 添加点击事件以展开/折叠详情
     requestLine.addEventListener('click', () => {
       detailsContainer.style.display = detailsContainer.style.display === 'none' ? 'block' : 'none';
+      requestLine.classList.toggle('expanded');
     });
-    
+
     const trafficLog = document.getElementById('trafficLog');
     trafficLog.appendChild(logItem);
     trafficLog.scrollTop = trafficLog.scrollHeight;
-    
+
     // 限制日志数量
     const logItems = trafficLog.querySelectorAll('.log-item');
     if (logItems.length > 100) {
       trafficLog.removeChild(logItems[0]);
     }
+  }
+
+  // 格式化请求/响应体
+  formatBody(body) {
+    if (!body) return '';
+
+    // 限制显示长度
+    const maxLength = 5000;
+    let displayBody = body.length > maxLength ? body.substring(0, maxLength) + '\n[内容过长，已截断...]' : body;
+
+    // 尝试格式化JSON
+    try {
+      if (displayBody.trim().startsWith('{') || displayBody.trim().startsWith('[')) {
+        const parsed = JSON.parse(displayBody);
+        return JSON.stringify(parsed, null, 2);
+      }
+    } catch (e) {
+      // 不是JSON，返回原始内容
+    }
+
+    return displayBody;
+  }
+
+  // 格式化文件大小
+  formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
+    return Math.round(bytes / (1024 * 1024)) + 'MB';
   }
 
   addImportantLog(data) {
