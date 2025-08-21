@@ -43,6 +43,7 @@ class AnswerProxy {
     return new Promise((resolve, reject) => {
       try {
         if (!encoding || encoding === 'identity') {
+          console.log('无压缩');
           // 无压缩
           resolve(buffer.toString());
           return;
@@ -55,6 +56,7 @@ class AnswerProxy {
               // 解压失败时返回原始内容
               resolve(buffer.toString());
             } else {
+              console.log('Gzip解压成功');
               resolve(result.toString());
             }
           });
@@ -64,6 +66,7 @@ class AnswerProxy {
               console.error('Deflate解压失败:', err);
               resolve(buffer.toString());
             } else {
+              console.log('Deflate解压成功');
               resolve(result.toString());
             }
           });
@@ -74,11 +77,13 @@ class AnswerProxy {
               console.error('Brotli解压失败:', err);
               resolve(buffer.toString());
             } else {
+              console.log('Brotli解压成功');
               resolve(result.toString());
             }
           });
         } else {
           // 未知压缩格式，直接返回
+		  console.log('未知压缩格式:', encoding)
           resolve(buffer.toString());
         }
       } catch (error) {
@@ -142,10 +147,11 @@ class AnswerProxy {
           const contentEncoding = proxyRes.headers['content-encoding'] || '';
           const isHtml = /text\/html|application\/xhtml\+xml/.test(contentType);
           const isJson = /application\/json/.test(contentType);
+          const isFile = /application\/octet-stream/.test(contentType);
           const contentLengthIsZero = proxyRes.headers['content-length'] == 0;
-          const isCompressed = contentEncoding && (contentEncoding.includes('gzip') || contentEncoding.includes('deflate') || contentEncoding.includes('br'));
+          const isCompressed = Boolean(contentEncoding);
 
-          console.log(`请求: ${fullUrl}, 内容类型: ${contentType}, 编码: ${contentEncoding}, 是否压缩: ${isCompressed}`);
+          console.log(`请求: ${fullUrl}, 内容类型: ${contentType}, 是否压缩: ${isCompressed}`);
 
           if (contentLengthIsZero) {
             // 非HTML内容或空内容，直接转发
@@ -194,9 +200,8 @@ class AnswerProxy {
                 // 解压缩响应体
                 let responseBody = '';
                 if (isCompressed) {
-                  console.log(`开始解压缩响应 (${contentEncoding}), 原始大小: ${responseBuffer.length}`);
+                  console.log(`开始解压缩响应 (${contentEncoding})`);
                   responseBody = await this.decompressResponse(responseBuffer, contentEncoding);
-                  console.log(`解压缩完成, 解压后大小: ${responseBody.length}`);
                 } else {
                   responseBody = responseBuffer.toString();
                 }
@@ -213,7 +218,15 @@ class AnswerProxy {
                   } catch (e) {
                     requestInfo.responseBody = responseBody;
                   }
-                } else {
+                } else if (isFile) {
+				  if (proxyRes.headers["Content-Disposition"]){
+					requestInfo.responseBody = proxyRes.headers["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
+				  } else {
+					requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
+				  }
+				} else if (isHtml){
+				  requestInfo.responseBody = responseBody.replaceAll('<', '&lt;').replaceAll('>', '&gt')
+				} else {
                   requestInfo.responseBody = responseBody;
                 }
 

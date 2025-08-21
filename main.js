@@ -17,6 +17,23 @@ let flag = 0;
 let pythonProcess
 let globalScale = 100
 
+process.on('uncaughtException', (error) => {
+  if (error.code === 'ECONNRESET') {
+    console.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
+    return;
+  }
+  
+  console.error(error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  if (reason.code === 'ECONNRESET') {
+    console.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
+    return;
+  }
+  console.error(reason);
+});
+
 // 创建抓包代理实例
 let answerProxy = new AnswerProxy();
 
@@ -401,4 +418,9 @@ ipcMain.on('stop-capturing', () => {
 ipcMain.on('open-directory-choosing', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
+})
+
+ipcMain.on('open-save-dialog', async (event, filename) => {
+  const result = await dialog.showSaveDialog({ defaultPath: filename });
+  
 })
