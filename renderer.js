@@ -649,6 +649,22 @@ class UniversalAnswerFeature {
     window.electronAPI.onCaptureStatus((event, data) => {
       this.updateCaptureStatus(data);
     });
+    
+    // 监听代理错误
+    window.electronAPI.onProxyError((event, data) => {
+      this.addErrorLog(data.message);
+      // 如果代理出错，重置按钮状态
+      const startBtn = document.getElementById('startProxyBtn');
+      const stopBtn = document.getElementById('stopProxyBtn');
+      const captureBtn = document.getElementById('startCaptureBtn');
+      
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      captureBtn.disabled = true;
+      
+      this.isProxyRunning = false;
+      this.updateProxyStatus({ running: false, message: '代理服务器出错' });
+    });
 
     // 监听文件结构
     window.electronAPI.onFileStructure((event, data) => {
@@ -662,23 +678,93 @@ class UniversalAnswerFeature {
   }
 
   startProxy() {
+    const startBtn = document.getElementById('startProxyBtn');
+    const stopBtn = document.getElementById('stopProxyBtn');
+    
+    // 更新按钮状态，防止重复点击
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    
     window.electronAPI.startAnswerProxy();
     this.addInfoLog('正在启动代理服务器...');
+    
+    // 设置超时检查，如果代理没有启动，恢复按钮状态
+    setTimeout(() => {
+      if (!this.isProxyRunning) {
+        this.addErrorLog('代理服务器启动超时，请检查网络或端口占用');
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    }, 5000);
   }
 
   stopProxy() {
+    const startBtn = document.getElementById('startProxyBtn');
+    const stopBtn = document.getElementById('stopProxyBtn');
+    
+    // 更新按钮状态，防止重复点击
+    startBtn.disabled = true;
+    stopBtn.disabled = true;
+    
     window.electronAPI.stopAnswerProxy();
     this.addInfoLog('正在停止代理服务器...');
+    
+    // 设置超时检查，如果代理没有停止，恢复按钮状态
+    setTimeout(() => {
+      if (this.isProxyRunning) {
+        this.addErrorLog('代理服务器停止超时，请尝试手动关闭');
+        startBtn.disabled = false;
+        stopBtn.disabled = false;
+      }
+    }, 5000);
   }
 
   startCapture() {
+    const startBtn = document.getElementById('startCaptureBtn');
+    const stopBtn = document.getElementById('stopCaptureBtn');
+    
+    // 确保代理已启动
+    if (!this.isProxyRunning) {
+      this.addErrorLog('请先启动代理服务器');
+      return;
+    }
+    
+    // 更新按钮状态，防止重复点击
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    
     window.electronAPI.startCapturing();
     this.addInfoLog('开始监听网络请求...');
+    
+    // 设置超时检查，如果监听没有开始，恢复按钮状态
+    setTimeout(() => {
+      if (!this.isCapturing) {
+        this.addErrorLog('监听启动超时，请检查代理设置');
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    }, 5000);
   }
 
   stopCapture() {
+    const startBtn = document.getElementById('startCaptureBtn');
+    const stopBtn = document.getElementById('stopCaptureBtn');
+    
+    // 更新按钮状态，防止重复点击
+    startBtn.disabled = true;
+    stopBtn.disabled = true;
+    
     window.electronAPI.stopCapturing();
     this.addInfoLog('停止监听网络请求');
+    
+    // 设置超时检查，如果监听没有停止，恢复按钮状态
+    setTimeout(() => {
+      if (this.isCapturing) {
+        this.addErrorLog('监听停止超时，请尝试手动关闭');
+        startBtn.disabled = false;
+        stopBtn.disabled = false;
+      }
+    }, 5000);
   }
 
   updateProxyStatus(data) {
@@ -718,12 +804,14 @@ class UniversalAnswerFeature {
       statusElement.className = 'status-value running';
       startBtn.disabled = true;
       stopBtn.disabled = false;
+      this.addSuccessLog('网络监听已启动');
     } else {
       this.isCapturing = false;
       statusElement.textContent = '未开始';
       statusElement.className = 'status-value stopped';
       startBtn.disabled = false;
       stopBtn.disabled = true;
+      this.addInfoLog('网络监听已停止');
     }
   }
 
@@ -764,8 +852,13 @@ class UniversalAnswerFeature {
         data.statusCode >= 400 ? 'error' : 'warning';
       statusDisplay = ` <span class="status-${statusClass}">[${data.statusCode}]</span>`;
     }
-
-    requestLine.innerHTML = `<span class="log-method ${method}">${method} [${timestamp}]</span>${statusDisplay} ${url}`;
+    
+    // 格式化URL确保完整显示，并修复重复协议问题
+    let formattedUrl = this.formatUrl(url);
+    // 修复URL重复问题，例如 http://fs.up366.cnhttp://fs.up366.cn/download/xxx
+    formattedUrl = formattedUrl.replace(/(https?:\/\/[^\/]+)\1+/, '$1');
+    
+    requestLine.innerHTML = `<span class="log-method ${method}">${method} [${timestamp}]</span>${statusDisplay} ${formattedUrl}`;
     logItem.appendChild(requestLine);
 
     // 创建详情容器（默认隐藏）
@@ -907,6 +1000,30 @@ class UniversalAnswerFeature {
     }
 
     return displayBody;
+  }
+  
+  // 格式化URL，确保显示完整URL
+  formatUrl(url) {
+    if (!url) return '';
+    
+    // 如果URL不包含协议，尝试补充
+    if (!url.match(/^https?:\/\//)) {
+      try {
+        const parsed = new URL(url);
+        if (!parsed.protocol) {
+          // 如果没有协议，根据是否为HTTPS添加协议
+          const isHttps = url.includes(':443') || url.includes(':8443') || 
+                         (url.includes('fs.') && !url.includes(':80'));
+          const protocol = isHttps ? 'https://' : 'http://';
+          url = protocol + url.replace(/^\//, '');
+        }
+      } catch (e) {
+        // URL解析失败，返回原始URL
+        return url;
+      }
+    }
+    
+    return url;
   }
 
   // 格式化文件大小

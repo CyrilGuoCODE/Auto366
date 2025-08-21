@@ -447,9 +447,20 @@ function startAnswerProxy() {
     responseInterceptor: (req, res, proxyReq, proxyRes, ssl, next) => {
       try {
         // 构建请求信息
+        const protocol = ssl ? "https" : "http";
+        // 修复URL重复问题，确保不会重复添加协议
+        let urlPath = req.url;
+        if (urlPath.startsWith(protocol + "://")) {
+          // 如果URL已经包含协议，直接使用
+          fullUrl = urlPath;
+        } else {
+          // 否则构建完整URL
+          fullUrl = protocol + "://" + (req.headers.host || "") + urlPath;
+        }
+        
         const requestInfo = {
           method: req.method,
-          url: req.url,
+          url: fullUrl,
           host: req.headers.host,
           timestamp: new Date().toISOString(),
           isHttps: ssl,
@@ -715,8 +726,8 @@ function handleProxyRequest(req, res) {
 
     // 检查是否需要监听响应内容
     const shouldMonitor = isCapturing && (
-      req.url.includes('fileinfo') ||
-      (req.url.includes('fs.') && req.url.includes('/download/'))
+      targetUrl.includes('fileinfo') ||
+      (targetUrl.includes('fs.') && targetUrl.includes('/download/'))
     )
 
     if (shouldMonitor) {

@@ -261,7 +261,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 监听事件
   onProxyStatus: (callback) => ipcRenderer.on('proxy-status', callback),
+  onProxyError: (callback) => ipcRenderer.on('proxy-error', callback),
   onTrafficLog: (callback) => ipcRenderer.on('traffic-log', callback),
+  onResponseCaptured: (callback) => ipcRenderer.on('response-captured', callback),
+  onResponseError: (callback) => ipcRenderer.on('response-error', callback),
   onImportantRequest: (callback) => ipcRenderer.on('important-request', callback),
   onDownloadFound: (callback) => ipcRenderer.on('download-found', callback),
   onProcessStatus: (callback) => ipcRenderer.on('process-status', callback),
