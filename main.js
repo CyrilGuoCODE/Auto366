@@ -10,6 +10,9 @@ const fs = require('fs-extra')
 const axios = require('axios')
 const StreamZip = require('node-stream-zip')
 const mitmproxy = require('node-mitmproxy')
+const zlib = require('zlib') // 添加zlib模块用于gzip解压
+const { pipeline } = require('stream')
+const { Transform } = require('stream')
 const CRLF = '\r\n';
 
 let mainWindow
@@ -70,6 +73,56 @@ function safeIpcSend(channel, data) {
   } catch (error) {
     console.error(`发送IPC消息失败 [${channel}]:`, error);
   }
+}
+
+// 响应体解压缩工具函数
+function decompressResponse(buffer, encoding) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!encoding || encoding === 'identity') {
+        // 无压缩
+        resolve(buffer.toString());
+        return;
+      }
+
+      if (encoding.includes('gzip')) {
+        zlib.gunzip(buffer, (err, result) => {
+          if (err) {
+            console.error('Gzip解压失败:', err);
+            // 解压失败时返回原始内容
+            resolve(buffer.toString());
+          } else {
+            resolve(result.toString());
+          }
+        });
+      } else if (encoding.includes('deflate')) {
+        zlib.inflate(buffer, (err, result) => {
+          if (err) {
+            console.error('Deflate解压失败:', err);
+            resolve(buffer.toString());
+          } else {
+            resolve(result.toString());
+          }
+        });
+      } else if (encoding.includes('br')) {
+        // Brotli压缩
+        zlib.brotliDecompress(buffer, (err, result) => {
+          if (err) {
+            console.error('Brotli解压失败:', err);
+            resolve(buffer.toString());
+          } else {
+            resolve(result.toString());
+          }
+        });
+      } else {
+        // 未知压缩格式，直接返回
+        resolve(buffer.toString());
+      }
+    } catch (error) {
+      console.error('解压缩过程中出错:', error);
+      resolve(buffer.toString());
+    }
+  });
 }
 
 ipcMain.handle('get-scale-factor', () => {
@@ -468,11 +521,15 @@ function startAnswerProxy() {
           requestHeaders: req.headers
         };
 
-        // 检查内容类型，判断是否为HTML内容
+        // 检查内容类型和编码
         const contentType = proxyRes.headers['content-type'] || '';
+        const contentEncoding = proxyRes.headers['content-encoding'] || '';
         const isHtml = /text\/html|application\/xhtml\+xml/.test(contentType);
         const isJson = /application\/json/.test(contentType);
         const contentLengthIsZero = proxyRes.headers['content-length'] == 0;
+        const isCompressed = contentEncoding && (contentEncoding.includes('gzip') || contentEncoding.includes('deflate') || contentEncoding.includes('br'));
+
+        console.log(`请求: ${fullUrl}, 内容类型: ${contentType}, 编码: ${contentEncoding}, 是否压缩: ${isCompressed}`);
 
         if (contentLengthIsZero) {
           // 非HTML内容或空内容，直接转发
@@ -491,7 +548,7 @@ function startAnswerProxy() {
           requestInfo.contentType = contentType;
           safeIpcSend('traffic-log', requestInfo);
         } else {
-          // 捕获响应体
+          // 捕获响应体并处理压缩
           Object.keys(proxyRes.headers).forEach(function (key) {
             if (proxyRes.headers[key] != undefined) {
               if (key === 'content-length') {
@@ -503,39 +560,67 @@ function startAnswerProxy() {
           });
           res.writeHead(proxyRes.statusCode);
 
-          let responseBody = '';
+          // 收集响应数据
+          const chunks = [];
+          let totalLength = 0;
+
           proxyRes.on('data', (chunk) => {
-            responseBody += chunk.toString();
+            chunks.push(chunk);
+            totalLength += chunk.length;
             res.write(chunk);
           });
 
-          proxyRes.on('end', () => {
-            // 发送完整的请求响应信息
-            requestInfo.statusCode = proxyRes.statusCode;
-            requestInfo.statusMessage = proxyRes.statusMessage;
-            requestInfo.responseHeaders = proxyRes.headers;
-            // 根据内容类型格式化响应体
-            if (isJson && responseBody) {
-              try {
-                requestInfo.responseBody = JSON.stringify(JSON.parse(responseBody), null, 2);
-              } catch (e) {
+          proxyRes.on('end', async () => {
+            try {
+              // 合并所有chunks
+              const responseBuffer = Buffer.concat(chunks, totalLength);
+
+              // 解压缩响应体
+              let responseBody = '';
+              if (isCompressed) {
+                console.log(`开始解压缩响应 (${contentEncoding}), 原始大小: ${responseBuffer.length}`);
+                responseBody = await decompressResponse(responseBuffer, contentEncoding);
+                console.log(`解压缩完成, 解压后大小: ${responseBody.length}`);
+              } else {
+                responseBody = responseBuffer.toString();
+              }
+
+              // 发送完整的请求响应信息
+              requestInfo.statusCode = proxyRes.statusCode;
+              requestInfo.statusMessage = proxyRes.statusMessage;
+              requestInfo.responseHeaders = proxyRes.headers;
+
+              // 根据内容类型格式化响应体
+              if (isJson && responseBody) {
+                try {
+                  requestInfo.responseBody = JSON.stringify(JSON.parse(responseBody), null, 2);
+                } catch (e) {
+                  requestInfo.responseBody = responseBody;
+                }
+              } else {
                 requestInfo.responseBody = responseBody;
               }
-            } else {
-              requestInfo.responseBody = responseBody;
-            }
-            requestInfo.contentType = contentType;
-            requestInfo.bodySize = responseBody.length;
-            safeIpcSend('traffic-log', requestInfo);
 
-            // 检查是否包含答案下载链接
-            if (isCapturing && responseBody) {
-              if (responseBody.includes('downloadUrl') || responseBody.includes('download')) {
-                extractDownloadUrl(responseBody);
+              requestInfo.contentType = contentType;
+              requestInfo.contentEncoding = contentEncoding;
+              requestInfo.bodySize = responseBody.length;
+              requestInfo.originalBodySize = responseBuffer.length;
+              requestInfo.isCompressed = isCompressed;
+
+              safeIpcSend('traffic-log', requestInfo);
+
+              // 检查是否包含答案下载链接
+              if (isCapturing && responseBody) {
+                if (responseBody.includes('downloadUrl') || responseBody.includes('download')) {
+                  extractDownloadUrl(responseBody);
+                }
               }
-            }
 
-            res.end();
+              res.end();
+            } catch (error) {
+              console.error('处理响应数据时出错:', error);
+              res.end();
+            }
           });
 
           proxyRes.on('error', (error) => {
@@ -646,7 +731,10 @@ function handleProxyRequest(req, res) {
     responseHeaders: {},
     responseBody: null,
     contentType: null,
-    bodySize: 0
+    contentEncoding: null,
+    bodySize: 0,
+    originalBodySize: 0,
+    isCompressed: false
   };
 
   // 收集请求头
@@ -723,9 +811,17 @@ function handleProxyRequest(req, res) {
     responseDetails.statusMessage = proxyRes.statusMessage;
     responseDetails.responseHeaders = { ...proxyRes.headers };
     responseDetails.contentType = proxyRes.headers['content-type'] || '';
+    responseDetails.contentEncoding = proxyRes.headers['content-encoding'] || '';
 
     const isJson = /application\/json/.test(responseDetails.contentType);
-    let responseData = '';
+    const isCompressed = responseDetails.contentEncoding && (
+      responseDetails.contentEncoding.includes('gzip') ||
+      responseDetails.contentEncoding.includes('deflate') ||
+      responseDetails.contentEncoding.includes('br')
+    );
+    responseDetails.isCompressed = isCompressed;
+
+    console.log(`处理响应: ${targetUrl}, 内容类型: ${responseDetails.contentType}, 编码: ${responseDetails.contentEncoding}, 是否压缩: ${isCompressed}`);
 
     res.writeHead(proxyRes.statusCode, proxyRes.headers)
 
@@ -735,19 +831,37 @@ function handleProxyRequest(req, res) {
       (targetUrl.includes('fs.') && targetUrl.includes('/download/'))
     )
 
-    // 统一处理所有响应
+    // 收集响应数据
+    const chunks = [];
+    let totalLength = 0;
+
     proxyRes.on('data', (chunk) => {
-      responseData += chunk.toString();
+      chunks.push(chunk);
+      totalLength += chunk.length;
       res.write(chunk);
     });
 
-    proxyRes.on('end', () => {
+    proxyRes.on('end', async () => {
       try {
-        // 处理响应体数据
-        if (responseData) {
+        // 合并所有chunks
+        const responseBuffer = Buffer.concat(chunks, totalLength);
+        responseDetails.originalBodySize = responseBuffer.length;
+
+        let responseData = '';
+        if (responseBuffer.length > 0) {
+          // 处理压缩的响应
+          if (isCompressed) {
+            console.log(`开始解压缩响应 (${responseDetails.contentEncoding}), 原始大小: ${responseBuffer.length}`);
+            responseData = await decompressResponse(responseBuffer, responseDetails.contentEncoding);
+            console.log(`解压缩完成, 解压后大小: ${responseData.length}`);
+          } else {
+            responseData = responseBuffer.toString();
+          }
+
           responseDetails.bodySize = responseData.length;
+
           // 尝试解析JSON响应
-          if (isJson) {
+          if (isJson && responseData) {
             try {
               responseDetails.responseBody = JSON.stringify(JSON.parse(responseData), null, 2);
             } catch (e) {

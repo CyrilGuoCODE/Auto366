@@ -335,10 +335,13 @@ button:disabled {
 }
 
 .traffic-log {
+    resize: vertical;
     background: #1a1a1a;
     border-radius: 8px;
     padding: 15px;
-    max-height: 300px;
+    height : 360px;
+    min-height: 200px;
+    max-height: 800px;
     overflow-y: auto;
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 13px;
