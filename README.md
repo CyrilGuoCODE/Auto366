@@ -54,7 +54,9 @@ npm run build
 
 windows默认资源路径：`D:/Up366StudentFiles/resources/`
 
-如需修改，请编辑 `preload.js` 文件中的 `resourcePath` 变量。
+如需修改，启动应用后在设置中更改
+
+资源路径可在天学网的设置中查看
 
 ### 快捷键
 
