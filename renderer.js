@@ -607,10 +607,14 @@ class UniversalAnswerFeature {
       this.stopProxy();
     });
 
-
+    document.getElementById('deleteTempBtn').addEventListener('click', () => {
+      this.handleDeleteTemp();
+    });
   }
 
   initIpcListeners() {
+
+    
     // 监听代理状态
     window.electronAPI.onProxyStatus((event, data) => {
       this.updateProxyStatus(data);
@@ -1181,6 +1185,28 @@ class UniversalAnswerFeature {
     });
 
     this.addSuccessLog(`答案提取完成！共 ${data.count} 题，来自 ${Object.keys(answersByFile).length} 个文件，已保存到: ${data.file}`);
+  }
+
+  handleDeleteTemp() {
+    const resultDiv = document.getElementById('trafficLog');
+
+    if (confirm('确定要删除临时缓存文件夹吗？此操作将删除所有已下载的缓存文件。')) {
+      resultDiv.innerHTML = `
+        <div class="log-item">正在删除临时缓存文件夹...</div>
+      `;
+
+      window.electronAPI.deleteTempDirectory().then(result => {
+        if (result.error) {
+          resultDiv.innerHTML = `
+            <div class="log-item error">删除失败: ${result.error}</div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="log-item success">删除成功！已删除 ${result.deletedCount} 个文件/文件夹</div>
+          `;
+        }
+      });
+    }
   }
 }
 

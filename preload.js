@@ -280,6 +280,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLocationsPk2: (pos) => ipcRenderer.send('set-locations-pk-2', pos),
   startChoose: () => ipcRenderer.send('start-choose'),
   getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
+  deleteTempDirectory: () => ipcRenderer.invoke('delete-temp-directory'),
   deleteFlipbooksFiles: () => {
 
     if (!fs.existsSync(flipbooksPath)) {

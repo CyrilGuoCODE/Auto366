@@ -420,6 +420,48 @@ ipcMain.on('open-directory-choosing', async () => {
   if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
 })
 
+ipcMain.handle('delete-temp-directory', () => {
+  const { app } = require('electron');
+  const path = require('path');
+  const fs = require('fs-extra');
+
+  let tempDir;
+  if (app.isPackaged) {
+    tempDir = path.join(app.getPath('userData'), 'temp');
+  } else {
+    tempDir = path.join(__dirname, 'temp');
+  }
+  
+  let deletedCount = 0;
+  
+  function deleteDirectory(dir) {
+    if (!fs.existsSync(dir)) return;
+    
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      
+      if (fs.statSync(filePath).isDirectory()) {
+        deleteDirectory(filePath);
+        deletedCount++;
+      } else {
+        fs.unlinkSync(filePath);
+        deletedCount++;
+      }
+    }
+    
+    fs.rmdirSync(dir);
+    deletedCount++;
+  }
+  
+  try {
+    deleteDirectory(tempDir);
+    return { success: true, deletedCount };
+  } catch (error) {
+    return { error: `删除临时文件夹失败: ${error.message}` };
+  }
+});
+
 ipcMain.on('open-save-dialog', async (event, filename) => {
   const result = await dialog.showSaveDialog({ defaultPath: filename });
   
