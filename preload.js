@@ -3,38 +3,8 @@ const fs = require('fs')
 const path = require('path')
 
 // 这些路径将在 setCachePath 函数中根据缓存路径设置
-let resourcePath = ''
-let flipbooksPath = ''
-
-// 初始化路径函数
-async function initPaths() {
-  // 尝试从本地存储获取路径，如果没有则使用默认路径
-  let cachePath;
-  try {
-    cachePath = await getCachePathFromStorage();
-  } catch (error) {
-    console.error('获取缓存路径失败，使用默认路径:', error);
-    cachePath = 'D:/Up366StudentFiles/';
-  }
-  
-  if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))){
-    resourcePath = path.join(cachePath, 'resources');
-    flipbooksPath = path.join(cachePath, 'flipbooks');
-    return true;
-  }
-  
-  const defaultPath = 'D:/Up366StudentFiles/';
-  if (defaultPath !== cachePath && fs.existsSync(path.join(defaultPath, 'resources')) && fs.existsSync(path.join(defaultPath, 'flipbooks'))){
-    resourcePath = path.join(defaultPath, 'resources');
-    flipbooksPath = path.join(defaultPath, 'flipbooks');
-    return true;
-  }
-  
-  return false;
-}
-
-// 初始化路径
-initPaths();
+let resourcePath = 'D:\\Up366StudentFiles\\resources\\'
+let flipbooksPath = 'D:\\Up366StudentFiles\\flipbooks\\'
 
 function deleteDirectoryRecursively(dirPath) {
   if (fs.existsSync(dirPath)) {
@@ -95,16 +65,6 @@ function restoreMp3FilesSync(folder) {
   }
 
   return restoredCount
-}
-
-// 获取本地存储中的路径设置
-function getCachePathFromStorage() {
-  return new Promise((resolve) => {
-    ipcRenderer.once('get-cache-path-response', (event, path) => {
-      resolve(path);
-    });
-    ipcRenderer.send('get-cache-path-request');
-  });
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -366,17 +326,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
   chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
-  // 获取当前路径设置
-  getPaths: () => {
-    return {
-      resourcePath,
-      flipbooksPath
-    };
-  },
-  // 从本地存储获取缓存路径
-  getCachePath: async () => {
-    return await getCachePathFromStorage();
-  },
   setCachePath: (cachePath) => {
 	if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))){
 	  resourcePath = path.join(cachePath, 'resources')

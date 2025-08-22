@@ -1,3 +1,17 @@
+let cachePath = ''
+function pathJoin(...parts) {
+    // 过滤空部分并拼接
+    const filteredParts = parts.filter(part => part && part !== '.');
+    
+    // 拼接路径并规范化
+    let joined = filteredParts.join('/')
+        .replace(/\/+/g, '/')          // 将多个斜杠替换为单个斜杠
+        .replace(/^\/+|\/+$/g, '')     // 移除开头和结尾的斜杠
+        .replace(/\/\.\//g, '/')       // 处理当前目录引用
+        .replace(/\/[^\/]+\/\.\.\//g, '/'); // 简单的上级目录处理
+    
+    return joined;
+}
 class Global {
   constructor() {
     this.initScale();
@@ -43,10 +57,11 @@ class Global {
   }
 
   initSettingsBtn() {
-    window.electronAPI.setCachePath(localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/')
+    window.electronAPI.setCachePath(localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles')
+	cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles'
     document.getElementsByClassName('settings-btn')[0].addEventListener('click', () => {
       document.getElementById('settings-modal').style.display = 'flex'
-      document.getElementById('cache-path').value = localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/'
+      document.getElementById('cache-path').value = cachePath
     })
     document.getElementsByClassName('close')[0].addEventListener('click', () => {
       document.getElementById('settings-modal').style.display = 'none'
@@ -60,6 +75,7 @@ class Global {
     document.getElementById('save-settings').addEventListener('click', function () {
       if (window.electronAPI.setCachePath(document.getElementById('cache-path').value)) {
         localStorage.setItem('cache-path', document.getElementById('cache-path').value)
+		cachePath = document.getElementById('cache-path').value
         document.getElementById('settings-modal').style.display = 'none'
       }
       else {
@@ -67,7 +83,8 @@ class Global {
       }
     })
     document.getElementById('reset-settings').addEventListener('click', function () {
-      document.getElementById('cache-path').value = 'D:/Up366StudentFiles/'
+      document.getElementById('cache-path').value = 'D:\\Up366StudentFiles'
+	  cachePath = 'D:\\Up366StudentFiles'
     })
   }
 }
@@ -163,7 +180,7 @@ class ListeningFeature {
   handleDeleteFiles() {
     const resultDiv = document.getElementById('result');
 
-    if (confirm('警告：此操作将删除 D:/Up366StudentFiles/resources/ 目录下的所有文件！\n\n确定要继续吗？')) {
+    if (confirm(`警告：此操作将删除 ${pathJoin(cachePath, 'resources')} 目录下的所有文件！\n\n确定要继续吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在删除文件...</strong><br>
         请稍候
@@ -198,7 +215,7 @@ class ListeningFeature {
     this.initialFiles = window.electronAPI.checkFirst();
 
     if (this.initialFiles === null) {
-      resultDiv.innerHTML = '<span class="error">资源路径不存在: D:/Up366StudentFiles/resources/</span>';
+      resultDiv.innerHTML = `<span class="error">资源路径不存在: ${pathJoin(cachePath, 'resources')}</span>`;
       return;
     }
 
@@ -473,7 +490,7 @@ class HearingFeature {
   handleDeleteFlipbooks() {
     const resultDiv = document.getElementById('answerResult');
 
-    if (confirm('警告：此操作将删除 D:/Up366StudentFiles/flipbooks/ 目录下的所有文件！\n\n确定要继续吗？')) {
+    if (confirm(`警告：此操作将删除 ${pathJoin(cachePath, 'flipbooks')} 目录下的所有文件！\n\n确定要继续吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在删除文件...</strong><br>
         请稍候
@@ -509,7 +526,7 @@ class HearingFeature {
       return;
     }
 
-    if (confirm(`警告：此操作将替换 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
+    if (confirm(`警告：此操作将替换 ${pathJoin(cachePath, 'flipbooks', folderPath, 'bookres', 'media')} 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在替换音频文件...</strong><br>
         请稍候
@@ -547,7 +564,7 @@ class HearingFeature {
       return;
     }
 
-    if (confirm(`确定要还原 D:/Up366StudentFiles/flipbooks/${folderPath}/bookres/media/ 目录下的音频文件吗？`)) {
+    if (confirm(`确定要还原 ${pathJoin(cachePath, 'flipbooks', folderPath, 'bookres', 'media')} 目录下的音频文件吗？`)) {
       resultDiv.innerHTML = `
         <strong>正在还原音频文件...</strong><br>
         请稍候

@@ -424,17 +424,3 @@ ipcMain.on('open-save-dialog', async (event, filename) => {
   const result = await dialog.showSaveDialog({ defaultPath: filename });
   
 })
-
-// 处理获取缓存路径的请求
-ipcMain.on('get-cache-path-request', (event) => {
-  // 从渲染进程的localStorage获取路径
-  const webContents = event.sender
-  const cachePath = webContents.executeJavaScript(`localStorage.getItem('cache-path') || 'D:/Up366StudentFiles/'`)
-    .then(path => {
-      event.sender.send('get-cache-path-response', path)
-    })
-    .catch(err => {
-      console.error('获取缓存路径失败:', err)
-      event.sender.send('get-cache-path-response', 'D:/Up366StudentFiles/')
-    })
-})
