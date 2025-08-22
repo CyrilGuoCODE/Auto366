@@ -2,8 +2,39 @@ const { contextBridge, ipcRenderer } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
-let resourcePath = 'D:/Up366StudentFiles/resources/'
-let flipbooksPath = 'D:/Up366StudentFiles/flipbooks/'
+// 这些路径将在 setCachePath 函数中根据缓存路径设置
+let resourcePath = ''
+let flipbooksPath = ''
+
+// 初始化路径函数
+async function initPaths() {
+  // 尝试从本地存储获取路径，如果没有则使用默认路径
+  let cachePath;
+  try {
+    cachePath = await getCachePathFromStorage();
+  } catch (error) {
+    console.error('获取缓存路径失败，使用默认路径:', error);
+    cachePath = 'D:/Up366StudentFiles/';
+  }
+  
+  if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))){
+    resourcePath = path.join(cachePath, 'resources');
+    flipbooksPath = path.join(cachePath, 'flipbooks');
+    return true;
+  }
+  
+  const defaultPath = 'D:/Up366StudentFiles/';
+  if (defaultPath !== cachePath && fs.existsSync(path.join(defaultPath, 'resources')) && fs.existsSync(path.join(defaultPath, 'flipbooks'))){
+    resourcePath = path.join(defaultPath, 'resources');
+    flipbooksPath = path.join(defaultPath, 'flipbooks');
+    return true;
+  }
+  
+  return false;
+}
+
+// 初始化路径
+initPaths();
 
 function deleteDirectoryRecursively(dirPath) {
   if (fs.existsSync(dirPath)) {
@@ -64,6 +95,16 @@ function restoreMp3FilesSync(folder) {
   }
 
   return restoredCount
+}
+
+// 获取本地存储中的路径设置
+function getCachePathFromStorage() {
+  return new Promise((resolve) => {
+    ipcRenderer.once('get-cache-path-response', (event, path) => {
+      resolve(path);
+    });
+    ipcRenderer.send('get-cache-path-request');
+  });
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -138,8 +179,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   replaceAudioFiles: (choosePath) => {
-    const innerPath = '/bookres/media/'
-    const targetFolder = flipbooksPath + choosePath + innerPath
+    const innerPath = path.join('bookres', 'media')
+    const targetFolder = path.join(flipbooksPath, choosePath, innerPath)
     const specificAudio = path.join(__dirname, 'init.mp3')
 
     if (!fs.existsSync(targetFolder)) {
@@ -158,8 +199,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   restoreAudioFiles: (choosePath) => {
-    const innerPath = '/bookres/media/'
-    const targetFolder = flipbooksPath + choosePath + innerPath
+    const innerPath = path.join('bookres', 'media')
+    const targetFolder = path.join(flipbooksPath, choosePath, innerPath)
 
     if (!fs.existsSync(targetFolder)) {
       return { error: '目标路径不存在: ' + targetFolder }
@@ -189,7 +230,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   getListeningAnswers: (choosePath) => {
-    const targetFolder = flipbooksPath + choosePath
+    const targetFolder = path.join(flipbooksPath, choosePath)
 
     if (!fs.existsSync(targetFolder)) {
       return { error: '目标路径不存在: ' + targetFolder }
@@ -325,6 +366,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
   chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
+  // 获取当前路径设置
+  getPaths: () => {
+    return {
+      resourcePath,
+      flipbooksPath
+    };
+  },
+  // 从本地存储获取缓存路径
+  getCachePath: async () => {
+    return await getCachePathFromStorage();
+  },
   setCachePath: (cachePath) => {
 	if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))){
 	  resourcePath = path.join(cachePath, 'resources')
