@@ -13,6 +13,9 @@ const { Transform } = require('stream')
 const path = require('path')
 const { app } = require('electron')
 const { v4: uuidv4 } = require('uuid')
+const appPath = app.isPackaged ? process.resourcesPath : __dirname;
+const tempDir = path.join(appPath, 'temp');
+const ansDir = path.join(appPath, 'answers');
 
 class AnswerProxy {
   constructor() {
@@ -20,8 +23,7 @@ class AnswerProxy {
     this.extractedAnswers = [];
     this.downloadUrl = '';
     this.mainWindow = null;
-    this.isCapturing = false;
-	this.trafficCache = new Map();
+    this.trafficCache = new Map();
   }
 
   // 设置主窗口引用
@@ -85,7 +87,7 @@ class AnswerProxy {
           });
         } else {
           // 未知压缩格式，直接返回
-		  console.log('未知压缩格式:', encoding)
+          console.log('未知压缩格式:', encoding)
           resolve(buffer.toString());
         }
       } catch (error) {
@@ -169,12 +171,12 @@ class AnswerProxy {
             requestInfo.statusMessage = proxyRes.statusMessage;
             requestInfo.responseHeaders = proxyRes.headers;
             requestInfo.contentType = contentType;
-			let uuid = uuidv4()
+            let uuid = uuidv4()
             requestInfo.uuid = uuid;
-			
+            
             this.safeIpcSend('traffic-log', requestInfo);
-			
-			this.trafficCache.set(uuid, requestInfo)
+            
+            this.trafficCache.set(uuid, requestInfo)
           } else {
             // 捕获响应体并处理压缩
             Object.keys(proxyRes.headers).forEach(function (key) {
@@ -225,14 +227,14 @@ class AnswerProxy {
                     requestInfo.responseBody = responseBody;
                   }
                 } else if (isFile) {
-				  if (proxyRes.headers["Content-Disposition"]){
-					requestInfo.responseBody = proxyRes.headers["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
-				  } else {
-					requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
-				  }
-				} else if (isHtml){
-				  requestInfo.responseBody = responseBody.replaceAll('<', '&lt;').replaceAll('>', '&gt')
-				} else {
+                  if (proxyRes.headers["Content-Disposition"]){
+                    requestInfo.responseBody = proxyRes.headers["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
+                  } else {
+                    requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
+                  }
+                } else if (isHtml){
+                  requestInfo.responseBody = responseBody.replaceAll('<', '&lt;').replaceAll('>', '&gt')
+                } else {
                   requestInfo.responseBody = responseBody;
                 }
 
@@ -241,25 +243,24 @@ class AnswerProxy {
                 requestInfo.bodySize = responseBody.length;
                 requestInfo.originalBodySize = responseBuffer.length;
                 requestInfo.isCompressed = isCompressed;
-				let uuid = uuidv4()
+                let uuid = uuidv4()
                 requestInfo.uuid = uuid;
-				
+                
                 this.safeIpcSend('traffic-log', requestInfo);
-				
-				requestInfo.originalResponse = responseBuffer;
-				this.trafficCache.set(uuid, requestInfo)
+                
+                requestInfo.originalResponse = responseBuffer;
+                this.trafficCache.set(uuid, requestInfo)
 
                 // 检查是否包含答案下载链接
                 if (isFile && requestInfo.responseBody.includes('zip')){
-				  const appPath = app.isPackaged ? process.resourcesPath : __dirname;
-				  const tempDir = path.join(appPath, 'temp');
-				  const ansDir = path.join(appPath, 'answers');
-				  this.downloadFileByUuid(uuid, tempDir, async (filePath) => {
-					await this.extractZipFile(filePath, ansDir)
-					await fs.unlink(filePath)
-					await fs.unlink(filePath.replace('.zip', ''))
-				  })
-				}
+                  fs.mkdirSync(tempDir, { recursive: true });
+                  fs.mkdirSync(ansDir, { recursive: true });
+                  const filePath = path.join(tempDir, requestInfo.responseBody)
+                  await this.downloadFileByUuid(uuid, filePath)
+                  await this.extractZipFile(filePath, ansDir)
+                  fs.unlink(filePath)
+                  fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
+                }
 
                 res.end();
               } catch (error) {
@@ -292,7 +293,6 @@ class AnswerProxy {
 
   stopProxy() {
     if (this.proxyAgent) {
-      this.setCapturing(false);
       this.safeIpcSend('capture-status', { capturing: false });
       this.proxyAgent.close();
       this.proxyAgent = null;
@@ -301,10 +301,6 @@ class AnswerProxy {
         message: '代理服务器已停止'
       });
     }
-  }
-
-  setCapturing(capturing) {
-    this.isCapturing = capturing;
   }
 
   // 提取下载链接
@@ -698,19 +694,30 @@ class AnswerProxy {
       return [];
     }
   }
-  async downloadFileByUuid(uuid, dir, callback = () => {}) {
+  async downloadFileByUuid(uuid, filePath) {
     const fileInfo = this.trafficCache.get(uuid);
     if (!fileInfo) {
-      throw new Error('未找到对应的文件数据');
+      throw new Error('数据不存在');
     }
-  
-    const fileName = fileInfo.responseBody;
-    const filePath = path.join(dir, fileName);
+    
+    let content = fileInfo.responseBody
+    if (fileInfo.contentType) {
+      if (fileInfo.contentType.includes('html')) {
+        content = fileInfo.originalResponse.toString()
+      }  else if (fileInfo.contentType.includes('image/') ||　fileInfo.contentType.includes('application/octet-stream')) {
+        content = fileInfo.originalResponse
+      }
+    }
 
     // 使用 fs.promises.writeFile 的异步版本
     await fs.promises.writeFile(filePath, fileInfo.originalResponse);
-    
-    callback(filePath);
+  }
+  clearCache(){
+    this.trafficCache.clear()
+	fs.rm(tempDir, { recursive: true, force: true });
+  }
+  getTrafficByUuid(uuid){
+    return this.trafficCache.get(uuid)
   }
 }
 

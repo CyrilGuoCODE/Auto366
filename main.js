@@ -6,6 +6,7 @@ const fs = require('fs-extra')
 
 // 引入抓包代理类
 const AnswerProxy = require('./answer-proxy');
+const { async } = require('node-stream-zip');
 
 let mainWindow
 let locationWindow
@@ -405,64 +406,49 @@ ipcMain.on('stop-answer-proxy', () => {
   answerProxy.stopProxy();
 })
 
-ipcMain.on('start-capturing', () => {
-  answerProxy.setCapturing(true);
-  mainWindow.webContents.send('capture-status', { capturing: true })
-})
-
-ipcMain.on('stop-capturing', () => {
-  answerProxy.setCapturing(false);
-  mainWindow.webContents.send('capture-status', { capturing: false })
-})
-
 ipcMain.on('open-directory-choosing', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
 })
 
-ipcMain.handle('delete-temp-directory', () => {
-  const { app } = require('electron');
-  const path = require('path');
-  const fs = require('fs-extra');
-
-  let tempDir;
-  if (app.isPackaged) {
-    tempDir = path.join(app.getPath('userData'), 'temp');
-  } else {
-    tempDir = path.join(__dirname, 'temp');
-  }
-  
-  let deletedCount = 0;
-  
-  function deleteDirectory(dir) {
-    if (!fs.existsSync(dir)) return;
-    
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      const filePath = path.join(dir, file);
-      
-      if (fs.statSync(filePath).isDirectory()) {
-        deleteDirectory(filePath);
-        deletedCount++;
-      } else {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-      }
-    }
-    
-    fs.rmdirSync(dir);
-    deletedCount++;
-  }
-  
+ipcMain.handle('clear-cache', () => {
   try {
-    deleteDirectory(tempDir);
-    return { success: true, deletedCount };
+    answerProxy.clearCache()
+    return 1;
   } catch (error) {
-    return { error: `删除临时文件夹失败: ${error.message}` };
+    return 0;
   }
 });
 
-ipcMain.on('open-save-dialog', async (event, filename) => {
-  const result = await dialog.showSaveDialog({ defaultPath: filename });
-  
-})
+ipcMain.handle('download-file', async (event, uuid) => {
+  let traffic = answerProxy.getTrafficByUuid(uuid)
+  console.log(traffic);
+  if (!traffic) return 0;
+  let extension = `download_${traffic.timestamp}.txt`;
+  if (traffic.contentType) {
+    if (traffic.contentType.includes('json')) {
+      extension = `download_${traffic.timestamp}.json`;
+    } else if (traffic.contentType.includes('html')) {
+      extension = `download_${traffic.timestamp}.html`;
+    } else if (traffic.contentType.includes('xml')) {
+      extension = `download_${traffic.timestamp}.xml`;
+    } else if (traffic.contentType.includes('javascript')) {
+      extension = `download_${traffic.timestamp}.js`;
+    } else if (traffic.contentType.includes('css')) {
+      extension = `download_${traffic.timestamp}.css`;
+    } else if (traffic.contentType.includes('image/')) {
+      extension = `download_${traffic.timestamp}.png`;
+    } else if (traffic.contentType.includes('application/octet-stream')) {
+      extension = traffic.responseBody;
+    }
+  }
+  const result = await dialog.showSaveDialog({ defaultPath: extension });
+  if (result.canceled) return -1;
+  let filePath = path.join(result, extension)
+  try {
+    await answerProxy.downloadFileByUuid(uuid, filePath)
+    return 1;
+  } catch (error) {
+    return 0;
+  }
+});

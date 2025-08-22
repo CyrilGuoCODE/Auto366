@@ -737,54 +737,6 @@ class UniversalAnswerFeature {
     }, 5000);
   }
 
-  startCapture() {
-    const startBtn = document.getElementById('startCaptureBtn');
-    const stopBtn = document.getElementById('stopCaptureBtn');
-    
-    // 确保代理已启动
-    if (!this.isProxyRunning) {
-      this.addErrorLog('请先启动代理服务器');
-      return;
-    }
-    
-    // 更新按钮状态，防止重复点击
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-    
-    window.electronAPI.startCapturing();
-    this.addInfoLog('开始监听网络请求...');
-    
-    // 设置超时检查，如果监听没有开始，恢复按钮状态
-    setTimeout(() => {
-      if (!this.isCapturing) {
-        this.addErrorLog('监听启动超时，请检查代理设置');
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-      }
-    }, 5000);
-  }
-
-  stopCapture() {
-    const startBtn = document.getElementById('startCaptureBtn');
-    const stopBtn = document.getElementById('stopCaptureBtn');
-    
-    // 更新按钮状态，防止重复点击
-    startBtn.disabled = true;
-    stopBtn.disabled = true;
-    
-    window.electronAPI.stopCapturing();
-    this.addInfoLog('停止监听网络请求');
-    
-    // 设置超时检查，如果监听没有停止，恢复按钮状态
-    setTimeout(() => {
-      if (this.isCapturing) {
-        this.addErrorLog('监听停止超时，请尝试手动关闭');
-        startBtn.disabled = false;
-        stopBtn.disabled = false;
-      }
-    }, 5000);
-  }
-
   updateProxyStatus(data) {
     const statusElement = document.getElementById('proxyStatus');
     const startBtn = document.getElementById('startProxyBtn');
@@ -977,7 +929,7 @@ class UniversalAnswerFeature {
       downloadBtn.style.marginLeft = '5px';
 
       downloadBtn.addEventListener('click', () => {
-        this.downloadResponse(data);
+        this.downloadResponse(data.uuid);
       });
       
       downloadContainer.appendChild(downloadBtn);
@@ -1117,71 +1069,12 @@ class UniversalAnswerFeature {
     this.addInfoLog(`文件结构: ${structureInfo}`);
   }
 
-  downloadResponse(data) {
-    try {
-      let filename = 'response';
-
-      try {
-        const url = new URL(data.url);
-        const pathParts = url.pathname.split('/');
-        if (pathParts.length > 0) {
-          const lastPart = pathParts[pathParts.length - 1];
-          if (lastPart && lastPart !== '') {
-            filename = lastPart;
-          }
-        }
-      } catch (e) {
-        console.log('无法从URL解析文件名');
-      }
-
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filenameWithTimestamp = `${filename}_${timestamp}`;
-
-      let extension = '.txt';
-      if (data.contentType) {
-        if (data.contentType.includes('json')) {
-          extension = '.json';
-        } else if (data.contentType.includes('html')) {
-          extension = '.html';
-        } else if (data.contentType.includes('xml')) {
-          extension = '.xml';
-        } else if (data.contentType.includes('javascript')) {
-          extension = '.js';
-        } else if (data.contentType.includes('css')) {
-          extension = '.css';
-        } else if (data.contentType.includes('image/')) {
-          extension = '.bin';
-        } else if (data.contentType.includes('application/octet-stream')) {
-          extension = '.bin';
-        }
-      }
-
-      const finalFilename = filenameWithTimestamp + extension;
-
-      let content = data.responseBody;
-
-      if (data.contentType && data.contentType.includes('json') && content) {
-        try {
-          const parsed = JSON.parse(content);
-          content = JSON.stringify(parsed, null, 2);
-        } catch (e) {
-        }
-      }
-
-      const blob = new Blob([content], { type: data.contentType || 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = finalFilename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
+  async downloadResponse(uuid) {
+    let res = await window.electronAPI.downloadFile(uuid)
+    if (res == 1){
       this.addSuccessLog(`响应体已下载: ${finalFilename}`);
-    } catch (error) {
-      console.error('下载响应体失败:', error);
-      this.addErrorLog(`下载失败: ${error.message}`);
+    } else if (res == 0) {
+      this.addErrorLog(`下载失败`);
     }
   }
 
@@ -1292,15 +1185,11 @@ class UniversalAnswerFeature {
         <div class="log-item">正在删除临时缓存文件夹...</div>
       `;
 
-      window.electronAPI.deleteTempDirectory().then(result => {
-        if (result.error) {
-          resultDiv.innerHTML = `
-            <div class="log-item error">删除失败: ${result.error}</div>
-          `;
+      window.electronAPI.clearCache().then(result => {
+        if (result) {
+          resultDiv.innerHTML = `<div class="log-item success">缓存清理成功</div>`;
         } else {
-          resultDiv.innerHTML = `
-            <div class="log-item success">删除成功！已删除 ${result.deletedCount} 个文件/文件夹</div>
-          `;
+          resultDiv.innerHTML = `<div class="log-item error">缓存清理失败</div>`;
         }
       });
     }
