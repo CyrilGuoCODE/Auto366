@@ -20,6 +20,7 @@ class AnswerProxy {
     this.extractedAnswers = [];
     this.downloadUrl = '';
     this.mainWindow = null;
+    this.isCapturing = false;
 	this.trafficCache = new Map();
   }
 
@@ -289,13 +290,21 @@ class AnswerProxy {
     });
   }
 
-  // 停止抓包代理
   stopProxy() {
-    // 怎么实现？
+    if (this.proxyAgent) {
+      this.setCapturing(false);
+      this.safeIpcSend('capture-status', { capturing: false });
+      this.proxyAgent.close();
+      this.proxyAgent = null;
+      this.safeIpcSend('proxy-status', {
+        running: false,
+        message: '代理服务器已停止'
+      });
+    }
   }
 
-  // 设置捕获状态
   setCapturing(capturing) {
+    this.isCapturing = capturing;
   }
 
   // 提取下载链接

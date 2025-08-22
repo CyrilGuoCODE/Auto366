@@ -209,9 +209,8 @@
             <div class="tutorial">
                 <h2>使用教程</h2>
                 <ol>
-                    <li><strong>启动代理服务器：</strong>点击"启动代理服务器"按钮</li>
+                    <li><strong>启动代理服务器：</strong>点击"启动代理服务器"按钮（代理启动后会自动开始监听）</li>
                     <li><strong>设置客户端代理：</strong>在天学网客户端设置HTTP代理为 127.0.0.1:5291</li>
-                    <li><strong>开始监听：</strong>点击"开始监听"按钮，开始捕获网络请求</li>
                     <li><strong>下载题目：</strong>在天学网客户端下载需要的题目</li>
                     <li><strong>自动处理：</strong>程序会自动检测、下载、解压并提取答案</li>
                     <li><strong>查看答案：</strong>答案会显示在下方区域，并自动保存到文件</li>
@@ -230,8 +229,7 @@
                 <div class="buttons">
                     <button id="startProxyBtn">启动代理服务器</button>
                     <button id="stopProxyBtn" disabled>停止代理服务器</button>
-                    <button id="startCaptureBtn" disabled>开始监听</button>
-                    <button id="stopCaptureBtn" disabled>停止监听</button>
+                    <button id="deleteTempBtn" class="delete-btn">删除缓存</button>
                 </div>
 
                 <div class="status-indicators">

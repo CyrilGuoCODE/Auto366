@@ -607,13 +607,7 @@ class UniversalAnswerFeature {
       this.stopProxy();
     });
 
-    document.getElementById('startCaptureBtn').addEventListener('click', () => {
-      this.startCapture();
-    });
 
-    document.getElementById('stopCaptureBtn').addEventListener('click', () => {
-      this.stopCapture();
-    });
   }
 
   initIpcListeners() {
@@ -711,6 +705,9 @@ class UniversalAnswerFeature {
         this.addErrorLog('代理服务器启动超时，请检查网络或端口占用');
         startBtn.disabled = false;
         stopBtn.disabled = true;
+      } else {
+        this.addInfoLog('代理服务器启动成功，自动开始监听网络请求...');
+        window.electronAPI.startCapturing();
       }
     }, 5000);
   }
@@ -788,7 +785,6 @@ class UniversalAnswerFeature {
     const statusElement = document.getElementById('proxyStatus');
     const startBtn = document.getElementById('startProxyBtn');
     const stopBtn = document.getElementById('stopProxyBtn');
-    const captureBtn = document.getElementById('startCaptureBtn');
 
     if (data.running) {
       this.isProxyRunning = true;
@@ -796,7 +792,6 @@ class UniversalAnswerFeature {
       statusElement.className = 'status-value running';
       startBtn.disabled = true;
       stopBtn.disabled = false;
-      captureBtn.disabled = false;
       this.addSuccessLog(data.message);
     } else {
       this.isProxyRunning = false;
@@ -804,8 +799,6 @@ class UniversalAnswerFeature {
       statusElement.className = 'status-value stopped';
       startBtn.disabled = false;
       stopBtn.disabled = true;
-      captureBtn.disabled = true;
-      document.getElementById('stopCaptureBtn').disabled = true;
       this.addInfoLog(data.message);
     }
   }
