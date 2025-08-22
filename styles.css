@@ -446,6 +446,24 @@ button:disabled {
     color: #34d399;
 }
 
+.download-response-btn {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.download-response-btn:hover {
+    background-color: #0056b3;
+}
+
+.response-body-container {
+    position: relative;
+    margin-top: 5px;
+}
+
 .log-item.error {
     color: #f87171;
 }

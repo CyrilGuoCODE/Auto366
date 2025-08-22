@@ -956,7 +956,36 @@ class UniversalAnswerFeature {
     if (data.responseBody) {
       const responseBodyDiv = document.createElement('div');
       responseBodyDiv.className = 'detail-item';
-      responseBodyDiv.innerHTML = `<strong>响应体:</strong><pre class="response-body">${this.formatBody(data.responseBody)}</pre>`;
+
+      const responseBodyContainer = document.createElement('div');
+      responseBodyContainer.className = 'response-body-container';
+
+      const responseBodyPreview = document.createElement('pre');
+      responseBodyPreview.className = 'response-body';
+      responseBodyPreview.textContent = this.formatBody(data.responseBody);
+
+      const downloadContainer = document.createElement('div');
+      downloadContainer.style.position = 'absolute';
+      downloadContainer.style.right = '5px';
+      downloadContainer.style.top = '5px';
+
+      const downloadBtn = document.createElement('button');
+      downloadBtn.className = 'download-response-btn';
+      downloadBtn.textContent = '下载';
+      downloadBtn.style.padding = '3px 8px';
+      downloadBtn.style.fontSize = '11px';
+      downloadBtn.style.marginLeft = '5px';
+
+      downloadBtn.addEventListener('click', () => {
+        this.downloadResponse(data);
+      });
+      
+      downloadContainer.appendChild(downloadBtn);
+      responseBodyContainer.appendChild(responseBodyPreview);
+      responseBodyContainer.appendChild(downloadContainer);
+      
+      responseBodyDiv.innerHTML = '<strong>响应体:</strong>';
+      responseBodyDiv.appendChild(responseBodyContainer);
       detailsContainer.appendChild(responseBodyDiv);
     }
 
@@ -1086,6 +1115,74 @@ class UniversalAnswerFeature {
     // 可以在这里添加文件结构的可视化显示
     const structureInfo = this.formatFileStructure(data.structure);
     this.addInfoLog(`文件结构: ${structureInfo}`);
+  }
+
+  downloadResponse(data) {
+    try {
+      let filename = 'response';
+
+      try {
+        const url = new URL(data.url);
+        const pathParts = url.pathname.split('/');
+        if (pathParts.length > 0) {
+          const lastPart = pathParts[pathParts.length - 1];
+          if (lastPart && lastPart !== '') {
+            filename = lastPart;
+          }
+        }
+      } catch (e) {
+        console.log('无法从URL解析文件名');
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filenameWithTimestamp = `${filename}_${timestamp}`;
+
+      let extension = '.txt';
+      if (data.contentType) {
+        if (data.contentType.includes('json')) {
+          extension = '.json';
+        } else if (data.contentType.includes('html')) {
+          extension = '.html';
+        } else if (data.contentType.includes('xml')) {
+          extension = '.xml';
+        } else if (data.contentType.includes('javascript')) {
+          extension = '.js';
+        } else if (data.contentType.includes('css')) {
+          extension = '.css';
+        } else if (data.contentType.includes('image/')) {
+          extension = '.bin';
+        } else if (data.contentType.includes('application/octet-stream')) {
+          extension = '.bin';
+        }
+      }
+
+      const finalFilename = filenameWithTimestamp + extension;
+
+      let content = data.responseBody;
+
+      if (data.contentType && data.contentType.includes('json') && content) {
+        try {
+          const parsed = JSON.parse(content);
+          content = JSON.stringify(parsed, null, 2);
+        } catch (e) {
+        }
+      }
+
+      const blob = new Blob([content], { type: data.contentType || 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = finalFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      this.addSuccessLog(`响应体已下载: ${finalFilename}`);
+    } catch (error) {
+      console.error('下载响应体失败:', error);
+      this.addErrorLog(`下载失败: ${error.message}`);
+    }
   }
 
   displayProcessedFiles(data) {
