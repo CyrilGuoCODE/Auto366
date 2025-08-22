@@ -12,14 +12,15 @@ const { pipeline } = require('stream')
 const { Transform } = require('stream')
 const path = require('path')
 const { app } = require('electron')
+const { v4: uuidv4 } = require('uuid')
 
 class AnswerProxy {
   constructor() {
     this.proxyAgent = null;
-    this.isCapturing = false;
     this.extractedAnswers = [];
     this.downloadUrl = '';
     this.mainWindow = null;
+	this.trafficCache = new Map();
   }
 
   // 设置主窗口引用
@@ -96,7 +97,6 @@ class AnswerProxy {
   // 启动抓包代理
   startProxy(mainWindow) {
     this.mainWindow = mainWindow;
-    this.isCapturing = true;
 
     if (this.proxyAgent) {
       this.stopProxy();
@@ -149,7 +149,7 @@ class AnswerProxy {
           const isJson = /application\/json/.test(contentType);
           const isFile = /application\/octet-stream/.test(contentType);
           const contentLengthIsZero = proxyRes.headers['content-length'] == 0;
-          const isCompressed = Boolean(contentEncoding);
+          const isCompressed = Boolean(contentEncoding) && !isFile;
 
           console.log(`请求: ${fullUrl}, 内容类型: ${contentType}, 是否压缩: ${isCompressed}`);
 
@@ -168,7 +168,12 @@ class AnswerProxy {
             requestInfo.statusMessage = proxyRes.statusMessage;
             requestInfo.responseHeaders = proxyRes.headers;
             requestInfo.contentType = contentType;
+			let uuid = uuidv4()
+            requestInfo.uuid = uuid;
+			
             this.safeIpcSend('traffic-log', requestInfo);
+			
+			this.trafficCache.set(uuid, requestInfo)
           } else {
             // 捕获响应体并处理压缩
             Object.keys(proxyRes.headers).forEach(function (key) {
@@ -235,15 +240,25 @@ class AnswerProxy {
                 requestInfo.bodySize = responseBody.length;
                 requestInfo.originalBodySize = responseBuffer.length;
                 requestInfo.isCompressed = isCompressed;
-
+				let uuid = uuidv4()
+                requestInfo.uuid = uuid;
+				
                 this.safeIpcSend('traffic-log', requestInfo);
+				
+				requestInfo.originalResponse = responseBuffer;
+				this.trafficCache.set(uuid, requestInfo)
 
                 // 检查是否包含答案下载链接
-                if (this.isCapturing && responseBody) {
-                  if (responseBody.includes('downloadUrl') || responseBody.includes('download')) {
-                    this.extractDownloadUrl(responseBody);
-                  }
-                }
+                if (isFile && requestInfo.responseBody.includes('zip')){
+				  const appPath = app.isPackaged ? process.resourcesPath : __dirname;
+				  const tempDir = path.join(appPath, 'temp');
+				  const ansDir = path.join(appPath, 'answers');
+				  this.downloadFileByUuid(uuid, tempDir, async (filePath) => {
+					await this.extractZipFile(filePath, ansDir)
+					await fs.unlink(filePath)
+					await fs.unlink(filePath.replace('.zip', ''))
+				  })
+				}
 
                 res.end();
               } catch (error) {
@@ -276,60 +291,11 @@ class AnswerProxy {
 
   // 停止抓包代理
   stopProxy() {
-    if (this.proxyAgent) {
-      try {
-        // 尝试多种方式关闭代理
-        if (typeof this.proxyAgent.close === 'function') {
-          this.proxyAgent.close();
-        } else if (typeof this.proxyAgent.destroy === 'function') {
-          this.proxyAgent.destroy();
-        } else if (typeof this.proxyAgent.abort === 'function') {
-          this.proxyAgent.abort();
-        }
-
-        // 清理所有相关资源
-        this.proxyAgent.removeAllListeners && this.proxyAgent.removeAllListeners();
-        this.proxyAgent = null;
-        this.isCapturing = false;
-        this.downloadUrl = '';
-        console.log('万能答案获取代理服务器已停止');
-        this.safeIpcSend('proxy-status', { running: false, message: '代理服务器已停止' });
-      } catch (error) {
-        console.error('停止代理时出错:', error);
-        this.safeIpcSend('proxy-error', {
-          message: `停止代理时出错: ${error.message}`,
-          timestamp: new Date().toISOString()
-        });
-        // 即使出错，也尝试重置状态
-        this.proxyAgent = null;
-        this.isCapturing = false;
-      }
-    }
+    // 怎么实现？
   }
 
   // 设置捕获状态
   setCapturing(capturing) {
-    this.isCapturing = capturing;
-  }
-
-  // 处理请求体
-  processRequestBody(body, hostname, path) {
-    if (body.includes('downloadUrl') || body.includes('download') || body.includes('fileinfo')) {
-      try {
-        this.safeIpcSend('important-request', {
-          url: `https://${hostname}${path}`,
-          body: body.substring(0, 500),
-          isHttps: true
-        });
-      } catch (sendError) {
-        console.error('发送重要请求信息失败:', sendError);
-      }
-
-      if (body.includes('fs.') && body.includes('/download/')) {
-        console.log('HTTPS请求体包含答案下载信息');
-        this.extractDownloadUrl(body);
-      }
-    }
   }
 
   // 提取下载链接
@@ -365,60 +331,6 @@ class AnswerProxy {
       }
     } catch (error) {
       console.error('提取下载链接失败:', error);
-    }
-  }
-
-  // 下载并处理文件
-  async downloadAndProcessFile(url) {
-    try {
-      this.safeIpcSend('process-status', { status: 'downloading', message: '正在下载文件...' });
-
-      // 使用更可靠的路径处理方式
-      const appPath = app.isPackaged ? process.resourcesPath : __dirname;
-      const tempDir = path.join(appPath, 'temp');
-      const ansDir = path.join(appPath, 'answers');
-
-      let finalTempDir = tempDir;
-      let finalAnsDir = ansDir;
-
-      try {
-        fs.ensureDirSync(tempDir);
-        fs.ensureDirSync(ansDir);
-      } catch (dirError) {
-        console.error('创建目录失败，尝试使用用户目录:', dirError);
-        const userDataPath = app.getPath('userData');
-        const tempDirAlt = path.join(userDataPath, 'temp');
-        const ansDirAlt = path.join(userDataPath, 'answers');
-        fs.ensureDirSync(tempDirAlt);
-        fs.ensureDirSync(ansDirAlt);
-        finalTempDir = tempDirAlt;
-        finalAnsDir = ansDirAlt;
-      }
-
-      const timestamp = Date.now();
-      const zipPath = path.join(finalTempDir, `exam_${timestamp}.zip`);
-
-      const response = await axios({
-        method: 'GET',
-        url: url,
-        responseType: 'stream',
-        timeout: 30000
-      });
-
-      const writer = fs.createWriteStream(zipPath);
-      response.data.pipe(writer);
-
-      writer.on('finish', () => {
-        this.safeIpcSend('process-status', { status: 'extracting', message: '正在解压文件...' });
-        this.extractZipFile(zipPath, finalAnsDir);
-      });
-
-      writer.on('error', (err) => {
-        this.safeIpcSend('process-error', { error: `文件下载失败: ${err.message}` });
-      });
-
-    } catch (error) {
-      this.safeIpcSend('process-error', { error: `下载失败: ${error.message}` });
     }
   }
 
@@ -776,6 +688,20 @@ class AnswerProxy {
       console.error(`解析XML文件失败: ${filePath}`, error);
       return [];
     }
+  }
+  async downloadFileByUuid(uuid, dir, callback = () => {}) {
+    const fileInfo = this.trafficCache.get(uuid);
+    if (!fileInfo) {
+      throw new Error('未找到对应的文件数据');
+    }
+  
+    const fileName = fileInfo.responseBody;
+    const filePath = path.join(dir, fileName);
+
+    // 使用 fs.promises.writeFile 的异步版本
+    await fs.promises.writeFile(filePath, fileInfo.originalResponse);
+    
+    callback(filePath);
   }
 }
 
