@@ -516,10 +516,10 @@ class AnswerProxy {
             const ext = path.extname(item).toLowerCase();
             const name = item.toLowerCase();
 
-            // 只处理 XML 和 JSON 文件
-            if (ext === '.xml' || ext === '.json') {
+            // 处理 XML、JSON、JS 和 TXT 文件
+            if (ext === '.xml' || ext === '.json' || ext === '.js' || ext === '.txt') {
               // 特别关注包含 answer、paper、question 等关键词的文件
-              if (name.includes('answer') || name.includes('paper') || name.includes('question')) {
+              if (name.includes('answer') || name.includes('paper') || name.includes('question') || name.includes('questionData')) {
                 answerFiles.push(itemPath);
               }
             }
@@ -541,10 +541,22 @@ class AnswerProxy {
       const content = fs.readFileSync(filePath, 'utf-8');
 
       // 根据文件类型选择不同的处理方法
-      if (ext === '.json') {
-        return this.extractFromJSON(content, filePath);
+      if (ext === '.json' || ext === '.js') {
+        // JS文件可能是变量赋值形式，需要尝试提取变量内容
+        let jsonContent = content;
+        if (ext === '.js') {
+          // 尝试提取变量赋值语句
+          const varMatch = content.match(/var\s+pageConfig\s*=\s*({.+?});?$/s);
+          if (varMatch && varMatch[1]) {
+            jsonContent = varMatch[1];
+          }
+        }
+        return this.extractFromJSON(jsonContent, filePath);
       } else if (ext === '.xml') {
         return this.extractFromXML(content, filePath);
+      } else if (ext === '.txt') {
+        // 尝试从文本文件中提取答案
+        return this.extractFromText(content, filePath);
       }
 
       return [];
@@ -575,20 +587,6 @@ class AnswerProxy {
         });
       }
 
-      // 处理答案字段
-      if (jsonData.answers) {
-        jsonData.answers.forEach((answerObj, index) => {
-          if (answerObj.id && answerObj.answer) {
-            answers.push({
-              question: index + 1,
-              answer: answerObj.answer,
-              content: `答案: ${answerObj.answer}`,
-              pattern: 'JSON答案模式'
-            });
-          }
-        });
-      }
-
       // 处理单词发音题型
       if (jsonData.Data && jsonData.Data.words) {
         jsonData.Data.words.forEach((word, index) => {
@@ -601,6 +599,93 @@ class AnswerProxy {
             });
           }
         });
+      }
+
+      // 处理听后回答题型（展示答案）
+      if (jsonData.Data && jsonData.Data.questions_list) {
+        jsonData.Data.questions_list.forEach((question, index) => {
+          if (question.answer_text && question.question_text) {
+            answers.push({
+              question: index + 1,
+              answer: question.answer_text,
+              content: `题目: ${question.question_text}\n答案: ${question.answer_text}`,
+              pattern: '听后回答模式'
+            });
+          }
+        });
+      }
+
+      // 处理听后转述题型（展示答案和原题）
+      if (jsonData.Data && jsonData.Data.OriginalStandard) {
+        jsonData.Data.OriginalStandard.forEach((answer, index) => {
+          if (answer && answer.length > 2) {
+            answers.push({
+              question: index + 1,
+              answer: answer,
+              content: `转述参考答案: ${answer}`,
+              pattern: '听后转述模式'
+            });
+          }
+        });
+      }
+
+      // 处理听后选择题型（展示答案）
+      if (jsonData.Data && jsonData.Data.questions_list) {
+        jsonData.Data.questions_list.forEach((question, index) => {
+          if (question.answer_text && question.options) {
+            const optionsText = question.options.map(opt => `${opt.id}: ${opt.content}`).join("；");
+            answers.push({
+              question: index + 1,
+              answer: question.answer_text,
+              content: `题目: ${question.question_text}\n选项: ${optionsText}\n答案: ${question.answer_text}`,
+              pattern: '听后选择模式'
+            });
+          }
+        });
+      }
+
+      // 处理页面配置中的题目类型（如 questionData.js）
+      if (jsonData.questionObj) {
+        const qObj = jsonData.questionObj;
+        
+        // 处理听后回答题目
+        if (qObj.question_type === 12 && qObj.answer_text) {
+          answers.push({
+            question: "听后回答",
+            answer: qObj.answer_text,
+            content: `题目: ${qObj.question_text}\n答案: ${qObj.answer_text}`,
+            pattern: '听后回答模式'
+          });
+        }
+        
+        // 处理听后选择题目
+        if (qObj.question_type === 1 && qObj.questions_list) {
+          qObj.questions_list.forEach((q, index) => {
+            if (q.answer_text && q.options) {
+              const optionsText = q.options.map(opt => `${opt.id}: ${opt.content}`).join("；");
+              answers.push({
+                question: `听后选择-${index + 1}`,
+                answer: q.answer_text,
+                content: `题目: ${q.question_text}\n选项: ${optionsText}\n答案: ${q.answer_text}`,
+                pattern: '听后选择模式'
+              });
+            }
+          });
+        }
+        
+        // 处理朗读句子题目
+        if (qObj.record_speak && qObj.record_speak.length > 0) {
+          qObj.record_speak.forEach((item, index) => {
+            if (item.content && item.content.length > 2) {
+              answers.push({
+                question: `朗读句子-${index + 1}`,
+                answer: item.content,
+                content: `请朗读: ${item.content}`,
+                pattern: '朗读句子模式'
+              });
+            }
+          });
+        }
       }
 
       // 尝试通用JSON答案提取
@@ -619,6 +704,64 @@ class AnswerProxy {
       return answers;
     } catch (error) {
       console.error(`解析JSON文件失败: ${filePath}`, error);
+      return [];
+    }
+  }
+
+  // 从文本文件提取答案
+  extractFromText(content, filePath) {
+    const answers = [];
+    
+    try {
+      // 尝试匹配常见的答案格式
+      const answerPatterns = [
+        /答案\s*[:：]\s*([^\n]+)/g,  // 答案: xxx
+        /标准答案\s*[:：]\s*([^\n]+)/g, // 标准答案: xxx
+        /正确答案\s*[:：]\s*([^\n]+)/g, // 正确答案: xxx
+        /参考答案\s*[:：]\s*([^\n]+)/g, // 参考答案: xxx
+        /\b[A-D]\b/g  // 单独的选项字母
+      ];
+      
+      // 按行处理文本
+      const lines = content.split('\n');
+      let lineNum = 0;
+      
+      for (const line of lines) {
+        lineNum++;
+        
+        // 尝试每个答案模式
+        for (const pattern of answerPatterns) {
+          const matches = [...line.matchAll(pattern)];
+          
+          if (matches.length > 0) {
+            matches.forEach((match, index) => {
+              if (match[1]) {
+                answers.push({
+                  question: `文本-${lineNum}-${index + 1}`,
+                  answer: match[1].trim(),
+                  content: `答案: ${match[1].trim()} (行: ${lineNum})`,
+                  pattern: '文本答案模式'
+                });
+              }
+            });
+          }
+        }
+        
+        // 处理单独的选项字母
+        const optionMatches = [...line.matchAll(/\b([A-D])\b/g)];
+        if (optionMatches.length > 0) {
+          answers.push({
+            question: `选项-${lineNum}`,
+            answer: optionMatches.map(m => m[1]).join(''),
+            content: `选项: ${optionMatches.map(m => m[1]).join('')} (行: ${lineNum})`,
+            pattern: '文本选项模式'
+          });
+        }
+      }
+      
+      return answers;
+    } catch (error) {
+      console.error(`解析文本文件失败: ${filePath}`, error);
       return [];
     }
   }
