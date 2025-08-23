@@ -1072,9 +1072,9 @@ class UniversalAnswerFeature {
   async downloadResponse(uuid) {
     let res = await window.electronAPI.downloadFile(uuid)
     if (res == 1){
-      this.addSuccessLog(`响应体已下载: ${finalFilename}`);
+      this.addSuccessLog(`响应体下载成功`);
     } else if (res == 0) {
-      this.addErrorLog(`下载失败`);
+      this.addErrorLog(`响应体下载失败`);
     }
   }
 

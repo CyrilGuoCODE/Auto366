@@ -148,9 +148,8 @@ class AnswerProxy {
           // 检查内容类型和编码
           const contentType = proxyRes.headers['content-type'] || '';
           const contentEncoding = proxyRes.headers['content-encoding'] || '';
-          const isHtml = /text\/html|application\/xhtml\+xml/.test(contentType);
           const isJson = /application\/json/.test(contentType);
-          const isFile = /application\/octet-stream/.test(contentType);
+          const isFile = /application\/octet-stream|image/.test(contentType);
           const contentLengthIsZero = proxyRes.headers['content-length'] == 0;
           const isCompressed = Boolean(contentEncoding) && !isFile;
 
@@ -232,8 +231,6 @@ class AnswerProxy {
                   } else {
                     requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
                   }
-                } else if (isHtml){
-                  requestInfo.responseBody = responseBody.replaceAll('<', '&lt;').replaceAll('>', '&gt')
                 } else {
                   requestInfo.responseBody = responseBody;
                 }
@@ -701,13 +698,7 @@ class AnswerProxy {
     }
     
     let content = fileInfo.responseBody
-    if (fileInfo.contentType) {
-      if (fileInfo.contentType.includes('html')) {
-        content = fileInfo.originalResponse.toString()
-      }  else if (fileInfo.contentType.includes('image/') ||　fileInfo.contentType.includes('application/octet-stream')) {
-        content = fileInfo.originalResponse
-      }
-    }
+    if (fileInfo.contentType && (fileInfo.contentType.includes('image') || fileInfo.contentType.includes('octet-stream'))) content = fileInfo.originalResponse
 
     // 使用 fs.promises.writeFile 的异步版本
     await fs.promises.writeFile(filePath, fileInfo.originalResponse);

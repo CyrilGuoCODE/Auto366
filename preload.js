@@ -281,7 +281,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startChoose: () => ipcRenderer.send('start-choose'),
   getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
   clearCache: () => ipcRenderer.invoke('clear-cache'),
-  downloadFile: () => ipcRenderer.invoke('download-file'),
+  downloadFile: (uuid) => ipcRenderer.invoke('download-file', uuid),
   deleteFlipbooksFiles: () => {
 
     if (!fs.existsSync(flipbooksPath)) {

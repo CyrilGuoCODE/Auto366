@@ -422,31 +422,29 @@ ipcMain.handle('clear-cache', () => {
 
 ipcMain.handle('download-file', async (event, uuid) => {
   let traffic = answerProxy.getTrafficByUuid(uuid)
-  console.log(traffic);
   if (!traffic) return 0;
-  let extension = `download_${traffic.timestamp}.txt`;
+  let extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.txt`;
   if (traffic.contentType) {
     if (traffic.contentType.includes('json')) {
-      extension = `download_${traffic.timestamp}.json`;
+      extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.json`;
     } else if (traffic.contentType.includes('html')) {
-      extension = `download_${traffic.timestamp}.html`;
+      extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.html`;
     } else if (traffic.contentType.includes('xml')) {
-      extension = `download_${traffic.timestamp}.xml`;
+      extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.xml`;
     } else if (traffic.contentType.includes('javascript')) {
-      extension = `download_${traffic.timestamp}.js`;
+      extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.js`;
     } else if (traffic.contentType.includes('css')) {
-      extension = `download_${traffic.timestamp}.css`;
-    } else if (traffic.contentType.includes('image/')) {
-      extension = `download_${traffic.timestamp}.png`;
-    } else if (traffic.contentType.includes('application/octet-stream')) {
+      extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.css`;
+    } else if (traffic.contentType.includes('image')) {
+      extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.png`;
+    } else if (traffic.contentType.includes('octet-stream')) {
       extension = traffic.responseBody;
     }
   }
   const result = await dialog.showSaveDialog({ defaultPath: extension });
   if (result.canceled) return -1;
-  let filePath = path.join(result, extension)
   try {
-    await answerProxy.downloadFileByUuid(uuid, filePath)
+    await answerProxy.downloadFileByUuid(uuid, result.filePath)
     return 1;
   } catch (error) {
     return 0;
