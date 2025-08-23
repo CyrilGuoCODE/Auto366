@@ -571,7 +571,39 @@ class AnswerProxy {
     const answers = [];
 
     try {
-      const jsonData = JSON.parse(content);
+      let jsonData;
+      
+      // 首先尝试直接解析为JSON
+      try {
+        jsonData = JSON.parse(content);
+      } catch (e) {
+        // 如果直接解析失败，尝试作为JavaScript文件处理
+        // 提取pageConfig变量赋值语句
+        const pageConfigMatch = content.match(/var pageConfig\s*=\s*({.+?});?$/s);
+        if (pageConfigMatch && pageConfigMatch[1]) {
+          // 尝试解析pageConfig中的JSON内容
+          try {
+            jsonData = JSON.parse(pageConfigMatch[1]);
+          } catch (e2) {
+            // 如果还是失败，尝试移除可能的BOM和注释
+            const cleanContent = pageConfigMatch[1]
+              .replace(/\/\*[\s\S]*?\*\//g, '') // 移除多行注释
+              .replace(/\/\/.*$/gm, '') // 移除单行注释
+              .replace(/\s+/g, ' ') // 合并空白字符
+              .trim();
+            
+            try {
+              jsonData = JSON.parse(cleanContent);
+            } catch (e3) {
+              console.error(`解析JavaScript文件中的JSON数据失败: ${filePath}`, e3);
+              return [];
+            }
+          }
+        } else {
+          console.error(`无法从JavaScript文件中提取pageConfig变量: ${filePath}`);
+          return [];
+        }
+      }
 
       // 处理句子跟读题型
       if (jsonData.Data && jsonData.Data.sentences) {
@@ -604,6 +636,7 @@ class AnswerProxy {
       // 处理听后回答题型（展示答案）
       if (jsonData.Data && jsonData.Data.questions_list) {
         jsonData.Data.questions_list.forEach((question, index) => {
+          // 检查是否有answer_text和question_text
           if (question.answer_text && question.question_text) {
             answers.push({
               question: index + 1,
@@ -611,6 +644,27 @@ class AnswerProxy {
               content: `题目: ${question.question_text}\n答案: ${question.answer_text}`,
               pattern: '听后回答模式'
             });
+          }
+          // 如果没有answer_text但有question_text，可能是听后回答题型
+          else if (question.question_text) {
+            // 尝试从分析文本中提取答案
+            let answerText = "";
+            if (question.analysis) {
+              // 尝试从分析文本中提取可能的答案
+              const answerMatch = question.analysis.match(/<b>(.*?)<\/b>/);
+              if (answerMatch && answerMatch[1]) {
+                answerText = answerMatch[1].trim();
+              }
+            }
+            
+            if (answerText) {
+              answers.push({
+                question: index + 1,
+                answer: answerText,
+                content: `题目: ${question.question_text}\n答案: ${answerText}`,
+                pattern: '听后回答模式(从分析中提取)'
+              });
+            }
           }
         });
       }
@@ -632,6 +686,7 @@ class AnswerProxy {
       // 处理听后选择题型（展示答案）
       if (jsonData.Data && jsonData.Data.questions_list) {
         jsonData.Data.questions_list.forEach((question, index) => {
+          // 检查是否有answer_text和options
           if (question.answer_text && question.options) {
             const optionsText = question.options.map(opt => `${opt.id}: ${opt.content}`).join("；");
             answers.push({
@@ -641,6 +696,93 @@ class AnswerProxy {
               pattern: '听后选择模式'
             });
           }
+          // 如果没有answer_text但有options和question_text，可能是选择题题型
+          else if (question.options && question.question_text) {
+            // 尝试从分析文本中提取答案
+            let answerText = "";
+            
+            // 首先尝试从analysis中提取答案
+            if (question.analysis) {
+              // 查找分析文本中的选项标识 (A, B, C, D)
+              const answerMatch = question.analysis.match(/<b>.*?([A-D]) .*?<\/b>/);
+              if (answerMatch && answerMatch[1]) {
+                answerText = answerMatch[1];
+              }
+              // 如果没有找到，尝试从文本中提取可能的答案
+              else {
+                const textMatch = question.analysis.match(/<b>(.*?)<\/b>/);
+                if (textMatch && textMatch[1]) {
+                  answerText = textMatch[1].trim();
+                }
+                // 尝试从文本中提取选项标识
+                else {
+                  const optionMatch = question.analysis.match(/\b([A-D])\b/);
+                  if (optionMatch && optionMatch[1]) {
+                    answerText = optionMatch[1];
+                  }
+                }
+              }
+            }
+            
+            // 如果从analysis中没找到答案，尝试从其他可能的字段中获取
+            if (!answerText && question.knowledge) {
+              answerText = question.knowledge;
+            }
+            
+            // 如果还是没有找到答案，尝试根据选项内容推断
+            if (!answerText && question.options) {
+              // 查找选项中的关键信息
+              const optionTexts = question.options.map(opt => opt.content.toLowerCase());
+              const questionText = question.question_text.toLowerCase();
+              
+              // 尝试找到与题目最相关的选项
+              for (let i = 0; i < optionTexts.length; i++) {
+                // 检查选项内容是否包含在题目中
+                if (questionText.includes(optionTexts[i].substring(0, 15))) {
+                  answerText = String.fromCharCode(65 + i); // A, B, C, D
+                  break;
+                }
+              }
+              
+              // 如果还是没找到，尝试分析题目中的关键词
+              if (!answerText) {
+                // 提取题目中的关键词（名词、动词等）
+                const keywords = questionText.match(/\b(\w{4,})\b/g) || [];
+                
+                // 检查哪个选项包含最多的关键词
+                let maxMatch = 0;
+                let bestOption = 0;
+                
+                for (let i = 0; i < optionTexts.length; i++) {
+                  let matchCount = 0;
+                  keywords.forEach(keyword => {
+                    if (optionTexts[i].includes(keyword)) {
+                      matchCount++;
+                    }
+                  });
+                  
+                  if (matchCount > maxMatch) {
+                    maxMatch = matchCount;
+                    bestOption = i;
+                  }
+                }
+                
+                if (maxMatch > 0) {
+                  answerText = String.fromCharCode(65 + bestOption); // A, B, C, D
+                }
+              }
+            }
+            
+            if (answerText) {
+              const optionsText = question.options.map(opt => `${opt.id}: ${opt.content}`).join("；");
+              answers.push({
+                question: index + 1,
+                answer: answerText,
+                content: `题目: ${question.question_text}\n选项: ${optionsText}\n答案: ${answerText}`,
+                pattern: '听后选择模式(从分析中提取)'
+              });
+            }
+          }
         });
       }
 
@@ -649,18 +791,36 @@ class AnswerProxy {
         const qObj = jsonData.questionObj;
         
         // 处理听后回答题目
-        if (qObj.question_type === 12 && qObj.answer_text) {
-          answers.push({
-            question: "听后回答",
-            answer: qObj.answer_text,
-            content: `题目: ${qObj.question_text}\n答案: ${qObj.answer_text}`,
-            pattern: '听后回答模式'
-          });
+        if (qObj.question_type === 12) {
+          // 如果有answer_text，直接使用
+          if (qObj.answer_text) {
+            answers.push({
+              question: "听后回答",
+              answer: qObj.answer_text,
+              content: `题目: ${qObj.question_text}\n答案: ${qObj.answer_text}`,
+              pattern: '听后回答模式'
+            });
+          }
+          // 如果没有answer_text，尝试从分析文本中提取
+          else if (qObj.analysis) {
+            // 尝试从分析文本中提取可能的答案
+            const answerMatch = qObj.analysis.match(/<b>(.*?)<\/b>/);
+            if (answerMatch && answerMatch[1]) {
+              const answerText = answerMatch[1].trim();
+              answers.push({
+                question: "听后回答",
+                answer: answerText,
+                content: `题目: ${qObj.question_text}\n答案: ${answerText}`,
+                pattern: '听后回答模式(从分析中提取)'
+              });
+            }
+          }
         }
         
         // 处理听后选择题目
         if (qObj.question_type === 1 && qObj.questions_list) {
           qObj.questions_list.forEach((q, index) => {
+            // 检查是否有answer_text和options
             if (q.answer_text && q.options) {
               const optionsText = q.options.map(opt => `${opt.id}: ${opt.content}`).join("；");
               answers.push({
@@ -669,6 +829,93 @@ class AnswerProxy {
                 content: `题目: ${q.question_text}\n选项: ${optionsText}\n答案: ${q.answer_text}`,
                 pattern: '听后选择模式'
               });
+            }
+            // 如果没有answer_text但有options和question_text，可能是选择题题型
+            else if (q.options && q.question_text) {
+              // 尝试从分析文本中提取答案
+              let answerText = "";
+              
+              // 首先尝试从analysis中提取答案
+              if (q.analysis) {
+                // 查找分析文本中的选项标识 (A, B, C, D)
+                const answerMatch = q.analysis.match(/<b>.*?([A-D]) .*?<\/b>/);
+                if (answerMatch && answerMatch[1]) {
+                  answerText = answerMatch[1];
+                }
+                // 如果没有找到，尝试从文本中提取可能的答案
+                else {
+                  const textMatch = q.analysis.match(/<b>(.*?)<\/b>/);
+                  if (textMatch && textMatch[1]) {
+                    answerText = textMatch[1].trim();
+                  }
+                  // 尝试从文本中提取选项标识
+                  else {
+                    const optionMatch = q.analysis.match(/\b([A-D])\b/);
+                    if (optionMatch && optionMatch[1]) {
+                      answerText = optionMatch[1];
+                    }
+                  }
+                }
+              }
+              
+              // 如果从analysis中没找到答案，尝试从其他可能的字段中获取
+              if (!answerText && q.knowledge) {
+                answerText = q.knowledge;
+              }
+              
+              // 如果还是没有找到答案，尝试根据选项内容推断
+              if (!answerText && q.options) {
+                // 查找选项中的关键信息
+                const optionTexts = q.options.map(opt => opt.content.toLowerCase());
+                const questionText = q.question_text.toLowerCase();
+                
+                // 尝试找到与题目最相关的选项
+                for (let i = 0; i < optionTexts.length; i++) {
+                  // 检查选项内容是否包含在题目中
+                  if (questionText.includes(optionTexts[i].substring(0, 15))) {
+                    answerText = String.fromCharCode(65 + i); // A, B, C, D
+                    break;
+                  }
+                }
+                
+                // 如果还是没找到，尝试分析题目中的关键词
+                if (!answerText) {
+                  // 提取题目中的关键词（名词、动词等）
+                  const keywords = questionText.match(/\b(\w{4,})\b/g) || [];
+                  
+                  // 检查哪个选项包含最多的关键词
+                  let maxMatch = 0;
+                  let bestOption = 0;
+                  
+                  for (let i = 0; i < optionTexts.length; i++) {
+                    let matchCount = 0;
+                    keywords.forEach(keyword => {
+                      if (optionTexts[i].includes(keyword)) {
+                        matchCount++;
+                      }
+                    });
+                    
+                    if (matchCount > maxMatch) {
+                      maxMatch = matchCount;
+                      bestOption = i;
+                    }
+                  }
+                  
+                  if (maxMatch > 0) {
+                    answerText = String.fromCharCode(65 + bestOption); // A, B, C, D
+                  }
+                }
+              }
+              
+              if (answerText) {
+                const optionsText = q.options.map(opt => `${opt.id}: ${opt.content}`).join("；");
+                answers.push({
+                  question: `听后选择-${index + 1}`,
+                  answer: answerText,
+                  content: `题目: ${q.question_text}\n选项: ${optionsText}\n答案: ${answerText}`,
+                  pattern: '听后选择模式(从分析中提取)'
+                });
+              }
             }
           });
         }
