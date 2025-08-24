@@ -551,7 +551,7 @@ class AnswerProxy {
         if (varMatch && varMatch[1]) {
           jsonContent = varMatch[1];
         }
-        return this.extractFromJS(content, filePath);
+        return this.extractFromJS(jsonContent, filePath);
       } else if (ext === '.xml') {
         return this.extractFromXML(content, filePath);
       } else if (ext === '.txt') {
@@ -614,206 +614,119 @@ class AnswerProxy {
 	}
   }
   
-  // 解析问答型答案
-  parseQAType(fileContent) {
+  parseQuestionFile(fileContent) {
       try {
           const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
           const questionObj = config.questionObj || {};
           const results = [];
   
-          if (questionObj.questions_list) {
+          // 1. 检查是否为听后选择类型
+          if (questionObj.questions_list && questionObj.questions_list[0]?.options) {
+              const type = '听后选择';
               questionObj.questions_list.forEach((question, index) => {
+                  if (question.answer_text && question.options) {
+                      const correctOption = question.options.find(
+                          opt => opt.id === question.answer_text
+                      );
+                      if (correctOption) {
+                          results.push({
+                              question: `Q${index + 1}`,
+                              answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+                              content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+                              pattern: type
+                          });
+                      }
+                  }
+              });
+              if (results.length > 0) return results;
+          }
+  
+          // 2. 检查是否为听后回答类型
+          if (questionObj.questions_list && questionObj.questions_list[0]?.record_speak) {
+              const type = '听后回答';
+              questionObj.questions_list.forEach((question, qIndex) => {
                   if (question.record_speak) {
                       const answers = question.record_speak
                           .filter(item => item.show === "1" || item.show === 1)
                           .map(item => item.content?.trim() || '')
                           .filter(content => content);
   
-                      answers.forEach((answer, answerIndex) => {
+                      answers.forEach((answer, aIndex) => {
                           results.push({
-                              question: index + 1,
+                              question: `Q${qIndex + 1}-A${aIndex + 1}`,
                               answer: answer,
                               content: `请回答: ${answer}`,
-                              pattern: '听后回答型'
+                              pattern: type
                           });
                       });
                   }
               });
+              if (results.length > 0) return results;
           }
   
-          return results;
+          // 3. 检查是否为听后转述类型
+          if (questionObj.record_speak && questionObj.record_speak.length > 0) {
+              const type = '听后转述';
+              questionObj.record_speak.forEach((item, index) => {
+                  if (item.content) {
+                      // 处理多行转述内容
+                      const contentLines = item.content.split('\n').filter(line => line.trim());
+                      contentLines.forEach((line, lineIndex) => {
+                          results.push({
+                              question: `转述-${index + 1}-${lineIndex + 1}`,
+                              answer: line.trim(),
+                              content: `请回答: ${line.trim()}`,
+                              pattern: type
+                          });
+                      });
+                  }
+              });
+              if (results.length > 0) return results;
+          }
   
-      } catch (error) {
-          return [];
-      }
-  }
-  
-  // 解析朗读型答案
-  parseReadType(fileContent) {
-      try {
-          const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
-          const questionObj = config.questionObj || {};
-          const results = [];
-  
+          // 4. 检查是否为朗读短文类型
           if (questionObj.record_follow_read?.paragraph_list) {
+              const type = '朗读短文';
               let sentenceIndex = 1;
               questionObj.record_follow_read.paragraph_list.forEach((paragraph, paraIndex) => {
                   if (paragraph.sentences) {
                       paragraph.sentences.forEach((sentence, sentIndex) => {
                           if (sentence.content_en) {
                               results.push({
-                                  question: paraIndex + 1,
+                                  question: `朗读-P${paraIndex + 1}-S${sentenceIndex}`,
                                   answer: sentence.content_en.trim(),
                                   content: `请回答: ${sentence.content_en.trim()}`,
-                                  pattern: '朗读文本型'
+                                  pattern: type
                               });
                               sentenceIndex++;
                           }
                       });
                   }
               });
+              if (results.length > 0) return results;
           }
   
-          // 备用：从question_text提取
-          if (results.length === 0 && questionObj.question_text) {
-              const text = questionObj.question_text.replace(/<[^>]*>/g, '').trim();
-              if (text) {
-                  const sentences = text.split(/[.!?]。/).filter(s => s.trim());
-                  sentences.forEach((sentence, index) => {
-                      results.push({
-                          question: index + 1,
-                          answer: sentence.trim(),
-                          content: `请回答: ${sentence.trim()}`,
-                          pattern: '朗读文本型'
-                      });
-                  });
-              }
-          }
-  
-          return results;
-  
-      } catch (error) {
-          return [];
-      }
-  }
-  
-  // 解析选择型答案
-  parseChoiceType(fileContent) {
-      try {
-          const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
-          const questionObj = config.questionObj || {};
-          const results = [];
-  
-          if (questionObj.questions_list) {
-              questionObj.questions_list.forEach((question, index) => {
-                  if (question.answer_text && question.options) {
-                      const correctOption = question.options.find(
-                          opt => opt.id === question.answer_text
-                      );
-                      
-                      if (correctOption) {
-                          results.push({
-                              question: index + 1,
-                              answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-                              content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-                              pattern: '听后选择型'
-                          });
-                      }
-                  }
-              });
-          }
-  
-          return results;
-  
-      } catch (error) {
-          return [];
-      }
-  }
-  
-  // 解析转述型答案
-  parseRetellType(fileContent) {
-      try {
-          const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
-          const questionObj = config.questionObj || {};
-          const results = [];
-  
-          // 从record_speak获取
-          if (questionObj.record_speak) {
-              questionObj.record_speak.forEach((item, index) => {
-                  if (item.content) {
-                      results.push({
-                          question: index + 1,
-                          answer: item.content.trim(),
-                          content: `请回答: ${item.content.trim()}`,
-                          pattern: '听后转述型'
-                      });
-                  }
-              });
-          }
-  
-          // 从analysis获取参考答案
-          if (results.length === 0 && questionObj.analysis) {
+          // 5. 备用方案：从analysis中提取答案
+          if (questionObj.analysis) {
               const cleanAnalysis = questionObj.analysis.replace(/<[^>]*>/g, '').trim();
               if (cleanAnalysis) {
-                  // 提取参考答案部分
-                  const referenceParts = cleanAnalysis.split('参考答案')
-                      .filter(part => part.includes(':'))
-                      .map(part => {
-                          const answerPart = part.split(':')[1]?.trim();
-                          return answerPart || part.trim();
-                      })
-                      .filter(part => part && part.length > 10); // 过滤掉太短的内容
-  
-                  if (referenceParts.length > 0) {
-                      referenceParts.forEach((part, index) => {
-                          results.push({
-                              question: index + 1,
-                              answer: part,
-                              content: `请回答: ${part}`,
-                              pattern: '听后转述型'
-                          });
-                      });
-                  } else {
-                      results.push({
-                          question: 1,
-                          answer: cleanAnalysis,
-                          content: `请回答: ${cleanAnalysis}`,
-                          pattern: '听后转述型'
-                      });
-                  }
-              }
-          }
-  
-          // 从question_text获取
-          if (results.length === 0 && questionObj.question_text) {
-              const text = questionObj.question_text.replace(/<[^>]*>/g, '').trim();
-              if (text) {
                   results.push({
-                      question: 1,
-                      answer: text,
-                      content: `请回答: ${text}`,
-                      pattern: '听后转述型'
+                      question: '分析答案',
+                      answer: cleanAnalysis,
+                      content: `请回答: ${cleanAnalysis}`,
+                      pattern: '分析型'
                   });
+                  return results;
               }
           }
   
-          return results;
+          // 6. 如果以上都没有找到，返回默认提示
+          return [];
   
       } catch (error) {
+  		console.error(error)
           return [];
       }
-  }
-  
-  // 自动检测并解析（供参考）
-  autoParseAnswerFile(fileContent) {
-      const results = [
-          ...parseQAType(fileContent),
-          ...parseReadType(fileContent),
-          ...parseChoiceType(fileContent),
-          ...parseRetellType(fileContent)
-      ];
-      
-      return results;
   }
 
   extractFromJS(content, filePath) {
@@ -828,7 +741,7 @@ class AnswerProxy {
 	    return []
 	  }
 
-      return autoParseAnswerFile(content)
+      return this.parseQuestionFile(content)
     } catch (error) {
       console.error(`解析JS文件失败: ${filePath}`, error);
       return [];
