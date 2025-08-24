@@ -1136,7 +1136,15 @@ class UniversalAnswerFeature {
       return;
     }
 
-    // 按来源文件分组显示答案
+    // 按题型排序：听后选择 -> 听后回答 -> 听后转述 -> 朗读短文
+    const patternOrder = {
+      '听后选择': 1,
+      '听后回答': 2,
+      '听后转述': 3,
+      '朗读短文': 4
+    };
+
+    // 先按来源文件分组，再按题型排序
     const answersByFile = {};
     data.answers.forEach(answer => {
       const sourceFile = answer.sourceFile || '未知文件';
@@ -1146,7 +1154,7 @@ class UniversalAnswerFeature {
       answersByFile[sourceFile].push(answer);
     });
 
-    // 显示每个文件的答案
+    // 显示每个文件的答案，按题型排序
     Object.keys(answersByFile).forEach(sourceFile => {
       const fileSection = document.createElement('div');
       fileSection.className = 'file-section';
@@ -1159,7 +1167,14 @@ class UniversalAnswerFeature {
       `;
       fileSection.appendChild(fileHeader);
 
-      answersByFile[sourceFile].forEach((answer, index) => {
+      // 按题型排序答案
+      const sortedAnswers = answersByFile[sourceFile].sort((a, b) => {
+        const patternA = patternOrder[a.pattern] || 99;
+        const patternB = patternOrder[b.pattern] || 99;
+        return patternA - patternB;
+      });
+
+      sortedAnswers.forEach((answer, index) => {
         const answerItem = document.createElement('div');
         answerItem.className = 'answer-item';
         answerItem.innerHTML = `

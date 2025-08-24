@@ -638,7 +638,6 @@ class AnswerProxy {
                       }
                   }
               });
-              if (results.length > 0) return results;
           }
   
           // 2. 检查是否为听后回答类型
@@ -661,7 +660,6 @@ class AnswerProxy {
                       });
                   }
               });
-              if (results.length > 0) return results;
           }
   
           // 3. 检查是否为听后转述类型
@@ -681,7 +679,6 @@ class AnswerProxy {
                       });
                   }
               });
-              if (results.length > 0) return results;
           }
   
           // 4. 检查是否为朗读短文类型
@@ -703,11 +700,10 @@ class AnswerProxy {
                       });
                   }
               });
-              if (results.length > 0) return results;
           }
   
           // 5. 备用方案：从analysis中提取答案
-          if (questionObj.analysis) {
+          if (questionObj.analysis && results.length === 0) {
               const cleanAnalysis = questionObj.analysis.replace(/<[^>]*>/g, '').trim();
               if (cleanAnalysis) {
                   results.push({
@@ -716,12 +712,11 @@ class AnswerProxy {
                       content: `请回答: ${cleanAnalysis}`,
                       pattern: '分析型'
                   });
-                  return results;
               }
           }
-  
-          // 6. 如果以上都没有找到，返回默认提示
-          return [];
+
+          // 6. 返回所有收集到的结果
+          return results;
   
       } catch (error) {
   		console.error(error)
