@@ -646,113 +646,255 @@ class AnswerProxy {
   }
   
   parseQuestionFile(fileContent) {
-      try {
-          const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
-          const questionObj = config.questionObj || {};
-          const results = [];
+    try {
+      const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
+      const questionObj = config.questionObj || {};
+      const results = [];
   
-          // 1. 检查是否为听后选择类型
-          if (questionObj.questions_list && questionObj.questions_list[0]?.options) {
-              const type = '听后选择';
-              questionObj.questions_list.forEach((question, index) => {
-                  if (question.answer_text && question.options) {
-                      const correctOption = question.options.find(
-                          opt => opt.id === question.answer_text
-                      );
-                      if (correctOption) {
-                          results.push({
-                              question: `Q${index + 1}`,
-                              answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-                              content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-                              pattern: type
-                          });
-                      }
-                  }
-              });
-          }
-  
-          // 2. 检查是否为听后回答类型
-          if (questionObj.questions_list && questionObj.questions_list[0]?.record_speak) {
-              const type = '听后回答';
-              questionObj.questions_list.forEach((question, qIndex) => {
-                  if (question.record_speak) {
-                      const answers = question.record_speak
-                          .filter(item => item.show === "1" || item.show === 1)
-                          .map(item => item.content?.trim() || '')
-                          .filter(content => content);
-  
-                      answers.forEach((answer, aIndex) => {
-                          results.push({
-                              question: `Q${qIndex + 1}-A${aIndex + 1}`,
-                              answer: answer,
-                              content: `请回答: ${answer}`,
-                              pattern: type
-                          });
-                      });
-                  }
-              });
-          }
-  
-          // 3. 检查是否为听后转述类型
-          if (questionObj.record_speak && questionObj.record_speak.length > 0) {
-              const type = '听后转述';
-              questionObj.record_speak.forEach((item, index) => {
-                  if (item.content) {
-                      // 处理多行转述内容
-                      const contentLines = item.content.split('\n').filter(line => line.trim());
-                      contentLines.forEach((line, lineIndex) => {
-                          results.push({
-                              question: `转述-${index + 1}-${lineIndex + 1}`,
-                              answer: line.trim(),
-                              content: `请回答: ${line.trim()}`,
-                              pattern: type
-                          });
-                      });
-                  }
-              });
-          }
-  
-          // 4. 检查是否为朗读短文类型
-          if (questionObj.record_follow_read?.paragraph_list) {
-              const type = '朗读短文';
-              let sentenceIndex = 1;
-              questionObj.record_follow_read.paragraph_list.forEach((paragraph, paraIndex) => {
-                  if (paragraph.sentences) {
-                      paragraph.sentences.forEach((sentence, sentIndex) => {
-                          if (sentence.content_en) {
-                              results.push({
-                                  question: `朗读-P${paraIndex + 1}-S${sentenceIndex}`,
-                                  answer: sentence.content_en.trim(),
-                                  content: `请回答: ${sentence.content_en.trim()}`,
-                                  pattern: type
-                              });
-                              sentenceIndex++;
-                          }
-                      });
-                  }
-              });
-          }
-  
-          // 5. 备用方案：从analysis中提取答案
-          if (questionObj.analysis && results.length === 0) {
-              const cleanAnalysis = questionObj.analysis.replace(/<[^>]*>/g, '').trim();
-              if (cleanAnalysis) {
-                  results.push({
-                      question: '分析答案',
-                      answer: cleanAnalysis,
-                      content: `请回答: ${cleanAnalysis}`,
-                      pattern: '分析型'
-                  });
-              }
-          }
-
-          // 6. 返回所有收集到的结果
-          return results;
-  
-      } catch (error) {
-  		console.error(error)
-          return [];
+      // 1. 精确检测类型
+      const detectedType = this.detectExactType(questionObj);
+      
+      // 2. 根据类型调用相应的解析器
+      switch(detectedType) {
+        case '听后选择':
+          return this.parseChoiceQuestions(questionObj);
+        case '听后回答':
+          return this.parseAnswerQuestions(questionObj);
+        case '听后转述':
+          return this.parseRetellContent(questionObj);
+        case '朗读短文':
+          return this.parseReadingContent(questionObj);
+        default:
+          return this.parseFallback(questionObj);
       }
+  
+    } catch (error) {
+	  console.error(error)
+      return [];
+    }
+  }
+  
+  // 精确的类型检测
+  detectExactType(questionObj) {
+    // 听后选择：有questions_list且包含options
+    if (questionObj.questions_list && questionObj.questions_list.length > 0) {
+      const firstQuestion = questionObj.questions_list[0];
+      if (firstQuestion.options && firstQuestion.options.length > 0) {
+        return '听后选择';
+      }
+    }
+    
+    // 听后回答：有record_speak且包含work/show属性，或者questions_list中的record_speak有这些属性
+    if (this.hasAnswerAttributes(questionObj)) {
+      return '听后回答';
+    }
+    
+    // 听后转述：有record_speak但没有work/show属性，且内容较长
+    if (questionObj.record_speak && questionObj.record_speak.length > 0) {
+      const firstItem = questionObj.record_speak[0];
+      if (firstItem && !firstItem.work && !firstItem.show && 
+        firstItem.content && firstItem.content.length > 100) {
+        return '听后转述';
+      }
+    }
+    
+    // 朗读短文：有record_follow_read或者analysis中包含停顿符号
+    if (questionObj.record_follow_read || 
+      (questionObj.analysis && /\/\//.test(questionObj.analysis))) {
+      return '朗读短文';
+    }
+    
+    return '未知';
+  }
+  
+  hasAnswerAttributes(questionObj) {
+    // 检查顶层的record_speak
+    if (questionObj.record_speak && questionObj.record_speak.length > 0) {
+      const firstItem = questionObj.record_speak[0];
+      if (firstItem && (firstItem.work === "1" || firstItem.work === 1 || 
+        firstItem.show === "1" || firstItem.show === 1)) {
+        return true;
+      }
+    }
+    
+    // 检查questions_list中的record_speak
+    if (questionObj.questions_list && questionObj.questions_list.length > 0) {
+      for (const question of questionObj.questions_list) {
+        if (question.record_speak && question.record_speak.length > 0) {
+          const firstRecord = question.record_speak[0];
+          if (firstRecord && (firstRecord.work === "1" || firstRecord.work === 1 || 
+            firstRecord.show === "1" || firstRecord.show === 1)) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // 解析听后选择题
+  parseChoiceQuestions(questionObj) {
+    const results = [];
+    questionObj.questions_list.forEach((question, index) => {
+      if (question.answer_text && question.options) {
+        const correctOption = question.options.find(
+          opt => opt.id === question.answer_text
+        );
+        if (correctOption) {
+          results.push({
+            question: `第${index + 1}题`,
+            answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+            content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+            pattern: '听后选择'
+          });
+        }
+      }
+    });
+    return results;
+  }
+  
+  // 解析听后回答题
+  parseAnswerQuestions(questionObj) {
+    const results = [];
+    
+    // 处理questions_list中的回答
+    if (questionObj.questions_list) {
+      questionObj.questions_list.forEach((question, qIndex) => {
+        if (question.record_speak) {
+          const answers = question.record_speak
+            .filter(item => item.show === "1" || item.show === 1)
+            .map(item => item.content?.trim() || '')
+            .filter(content => content && content !== '<answers/>');
+          
+          answers.forEach((answer, aIndex) => {
+            results.push({
+              question: `第${qIndex + 1}-${aIndex + 1}题`,
+              answer: answer,
+              content: `请回答: ${answer}`,
+              pattern: '听后回答'
+            });
+          });
+        }
+      });
+    }
+    
+    // 处理顶层的record_speak（单个问题的情况）
+    if (questionObj.record_speak && results.length === 0) {
+      const answers = questionObj.record_speak
+        .filter(item => item.show === "1" || item.show === 1)
+        .map(item => item.content?.trim() || '')
+        .filter(content => content && content !== '<answers/>');
+      
+      answers.forEach((answer, index) => {
+        results.push({
+          question: `第${index + 1}题`,
+          answer: answer,
+          content: `请回答: ${answer}`,
+          pattern: '听后回答'
+        });
+      });
+    }
+    
+    return results;
+  }
+  
+  // 解析听后转述
+  parseRetellContent(questionObj) {
+    const results = [];
+    
+    if (questionObj.record_speak && questionObj.record_speak.length > 0) {
+      questionObj.record_speak.forEach((item, itemIndex) => {
+        if (item.content) {
+          // 按换行符分割内容，每个段落作为一个答案
+          const paragraphs = item.content.split('\n')
+            .map(p => p.trim())
+            .filter(p => p.length > 0);
+          
+          paragraphs.forEach((paragraph, pIndex) => {
+            results.push({
+              question: `第${itemIndex + 1}-${pIndex + 1}题`,
+              answer: paragraph,
+              content: `请回答: ${paragraph}`,
+              pattern: '听后转述'
+            });
+          });
+        }
+      });
+    }
+    
+    return results;
+  }
+  
+  // 解析朗读短文
+  parseReadingContent(questionObj) {
+    const results = [];
+    
+    // 优先从analysis中提取带停顿的文本
+    if (questionObj.analysis) {
+      const cleanAnalysis = questionObj.analysis
+        .replace(/<[^>]*>/g, '') // 移除HTML标签
+        .replace(/参考答案[一二一二]：/g, '') // 移除参考答案标记
+        .trim();
+      
+      if (cleanAnalysis) {
+        // 按句号分割但保留原文格式
+        const sentences = cleanAnalysis.split(/[.!?]。/)
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+        
+        sentences.forEach((sentence, index) => {
+          results.push({
+            question: `第${index + 1}题`,
+            answer: sentence,
+            content: `请回答: ${sentence}`,
+            pattern: '朗读短文'
+          });
+        });
+      }
+    }
+    
+    // 如果没有analysis，从record_follow_read中提取
+    if (results.length === 0 && questionObj.record_follow_read?.paragraph_list) {
+      let sentenceCount = 1;
+      questionObj.record_follow_read.paragraph_list.forEach((paragraph) => {
+        if (paragraph.sentences) {
+          paragraph.sentences.forEach((sentence) => {
+            if (sentence.content_en) {
+              results.push({
+                question: `第${sentenceCount}题`,
+                answer: sentence.content_en.trim(),
+                content: `请回答: ${sentence.content_en.trim()}`,
+                pattern: '朗读短文'
+              });
+              sentenceCount++;
+            }
+          });
+        }
+      });
+    }
+    
+    return results;
+  }
+  
+  // 备用解析方案
+  parseFallback(questionObj) {
+    const results = [];
+    
+    // 尝试从各种可能的位置提取答案
+    if (questionObj.analysis) {
+      const text = questionObj.analysis.replace(/<[^>]*>/g, '').trim();
+      if (text) {
+        results.push({
+          question: '第1题',
+          answer: text,
+          content: `请回答: ${text}`,
+          pattern: '分析内容'
+        });
+      }
+    }
+    
+    return results;
   }
 
   extractFromJS(content, filePath) {
