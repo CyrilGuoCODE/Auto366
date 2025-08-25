@@ -1137,7 +1137,44 @@ class UniversalAnswerFeature {
     const container = document.getElementById('answersContainer');
     const processStatus = document.getElementById('processStatus');
 
-    // 更新处理状态
+    this.copyToClipboard = function (text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = 0;
+      document.body.appendChild(textarea);
+      textarea.select();
+
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          const toast = document.createElement('div');
+          toast.className = 'copy-toast show';
+          toast.textContent = '答案已复制到剪贴板！';
+          document.body.appendChild(toast);
+
+          setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+              document.body.removeChild(toast);
+            }, 300);
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('复制失败:', err);
+        const toast = document.createElement('div');
+        toast.className = 'copy-toast error show';
+        toast.textContent = '复制失败，请手动复制';
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          toast.classList.remove('show');
+          setTimeout(() => {
+            document.body.removeChild(toast);
+          }, 300);
+        }, 2000);
+      }
+      document.body.removeChild(textarea);
+    };
     processStatus.textContent = '完成';
     processStatus.className = 'status-value running';
 
@@ -1189,12 +1226,52 @@ class UniversalAnswerFeature {
         sortedAnswers.forEach((answer, index) => {
           const answerItem = document.createElement('div');
           answerItem.className = 'answer-item';
-          answerItem.innerHTML = `
-            <div class="answer-number">第 ${answer.question || index + 1} 题</div>
-            <div class="answer-option">${answer.answer}</div>
-            <div class="answer-content">${answer.content || '暂无内容'}</div>
-            ${answer.pattern ? `<div class="answer-pattern">提取模式: ${answer.pattern}</div>` : ''}
-          `;
+
+          const answerNumber = document.createElement('div');
+          answerNumber.className = 'answer-number';
+          answerNumber.textContent = `第 ${answer.question || index + 1} 题`;
+
+          const answerOption = document.createElement('div');
+          answerOption.className = 'answer-option';
+          answerOption.textContent = answer.answer;
+
+          const answerContent = document.createElement('div');
+          answerContent.className = 'answer-content';
+          answerContent.textContent = answer.content || '暂无内容';
+
+          const answerPattern = document.createElement('div');
+          answerPattern.className = 'answer-pattern';
+          answerPattern.textContent = `提取模式: ${answer.pattern}`;
+
+          const copyBtn = document.createElement('div');
+          copyBtn.className = 'copy-btn';
+          copyBtn.innerHTML = '📋 复制';
+          copyBtn.title = '点击复制答案';
+
+          answerOption.dataset.answer = answer.answer;
+          answerContent.dataset.answer = answer.content || '暂无内容';
+
+          answerOption.addEventListener('click', () => {
+            this.copyToClipboard(answer.answer);
+          });
+
+          answerContent.addEventListener('click', () => {
+            this.copyToClipboard(answer.content || '暂无内容');
+          });
+
+          copyBtn.addEventListener('click', () => {
+            const fullAnswer = `${answer.answer}\n${answer.content || ''}`.trim();
+            this.copyToClipboard(fullAnswer);
+          });
+
+          // 组装答案元素
+          answerItem.appendChild(answerNumber);
+          answerItem.appendChild(answerOption);
+          answerItem.appendChild(answerContent);
+          if (answer.pattern) {
+            answerItem.appendChild(answerPattern);
+          }
+          answerItem.appendChild(copyBtn);
           fileSection.appendChild(answerItem);
         });
 
@@ -1234,12 +1311,51 @@ class UniversalAnswerFeature {
           sortedAnswers.forEach((answer, index) => {
             const answerItem = document.createElement('div');
             answerItem.className = 'answer-item';
-            answerItem.innerHTML = `
-              <div class="answer-number">${answer.sourceFile ? `[${answer.sourceFile}]` : ''} 第 ${answer.question || index + 1} 题</div>
-              <div class="answer-option">${answer.answer}</div>
-              <div class="answer-content">${answer.content || '暂无内容'}</div>
-              ${answer.sourceFile ? `<div class="answer-source">来源: ${answer.sourceFile}</div>` : ''}
-            `;
+
+            const answerNumber = document.createElement('div');
+            answerNumber.className = 'answer-number';
+            answerNumber.textContent = `${answer.sourceFile ? `[${answer.sourceFile}]` : ''} 第 ${answer.question || index + 1} 题`;
+
+            const answerOption = document.createElement('div');
+            answerOption.className = 'answer-option';
+            answerOption.textContent = answer.answer;
+
+            const answerContent = document.createElement('div');
+            answerContent.className = 'answer-content';
+            answerContent.textContent = answer.content || '暂无内容';
+
+            const answerSource = document.createElement('div');
+            answerSource.className = 'answer-source';
+            answerSource.textContent = `来源: ${answer.sourceFile}`;
+
+            const copyBtn = document.createElement('div');
+            copyBtn.className = 'copy-btn';
+            copyBtn.innerHTML = '📋 复制';
+            copyBtn.title = '点击复制答案';
+
+            answerOption.dataset.answer = answer.answer;
+            answerContent.dataset.answer = answer.content || '暂无内容';
+
+            answerOption.addEventListener('click', () => {
+              this.copyToClipboard(answer.answer);
+            });
+
+            answerContent.addEventListener('click', () => {
+              this.copyToClipboard(answer.content || '暂无内容');
+            });
+
+            copyBtn.addEventListener('click', () => {
+              const fullAnswer = `${answer.answer}\n${answer.content || ''}`.trim();
+              this.copyToClipboard(fullAnswer);
+            });
+
+            answerItem.appendChild(answerNumber);
+            answerItem.appendChild(answerOption);
+            answerItem.appendChild(answerContent);
+            if (answer.sourceFile) {
+              answerItem.appendChild(answerSource);
+            }
+            answerItem.appendChild(copyBtn);
             patternSection.appendChild(answerItem);
           });
 

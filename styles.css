@@ -829,3 +829,52 @@ button:disabled {
     border-radius: 3px;
     display: inline-block;
 }
+
+/* 复制按钮样式 */
+.copy-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    opacity: 0.8;
+}
+
+.copy-btn:hover {
+    background: #0056b3;
+    opacity: 1;
+}
+
+.answer-item {
+    position: relative;
+}
+
+.copy-toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.copy-toast.show {
+    opacity: 1;
+}
+
+.copy-toast.error {
+    background: #dc3545;
+}
