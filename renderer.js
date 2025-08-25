@@ -1229,7 +1229,7 @@ class UniversalAnswerFeature {
 
           const answerNumber = document.createElement('div');
           answerNumber.className = 'answer-number';
-          answerNumber.textContent = `第 ${answer.question || index + 1} 题`;
+          answerNumber.textContent = answer.question || index + 1;
 
           const answerOption = document.createElement('div');
           answerOption.className = 'answer-option';
@@ -1314,7 +1314,7 @@ class UniversalAnswerFeature {
 
             const answerNumber = document.createElement('div');
             answerNumber.className = 'answer-number';
-            answerNumber.textContent = `${answer.sourceFile ? `[${answer.sourceFile}]` : ''} 第 ${answer.question || index + 1} 题`;
+            answerNumber.textContent = answer.question || index + 1;
 
             const answerOption = document.createElement('div');
             answerOption.className = 'answer-option';

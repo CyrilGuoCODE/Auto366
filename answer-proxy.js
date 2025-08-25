@@ -586,7 +586,7 @@ class AnswerProxy {
         jsonData.Data.sentences.forEach((sentence, index) => {
           if (sentence.text && sentence.text.length > 2) {
             answers.push({
-              question: index + 1,
+              question: `第${index + 1}题`,
               answer: sentence.text,
               content: `请朗读: ${sentence.text}`,
               pattern: 'JSON句子跟读模式'
@@ -600,7 +600,7 @@ class AnswerProxy {
         jsonData.Data.words.forEach((word, index) => {
           if (word && word.length > 1) {
             answers.push({
-              question: index + 1,
+              question: `第${index + 1}题`,
               answer: word,
               content: `请朗读单词: ${word}`,
               pattern: 'JSON单词发音模式'
@@ -618,7 +618,7 @@ class AnswerProxy {
         jsonData.answers.forEach((answer, index) => {
           if (answer && (typeof answer === 'string' || (typeof answer === 'object' && answer.content))) {
             answers.push({
-              question: index + 1,
+              question: `第${index + 1}题`,
               answer: typeof answer === 'string' ? answer : (answer.content || answer.answer || ''),
               content: typeof answer === 'string' ? answer : (answer.content || answer.answer || ''),
               pattern: 'JSON答案数组模式'
@@ -631,7 +631,7 @@ class AnswerProxy {
         jsonData.questions.forEach((question, index) => {
           if (question && question.answer) {
             answers.push({
-              question: index + 1,
+              question: `第${index + 1}题`,
               answer: question.answer,
               content: `题目: ${question.question || '未知题目'}\n答案: ${question.answer}`,
               pattern: 'JSON题目模式'
@@ -813,7 +813,7 @@ class AnswerProxy {
           
           paragraphs.forEach((paragraph, pIndex) => {
             results.push({
-              question: `第${itemIndex + 1}-${pIndex + 1}题`,
+              question: `第${itemIndex + 1}题-${pIndex == 0 ? '原文' : `参考答案${pIndex}`}`,
               answer: paragraph,
               content: `请回答: ${paragraph}`,
               pattern: '听后转述'
