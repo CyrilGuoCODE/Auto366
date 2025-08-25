@@ -608,10 +608,41 @@ class AnswerProxy {
           }
         });
       }
+
+      if (jsonData.questionObj) {
+        const questionAnswers = this.parseQuestionFile(jsonData);
+        answers.push(...questionAnswers);
+      }
+
+      if (Array.isArray(jsonData.answers)) {
+        jsonData.answers.forEach((answer, index) => {
+          if (answer && (typeof answer === 'string' || (typeof answer === 'object' && answer.content))) {
+            answers.push({
+              question: index + 1,
+              answer: typeof answer === 'string' ? answer : (answer.content || answer.answer || ''),
+              content: typeof answer === 'string' ? answer : (answer.content || answer.answer || ''),
+              pattern: 'JSON答案数组模式'
+            });
+          }
+        });
+      }
+
+      if (jsonData.questions) {
+        jsonData.questions.forEach((question, index) => {
+          if (question && question.answer) {
+            answers.push({
+              question: index + 1,
+              answer: question.answer,
+              content: `题目: ${question.question || '未知题目'}\n答案: ${question.answer}`,
+              pattern: 'JSON题目模式'
+            });
+          }
+        });
+      }
     } catch (e) {
-	  console.log('无法解析JSON文件，可能该文件为乱码或被编码')
 	  return []
 	}
+    return answers;
   }
   
   parseQuestionFile(fileContent) {
