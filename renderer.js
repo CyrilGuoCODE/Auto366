@@ -594,6 +594,8 @@ class UniversalAnswerFeature {
   constructor() {
     this.isProxyRunning = false;
     this.isCapturing = false;
+    this.sortMode = 'file';
+    this.lastAnswersData = null;
     this.initEventListeners();
     this.initIpcListeners();
   }
@@ -609,6 +611,17 @@ class UniversalAnswerFeature {
 
     document.getElementById('deleteTempBtn').addEventListener('click', () => {
       this.handleDeleteTemp();
+    });
+
+    document.getElementById('sortMode').addEventListener('change', (e) => {
+      this.sortMode = e.target.value;
+      const container = document.getElementById('answersContainer');
+      if (container.innerHTML && !container.innerHTML.includes('暂无答案数据')) {
+        const answersData = this.lastAnswersData;
+        if (answersData) {
+          this.displayAnswers(answersData);
+        }
+      }
     });
   }
 
@@ -1136,7 +1149,8 @@ class UniversalAnswerFeature {
       return;
     }
 
-    // 按题型排序：听后选择 -> 听后回答 -> 听后转述 -> 朗读短文
+    this.lastAnswersData = data;
+
     const patternOrder = {
       '听后选择': 1,
       '听后回答': 2,
@@ -1144,52 +1158,97 @@ class UniversalAnswerFeature {
       '朗读短文': 4
     };
 
-    // 先按来源文件分组，再按题型排序
-    const answersByFile = {};
-    data.answers.forEach(answer => {
-      const sourceFile = answer.sourceFile || '未知文件';
-      if (!answersByFile[sourceFile]) {
-        answersByFile[sourceFile] = [];
-      }
-      answersByFile[sourceFile].push(answer);
-    });
-
-    // 显示每个文件的答案，按题型排序
-    Object.keys(answersByFile).forEach(sourceFile => {
-      const fileSection = document.createElement('div');
-      fileSection.className = 'file-section';
-
-      const fileHeader = document.createElement('div');
-      fileHeader.className = 'file-header';
-      fileHeader.innerHTML = `
-        <h4>📁 ${sourceFile}</h4>
-        <span class="answer-count">${answersByFile[sourceFile].length} 个答案</span>
-      `;
-      fileSection.appendChild(fileHeader);
-
-      // 按题型排序答案
-      const sortedAnswers = answersByFile[sourceFile].sort((a, b) => {
-        const patternA = patternOrder[a.pattern] || 99;
-        const patternB = patternOrder[b.pattern] || 99;
-        return patternA - patternB;
+    if (this.sortMode === 'file') {
+      const answersByFile = {};
+      data.answers.forEach(answer => {
+        const sourceFile = answer.sourceFile || '未知文件';
+        if (!answersByFile[sourceFile]) {
+          answersByFile[sourceFile] = [];
+        }
+        answersByFile[sourceFile].push(answer);
       });
+      Object.keys(answersByFile).forEach(sourceFile => {
+        const fileSection = document.createElement('div');
+        fileSection.className = 'file-section';
 
-      sortedAnswers.forEach((answer, index) => {
-        const answerItem = document.createElement('div');
-        answerItem.className = 'answer-item';
-        answerItem.innerHTML = `
-          <div class="answer-number">第 ${answer.question || index + 1} 题</div>
-          <div class="answer-option">${answer.answer}</div>
-          <div class="answer-content">${answer.content || '暂无内容'}</div>
-          ${answer.pattern ? `<div class="answer-pattern">提取模式: ${answer.pattern}</div>` : ''}
+        const fileHeader = document.createElement('div');
+        fileHeader.className = 'file-header';
+        fileHeader.innerHTML = `
+          <h4>📁 ${sourceFile}</h4>
+          <span class="answer-count">${answersByFile[sourceFile].length} 个答案</span>
         `;
-        fileSection.appendChild(answerItem);
+        fileSection.appendChild(fileHeader);
+
+        // 按题型排序答案
+        const sortedAnswers = answersByFile[sourceFile].sort((a, b) => {
+          const patternA = patternOrder[a.pattern] || 99;
+          const patternB = patternOrder[b.pattern] || 99;
+          return patternA - patternB;
+        });
+
+        sortedAnswers.forEach((answer, index) => {
+          const answerItem = document.createElement('div');
+          answerItem.className = 'answer-item';
+          answerItem.innerHTML = `
+            <div class="answer-number">第 ${answer.question || index + 1} 题</div>
+            <div class="answer-option">${answer.answer}</div>
+            <div class="answer-content">${answer.content || '暂无内容'}</div>
+            ${answer.pattern ? `<div class="answer-pattern">提取模式: ${answer.pattern}</div>` : ''}
+          `;
+          fileSection.appendChild(answerItem);
+        });
+
+        container.appendChild(fileSection);
       });
 
-      container.appendChild(fileSection);
-    });
+      this.addSuccessLog(`答案提取完成！共 ${data.count} 题，来自 ${Object.keys(answersByFile).length} 个文件，已保存到: ${data.file}`);
+    } else {
+      const answersByPattern = {};
+      data.answers.forEach(answer => {
+        const pattern = answer.pattern || '未知题型';
+        if (!answersByPattern[pattern]) {
+          answersByPattern[pattern] = [];
+        }
+        answersByPattern[pattern].push(answer);
+      });
 
-    this.addSuccessLog(`答案提取完成！共 ${data.count} 题，来自 ${Object.keys(answersByFile).length} 个文件，已保存到: ${data.file}`);
+      Object.keys(patternOrder).forEach(pattern => {
+        if (answersByPattern[pattern]) {
+          const patternSection = document.createElement('div');
+          patternSection.className = 'pattern-section';
+
+          const patternHeader = document.createElement('div');
+          patternHeader.className = 'pattern-header';
+          patternHeader.innerHTML = `
+            <h4>📝 ${pattern}</h4>
+            <span class="answer-count">${answersByPattern[pattern].length} 个答案</span>
+          `;
+          patternSection.appendChild(patternHeader);
+
+          const sortedAnswers = answersByPattern[pattern].sort((a, b) => {
+            const fileA = a.sourceFile || '未知文件';
+            const fileB = b.sourceFile || '未知文件';
+            return fileA.localeCompare(fileB);
+          });
+
+          sortedAnswers.forEach((answer, index) => {
+            const answerItem = document.createElement('div');
+            answerItem.className = 'answer-item';
+            answerItem.innerHTML = `
+              <div class="answer-number">${answer.sourceFile ? `[${answer.sourceFile}]` : ''} 第 ${answer.question || index + 1} 题</div>
+              <div class="answer-option">${answer.answer}</div>
+              <div class="answer-content">${answer.content || '暂无内容'}</div>
+              ${answer.sourceFile ? `<div class="answer-source">来源: ${answer.sourceFile}</div>` : ''}
+            `;
+            patternSection.appendChild(answerItem);
+          });
+
+          container.appendChild(patternSection);
+        }
+      });
+
+      this.addSuccessLog(`答案提取完成！共 ${data.count} 题，按题型排序显示，已保存到: ${data.file}`);
+    }
   }
 
   handleDeleteTemp() {

@@ -252,7 +252,16 @@
             </div>
 
             <div class="answers-display">
-                <h3>提取的答案</h3>
+                <div class="answers-header">
+                    <h3>此次结果</h3>
+                    <div class="sort-mode-selector">
+                        <label for="sortMode">排序模式：</label>
+                        <select id="sortMode">
+                            <option value="file">按文件排序</option>
+                            <option value="pattern">按题型排序</option>
+                        </select>
+                    </div>
+                </div>
                 <div id="answersContainer" class="answers-container">
                     <div class="no-answers">暂无答案数据</div>
                 </div>

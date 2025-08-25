@@ -496,9 +496,41 @@ button:disabled {
     margin: 20px 0;
 }
 
+.answers-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
 .answers-display h3 {
     color: #495057;
-    margin-bottom: 15px;
+    margin-bottom: 0;
+}
+
+.sort-mode-selector {
+    display: flex;
+    align-items: center;
+}
+
+.sort-mode-selector label {
+    margin-right: 8px;
+    font-weight: 500;
+    color: #495057;
+}
+
+.sort-mode-selector select {
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background-color: white;
+    color: #495057;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.sort-mode-selector select:hover {
+    border-color: #adb5bd;
 }
 
 .answers-container {
@@ -548,6 +580,13 @@ button:disabled {
     margin-top: 8px;
     color: #495057;
     line-height: 1.5;
+}
+
+.answer-source {
+    margin-top: 8px;
+    color: #6c757d;
+    font-size: 12px;
+    font-style: italic;
 }
 
 /* 响应式设计 */
@@ -725,7 +764,8 @@ button:disabled {
 
 /* 文件分组显示
 样式 */
-.file-section {
+.file-section,
+.pattern-section {
     margin-bottom: 25px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -741,11 +781,20 @@ button:disabled {
     align-items: center;
 }
 
-.file-header h4 {
+.file-header h4, .pattern-header h4 {
     margin: 0;
     color: #495057;
     font-size: 14px;
     font-weight: 600;
+}
+
+.pattern-header {
+    background: #f8f9fa;
+    padding: 12px 15px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .answer-count {
