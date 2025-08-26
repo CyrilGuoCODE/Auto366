@@ -878,3 +878,9 @@ button:disabled {
 .copy-toast.error {
     background: #dc3545;
 }
+
+.children {
+    border: solid 1px #e2e8f0;
+    margin: 20px;
+    border-radius: 8px;
+}

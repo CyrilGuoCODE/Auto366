@@ -640,8 +640,8 @@ class AnswerProxy {
         });
       }
     } catch (e) {
-	  return []
-	}
+      return []
+    }
     return answers;
   }
   
@@ -669,7 +669,7 @@ class AnswerProxy {
       }
   
     } catch (error) {
-	  console.error(error)
+      console.error(error)
       return [];
     }
   }
@@ -767,14 +767,22 @@ class AnswerProxy {
             .map(item => item.content?.trim() || '')
             .filter(content => content && content !== '<answers/>');
           
+          let messageInfo = {
+            question: `第${qIndex + 1}题`,
+            answer: question.question_text || '未知',
+            content: `点击展开全部回答`,
+            pattern: '听后回答',
+            children: []
+          }
           answers.forEach((answer, aIndex) => {
-            results.push({
-              question: `第${qIndex + 1}-${aIndex + 1}题`,
+            messageInfo.children.push({
+              question: `第${aIndex + 1}个答案`,
               answer: answer,
               content: `请回答: ${answer}`,
               pattern: '听后回答'
             });
           });
+          results.push(messageInfo)
         }
       });
     }
@@ -786,14 +794,22 @@ class AnswerProxy {
         .map(item => item.content?.trim() || '')
         .filter(content => content && content !== '<answers/>');
       
+      let messageInfo = {
+        question: `第1题`,
+        answer: questionObj.question_text || '未知',
+        content: `点击展开全部回答`,
+        pattern: '听后回答',
+        children: []
+      }
       answers.forEach((answer, index) => {
-        results.push({
-          question: `第${index + 1}题`,
+        messageInfo.children.push({
+          question: `第${index + 1}个答案`,
           answer: answer,
           content: `请回答: ${answer}`,
           pattern: '听后回答'
         });
       });
+      results.push(messageInfo)
     }
     
     return results;
@@ -899,15 +915,15 @@ class AnswerProxy {
 
   extractFromJS(content, filePath) {
     try {
-	  let jsonData;
-	  
-	  // 首先尝试直接解析为JSON
-	  try {
-	    jsonData = JSON.parse(content);
-	  } catch (e) {
-	    console.log('无法解析JS文件，可能该文件为不支持的格式')
-	    return []
-	  }
+      let jsonData;
+      
+      // 首先尝试直接解析为JSON
+      try {
+        jsonData = JSON.parse(content);
+      } catch (e) {
+        console.log('无法解析JS文件，可能该文件为不支持的格式')
+        return []
+      }
 
       return this.parseQuestionFile(content)
     } catch (error) {

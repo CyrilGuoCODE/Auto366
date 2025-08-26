@@ -58,7 +58,7 @@ class Global {
 
   initSettingsBtn() {
     window.electronAPI.setCachePath(localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles')
-	cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles'
+    cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles'
     document.getElementsByClassName('settings-btn')[0].addEventListener('click', () => {
       document.getElementById('settings-modal').style.display = 'flex'
       document.getElementById('cache-path').value = cachePath
@@ -75,7 +75,7 @@ class Global {
     document.getElementById('save-settings').addEventListener('click', function () {
       if (window.electronAPI.setCachePath(document.getElementById('cache-path').value)) {
         localStorage.setItem('cache-path', document.getElementById('cache-path').value)
-		cachePath = document.getElementById('cache-path').value
+        cachePath = document.getElementById('cache-path').value
         document.getElementById('settings-modal').style.display = 'none'
       }
       else {
@@ -84,7 +84,7 @@ class Global {
     })
     document.getElementById('reset-settings').addEventListener('click', function () {
       document.getElementById('cache-path').value = 'D:\\Up366StudentFiles'
-	  cachePath = 'D:\\Up366StudentFiles'
+      cachePath = 'D:\\Up366StudentFiles'
     })
   }
 }
@@ -1222,48 +1222,48 @@ class UniversalAnswerFeature {
           const patternB = patternOrder[b.pattern] || 99;
           return patternA - patternB;
         });
-
-        sortedAnswers.forEach((answer, index) => {
+        
+        this.createAnswerDisplay = (answer) => {
           const answerItem = document.createElement('div');
           answerItem.className = 'answer-item';
-
+          
           const answerNumber = document.createElement('div');
           answerNumber.className = 'answer-number';
-          answerNumber.textContent = answer.question || index + 1;
-
+          answerNumber.textContent = answer.question;
+          
           const answerOption = document.createElement('div');
           answerOption.className = 'answer-option';
           answerOption.textContent = answer.answer;
-
+          
           const answerContent = document.createElement('div');
           answerContent.className = 'answer-content';
           answerContent.textContent = answer.content || '暂无内容';
-
+          
           const answerPattern = document.createElement('div');
           answerPattern.className = 'answer-pattern';
           answerPattern.textContent = `提取模式: ${answer.pattern}`;
-
+          
           const copyBtn = document.createElement('div');
           copyBtn.className = 'copy-btn';
           copyBtn.innerHTML = '📋 复制';
           copyBtn.title = '点击复制答案';
-
+          
           answerOption.dataset.answer = answer.answer;
           answerContent.dataset.answer = answer.content || '暂无内容';
-
+          
           answerOption.addEventListener('click', () => {
             this.copyToClipboard(answer.answer);
           });
-
+          
           answerContent.addEventListener('click', () => {
             this.copyToClipboard(answer.content || '暂无内容');
           });
-
+          
           copyBtn.addEventListener('click', () => {
             const fullAnswer = `${answer.answer}\n${answer.content || ''}`.trim();
             this.copyToClipboard(fullAnswer);
           });
-
+          
           // 组装答案元素
           answerItem.appendChild(answerNumber);
           answerItem.appendChild(answerOption);
@@ -1272,7 +1272,32 @@ class UniversalAnswerFeature {
             answerItem.appendChild(answerPattern);
           }
           answerItem.appendChild(copyBtn);
-          fileSection.appendChild(answerItem);
+          
+          if (answer.children){
+            const childrenItem = document.createElement('div');
+            childrenItem.className = 'children';
+            childrenItem.style.display = 'none';
+            answer.children.forEach(child => {
+              childrenItem.appendChild(this.createAnswerDisplay(child))
+            })
+            answerItem.appendChild(childrenItem);
+            answerContent.style.cursor = 'pointer'
+            answerContent.addEventListener('click', () => {
+              if (childrenItem.style.display == 'none'){
+                childrenItem.style.display = 'block';
+                answerContent.textContent = '点击收起全部回答'
+              } else {
+                childrenItem.style.display = 'none';
+                answerContent.textContent = '点击展开全部回答'
+              }
+            })
+          }
+          
+          return answerItem
+        }
+
+        sortedAnswers.forEach(answer => {
+          fileSection.appendChild(this.createAnswerDisplay(answer));
         });
 
         container.appendChild(fileSection);
@@ -1307,14 +1332,14 @@ class UniversalAnswerFeature {
             const fileB = b.sourceFile || '未知文件';
             return fileA.localeCompare(fileB);
           });
-
-          sortedAnswers.forEach((answer, index) => {
+          
+          this.createAnswerDisplay = (answer) => {
             const answerItem = document.createElement('div');
             answerItem.className = 'answer-item';
 
             const answerNumber = document.createElement('div');
             answerNumber.className = 'answer-number';
-            answerNumber.textContent = answer.question || index + 1;
+            answerNumber.textContent = answer.question;
 
             const answerOption = document.createElement('div');
             answerOption.className = 'answer-option';
@@ -1356,7 +1381,32 @@ class UniversalAnswerFeature {
               answerItem.appendChild(answerSource);
             }
             answerItem.appendChild(copyBtn);
-            patternSection.appendChild(answerItem);
+            
+            if (answer.children){
+              const childrenItem = document.createElement('div');
+              childrenItem.className = 'children';
+              childrenItem.style.display = 'none';
+              answer.children.forEach(child => {
+                childrenItem.appendChild(this.createAnswerDisplay(child))
+              })
+              answerItem.appendChild(childrenItem);
+              answerContent.style.cursor = 'pointer'
+              answerContent.addEventListener('click', () => {
+                if (childrenItem.style.display == 'none'){
+                  childrenItem.style.display = 'block';
+                  answerContent.textContent = '点击收起全部回答'
+                } else {
+                  childrenItem.style.display = 'none';
+                  answerContent.textContent = '点击展开全部回答'
+                }
+              })
+            }
+            
+            return answerItem
+          }
+
+          sortedAnswers.forEach(answer => {
+            patternSection.appendChild(this.createAnswerDisplay(answer));
           });
 
           container.appendChild(patternSection);
