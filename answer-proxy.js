@@ -259,6 +259,47 @@ class AnswerProxy {
                   fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
                 }
 
+                if (fullUrl.includes('words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
+                  console.log('检测到单词PK请求，开始解析答案...');
+                  
+                  try {
+                    const jsonData = JSON.parse(responseBody);
+                    if (jsonData.data && jsonData.data.contentList) {
+                      const answers = this.extractWordPKAnswers(jsonData);
+                      
+                      if (answers.length > 0) {
+                        const answerFile = path.join(ansDir, `word_pk_answers_${Date.now()}.txt`);
+                        const answerText = answers.map((item, index) => 
+                          `${index + 1}. [${item.categoryId}] ${item.entry}: ${item.paraphrase}`
+                        ).join('\n\n');
+                        
+                        fs.writeFileSync(answerFile, answerText, 'utf-8');
+                        
+                        this.safeIpcSend('word-answers-extracted', {
+                          answers: answers,
+                          count: answers.length,
+                          file: answerFile,
+                          url: fullUrl
+                        });
+                        
+                        console.log(`成功提取 ${answers.length} 个单词PK答案，已保存到: ${answerFile}`);
+                      } else {
+                        console.log('未在单词PK数据中找到有效答案');
+                        this.safeIpcSend('no-word-answers-found', {
+                          message: '未在单词PK数据中找到有效答案',
+                          url: fullUrl
+                        });
+                      }
+                    }
+                  } catch (error) {
+                    console.error('解析单词PK数据失败:', error);
+                    this.safeIpcSend('word-parse-error', {
+                      error: error.message,
+                      url: fullUrl
+                    });
+                  }
+                }
+
                 res.end();
               } catch (error) {
                 console.error('处理响应数据时出错:', error);
@@ -988,6 +1029,40 @@ class AnswerProxy {
       console.error(`解析文本文件失败: ${filePath}`, error);
       return [];
     }
+  }
+
+  extractWordPKAnswers(jsonData) {
+    const answers = [];
+    
+    try {
+      if (jsonData.data && jsonData.data.contentList) {
+        jsonData.data.contentList.forEach((contentItem, cIndex) => {
+          if (contentItem.entryList) {
+            contentItem.entryList.forEach((entryItem, eIndex) => {
+              if (entryItem.entry && entryItem.paraphrase) {
+                answers.push({
+                  categoryId: entryItem.categoryId || '未知',
+                  dictId: entryItem.dictId || '未知',
+                  displayOrder: entryItem.displayOrder || eIndex + 1,
+                  entry: entryItem.entry,
+                  entryId: entryItem.entryId || '未知',
+                  enPhonetic: entryItem.enPhonetic || '',
+                  usPhonetic: entryItem.usPhonetic || '',
+                  paraphrase: entryItem.paraphrase,
+                  pkid: entryItem.pkid || '未知',
+                  sourceType: entryItem.sourceType || '未知',
+                  stageIds: entryItem.stageIds || '未知'
+                });
+              }
+            });
+          }
+        });
+      }
+    } catch (error) {
+      console.error('提取单词PK答案失败:', error);
+    }
+    
+    return answers;
   }
 
   // 从XML文件提取答案
