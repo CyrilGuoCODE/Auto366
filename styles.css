@@ -884,3 +884,15 @@ button:disabled {
     margin: 20px;
     border-radius: 8px;
 }
+
+#importAnswer{
+    display: none;
+}
+
+#importAnswerBtn{
+	cursor: pointer;
+	background-color: #007bff;
+	border-radius: 8px;
+	padding: 10px;
+	color: white;
+}

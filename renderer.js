@@ -598,6 +598,7 @@ class UniversalAnswerFeature {
     this.lastAnswersData = null;
     this.initEventListeners();
     this.initIpcListeners();
+    this.initImportAnswer()
   }
 
   initEventListeners() {
@@ -1433,6 +1434,26 @@ class UniversalAnswerFeature {
         }
       });
     }
+  }
+  
+  initImportAnswer() {
+    document.getElementById('importAnswer').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target.result;
+          try {
+            const answersData = JSON.parse(content);
+            this.displayAnswers(answersData);
+          } catch (error){
+			console.error(error)
+            alert('解析答案文件失败')
+          }
+        };
+        reader.readAsText(file); // 读取文件内容为文本
+      }
+    })
   }
 }
 

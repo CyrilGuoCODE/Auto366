@@ -462,10 +462,13 @@ class AnswerProxy {
 
         if (allAnswers.length > 0) {
           // 保存所有答案到文件
-          const answerFile = path.join(ansDir, `answers_${Date.now()}.txt`);
-          const answerText = allAnswers.map((item, index) =>
-            `${index + 1}. [${item.sourceFile}] ${item.answer}: ${item.content}`
-          ).join('\n\n');
+          const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
+          const answerText = JSON.stringify({
+            answers: allAnswers,
+            count: allAnswers.length,
+            file: answerFile,
+            processedFiles: processedFiles
+          })
 
           fs.writeFileSync(answerFile, answerText, 'utf-8');
 
