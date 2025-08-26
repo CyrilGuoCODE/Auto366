@@ -1239,6 +1239,15 @@ class UniversalAnswerFeature {
           const answerContent = document.createElement('div');
           answerContent.className = 'answer-content';
           answerContent.textContent = answer.content || '暂无内容';
+
+          answerContent.style.textAlign = 'center';
+          answerContent.style.color = '#007bff';
+          answerContent.style.fontWeight = 'bold';
+          answerContent.style.padding = '8px';
+          answerContent.style.borderRadius = '4px';
+          answerContent.style.backgroundColor = '#e6f2ff';
+          answerContent.style.cursor = 'pointer';
+          answerContent.style.transition = 'all 0.3s ease';
           
           const answerPattern = document.createElement('div');
           answerPattern.className = 'answer-pattern';
@@ -1286,10 +1295,10 @@ class UniversalAnswerFeature {
             answerContent.addEventListener('click', () => {
               if (childrenItem.style.display == 'none'){
                 childrenItem.style.display = 'block';
-                answerContent.textContent = '点击收起全部回答'
+                answerContent.textContent = '点击收起全部回答';
               } else {
                 childrenItem.style.display = 'none';
-                answerContent.textContent = '点击展开全部回答'
+                answerContent.textContent = '点击展开全部回答';
               }
             })
           }
@@ -1350,6 +1359,15 @@ class UniversalAnswerFeature {
             answerContent.className = 'answer-content';
             answerContent.textContent = answer.content || '暂无内容';
 
+            answerContent.style.textAlign = 'center';
+            answerContent.style.color = '#007bff';
+            answerContent.style.fontWeight = 'bold';
+            answerContent.style.padding = '8px';
+            answerContent.style.borderRadius = '4px';
+            answerContent.style.backgroundColor = '#e6f2ff';
+            answerContent.style.cursor = 'pointer';
+            answerContent.style.transition = 'all 0.3s ease';
+
             const answerSource = document.createElement('div');
             answerSource.className = 'answer-source';
             answerSource.textContent = `来源: ${answer.sourceFile}`;
@@ -1395,10 +1413,10 @@ class UniversalAnswerFeature {
               answerContent.addEventListener('click', () => {
                 if (childrenItem.style.display == 'none'){
                   childrenItem.style.display = 'block';
-                  answerContent.textContent = '点击收起全部回答'
+                  answerContent.textContent = '点击收起全部回答';
                 } else {
                   childrenItem.style.display = 'none';
-                  answerContent.textContent = '点击展开全部回答'
+                  answerContent.textContent = '点击展开全部回答';
                 }
               })
             }
