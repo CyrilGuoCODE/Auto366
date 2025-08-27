@@ -1471,7 +1471,35 @@ class UniversalAnswerFeature {
         };
         reader.readAsText(file); // 读取文件内容为文本
       }
-    })
+    });
+
+    document.getElementById('clearAnswersBtn').addEventListener('click', () => {
+      const container = document.getElementById('answersContainer');
+
+      container.innerHTML = `
+        <div class="no-answers">暂无答案数据</div>
+        <div class="import-answer-button">
+          <label for="importAnswer" id="importAnswerBtn">导入答案</label>
+          <input type="file" accept="json" id="importAnswer">
+        </div>
+      `;
+
+      this.initImportAnswer();
+
+      this.lastAnswersData = null;
+
+      const toast = document.createElement('div');
+      toast.className = 'copy-toast show';
+      toast.textContent = '已清空提取结果';
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+          document.body.removeChild(toast);
+        }, 300);
+      }, 2000);
+    });
   }
 }
 

@@ -254,6 +254,19 @@
             <div class="answers-display">
                 <div class="answers-header">
                     <h3>此次结果</h3>
+                    <div class="clear-answers-button">
+                        <button id="clearAnswersBtn" class="clear-btn" title="清空提取结果">
+                            <svg t="1756262061386" class="clear-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4752"
+                                width="256" height="256">
+                                <path
+                                    d="M829.952 271.36h-126.976v-51.2a76.288 76.288 0 0 0-75.776-76.288h-256a76.288 76.288 0 0 0-75.776 76.8v51.2H168.448a25.6 25.6 0 0 0 0 51.2h661.504a25.6 25.6 0 0 0 0-51.712z m-178.176 0h-307.2v-51.2a26.112 26.112 0 0 1 25.6-25.6h256a24.576 24.576 0 0 1 24.576 25.6zM448.512 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0zM601.088 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0z"
+                                    fill="" p-id="4753"></path>
+                                <path
+                                    d="M735.744 346.624a25.6 25.6 0 0 0-25.6 25.6v381.44a102.4 102.4 0 0 1-102.4 102.4H390.656a102.4 102.4 0 0 1-102.4-102.4V372.224a25.6 25.6 0 0 0-51.2 0v381.44a153.6 153.6 0 0 0 153.6 153.6h217.6a153.6 153.6 0 0 0 153.6-153.6V372.224a25.6 25.6 0 0 0-26.112-25.6z"
+                                    fill="" p-id="4754"></path>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="sort-mode-selector">
                         <label for="sortMode">排序模式：</label>
                         <select id="sortMode">
@@ -261,13 +274,13 @@
                             <option value="pattern">按题型排序</option>
                         </select>
                     </div>
+                </div>
+                <div id="answersContainer" class="answers-container">
+                    <div class="no-answers">暂无答案数据</div>
                     <div class="import-answer-button">
                         <label for="importAnswer" id="importAnswerBtn">导入答案</label>
                         <input type="file" accept="json" id="importAnswer">
                     </div>
-                </div>
-                <div id="answersContainer" class="answers-container">
-                    <div class="no-answers">暂无答案数据</div>
                 </div>
             </div>
 
