@@ -505,17 +505,14 @@ button:disabled {
 }
 
 .clear-answers-button {
-    position: absolute;
-    right: 620px;
-    top: 68%;
-    transform: translateY(-50%);
     display: flex;
     align-items: center;
+    margin-right: auto;
 }
 
 .answers-display h3 {
     color: #495057;
-    margin-bottom: 0;
+    margin: 0;
 }
 
 .sort-mode-selector {
@@ -660,8 +657,8 @@ button:disabled {
     height: 100%;
     background-color: rgba(0,0,0,0.4);
     overflow: auto;
-	justify-content: center;
-	align-items: center;
+    justify-content: center;
+    align-items: center;
 }
 
 .modal-content {
@@ -768,8 +765,8 @@ button:disabled {
 }
 
 #error-message{
-	margin: 0;
-	color: red;
+    margin: 0;
+    color: red;
 }
 
 /* 文件分组显示
@@ -900,33 +897,33 @@ button:disabled {
 }
 
 #importAnswerBtn{
-	cursor: pointer;
-	background-color: #007bff;
-	border-radius: 6px;
-	padding: 10px 20px;
-	color: white;
-	font-size: 14px;
-	transition: all 0.3s ease;
-	margin: 15px auto;
-	display: block;
-	width: fit-content;
+    cursor: pointer;
+    background-color: #007bff;
+    border-radius: 6px;
+    padding: 10px 20px;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    margin-left: 10px;
+    display: block;
+    width: fit-content;
 }
 
 .clear-btn {
-	padding: 4px 6px;
+    padding: 4px 6px;
     background-color: rgba(220, 53, 69, 0.1);
     color: #dc3545;
-	border: none;
-	border-radius: 4px;
-	cursor: pointer;
-	transition: all 0.2s ease;
-	display: flex;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
 }
 
 .clear-icon {
-	width: 25px;
-	height: 25px;
-	path {
-		fill: currentColor;
-	}
+    width: 25px;
+    height: 25px;
+    path {
+        fill: currentColor;
+    }
 }

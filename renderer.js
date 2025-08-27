@@ -1193,7 +1193,17 @@ class UniversalAnswerFeature {
       '听后选择': 1,
       '听后回答': 2,
       '听后转述': 3,
-      '朗读短文': 4
+      '朗读短文': 4,
+      '分析内容': 5,
+      'JSON句子跟读模式': 6,
+      'JSON单词发音模式': 7,
+      'JSON答案数组模式': 8,
+      'JSON题目模式': 9,
+      '文本答案模式': 10,
+      '文本选项模式': 11,
+      'XML正确答案模式': 12,
+      'XML题目答案模式': 13,
+      '通用XML答案模式': 14
     };
 
     if (this.sortMode === 'file') {
@@ -1465,9 +1475,10 @@ class UniversalAnswerFeature {
             const answersData = JSON.parse(content);
             this.displayAnswers(answersData);
           } catch (error){
-			console.error(error)
+            console.error(error)
             alert('解析答案文件失败')
           }
+          event.target.value = '';
         };
         reader.readAsText(file); // 读取文件内容为文本
       }
@@ -1476,15 +1487,7 @@ class UniversalAnswerFeature {
     document.getElementById('clearAnswersBtn').addEventListener('click', () => {
       const container = document.getElementById('answersContainer');
 
-      container.innerHTML = `
-        <div class="no-answers">暂无答案数据</div>
-        <div class="import-answer-button">
-          <label for="importAnswer" id="importAnswerBtn">导入答案</label>
-          <input type="file" accept="json" id="importAnswer">
-        </div>
-      `;
-
-      this.initImportAnswer();
+      container.innerHTML = `<div class="no-answers">暂无答案数据</div>`;
 
       this.lastAnswersData = null;
 

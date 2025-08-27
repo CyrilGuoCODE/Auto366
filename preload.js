@@ -329,13 +329,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
   chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
   setCachePath: (cachePath) => {
-	if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))){
-	  resourcePath = path.join(cachePath, 'resources')
-	  flipbooksPath = path.join(cachePath, 'flipbooks')
-	  return 1;
-	}
-	else {
-	  return 0;
-	}
+    if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))){
+      resourcePath = path.join(cachePath, 'resources')
+      flipbooksPath = path.join(cachePath, 'flipbooks')
+      return 1;
+    }
+    else {
+      return 0;
+    }
   }
 })
