@@ -23,7 +23,7 @@ process.on('uncaughtException', (error) => {
     console.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
     return;
   }
-  
+
   console.error(error);
 });
 
@@ -410,6 +410,83 @@ ipcMain.on('open-directory-choosing', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
 })
+
+// 响应体更改规则相关IPC处理
+ipcMain.handle('get-response-rules', () => {
+  return answerProxy.getResponseRules();
+});
+
+ipcMain.handle('save-response-rule', (event, rule) => {
+  return answerProxy.saveRule(rule);
+});
+
+ipcMain.handle('delete-response-rule', (event, ruleId) => {
+  return answerProxy.deleteRule(ruleId);
+});
+
+ipcMain.handle('toggle-response-rule', (event, ruleId, enabled) => {
+  return answerProxy.toggleRule(ruleId, enabled);
+});
+
+ipcMain.handle('export-response-rules', async () => {
+  const rules = answerProxy.getResponseRules();
+  const result = await dialog.showSaveDialog({
+    defaultPath: `response-rules-${new Date().toISOString().split('T')[0]}.json`,
+    filters: [
+      { name: 'JSON Files', extensions: ['json'] }
+    ]
+  });
+
+  if (!result.canceled) {
+    try {
+      fs.writeFileSync(result.filePath, JSON.stringify(rules, null, 2), 'utf-8');
+      return { success: true, path: result.filePath };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  return { success: false, error: '用户取消操作' };
+});
+
+ipcMain.handle('import-response-rules', async () => {
+  const result = await dialog.showOpenDialog({
+    filters: [
+      { name: 'JSON Files', extensions: ['json'] }
+    ],
+    properties: ['openFile']
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    try {
+      const rulesData = fs.readFileSync(result.filePaths[0], 'utf-8');
+      const rules = JSON.parse(rulesData);
+
+      if (Array.isArray(rules)) {
+        // 为导入的规则生成新的ID
+        const importedRules = rules.map(rule => ({
+          ...rule,
+          id: require('uuid').v4(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }));
+
+        // 添加到现有规则中
+        const currentRules = answerProxy.getResponseRules();
+        answerProxy.responseRules = [...currentRules, ...importedRules];
+        answerProxy.saveResponseRules();
+
+        return { success: true, count: importedRules.length };
+      } else {
+        return { success: false, error: '无效的规则文件格式' };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  return { success: false, error: '用户取消操作' };
+});
 
 ipcMain.handle('clear-cache', () => {
   try {

@@ -1,16 +1,16 @@
 let cachePath = ''
 function pathJoin(...parts) {
-    // 过滤空部分并拼接
-    const filteredParts = parts.filter(part => part && part !== '.');
-    
-    // 拼接路径并规范化
-    let joined = filteredParts.join('/')
-        .replace(/\/+/g, '/')          // 将多个斜杠替换为单个斜杠
-        .replace(/^\/+|\/+$/g, '')     // 移除开头和结尾的斜杠
-        .replace(/\/\.\//g, '/')       // 处理当前目录引用
-        .replace(/\/[^\/]+\/\.\.\//g, '/'); // 简单的上级目录处理
-    
-    return joined;
+  // 过滤空部分并拼接
+  const filteredParts = parts.filter(part => part && part !== '.');
+
+  // 拼接路径并规范化
+  let joined = filteredParts.join('/')
+    .replace(/\/+/g, '/')          // 将多个斜杠替换为单个斜杠
+    .replace(/^\/+|\/+$/g, '')     // 移除开头和结尾的斜杠
+    .replace(/\/\.\//g, '/')       // 处理当前目录引用
+    .replace(/\/[^\/]+\/\.\.\//g, '/'); // 简单的上级目录处理
+
+  return joined;
 }
 class Global {
   constructor() {
@@ -628,7 +628,7 @@ class UniversalAnswerFeature {
 
   initIpcListeners() {
 
-    
+
     // 监听代理状态
     window.electronAPI.onProxyStatus((event, data) => {
       this.updateProxyStatus(data);
@@ -678,7 +678,7 @@ class UniversalAnswerFeature {
     window.electronAPI.onCaptureStatus((event, data) => {
       this.updateCaptureStatus(data);
     });
-    
+
     // 监听代理错误
     window.electronAPI.onProxyError((event, data) => {
       this.addErrorLog(data.message);
@@ -686,11 +686,11 @@ class UniversalAnswerFeature {
       const startBtn = document.getElementById('startProxyBtn');
       const stopBtn = document.getElementById('stopProxyBtn');
       const captureBtn = document.getElementById('startCaptureBtn');
-      
+
       startBtn.disabled = false;
       stopBtn.disabled = true;
       captureBtn.disabled = true;
-      
+
       this.isProxyRunning = false;
       this.updateProxyStatus({ running: false, message: '代理服务器出错' });
     });
@@ -709,14 +709,14 @@ class UniversalAnswerFeature {
   startProxy() {
     const startBtn = document.getElementById('startProxyBtn');
     const stopBtn = document.getElementById('stopProxyBtn');
-    
+
     // 更新按钮状态，防止重复点击
     startBtn.disabled = true;
     stopBtn.disabled = false;
-    
+
     window.electronAPI.startAnswerProxy();
     this.addInfoLog('正在启动代理服务器...');
-    
+
     // 设置超时检查，如果代理没有启动，恢复按钮状态
     setTimeout(() => {
       if (!this.isProxyRunning) {
@@ -733,14 +733,14 @@ class UniversalAnswerFeature {
   stopProxy() {
     const startBtn = document.getElementById('startProxyBtn');
     const stopBtn = document.getElementById('stopProxyBtn');
-    
+
     // 更新按钮状态，防止重复点击
     startBtn.disabled = true;
     stopBtn.disabled = true;
-    
+
     window.electronAPI.stopAnswerProxy();
     this.addInfoLog('正在停止代理服务器...');
-    
+
     // 设置超时检查，如果代理没有停止，恢复按钮状态
     setTimeout(() => {
       if (this.isProxyRunning) {
@@ -832,12 +832,12 @@ class UniversalAnswerFeature {
         data.statusCode >= 400 ? 'error' : 'warning';
       statusDisplay = ` <span class="status-${statusClass}">[${data.statusCode}]</span>`;
     }
-    
+
     // 格式化URL确保完整显示，并修复重复协议问题
     let formattedUrl = this.formatUrl(url);
     // 修复URL重复问题，例如 http://fs.up366.cnhttp://fs.up366.cn/download/xxx
     formattedUrl = formattedUrl.replace(/(https?:\/\/[^\/]+)\1+/, '$1');
-    
+
     requestLine.innerHTML = `<span class="log-method ${method}">${method} [${timestamp}]</span>${statusDisplay} ${formattedUrl}`;
     logItem.appendChild(requestLine);
 
@@ -945,11 +945,11 @@ class UniversalAnswerFeature {
       downloadBtn.addEventListener('click', () => {
         this.downloadResponse(data.uuid);
       });
-      
+
       downloadContainer.appendChild(downloadBtn);
       responseBodyContainer.appendChild(responseBodyPreview);
       responseBodyContainer.appendChild(downloadContainer);
-      
+
       responseBodyDiv.innerHTML = '<strong>响应体:</strong>';
       responseBodyDiv.appendChild(responseBodyContainer);
       detailsContainer.appendChild(responseBodyDiv);
@@ -1010,19 +1010,19 @@ class UniversalAnswerFeature {
 
     return displayBody;
   }
-  
+
   // 格式化URL，确保显示完整URL
   formatUrl(url) {
     if (!url) return '';
-    
+
     // 如果URL不包含协议，尝试补充
     if (!url.match(/^https?:\/\//)) {
       try {
         const parsed = new URL(url);
         if (!parsed.protocol) {
           // 如果没有协议，根据是否为HTTPS添加协议
-          const isHttps = url.includes(':443') || url.includes(':8443') || 
-                         (url.includes('fs.') && !url.includes(':80'));
+          const isHttps = url.includes(':443') || url.includes(':8443') ||
+            (url.includes('fs.') && !url.includes(':80'));
           const protocol = isHttps ? 'https://' : 'http://';
           url = protocol + url.replace(/^\//, '');
         }
@@ -1031,7 +1031,7 @@ class UniversalAnswerFeature {
         return url;
       }
     }
-    
+
     return url;
   }
 
@@ -1085,7 +1085,7 @@ class UniversalAnswerFeature {
 
   async downloadResponse(uuid) {
     let res = await window.electronAPI.downloadFile(uuid)
-    if (res == 1){
+    if (res == 1) {
       this.addSuccessLog(`响应体下载成功`);
     } else if (res == 0) {
       this.addErrorLog(`响应体下载失败`);
@@ -1233,19 +1233,19 @@ class UniversalAnswerFeature {
           const patternB = patternOrder[b.pattern] || 99;
           return patternA - patternB;
         });
-        
+
         this.createAnswerDisplay = (answer) => {
           const answerItem = document.createElement('div');
           answerItem.className = 'answer-item';
-          
+
           const answerNumber = document.createElement('div');
           answerNumber.className = 'answer-number';
           answerNumber.textContent = answer.question;
-          
+
           const answerOption = document.createElement('div');
           answerOption.className = 'answer-option';
           answerOption.textContent = answer.answer;
-          
+
           const answerContent = document.createElement('div');
           answerContent.className = 'answer-content';
           answerContent.textContent = answer.content || '暂无内容';
@@ -1258,32 +1258,32 @@ class UniversalAnswerFeature {
           answerContent.style.backgroundColor = '#e6f2ff';
           answerContent.style.cursor = 'pointer';
           answerContent.style.transition = 'all 0.3s ease';
-          
+
           const answerPattern = document.createElement('div');
           answerPattern.className = 'answer-pattern';
           answerPattern.textContent = `提取模式: ${answer.pattern}`;
-          
+
           const copyBtn = document.createElement('div');
           copyBtn.className = 'copy-btn';
           copyBtn.innerHTML = '📋 复制';
           copyBtn.title = '点击复制答案';
-          
+
           answerOption.dataset.answer = answer.answer;
           answerContent.dataset.answer = answer.content || '暂无内容';
-          
+
           answerOption.addEventListener('click', () => {
             this.copyToClipboard(answer.answer);
           });
-          
+
           answerContent.addEventListener('click', () => {
             this.copyToClipboard(answer.content || '暂无内容');
           });
-          
+
           copyBtn.addEventListener('click', () => {
             const fullAnswer = `${answer.answer}\n${answer.content || ''}`.trim();
             this.copyToClipboard(fullAnswer);
           });
-          
+
           // 组装答案元素
           answerItem.appendChild(answerNumber);
           answerItem.appendChild(answerOption);
@@ -1292,8 +1292,8 @@ class UniversalAnswerFeature {
             answerItem.appendChild(answerPattern);
           }
           answerItem.appendChild(copyBtn);
-          
-          if (answer.children){
+
+          if (answer.children) {
             const childrenItem = document.createElement('div');
             childrenItem.className = 'children';
             childrenItem.style.display = 'none';
@@ -1303,7 +1303,7 @@ class UniversalAnswerFeature {
             answerItem.appendChild(childrenItem);
             answerContent.style.cursor = 'pointer'
             answerContent.addEventListener('click', () => {
-              if (childrenItem.style.display == 'none'){
+              if (childrenItem.style.display == 'none') {
                 childrenItem.style.display = 'block';
                 answerContent.textContent = '点击收起全部回答';
               } else {
@@ -1312,7 +1312,7 @@ class UniversalAnswerFeature {
               }
             })
           }
-          
+
           return answerItem
         }
 
@@ -1352,7 +1352,7 @@ class UniversalAnswerFeature {
             const fileB = b.sourceFile || '未知文件';
             return fileA.localeCompare(fileB);
           });
-          
+
           this.createAnswerDisplay = (answer) => {
             const answerItem = document.createElement('div');
             answerItem.className = 'answer-item';
@@ -1410,8 +1410,8 @@ class UniversalAnswerFeature {
               answerItem.appendChild(answerSource);
             }
             answerItem.appendChild(copyBtn);
-            
-            if (answer.children){
+
+            if (answer.children) {
               const childrenItem = document.createElement('div');
               childrenItem.className = 'children';
               childrenItem.style.display = 'none';
@@ -1421,7 +1421,7 @@ class UniversalAnswerFeature {
               answerItem.appendChild(childrenItem);
               answerContent.style.cursor = 'pointer'
               answerContent.addEventListener('click', () => {
-                if (childrenItem.style.display == 'none'){
+                if (childrenItem.style.display == 'none') {
                   childrenItem.style.display = 'block';
                   answerContent.textContent = '点击收起全部回答';
                 } else {
@@ -1430,7 +1430,7 @@ class UniversalAnswerFeature {
                 }
               })
             }
-            
+
             return answerItem
           }
 
@@ -1463,7 +1463,7 @@ class UniversalAnswerFeature {
       });
     }
   }
-  
+
   initImportAnswer() {
     document.getElementById('importAnswer').addEventListener('change', (event) => {
       const file = event.target.files[0];
@@ -1474,7 +1474,7 @@ class UniversalAnswerFeature {
           try {
             const answersData = JSON.parse(content);
             this.displayAnswers(answersData);
-          } catch (error){
+          } catch (error) {
             console.error(error)
             alert('解析答案文件失败')
           }
@@ -1495,7 +1495,7 @@ class UniversalAnswerFeature {
       toast.className = 'copy-toast show';
       toast.textContent = '已清空提取结果';
       document.body.appendChild(toast);
-      
+
       setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => {
@@ -1514,4 +1514,542 @@ document.addEventListener('DOMContentLoaded', () => {
   new WordPKFeature();
   new HearingFeature();
   new UniversalAnswerFeature();
+
+  // 响应体更改规则功能
+  initResponseRulesFeature();
 });
+
+// 响应体更改规则功能初始化
+function initResponseRulesFeature() {
+  const responseRulesBtn = document.getElementById('responseRulesBtn');
+  const responseRulesModal = document.getElementById('response-rules-modal');
+  const closeResponseRules = document.getElementById('close-response-rules');
+  const ruleEditModal = document.getElementById('rule-edit-modal');
+  const closeRuleEdit = document.getElementById('close-rule-edit');
+
+  // 打开规则管理弹窗
+  responseRulesBtn.addEventListener('click', () => {
+    responseRulesModal.style.display = 'flex';
+    loadResponseRules();
+  });
+
+  // 关闭规则管理弹窗
+  closeResponseRules.addEventListener('click', () => {
+    responseRulesModal.style.display = 'none';
+  });
+
+  // 关闭规则编辑弹窗
+  closeRuleEdit.addEventListener('click', () => {
+    ruleEditModal.style.display = 'none';
+  });
+
+  // 点击弹窗外部关闭
+  window.addEventListener('click', (event) => {
+    if (event.target === responseRulesModal) {
+      responseRulesModal.style.display = 'none';
+    }
+    if (event.target === ruleEditModal) {
+      ruleEditModal.style.display = 'none';
+    }
+  });
+
+  // 新建规则
+  document.getElementById('add-rule-btn').addEventListener('click', () => {
+    openRuleEditor();
+  });
+
+  // 导入规则
+  document.getElementById('import-rules-btn').addEventListener('click', async () => {
+    try {
+      const result = await window.electronAPI.importResponseRules();
+      if (result.success) {
+        showToast(`成功导入 ${result.count} 条规则`, 'success');
+        loadResponseRules();
+      } else {
+        showToast(`导入失败: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showToast(`导入失败: ${error.message}`, 'error');
+    }
+  });
+
+  // 导出规则
+  document.getElementById('export-rules-btn').addEventListener('click', async () => {
+    try {
+      const result = await window.electronAPI.exportResponseRules();
+      if (result.success) {
+        showToast(`规则已导出到: ${result.path}`, 'success');
+      } else {
+        showToast(`导出失败: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      showToast(`导出失败: ${error.message}`, 'error');
+    }
+  });
+
+  // 规则编辑表单事件
+  initRuleEditForm();
+}
+
+// 加载响应体更改规则
+async function loadResponseRules() {
+  try {
+    const rules = await window.electronAPI.getResponseRules();
+    displayResponseRules(rules);
+    updateRulesStatus(rules);
+  } catch (error) {
+    console.error('加载规则失败:', error);
+    showToast('加载规则失败', 'error');
+  }
+}
+
+// 显示规则列表
+function displayResponseRules(rules) {
+  const rulesList = document.getElementById('rules-list');
+
+  if (rules.length === 0) {
+    rulesList.innerHTML = '<div class="no-rules">暂无规则，点击"新建规则"开始添加</div>';
+    return;
+  }
+
+  rulesList.innerHTML = rules.map(rule => `
+        <div class="rule-item" data-rule-id="${rule.id}">
+            <input type="checkbox" class="rule-checkbox" ${rule.enabled ? 'checked' : ''} 
+                   onchange="toggleRule('${rule.id}', this.checked)">
+            <div class="rule-info">
+                <div class="rule-name">${escapeHtml(rule.name)}</div>
+                <div class="rule-details">
+                    <div class="rule-detail-item">
+                        <span>URL:</span>
+                        <span>${rule.urlPattern || '所有'}</span>
+                    </div>
+                    <div class="rule-detail-item">
+                        <span>方法:</span>
+                        <span>${rule.method || '所有'}</span>
+                    </div>
+                    <div class="rule-detail-item">
+                        <span>操作:</span>
+                        <span>${getActionText(rule.action)}</span>
+                    </div>
+                    <div class="rule-detail-item">
+                        <span class="rule-status ${rule.enabled ? 'enabled' : 'disabled'}">
+                            ${rule.enabled ? '启用' : '禁用'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="rule-actions">
+                <button class="rule-action-btn edit" onclick="editRule('${rule.id}')">编辑</button>
+                <button class="rule-action-btn delete" onclick="deleteRule('${rule.id}')">删除</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 更新规则状态显示
+function updateRulesStatus(rules) {
+  const totalCount = rules.length;
+  const enabledCount = rules.filter(rule => rule.enabled).length;
+
+  document.getElementById('rules-count').textContent = `规则数量: ${totalCount}`;
+  document.getElementById('active-rules-count').textContent = `启用: ${enabledCount}`;
+}
+
+// 获取操作类型文本
+function getActionText(action) {
+  const actionMap = {
+    'replace': '替换响应体',
+    'modify': '修改响应体',
+    'inject': '注入内容'
+  };
+  return actionMap[action] || action;
+}
+
+// 切换规则启用状态
+async function toggleRule(ruleId, enabled) {
+  try {
+    const success = await window.electronAPI.toggleResponseRule(ruleId, enabled);
+    if (success) {
+      loadResponseRules();
+    } else {
+      showToast('切换规则状态失败', 'error');
+    }
+  } catch (error) {
+    console.error('切换规则状态失败:', error);
+    showToast('切换规则状态失败', 'error');
+  }
+}
+
+// 编辑规则
+async function editRule(ruleId) {
+  try {
+    const rules = await window.electronAPI.getResponseRules();
+    const rule = rules.find(r => r.id === ruleId);
+    if (rule) {
+      openRuleEditor(rule);
+    }
+  } catch (error) {
+    console.error('加载规则失败:', error);
+    showToast('加载规则失败', 'error');
+  }
+}
+
+// 删除规则
+async function deleteRule(ruleId) {
+  if (confirm('确定要删除这条规则吗？')) {
+    try {
+      const success = await window.electronAPI.deleteResponseRule(ruleId);
+      if (success) {
+        loadResponseRules();
+        showToast('规则已删除', 'success');
+      } else {
+        showToast('删除规则失败', 'error');
+      }
+    } catch (error) {
+      console.error('删除规则失败:', error);
+      showToast('删除规则失败', 'error');
+    }
+  }
+}
+
+// 打开规则编辑器
+function openRuleEditor(rule = null) {
+  const modal = document.getElementById('rule-edit-modal');
+  const title = document.getElementById('rule-edit-title');
+
+  if (rule) {
+    title.textContent = '编辑规则';
+    fillRuleForm(rule);
+  } else {
+    title.textContent = '新建规则';
+    clearRuleForm();
+  }
+
+  modal.style.display = 'flex';
+}
+
+// 填充规则表单
+function fillRuleForm(rule) {
+  document.getElementById('rule-name').value = rule.name || '';
+  document.getElementById('rule-url-pattern').value = rule.urlPattern || '';
+  document.getElementById('rule-method').value = rule.method || '';
+  document.getElementById('rule-content-type').value = rule.contentType || '';
+  document.getElementById('rule-action').value = rule.action || 'replace';
+  document.getElementById('rule-enabled').checked = rule.enabled !== false;
+
+  // 根据操作类型显示相应的内容区域
+  handleActionChange(rule.action);
+
+  // 填充具体内容
+  switch (rule.action) {
+    case 'replace':
+      document.getElementById('rule-replace-content').value = rule.replaceContent || '';
+      break;
+    case 'modify':
+      fillModifyRules(rule.modifyRules || []);
+      break;
+    case 'inject':
+      document.getElementById('rule-inject-content').value = rule.injectContent || '';
+      document.getElementById('rule-inject-position').value = rule.injectPosition || 'start';
+      document.getElementById('rule-inject-target').value = rule.injectTarget || '';
+      handleInjectPositionChange(rule.injectPosition);
+      break;
+  }
+
+  // 存储规则ID用于更新
+  document.getElementById('rule-edit-modal').dataset.ruleId = rule.id || '';
+}
+
+// 清空规则表单
+function clearRuleForm() {
+  document.getElementById('rule-name').value = '';
+  document.getElementById('rule-url-pattern').value = '';
+  document.getElementById('rule-method').value = '';
+  document.getElementById('rule-content-type').value = '';
+  document.getElementById('rule-action').value = 'replace';
+  document.getElementById('rule-enabled').checked = true;
+  document.getElementById('rule-replace-content').value = '';
+  document.getElementById('rule-inject-content').value = '';
+  document.getElementById('rule-inject-position').value = 'start';
+  document.getElementById('rule-inject-target').value = '';
+
+  // 清空修改规则
+  const container = document.querySelector('.modify-rules-container');
+  container.innerHTML = '<div class="modify-rule-item"><input type="text" placeholder="查找内容(支持正则)" class="find-input"><input type="text" placeholder="替换为" class="replace-input"><button type="button" class="remove-modify-rule" onclick="removeModifyRule(this)">删除</button></div>';
+
+  handleActionChange('replace');
+  document.getElementById('rule-edit-modal').dataset.ruleId = '';
+}
+
+// 填充修改规则
+function fillModifyRules(modifyRules) {
+  const container = document.querySelector('.modify-rules-container');
+  container.innerHTML = '';
+
+  if (modifyRules.length === 0) {
+    addModifyRule();
+  } else {
+    modifyRules.forEach(rule => {
+      const div = document.createElement('div');
+      div.className = 'modify-rule-item';
+      div.innerHTML = `
+                <input type="text" placeholder="查找内容(支持正则)" class="find-input" value="${escapeHtml(rule.find || '')}">
+                <input type="text" placeholder="替换为" class="replace-input" value="${escapeHtml(rule.replace || '')}">
+                <button type="button" class="remove-modify-rule" onclick="removeModifyRule(this)">删除</button>
+            `;
+      container.appendChild(div);
+    });
+  }
+}
+
+// 初始化规则编辑表单事件
+function initRuleEditForm() {
+  // 操作类型变化
+  document.getElementById('rule-action').addEventListener('change', (e) => {
+    handleActionChange(e.target.value);
+  });
+
+  // 注入位置变化
+  document.getElementById('rule-inject-position').addEventListener('change', (e) => {
+    handleInjectPositionChange(e.target.value);
+  });
+
+  // 添加修改规则
+  document.getElementById('add-modify-rule').addEventListener('click', addModifyRule);
+
+  // 保存规则
+  document.getElementById('save-rule-btn').addEventListener('click', saveRule);
+
+  // 测试规则
+  document.getElementById('test-rule-btn').addEventListener('click', testRule);
+
+  // 取消编辑
+  document.getElementById('cancel-rule-btn').addEventListener('click', () => {
+    document.getElementById('rule-edit-modal').style.display = 'none';
+  });
+}
+
+// 处理操作类型变化
+function handleActionChange(action) {
+  const replaceGroup = document.getElementById('replace-content-group');
+  const modifyGroup = document.getElementById('modify-rules-group');
+  const injectGroup = document.getElementById('inject-content-group');
+
+  // 隐藏所有组
+  replaceGroup.style.display = 'none';
+  modifyGroup.style.display = 'none';
+  injectGroup.style.display = 'none';
+
+  // 显示对应的组
+  switch (action) {
+    case 'replace':
+      replaceGroup.style.display = 'block';
+      break;
+    case 'modify':
+      modifyGroup.style.display = 'block';
+      break;
+    case 'inject':
+      injectGroup.style.display = 'block';
+      break;
+  }
+}
+
+// 处理注入位置变化
+function handleInjectPositionChange(position) {
+  const targetInput = document.getElementById('rule-inject-target');
+  if (position === 'before' || position === 'after') {
+    targetInput.style.display = 'block';
+    targetInput.required = true;
+  } else {
+    targetInput.style.display = 'none';
+    targetInput.required = false;
+  }
+}
+
+// 添加修改规则
+function addModifyRule() {
+  const container = document.querySelector('.modify-rules-container');
+  const div = document.createElement('div');
+  div.className = 'modify-rule-item';
+  div.innerHTML = `
+        <input type="text" placeholder="查找内容(支持正则)" class="find-input">
+        <input type="text" placeholder="替换为" class="replace-input">
+        <button type="button" class="remove-modify-rule" onclick="removeModifyRule(this)">删除</button>
+    `;
+  container.appendChild(div);
+}
+
+// 删除修改规则
+function removeModifyRule(button) {
+  const container = document.querySelector('.modify-rules-container');
+  if (container.children.length > 1) {
+    button.parentElement.remove();
+  } else {
+    showToast('至少需要保留一条修改规则', 'error');
+  }
+}
+
+// 保存规则
+async function saveRule() {
+  try {
+    const rule = collectRuleData();
+    if (!validateRule(rule)) {
+      return;
+    }
+
+    const success = await window.electronAPI.saveResponseRule(rule);
+    if (success) {
+      document.getElementById('rule-edit-modal').style.display = 'none';
+      loadResponseRules();
+      showToast('规则保存成功', 'success');
+    } else {
+      showToast('规则保存失败', 'error');
+    }
+  } catch (error) {
+    console.error('保存规则失败:', error);
+    showToast('保存规则失败', 'error');
+  }
+}
+
+// 收集规则数据
+function collectRuleData() {
+  const ruleId = document.getElementById('rule-edit-modal').dataset.ruleId;
+  const rule = {
+    name: document.getElementById('rule-name').value.trim(),
+    urlPattern: document.getElementById('rule-url-pattern').value.trim(),
+    method: document.getElementById('rule-method').value,
+    contentType: document.getElementById('rule-content-type').value.trim(),
+    action: document.getElementById('rule-action').value,
+    enabled: document.getElementById('rule-enabled').checked
+  };
+
+  if (ruleId) {
+    rule.id = ruleId;
+  }
+
+  // 根据操作类型收集具体数据
+  switch (rule.action) {
+    case 'replace':
+      rule.replaceContent = document.getElementById('rule-replace-content').value;
+      break;
+    case 'modify':
+      rule.modifyRules = [];
+      const modifyItems = document.querySelectorAll('.modify-rule-item');
+      modifyItems.forEach(item => {
+        const find = item.querySelector('.find-input').value.trim();
+        const replace = item.querySelector('.replace-input').value;
+        if (find) {
+          rule.modifyRules.push({ find, replace });
+        }
+      });
+      break;
+    case 'inject':
+      rule.injectContent = document.getElementById('rule-inject-content').value;
+      rule.injectPosition = document.getElementById('rule-inject-position').value;
+      rule.injectTarget = document.getElementById('rule-inject-target').value.trim();
+      break;
+  }
+
+  return rule;
+}
+
+// 验证规则数据
+function validateRule(rule) {
+  if (!rule.name) {
+    showToast('请输入规则名称', 'error');
+    return false;
+  }
+
+  // 验证URL模式是否为有效正则表达式
+  if (rule.urlPattern) {
+    try {
+      new RegExp(rule.urlPattern);
+    } catch (e) {
+      showToast('URL匹配模式不是有效的正则表达式', 'error');
+      return false;
+    }
+  }
+
+  // 根据操作类型验证具体内容
+  switch (rule.action) {
+    case 'replace':
+      if (!rule.replaceContent && rule.replaceContent !== '') {
+        showToast('请输入替换内容', 'error');
+        return false;
+      }
+      break;
+    case 'modify':
+      if (!rule.modifyRules || rule.modifyRules.length === 0) {
+        showToast('请至少添加一条修改规则', 'error');
+        return false;
+      }
+      // 验证正则表达式
+      for (const modifyRule of rule.modifyRules) {
+        try {
+          new RegExp(modifyRule.find);
+        } catch (e) {
+          showToast(`修改规则中的查找内容不是有效的正则表达式: ${modifyRule.find}`, 'error');
+          return false;
+        }
+      }
+      break;
+    case 'inject':
+      if (!rule.injectContent) {
+        showToast('请输入注入内容', 'error');
+        return false;
+      }
+      if ((rule.injectPosition === 'before' || rule.injectPosition === 'after') && !rule.injectTarget) {
+        showToast('请输入目标内容', 'error');
+        return false;
+      }
+      break;
+  }
+
+  return true;
+}
+
+// 测试规则
+function testRule() {
+  const rule = collectRuleData();
+  if (!validateRule(rule)) {
+    return;
+  }
+
+  // 这里可以实现规则测试逻辑
+  showToast('规则验证通过', 'success');
+}
+
+// HTML转义
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// 显示提示消息
+function showToast(message, type = 'info') {
+  // 创建提示元素
+  const toast = document.createElement('div');
+  toast.className = `copy-toast ${type === 'error' ? 'error' : ''}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  // 显示提示
+  setTimeout(() => {
+    toast.classList.add('show');
+  }, 100);
+
+  // 3秒后隐藏
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      document.body.removeChild(toast);
+    }, 300);
+  }, 3000);
+}
+
+// 将函数暴露到全局作用域，供HTML中的onclick使用
+window.toggleRule = toggleRule;
+window.editRule = editRule;
+window.deleteRule = deleteRule;
+window.removeModifyRule = removeModifyRule;

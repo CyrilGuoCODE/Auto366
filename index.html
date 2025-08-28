@@ -229,6 +229,7 @@
                 <div class="buttons">
                     <button id="startProxyBtn">启动代理服务器</button>
                     <button id="stopProxyBtn" disabled>停止代理服务器</button>
+                    <button id="responseRulesBtn">更改响应体规则</button>
                     <button id="deleteTempBtn" class="delete-btn">删除缓存</button>
                 </div>
 
@@ -256,8 +257,8 @@
                     <h3>此次结果</h3>
                     <div class="clear-answers-button">
                         <button id="clearAnswersBtn" class="clear-btn" title="清空提取结果">
-                            <svg t="1756262061386" class="clear-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4752"
-                                width="256" height="256">
+                            <svg t="1756262061386" class="clear-icon" viewBox="0 0 1024 1024" version="1.1"
+                                xmlns="http://www.w3.org/2000/svg" p-id="4752" width="256" height="256">
                                 <path
                                     d="M829.952 271.36h-126.976v-51.2a76.288 76.288 0 0 0-75.776-76.288h-256a76.288 76.288 0 0 0-75.776 76.8v51.2H168.448a25.6 25.6 0 0 0 0 51.2h661.504a25.6 25.6 0 0 0 0-51.712z m-178.176 0h-307.2v-51.2a26.112 26.112 0 0 1 25.6-25.6h256a24.576 24.576 0 0 1 24.576 25.6zM448.512 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0zM601.088 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0z"
                                     fill="" p-id="4753"></path>
@@ -290,6 +291,114 @@
                 <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
                         style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
                 <p>许可证：GNU General Public License v3.0</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 响应体更改规则弹窗 -->
+    <div id="response-rules-modal" class="modal">
+        <div class="modal-content response-rules-modal">
+            <div class="modal-header">
+                <h2>响应体更改规则</h2>
+                <span class="close" id="close-response-rules">&times;</span>
+            </div>
+            <div class="rules-container">
+                <div class="rules-toolbar">
+                    <button id="add-rule-btn" class="add-rule-btn">新建规则</button>
+                    <button id="import-rules-btn" class="import-btn">导入规则</button>
+                    <button id="export-rules-btn" class="export-btn">导出规则</button>
+                    <div class="rules-status">
+                        <span id="rules-count">规则数量: 0</span>
+                        <span id="active-rules-count">启用: 0</span>
+                    </div>
+                </div>
+                <div class="rules-list" id="rules-list">
+                    <div class="no-rules">暂无规则，点击"新建规则"开始添加</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 规则编辑弹窗 -->
+    <div id="rule-edit-modal" class="modal">
+        <div class="modal-content rule-edit-modal">
+            <div class="modal-header">
+                <h2 id="rule-edit-title">新建规则</h2>
+                <span class="close" id="close-rule-edit">&times;</span>
+            </div>
+            <div class="rule-form">
+                <div class="form-group">
+                    <label for="rule-name">规则名称:</label>
+                    <input type="text" id="rule-name" placeholder="请输入规则名称" required>
+                </div>
+                <div class="form-group">
+                    <label for="rule-url-pattern">URL匹配模式:</label>
+                    <input type="text" id="rule-url-pattern" placeholder="支持正则表达式，如: .*\.json$" required>
+                    <small>支持正则表达式，留空则匹配所有请求</small>
+                </div>
+                <div class="form-group">
+                    <label for="rule-method">请求方法:</label>
+                    <select id="rule-method">
+                        <option value="">所有方法</option>
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="rule-content-type">内容类型:</label>
+                    <input type="text" id="rule-content-type" placeholder="如: application/json">
+                    <small>留空则匹配所有内容类型</small>
+                </div>
+                <div class="form-group">
+                    <label for="rule-action">操作类型:</label>
+                    <select id="rule-action">
+                        <option value="replace">替换响应体</option>
+                        <option value="modify">修改响应体</option>
+                        <option value="inject">注入内容</option>
+                    </select>
+                </div>
+                <div class="form-group" id="replace-content-group">
+                    <label for="rule-replace-content">替换内容:</label>
+                    <textarea id="rule-replace-content" rows="8" placeholder="请输入要替换的完整响应体内容"></textarea>
+                </div>
+                <div class="form-group" id="modify-rules-group" style="display: none;">
+                    <label>修改规则:</label>
+                    <div class="modify-rules-container">
+                        <div class="modify-rule-item">
+                            <input type="text" placeholder="查找内容(支持正则)" class="find-input">
+                            <input type="text" placeholder="替换为" class="replace-input">
+                            <button type="button" class="remove-modify-rule">删除</button>
+                        </div>
+                    </div>
+                    <button type="button" id="add-modify-rule">添加修改规则</button>
+                </div>
+                <div class="form-group" id="inject-content-group" style="display: none;">
+                    <label for="rule-inject-content">注入内容:</label>
+                    <textarea id="rule-inject-content" rows="4" placeholder="要注入的内容"></textarea>
+                    <div class="inject-position">
+                        <label>注入位置:</label>
+                        <select id="rule-inject-position">
+                            <option value="start">开头</option>
+                            <option value="end">结尾</option>
+                            <option value="before">指定内容前</option>
+                            <option value="after">指定内容后</option>
+                        </select>
+                        <input type="text" id="rule-inject-target" placeholder="目标内容(当选择指定位置时)" style="display: none;">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="rule-enabled" checked>
+                        启用此规则
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="save-rule-btn" class="save-btn">保存规则</button>
+                    <button type="button" id="test-rule-btn" class="test-btn">测试规则</button>
+                    <button type="button" id="cancel-rule-btn" class="cancel-btn">取消</button>
+                </div>
             </div>
         </div>
     </div>

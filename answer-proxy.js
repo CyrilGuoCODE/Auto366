@@ -16,6 +16,7 @@ const { v4: uuidv4 } = require('uuid')
 const appPath = app.isPackaged ? process.resourcesPath : __dirname;
 const tempDir = path.join(appPath, 'temp');
 const ansDir = path.join(appPath, 'answers');
+const rulesDir = path.join(app.getPath('userData'), 'response-rules');
 
 class AnswerProxy {
   constructor() {
@@ -24,6 +25,8 @@ class AnswerProxy {
     this.downloadUrl = '';
     this.mainWindow = null;
     this.trafficCache = new Map();
+    this.responseRules = [];
+    this.loadResponseRules();
   }
 
   // 设置主窗口引用
@@ -39,6 +42,200 @@ class AnswerProxy {
       }
     } catch (error) {
       console.error(`发送IPC消息失败 [${channel}]:`, error);
+    }
+  }
+
+  // 加载响应体更改规则
+  loadResponseRules() {
+    try {
+      fs.ensureDirSync(rulesDir);
+      const rulesFile = path.join(rulesDir, 'rules.json');
+
+      if (fs.existsSync(rulesFile)) {
+        const rulesData = fs.readFileSync(rulesFile, 'utf-8');
+        this.responseRules = JSON.parse(rulesData);
+        console.log(`已加载 ${this.responseRules.length} 条响应体更改规则`);
+      } else {
+        this.responseRules = [];
+      }
+    } catch (error) {
+      console.error('加载响应体更改规则失败:', error);
+      this.responseRules = [];
+    }
+  }
+
+  // 保存响应体更改规则
+  saveResponseRules() {
+    try {
+      fs.ensureDirSync(rulesDir);
+      const rulesFile = path.join(rulesDir, 'rules.json');
+      fs.writeFileSync(rulesFile, JSON.stringify(this.responseRules, null, 2), 'utf-8');
+      console.log(`已保存 ${this.responseRules.length} 条响应体更改规则`);
+      return true;
+    } catch (error) {
+      console.error('保存响应体更改规则失败:', error);
+      return false;
+    }
+  }
+
+  // 获取所有规则
+  getResponseRules() {
+    return this.responseRules;
+  }
+
+  // 添加或更新规则
+  saveRule(rule) {
+    try {
+      if (rule.id) {
+        // 更新现有规则
+        const index = this.responseRules.findIndex(r => r.id === rule.id);
+        if (index !== -1) {
+          this.responseRules[index] = { ...rule, updatedAt: new Date().toISOString() };
+        }
+      } else {
+        // 添加新规则
+        rule.id = uuidv4();
+        rule.createdAt = new Date().toISOString();
+        rule.updatedAt = new Date().toISOString();
+        this.responseRules.push(rule);
+      }
+
+      return this.saveResponseRules();
+    } catch (error) {
+      console.error('保存规则失败:', error);
+      return false;
+    }
+  }
+
+  // 删除规则
+  deleteRule(ruleId) {
+    try {
+      this.responseRules = this.responseRules.filter(r => r.id !== ruleId);
+      return this.saveResponseRules();
+    } catch (error) {
+      console.error('删除规则失败:', error);
+      return false;
+    }
+  }
+
+  // 切换规则启用状态
+  toggleRule(ruleId, enabled) {
+    try {
+      const rule = this.responseRules.find(r => r.id === ruleId);
+      if (rule) {
+        rule.enabled = enabled;
+        rule.updatedAt = new Date().toISOString();
+        return this.saveResponseRules();
+      }
+      return false;
+    } catch (error) {
+      console.error('切换规则状态失败:', error);
+      return false;
+    }
+  }
+
+  // 检查URL是否匹配规则
+  matchesRule(rule, url, method, contentType) {
+    try {
+      // 检查是否启用
+      if (!rule.enabled) return false;
+
+      // 检查URL模式
+      if (rule.urlPattern && rule.urlPattern.trim()) {
+        const regex = new RegExp(rule.urlPattern, 'i');
+        if (!regex.test(url)) return false;
+      }
+
+      // 检查请求方法
+      if (rule.method && rule.method.trim() && rule.method !== method) {
+        return false;
+      }
+
+      // 检查内容类型
+      if (rule.contentType && rule.contentType.trim()) {
+        if (!contentType || !contentType.includes(rule.contentType)) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('规则匹配检查失败:', error);
+      return false;
+    }
+  }
+
+  // 应用响应体更改规则
+  applyResponseRules(url, method, contentType, responseBody) {
+    try {
+      let modifiedBody = responseBody;
+      let appliedRules = [];
+
+      for (const rule of this.responseRules) {
+        if (this.matchesRule(rule, url, method, contentType)) {
+          console.log(`应用规则: ${rule.name} 到 ${url}`);
+
+          switch (rule.action) {
+            case 'replace':
+              modifiedBody = rule.replaceContent || '';
+              appliedRules.push(rule.name);
+              break;
+
+            case 'modify':
+              if (rule.modifyRules && Array.isArray(rule.modifyRules)) {
+                for (const modifyRule of rule.modifyRules) {
+                  if (modifyRule.find && modifyRule.replace !== undefined) {
+                    try {
+                      const regex = new RegExp(modifyRule.find, 'g');
+                      modifiedBody = modifiedBody.replace(regex, modifyRule.replace);
+                    } catch (regexError) {
+                      console.error('正则表达式错误:', regexError);
+                    }
+                  }
+                }
+                appliedRules.push(rule.name);
+              }
+              break;
+
+            case 'inject':
+              if (rule.injectContent) {
+                switch (rule.injectPosition) {
+                  case 'start':
+                    modifiedBody = rule.injectContent + modifiedBody;
+                    break;
+                  case 'end':
+                    modifiedBody = modifiedBody + rule.injectContent;
+                    break;
+                  case 'before':
+                    if (rule.injectTarget) {
+                      modifiedBody = modifiedBody.replace(rule.injectTarget, rule.injectContent + rule.injectTarget);
+                    }
+                    break;
+                  case 'after':
+                    if (rule.injectTarget) {
+                      modifiedBody = modifiedBody.replace(rule.injectTarget, rule.injectTarget + rule.injectContent);
+                    }
+                    break;
+                }
+                appliedRules.push(rule.name);
+              }
+              break;
+          }
+        }
+      }
+
+      return {
+        modified: appliedRules.length > 0,
+        body: modifiedBody,
+        appliedRules: appliedRules
+      };
+    } catch (error) {
+      console.error('应用响应体更改规则失败:', error);
+      return {
+        modified: false,
+        body: responseBody,
+        appliedRules: []
+      };
     }
   }
 
@@ -172,9 +369,9 @@ class AnswerProxy {
             requestInfo.contentType = contentType;
             let uuid = uuidv4()
             requestInfo.uuid = uuid;
-            
+
             this.safeIpcSend('traffic-log', requestInfo);
-            
+
             this.trafficCache.set(uuid, requestInfo)
           } else {
             // 捕获响应体并处理压缩
@@ -226,7 +423,7 @@ class AnswerProxy {
                     requestInfo.responseBody = responseBody;
                   }
                 } else if (isFile) {
-                  if (proxyRes.headers["Content-Disposition"]){
+                  if (proxyRes.headers["Content-Disposition"]) {
                     requestInfo.responseBody = proxyRes.headers["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
                   } else {
                     requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
@@ -242,14 +439,28 @@ class AnswerProxy {
                 requestInfo.isCompressed = isCompressed;
                 let uuid = uuidv4()
                 requestInfo.uuid = uuid;
-                
+
+                // 应用响应体更改规则
+                const ruleResult = this.applyResponseRules(
+                  fullUrl,
+                  req.method,
+                  contentType,
+                  responseBody
+                );
+
+                if (ruleResult.modified) {
+                  console.log(`响应体已被规则修改: ${ruleResult.appliedRules.join(', ')}`);
+                  requestInfo.responseBody = ruleResult.body;
+                  requestInfo.modifiedByRules = ruleResult.appliedRules;
+                }
+
                 this.safeIpcSend('traffic-log', requestInfo);
-                
+
                 requestInfo.originalResponse = responseBuffer;
                 this.trafficCache.set(uuid, requestInfo)
 
                 // 检查是否包含答案下载链接
-                if (isFile && requestInfo.responseBody.includes('zip')){
+                if (isFile && requestInfo.responseBody.includes('zip')) {
                   fs.mkdirSync(tempDir, { recursive: true });
                   fs.mkdirSync(ansDir, { recursive: true });
                   const filePath = path.join(tempDir, requestInfo.responseBody)
@@ -261,27 +472,27 @@ class AnswerProxy {
 
                 if (fullUrl.includes('words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
                   console.log('检测到单词PK请求，开始解析答案...');
-                  
+
                   try {
                     const jsonData = JSON.parse(responseBody);
                     if (jsonData.data && jsonData.data.contentList) {
                       const answers = this.extractWordPKAnswers(jsonData);
-                      
+
                       if (answers.length > 0) {
                         const answerFile = path.join(ansDir, `word_pk_answers_${Date.now()}.txt`);
-                        const answerText = answers.map((item, index) => 
+                        const answerText = answers.map((item, index) =>
                           `${index + 1}. [${item.categoryId}] ${item.entry}: ${item.paraphrase}`
                         ).join('\n\n');
-                        
+
                         fs.writeFileSync(answerFile, answerText, 'utf-8');
-                        
+
                         this.safeIpcSend('word-answers-extracted', {
                           answers: answers,
                           count: answers.length,
                           file: answerFile,
                           url: fullUrl
                         });
-                        
+
                         console.log(`成功提取 ${answers.length} 个单词PK答案，已保存到: ${answerFile}`);
                       } else {
                         console.log('未在单词PK数据中找到有效答案');
@@ -616,7 +827,7 @@ class AnswerProxy {
 
     try {
       let jsonData;
-      
+
       // 首先尝试直接解析为JSON
       try {
         jsonData = JSON.parse(content);
@@ -688,18 +899,18 @@ class AnswerProxy {
     }
     return answers;
   }
-  
+
   parseQuestionFile(fileContent) {
     try {
       const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
       const questionObj = config.questionObj || {};
       const results = [];
-  
+
       // 1. 精确检测类型
       const detectedType = this.detectExactType(questionObj);
-      
+
       // 2. 根据类型调用相应的解析器
-      switch(detectedType) {
+      switch (detectedType) {
         case '听后选择':
           return this.parseChoiceQuestions(questionObj);
         case '听后回答':
@@ -711,13 +922,13 @@ class AnswerProxy {
         default:
           return this.parseFallback(questionObj);
       }
-  
+
     } catch (error) {
       console.error(error)
       return [];
     }
   }
-  
+
   // 精确的类型检测
   detectExactType(questionObj) {
     // 听后选择：有questions_list且包含options
@@ -727,56 +938,56 @@ class AnswerProxy {
         return '听后选择';
       }
     }
-    
+
     // 听后回答：有record_speak且包含work/show属性，或者questions_list中的record_speak有这些属性
     if (this.hasAnswerAttributes(questionObj)) {
       return '听后回答';
     }
-    
+
     // 听后转述：有record_speak但没有work/show属性，且内容较长
     if (questionObj.record_speak && questionObj.record_speak.length > 0) {
       const firstItem = questionObj.record_speak[0];
-      if (firstItem && !firstItem.work && !firstItem.show && 
+      if (firstItem && !firstItem.work && !firstItem.show &&
         firstItem.content && firstItem.content.length > 100) {
         return '听后转述';
       }
     }
-    
+
     // 朗读短文：有record_follow_read或者analysis中包含停顿符号
-    if (questionObj.record_follow_read || 
+    if (questionObj.record_follow_read ||
       (questionObj.analysis && /\/\//.test(questionObj.analysis))) {
       return '朗读短文';
     }
-    
+
     return '未知';
   }
-  
+
   hasAnswerAttributes(questionObj) {
     // 检查顶层的record_speak
     if (questionObj.record_speak && questionObj.record_speak.length > 0) {
       const firstItem = questionObj.record_speak[0];
-      if (firstItem && (firstItem.work === "1" || firstItem.work === 1 || 
+      if (firstItem && (firstItem.work === "1" || firstItem.work === 1 ||
         firstItem.show === "1" || firstItem.show === 1)) {
         return true;
       }
     }
-    
+
     // 检查questions_list中的record_speak
     if (questionObj.questions_list && questionObj.questions_list.length > 0) {
       for (const question of questionObj.questions_list) {
         if (question.record_speak && question.record_speak.length > 0) {
           const firstRecord = question.record_speak[0];
-          if (firstRecord && (firstRecord.work === "1" || firstRecord.work === 1 || 
+          if (firstRecord && (firstRecord.work === "1" || firstRecord.work === 1 ||
             firstRecord.show === "1" || firstRecord.show === 1)) {
             return true;
           }
         }
       }
     }
-    
+
     return false;
   }
-  
+
   // 解析听后选择题
   parseChoiceQuestions(questionObj) {
     const results = [];
@@ -797,11 +1008,11 @@ class AnswerProxy {
     });
     return results;
   }
-  
+
   // 解析听后回答题
   parseAnswerQuestions(questionObj) {
     const results = [];
-    
+
     // 处理questions_list中的回答
     if (questionObj.questions_list) {
       questionObj.questions_list.forEach((question, qIndex) => {
@@ -810,7 +1021,7 @@ class AnswerProxy {
             .filter(item => item.show === "1" || item.show === 1)
             .map(item => item.content?.trim() || '')
             .filter(content => content && content !== '<answers/>');
-          
+
           let messageInfo = {
             question: `第${qIndex + 1}题`,
             answer: question.question_text || '未知',
@@ -830,14 +1041,14 @@ class AnswerProxy {
         }
       });
     }
-    
+
     // 处理顶层的record_speak（单个问题的情况）
     if (questionObj.record_speak && results.length === 0) {
       const answers = questionObj.record_speak
         .filter(item => item.show === "1" || item.show === 1)
         .map(item => item.content?.trim() || '')
         .filter(content => content && content !== '<answers/>');
-      
+
       let messageInfo = {
         question: `第1题`,
         answer: questionObj.question_text || '未知',
@@ -855,14 +1066,14 @@ class AnswerProxy {
       });
       results.push(messageInfo)
     }
-    
+
     return results;
   }
-  
+
   // 解析听后转述
   parseRetellContent(questionObj) {
     const results = [];
-    
+
     if (questionObj.record_speak && questionObj.record_speak.length > 0) {
       questionObj.record_speak.forEach((item, itemIndex) => {
         if (item.content) {
@@ -870,7 +1081,7 @@ class AnswerProxy {
           const paragraphs = item.content.split('\n')
             .map(p => p.trim())
             .filter(p => p.length > 0);
-          
+
           paragraphs.forEach((paragraph, pIndex) => {
             results.push({
               question: `第${itemIndex + 1}题-${pIndex == 0 ? '原文' : `参考答案${pIndex}`}`,
@@ -882,27 +1093,27 @@ class AnswerProxy {
         }
       });
     }
-    
+
     return results;
   }
-  
+
   // 解析朗读短文
   parseReadingContent(questionObj) {
     const results = [];
-    
+
     // 优先从analysis中提取带停顿的文本
     if (questionObj.analysis) {
       const cleanAnalysis = questionObj.analysis
         .replace(/<[^>]*>/g, '') // 移除HTML标签
         .replace(/参考答案[一二一二]：/g, '') // 移除参考答案标记
         .trim();
-      
+
       if (cleanAnalysis) {
         // 按句号分割但保留原文格式
         const sentences = cleanAnalysis.split(/[.!?]。/)
           .map(s => s.trim())
           .filter(s => s.length > 0);
-        
+
         sentences.forEach((sentence, index) => {
           results.push({
             question: `第${index + 1}题`,
@@ -913,7 +1124,7 @@ class AnswerProxy {
         });
       }
     }
-    
+
     // 如果没有analysis，从record_follow_read中提取
     if (results.length === 0 && questionObj.record_follow_read?.paragraph_list) {
       let sentenceCount = 1;
@@ -933,14 +1144,14 @@ class AnswerProxy {
         }
       });
     }
-    
+
     return results;
   }
-  
+
   // 备用解析方案
   parseFallback(questionObj) {
     const results = [];
-    
+
     // 尝试从各种可能的位置提取答案
     if (questionObj.analysis) {
       const text = questionObj.analysis.replace(/<[^>]*>/g, '').trim();
@@ -953,14 +1164,14 @@ class AnswerProxy {
         });
       }
     }
-    
+
     return results;
   }
 
   extractFromJS(content, filePath) {
     try {
       let jsonData;
-      
+
       // 首先尝试直接解析为JSON
       try {
         jsonData = JSON.parse(content);
@@ -979,7 +1190,7 @@ class AnswerProxy {
   // 从文本文件提取答案
   extractFromText(content, filePath) {
     const answers = [];
-    
+
     try {
       // 尝试匹配常见的答案格式
       const answerPatterns = [
@@ -989,18 +1200,18 @@ class AnswerProxy {
         /参考答案\s*[:：]\s*([^\n]+)/g, // 参考答案: xxx
         /\b[A-D]\b/g  // 单独的选项字母
       ];
-      
+
       // 按行处理文本
       const lines = content.split('\n');
       let lineNum = 0;
-      
+
       for (const line of lines) {
         lineNum++;
-        
+
         // 尝试每个答案模式
         for (const pattern of answerPatterns) {
           const matches = [...line.matchAll(pattern)];
-          
+
           if (matches.length > 0) {
             matches.forEach((match, index) => {
               if (match[1]) {
@@ -1014,7 +1225,7 @@ class AnswerProxy {
             });
           }
         }
-        
+
         // 处理单独的选项字母
         const optionMatches = [...line.matchAll(/\b([A-D])\b/g)];
         if (optionMatches.length > 0) {
@@ -1026,7 +1237,7 @@ class AnswerProxy {
           });
         }
       }
-      
+
       return answers;
     } catch (error) {
       console.error(`解析文本文件失败: ${filePath}`, error);
@@ -1036,7 +1247,7 @@ class AnswerProxy {
 
   extractWordPKAnswers(jsonData) {
     const answers = [];
-    
+
     try {
       if (jsonData.data && jsonData.data.contentList) {
         jsonData.data.contentList.forEach((contentItem, cIndex) => {
@@ -1064,7 +1275,7 @@ class AnswerProxy {
     } catch (error) {
       console.error('提取单词PK答案失败:', error);
     }
-    
+
     return answers;
   }
 
@@ -1141,18 +1352,18 @@ class AnswerProxy {
     if (!fileInfo) {
       throw new Error('数据不存在');
     }
-    
+
     let content = fileInfo.responseBody
     if (fileInfo.contentType && (fileInfo.contentType.includes('image') || fileInfo.contentType.includes('octet-stream'))) content = fileInfo.originalResponse
 
     // 使用 fs.promises.writeFile 的异步版本
     await fs.promises.writeFile(filePath, fileInfo.originalResponse);
   }
-  clearCache(){
+  clearCache() {
     this.trafficCache.clear()
     fs.rm(tempDir, { recursive: true, force: true });
   }
-  getTrafficByUuid(uuid){
+  getTrafficByUuid(uuid) {
     return this.trafficCache.get(uuid)
   }
 }

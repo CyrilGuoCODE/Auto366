@@ -325,11 +325,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return { error: '系统音频写入失败: ' + e.message };
     }
   },
-  
+
   openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
   chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
   setCachePath: (cachePath) => {
-    if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))){
+    if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))) {
       resourcePath = path.join(cachePath, 'resources')
       flipbooksPath = path.join(cachePath, 'flipbooks')
       return 1;
@@ -337,5 +337,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     else {
       return 0;
     }
-  }
+  },
+
+  // 响应体更改规则相关API
+  getResponseRules: () => ipcRenderer.invoke('get-response-rules'),
+  saveResponseRule: (rule) => ipcRenderer.invoke('save-response-rule', rule),
+  deleteResponseRule: (ruleId) => ipcRenderer.invoke('delete-response-rule', ruleId),
+  toggleResponseRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
+  exportResponseRules: () => ipcRenderer.invoke('export-response-rules'),
+  importResponseRules: () => ipcRenderer.invoke('import-response-rules')
 })
