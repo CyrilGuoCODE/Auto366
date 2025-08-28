@@ -260,10 +260,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startCapturing: () => ipcRenderer.send('start-capturing'),
   stopCapturing: () => ipcRenderer.send('stop-capturing'),
 
-  // 响应体规则相关API
-  getResponseRules: () => ipcRenderer.invoke('get-response-rules'),
-  saveResponseRules: (rules) => ipcRenderer.invoke('save-response-rules', rules),
-
   // 监听事件
   onProxyStatus: (callback) => ipcRenderer.on('proxy-status', callback),
   onProxyError: (callback) => ipcRenderer.on('proxy-error', callback),
