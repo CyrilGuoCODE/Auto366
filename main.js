@@ -406,6 +406,19 @@ ipcMain.on('stop-answer-proxy', () => {
   answerProxy.stopProxy();
 })
 
+ipcMain.handle('get-response-rules', () => {
+  return answerProxy.getResponseRules();
+});
+
+ipcMain.handle('save-response-rules', (event, rules) => {
+  try {
+    answerProxy.setResponseRules(rules);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.on('open-directory-choosing', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
