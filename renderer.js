@@ -63,9 +63,20 @@ class Global {
       document.getElementById('settings-modal').style.display = 'flex'
       document.getElementById('cache-path').value = cachePath
     })
-    document.getElementsByClassName('close')[0].addEventListener('click', () => {
-      document.getElementById('settings-modal').style.display = 'none'
+
+    const settingsModal = document.getElementById('settings-modal');
+    const settingsCloseBtn = settingsModal.querySelector('.close');
+    
+    settingsCloseBtn.addEventListener('click', () => {
+      settingsModal.style.display = 'none'
     })
+
+    window.addEventListener('click', (event) => {
+      if (event.target === settingsModal) {
+        settingsModal.style.display = 'none'
+      }
+    })
+    
     document.getElementById('browse-cache').addEventListener('click', function () {
       window.electronAPI.openDirectoryChoosing()
     })
