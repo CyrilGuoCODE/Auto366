@@ -960,11 +960,10 @@ class AnswerProxy {
   // 精确的类型检测
   detectExactType(questionObj) {
     // 听后选择：有questions_list且包含options
-    if (questionObj.questions_list && questionObj.questions_list.length > 0) {
-      const firstQuestion = questionObj.questions_list[0];
-      if (firstQuestion.options && firstQuestion.options.length > 0) {
+    if ((questionObj.questions_list && questionObj.questions_list.length > 0 && 
+         questionObj.questions_list[0].options && questionObj.questions_list[0].options.length > 0) ||
+        (questionObj.options && questionObj.options.length > 0 && questionObj.answer_text)) {
         return '听后选择';
-      }
     }
 
     // 听后回答：有record_speak且包含work/show属性，或者questions_list中的record_speak有这些属性
@@ -1019,21 +1018,44 @@ class AnswerProxy {
   // 解析听后选择题
   parseChoiceQuestions(questionObj) {
     const results = [];
-    questionObj.questions_list.forEach((question, index) => {
-      if (question.answer_text && question.options) {
-        const correctOption = question.options.find(
-          opt => opt.id === question.answer_text
+    // 处理questions_list中的选择题
+    if (questionObj.questions_list) {
+        questionObj.questions_list.forEach((question, index) => {
+            if (question.answer_text && question.options) {
+                const correctOption = question.options.find(
+                    opt => opt.id === question.answer_text
+                );
+                if (correctOption) {
+                    results.push({
+                        question: `第${index + 1}题: ${question.question_text || '未知问题'}`,
+                        answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+                        content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+                        pattern: '听后选择'
+                    });
+                }
+            }
+        });
+    }
+    
+    // 处理单个选择题（没有questions_list但在顶层有options）
+    if (results.length === 0 && questionObj.options && questionObj.options.length > 0 && questionObj.answer_text) {
+        const correctOption = questionObj.options.find(
+            opt => opt.id === questionObj.answer_text
         );
         if (correctOption) {
-          results.push({
-            question: `第${index + 1}题`,
-            answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-            content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-            pattern: '听后选择'
-          });
+            // 清理问题文本中的HTML标签
+            const cleanQuestionText = questionObj.question_text 
+                ? questionObj.question_text.replace(/<[^>]*>/g, '').trim()
+                : '未知问题';
+            
+            results.push({
+                question: `第1题: ${cleanQuestionText}`,
+                answer: `${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
+                content: `请回答: ${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
+                pattern: '听后选择'
+            });
         }
-      }
-    });
+    }
     return results;
   }
 
