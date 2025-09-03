@@ -283,28 +283,27 @@ button:disabled {
 }
 
 .status-indicators {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    justify-content: space-between;
     gap: 15px;
     margin-top: 20px;
 }
 
 .status-item {
-    display: flex;
-    align-items: center;
     padding: 10px;
     background: white;
     border-radius: 6px;
     border: 1px solid #dee2e6;
-    width: 160px;
-    margin: 0 auto;
+    flex: 1;
     text-align: center;
+    min-width: 0;
 }
 
 .status-label {
     font-weight: 500;
     color: #495057;
-    margin-right: 10px;
+    margin-bottom: 5px;
+    font-size: 12px;
 }
 
 .status-value {
@@ -327,6 +326,16 @@ button:disabled {
 .status-value.processing {
     background: #fff3cd;
     color: #856404;
+}
+
+.status-value.success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-value.error {
+    background: #f8d7da;
+    color: #721c24;
 }
 
 .traffic-monitor {
@@ -620,7 +629,13 @@ button:disabled {
     }
 
     .status-indicators {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .status-item {
+        flex: none;
+        width: 100%;
     }
 }
 

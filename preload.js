@@ -274,6 +274,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCaptureStatus: (callback) => ipcRenderer.on('capture-status', callback),
   onFileStructure: (callback) => ipcRenderer.on('file-structure', callback),
   onFilesProcessed: (callback) => ipcRenderer.on('files-processed', callback),
+  onCertificateStatus: (callback) => ipcRenderer.on('certificate-status', callback),
 
   openLocationWindowPk: () => ipcRenderer.send('open-location-window-pk'),
   setLocationsPk1: (pos) => ipcRenderer.send('set-locations-pk-1', pos),

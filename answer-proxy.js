@@ -13,6 +13,7 @@ const { Transform } = require('stream')
 const path = require('path')
 const { app } = require('electron')
 const { v4: uuidv4 } = require('uuid')
+const CertificateManager = require('./certificate-manager')
 const appPath = app.isPackaged ? process.resourcesPath : __dirname;
 const tempDir = path.join(appPath, 'temp');
 const ansDir = path.join(appPath, 'answers');
@@ -26,6 +27,7 @@ class AnswerProxy {
     this.mainWindow = null;
     this.trafficCache = new Map();
     this.responseRules = [];
+    this.certManager = new CertificateManager();
     this.loadResponseRules();
   }
 
@@ -295,11 +297,37 @@ class AnswerProxy {
   }
 
   // 启动抓包代理
-  startProxy(mainWindow) {
+  async startProxy(mainWindow) {
     this.mainWindow = mainWindow;
 
     if (this.proxyAgent) {
       this.stopProxy();
+    }
+
+    // 自动导入证书
+    try {
+      this.safeIpcSend('certificate-status', { 
+        status: 'importing', 
+        message: '正在检查并导入证书到受信任的根证书颁发机构...' 
+      });
+      
+      const certResult = await this.certManager.importCertificate();
+      
+      // 发送证书导入结果状态
+      this.safeIpcSend('certificate-status', { 
+        status: certResult.status || (certResult.success ? 'success' : 'error'),
+        message: certResult.message || certResult.error || '证书处理完成'
+      });
+      
+      if (!certResult.success) {
+        console.warn('证书导入失败，但代理将继续启动:', certResult.error);
+      }
+    } catch (error) {
+      this.safeIpcSend('certificate-status', { 
+        status: 'error', 
+        message: '证书导入过程中发生错误: ' + error.message 
+      });
+      console.warn('证书导入过程中发生错误，但代理将继续启动:', error);
     }
 
     // 创建MITM代理实例

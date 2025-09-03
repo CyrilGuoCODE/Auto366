@@ -645,6 +645,11 @@ class UniversalAnswerFeature {
       this.updateProxyStatus(data);
     });
 
+    // 监听证书状态
+    window.electronAPI.onCertificateStatus((event, data) => {
+      this.updateCertificateStatus(data);
+    });
+
     // 监听流量日志
     window.electronAPI.onTrafficLog((event, data) => {
       this.addTrafficLog(data);
@@ -781,6 +786,32 @@ class UniversalAnswerFeature {
       startBtn.disabled = false;
       stopBtn.disabled = true;
       this.addInfoLog(data.message);
+    }
+  }
+
+  updateCertificateStatus(data) {
+    const statusElement = document.getElementById('certificateStatus');
+    
+    if (data.status === 'importing') {
+      statusElement.textContent = '导入中';
+      statusElement.className = 'status-value processing';
+      this.addInfoLog(data.message);
+    } else if (data.status === 'success') {
+      statusElement.textContent = '已导入';
+      statusElement.className = 'status-value success';
+      this.addSuccessLog(data.message);
+    } else if (data.status === 'error') {
+      statusElement.textContent = '导入失败';
+      statusElement.className = 'status-value error';
+      this.addErrorLog(data.message);
+    } else if (data.status === 'exists') {
+      statusElement.textContent = '已存在';
+      statusElement.className = 'status-value success';
+      this.addSuccessLog(data.message);
+    } else if (data.status === 'not_found') {
+      statusElement.textContent = '未找到';
+      statusElement.className = 'status-value error';
+      this.addErrorLog(data.message);
     }
   }
 

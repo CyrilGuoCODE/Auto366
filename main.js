@@ -398,8 +398,8 @@ function stopPythonScript() {
 }
 
 // IPC事件处理 - 抓包代理相关
-ipcMain.on('start-answer-proxy', () => {
-  answerProxy.startProxy(mainWindow);
+ipcMain.on('start-answer-proxy', async () => {
+  await answerProxy.startProxy(mainWindow);
 })
 
 ipcMain.on('stop-answer-proxy', () => {

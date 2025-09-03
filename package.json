@@ -39,12 +39,6 @@
       "!dist/**/*",
       "!.git/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "./backend.exe",
-        "to": "./backend.exe"
-      }
-    ],
     "win": {
       "target": "nsis",
       "icon": "icon.png",
