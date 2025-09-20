@@ -311,7 +311,19 @@ class AnswerProxy {
         message: '正在检查并导入证书到受信任的根证书颁发机构...' 
       });
       
-      const certResult = await this.certManager.importCertificate();
+      // 先尝试正常导入
+      let certResult = await this.certManager.importCertificate();
+      
+      // 如果显示"已存在"但实际可能没有，尝试强制导入
+      if (certResult.status === 'exists') {
+        console.log('检测到证书可能已存在，但为了确保正确性，尝试强制重新导入...');
+        this.safeIpcSend('certificate-status', { 
+          status: 'importing', 
+          message: '检测到证书可能已存在，正在强制重新导入以确保正确性...' 
+        });
+        
+        certResult = await this.certManager.forceImportCertificate();
+      }
       
       // 发送证书导入结果状态
       this.safeIpcSend('certificate-status', { 
