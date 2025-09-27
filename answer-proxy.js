@@ -306,38 +306,38 @@ class AnswerProxy {
 
     // 自动导入证书
     try {
-      this.safeIpcSend('certificate-status', { 
-        status: 'importing', 
-        message: '正在检查并导入证书到受信任的根证书颁发机构...' 
+      this.safeIpcSend('certificate-status', {
+        status: 'importing',
+        message: '正在检查并导入证书到受信任的根证书颁发机构...'
       });
-      
+
       // 先尝试正常导入
       let certResult = await this.certManager.importCertificate();
-      
+
       // 如果显示"已存在"但实际可能没有，尝试强制导入
       if (certResult.status === 'exists') {
         console.log('检测到证书可能已存在，但为了确保正确性，尝试强制重新导入...');
-        this.safeIpcSend('certificate-status', { 
-          status: 'importing', 
-          message: '检测到证书可能已存在，正在强制重新导入以确保正确性...' 
+        this.safeIpcSend('certificate-status', {
+          status: 'importing',
+          message: '检测到证书可能已存在，正在强制重新导入以确保正确性...'
         });
-        
+
         certResult = await this.certManager.forceImportCertificate();
       }
-      
+
       // 发送证书导入结果状态
-      this.safeIpcSend('certificate-status', { 
+      this.safeIpcSend('certificate-status', {
         status: certResult.status || (certResult.success ? 'success' : 'error'),
         message: certResult.message || certResult.error || '证书处理完成'
       });
-      
+
       if (!certResult.success) {
         console.warn('证书导入失败，但代理将继续启动:', certResult.error);
       }
     } catch (error) {
-      this.safeIpcSend('certificate-status', { 
-        status: 'error', 
-        message: '证书导入过程中发生错误: ' + error.message 
+      this.safeIpcSend('certificate-status', {
+        status: 'error',
+        message: '证书导入过程中发生错误: ' + error.message
       });
       console.warn('证书导入过程中发生错误，但代理将继续启动:', error);
     }
@@ -712,20 +712,23 @@ class AnswerProxy {
         });
 
         if (allAnswers.length > 0) {
+          // 尝试合并correctAnswer.xml和paper.xml的数据
+          const mergedAnswers = this.mergeAnswerData(allAnswers);
+
           // 保存所有答案到文件
           const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
           const answerText = JSON.stringify({
-            answers: allAnswers,
-            count: allAnswers.length,
+            answers: mergedAnswers,
+            count: mergedAnswers.length,
             file: answerFile,
             processedFiles: processedFiles
-          })
+          }, null, 2);
 
           fs.writeFileSync(answerFile, answerText, 'utf-8');
 
           this.safeIpcSend('answers-extracted', {
-            answers: allAnswers,
-            count: allAnswers.length,
+            answers: mergedAnswers,
+            count: mergedAnswers.length,
             file: answerFile,
             processedFiles: processedFiles
           });
@@ -972,10 +975,10 @@ class AnswerProxy {
   // 精确的类型检测
   detectExactType(questionObj) {
     // 听后选择：有questions_list且包含options
-    if ((questionObj.questions_list && questionObj.questions_list.length > 0 && 
-         questionObj.questions_list[0].options && questionObj.questions_list[0].options.length > 0) ||
-        (questionObj.options && questionObj.options.length > 0 && questionObj.answer_text)) {
-        return '听后选择';
+    if ((questionObj.questions_list && questionObj.questions_list.length > 0 &&
+      questionObj.questions_list[0].options && questionObj.questions_list[0].options.length > 0) ||
+      (questionObj.options && questionObj.options.length > 0 && questionObj.answer_text)) {
+      return '听后选择';
     }
 
     // 听后回答：有record_speak且包含work/show属性，或者questions_list中的record_speak有这些属性
@@ -1032,41 +1035,41 @@ class AnswerProxy {
     const results = [];
     // 处理questions_list中的选择题
     if (questionObj.questions_list) {
-        questionObj.questions_list.forEach((question, index) => {
-            if (question.answer_text && question.options) {
-                const correctOption = question.options.find(
-                    opt => opt.id === question.answer_text
-                );
-                if (correctOption) {
-                    results.push({
-                        question: `第${index + 1}题: ${question.question_text || '未知问题'}`,
-                        answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-                        content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
-                        pattern: '听后选择'
-                    });
-                }
-            }
-        });
+      questionObj.questions_list.forEach((question, index) => {
+        if (question.answer_text && question.options) {
+          const correctOption = question.options.find(
+            opt => opt.id === question.answer_text
+          );
+          if (correctOption) {
+            results.push({
+              question: `第${index + 1}题: ${question.question_text || '未知问题'}`,
+              answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+              content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+              pattern: '听后选择'
+            });
+          }
+        }
+      });
     }
-    
+
     // 处理单个选择题（没有questions_list但在顶层有options）
     if (results.length === 0 && questionObj.options && questionObj.options.length > 0 && questionObj.answer_text) {
-        const correctOption = questionObj.options.find(
-            opt => opt.id === questionObj.answer_text
-        );
-        if (correctOption) {
-            // 清理问题文本中的HTML标签
-            const cleanQuestionText = questionObj.question_text 
-                ? questionObj.question_text.replace(/<[^>]*>/g, '').trim()
-                : '未知问题';
-            
-            results.push({
-                question: `第1题: ${cleanQuestionText}`,
-                answer: `${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
-                content: `请回答: ${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
-                pattern: '听后选择'
-            });
-        }
+      const correctOption = questionObj.options.find(
+        opt => opt.id === questionObj.answer_text
+      );
+      if (correctOption) {
+        // 清理问题文本中的HTML标签
+        const cleanQuestionText = questionObj.question_text
+          ? questionObj.question_text.replace(/<[^>]*>/g, '').trim()
+          : '未知问题';
+
+        results.push({
+          question: `第1题: ${cleanQuestionText}`,
+          answer: `${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
+          content: `请回答: ${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
+          pattern: '听后选择'
+        });
+      }
     }
     return results;
   }
@@ -1307,6 +1310,85 @@ class AnswerProxy {
     }
   }
 
+  // 合并答案数据
+  mergeAnswerData(allAnswers) {
+    try {
+      // 分离correctAnswer.xml和paper.xml的数据
+      const correctAnswers = allAnswers.filter(ans => ans.sourceFile === 'correctAnswer.xml');
+      const paperQuestions = allAnswers.filter(ans => ans.sourceFile === 'paper.xml');
+
+      // 如果两个文件都存在，尝试合并
+      if (correctAnswers.length > 0 && paperQuestions.length > 0) {
+        const mergedAnswers = [];
+        let successfulMerges = 0;
+
+        // 为每个正确答案找到对应的题目
+        correctAnswers.forEach((correctAns, index) => {
+          // 尝试通过题目编号匹配
+          const matchingQuestion = paperQuestions.find(q =>
+            q.questionNo === (index + 1) ||
+            q.question.includes(`第${index + 1}题`)
+          );
+
+          if (matchingQuestion && matchingQuestion.options && matchingQuestion.options.length > 0) {
+            // 找到对应的正确选项
+            const correctOption = matchingQuestion.options.find(opt =>
+              opt.id === correctAns.answer
+            );
+
+            if (correctOption) {
+              // 成功合并，使用合并格式
+              mergedAnswers.push({
+                question: `第${index + 1}题`,
+                questionText: matchingQuestion.answer.replace('题目: ', ''),
+                answer: correctAns.answer,
+                answerText: correctOption.text,
+                fullAnswer: `${correctAns.answer}. ${correctOption.text}`,
+                options: matchingQuestion.options,
+                analysis: correctAns.content.includes('解析:') ?
+                  correctAns.content.split('解析: ')[1].split('\n答案:')[0] : '',
+                pattern: '合并答案模式',
+                sourceFiles: ['correctAnswer.xml', 'paper.xml']
+              });
+              successfulMerges++;
+            } else {
+              // 没有找到对应选项，使用普通格式
+              mergedAnswers.push({
+                question: `第${index + 1}题`,
+                answer: correctAns.answer,
+                content: correctAns.content,
+                pattern: correctAns.pattern
+              });
+            }
+          } else {
+            // 没有找到匹配的题目，使用普通格式
+            mergedAnswers.push({
+              question: `第${index + 1}题`,
+              answer: correctAns.answer,
+              content: correctAns.content,
+              pattern: correctAns.pattern
+            });
+          }
+        });
+
+        // 如果成功合并的数量太少（少于总数的50%），回退到普通模式
+        if (successfulMerges < correctAnswers.length * 0.5) {
+          console.log(`合并成功率过低 (${successfulMerges}/${correctAnswers.length})，回退到普通模式`);
+          return allAnswers;
+        }
+
+        console.log(`成功合并 ${successfulMerges}/${correctAnswers.length} 个答案`);
+        return mergedAnswers;
+      }
+
+      // 如果只有一个文件或无法合并，返回原始数据
+      return allAnswers;
+    } catch (error) {
+      console.error('合并答案数据失败:', error);
+      return allAnswers;
+    }
+  }
+
   extractWordPKAnswers(jsonData) {
     const answers = [];
 
@@ -1348,60 +1430,83 @@ class AnswerProxy {
     try {
       // 处理correctAnswer.xml文件
       if (filePath.includes('correctAnswer')) {
-        // 使用正则表达式提取所有<answer>标签中的内容
-        const answerMatches = content.match(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/g);
+        // 提取所有element元素，包含id、analysis和answers
+        const elementMatches = [...content.matchAll(/<element\s+id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
 
-        if (answerMatches) {
-          answerMatches.forEach((match, index) => {
-            const answerText = match.replace(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/, '$1');
-            if (answerText && answerText.trim().length > 0) {
-              answers.push({
-                question: index + 1,
-                answer: answerText.trim(),
-                content: `答案: ${answerText.trim()}`,
-                pattern: 'XML正确答案模式'
-              });
+        elementMatches.forEach((elementMatch, index) => {
+          const elementId = elementMatch[1];
+          const elementContent = elementMatch[2];
+
+          // 提取answers标签中的内容
+          const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answers>/);
+
+          if (answersMatch && answersMatch[1]) {
+            const answerText = answersMatch[1].trim();
+
+            // 提取analysis中的内容作为题目解析
+            const analysisMatch = elementContent.match(/<analysis>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/analysis>/s);
+            let analysisText = '';
+            if (analysisMatch && analysisMatch[1]) {
+              // 清理HTML标签
+              analysisText = analysisMatch[1].replace(/<[^>]*>/g, '').trim();
             }
-          });
-        }
+
+            answers.push({
+              question: `第${index + 1}题`,
+              answer: answerText,
+              content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
+              pattern: 'XML正确答案模式',
+              elementId: elementId
+            });
+          }
+        });
       }
 
       // 处理paper.xml文件
       if (filePath.includes('paper')) {
-        // 提取所有<element>标签中的题目和答案
-        const elementMatches = content.match(/<element[^>]*id="([^"]+)".*?<question_no>(\d+)<\/question_no>.*?<question_text>(.*?)<\/question_text>.*?<knowledge>(.*?)<\/knowledge>/gs);
+        // 提取所有包含题目信息的element元素
+        const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*type="3"[^>]*>(.*?)<\/element>/gs)];
 
-        if (elementMatches) {
-          elementMatches.forEach((match, index) => {
-            const idMatch = match.match(/id="([^"]+)"/);
-            const questionNoMatch = match.match(/<question_no>(\d+)<\/question_no>/);
-            const questionTextMatch = match.match(/<question_text>(.*?)<\/question_text>/);
-            const knowledgeMatch = match.match(/<knowledge>(.*?)<\/knowledge>/);
+        elementMatches.forEach((elementMatch) => {
+          const elementId = elementMatch[1];
+          const elementContent = elementMatch[2];
 
-            if (idMatch && questionNoMatch && questionTextMatch && knowledgeMatch) {
-              answers.push({
-                question: parseInt(questionNoMatch[1]),
-                answer: knowledgeMatch[1].trim(),
-                content: `题目: ${questionTextMatch[1].trim()}\n答案: ${knowledgeMatch[1].trim()}`,
-                pattern: 'XML题目答案模式'
-              });
-            }
-          });
-        }
+          // 提取题目编号
+          const questionNoMatch = elementContent.match(/<question_no>(\d+)<\/question_no>/);
+
+          // 提取题目文本
+          const questionTextMatch = elementContent.match(/<question_text>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/question_text>/s);
+
+          // 提取选项
+          const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/option>/gs)];
+
+          if (questionNoMatch && questionTextMatch && optionsMatches.length > 0) {
+            const questionNo = parseInt(questionNoMatch[1]);
+            let questionText = questionTextMatch[1];
+
+            // 清理题目文本中的HTML标签，但保留问题内容
+            questionText = questionText.replace(/<img[^>]*>/g, '[音频]').replace(/<[^>]*>/g, '').trim();
+
+            // 格式化选项
+            const optionsText = optionsMatches.map(optionMatch =>
+              `${optionMatch[1]}. ${optionMatch[2].trim()}`
+            ).join('\n');
+
+            answers.push({
+              question: `第${questionNo}题`,
+              answer: `题目: ${questionText}`,
+              content: `题目: ${questionText}\n\n选项:\n${optionsText}`,
+              pattern: 'XML题目选项模式',
+              elementId: elementId,
+              questionNo: questionNo,
+              options: optionsMatches.map(optionMatch => ({
+                id: optionMatch[1],
+                text: optionMatch[2].trim()
+              }))
+            });
+          }
+        });
       }
-
-      // 尝试通用XML答案提取
-      const xmlAnswerMatches = [...content.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>/g)];
-      xmlAnswerMatches.forEach((match, index) => {
-        if (match[1]) {
-          answers.push({
-            question: index + 1,
-            answer: match[1].trim(),
-            content: `答案: ${match[1].trim()}`,
-            pattern: '通用XML答案模式'
-          });
-        }
-      });
 
       return answers;
     } catch (error) {
