@@ -1364,3 +1364,131 @@ button:disabled {
         fill: currentColor;
     }
 }
+
+.appreciation-section {
+    text-align: center;
+    margin: 30px 0 20px 0;
+}
+
+.appreciation-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+    color: white;
+    border-radius: 25px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+    user-select: none;
+}
+
+.appreciation-icon:hover {
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+    background: linear-gradient(135deg, #ff5252, #e53935);
+}
+
+.heart-icon {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.appreciation-text {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.appreciation-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 15px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    padding: 20px;
+    min-width: 280px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    border: 1px solid #e2e8f0;
+}
+
+.appreciation-popup::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 8px solid transparent;
+    border-top-color: white;
+}
+
+.appreciation-icon:hover .appreciation-popup {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(-5px);
+}
+
+.appreciation-content h4 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 16px;
+    text-align: center;
+}
+
+.qr-placeholder {
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+    line-height: 1.5;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 2px dashed #dee2e6;
+}
+
+.qr-placeholder p {
+    margin: 8px 0;
+}
+
+.qr-placeholder strong {
+    color: #007bff;
+    font-weight: 600;
+}
+
+.appreciation-qr {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 心跳动画 */
+@keyframes heartbeat {
+    0%, 50%, 100% {
+        transform: scale(1);
+    }
+    25% {
+        transform: scale(1.1);
+    }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .appreciation-popup {
+        min-width: 250px;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+    }
+    
+    .appreciation-icon:hover .appreciation-popup {
+        transform: translateX(-50%) translateY(-5px);
+    }
+}
