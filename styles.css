@@ -1411,7 +1411,7 @@ button:disabled {
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     padding: 20px;
-    min-width: 280px;
+    min-width: 400px;
     opacity: 0;
     visibility: hidden;
     transition: all 0.3s ease;
@@ -1462,11 +1462,20 @@ button:disabled {
     font-weight: 600;
 }
 
+.appreciation-qr-container {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .appreciation-qr {
-    max-width: 200px;
-    max-height: 200px;
+    max-width: 180px;
+    max-height: 180px;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
 }
 
 /* 心跳动画 */
@@ -1482,10 +1491,20 @@ button:disabled {
 /* 响应式设计 */
 @media (max-width: 768px) {
     .appreciation-popup {
-        min-width: 250px;
+        min-width: 320px;
         left: 50%;
         right: auto;
         transform: translateX(-50%);
+    }
+    
+    .appreciation-qr-container {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .appreciation-qr {
+        max-width: 150px;
+        max-height: 150px;
     }
     
     .appreciation-icon:hover .appreciation-popup {
