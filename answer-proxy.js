@@ -1324,41 +1324,63 @@ class AnswerProxy {
 
         // 为每个正确答案找到对应的题目
         correctAnswers.forEach((correctAns, index) => {
-          // 尝试通过题目编号匹配
-          const matchingQuestion = paperQuestions.find(q =>
-            q.questionNo === (index + 1) ||
-            q.question.includes(`第${index + 1}题`)
-          );
+          // 尝试通过elementId匹配（最准确）
+          let matchingQuestion = paperQuestions.find(q => q.elementId === correctAns.elementId);
 
-          if (matchingQuestion && matchingQuestion.options && matchingQuestion.options.length > 0) {
-            // 找到对应的正确选项
-            const correctOption = matchingQuestion.options.find(opt =>
-              opt.id === correctAns.answer
+          // 如果elementId匹配失败，尝试通过题目编号匹配
+          if (!matchingQuestion) {
+            matchingQuestion = paperQuestions.find(q =>
+              q.questionNo === (index + 1) ||
+              q.question.includes(`第${index + 1}题`)
             );
+          }
 
-            if (correctOption) {
-              // 成功合并，使用合并格式
+          if (matchingQuestion) {
+            // 检查是否有选项的题目类型
+            if (matchingQuestion.options && matchingQuestion.options.length > 0) {
+              // 找到对应的正确选项
+              const correctOption = matchingQuestion.options.find(opt =>
+                opt.id === correctAns.answer
+              );
+
+              if (correctOption) {
+                // 成功合并选择题，使用合并格式
+                mergedAnswers.push({
+                  question: `第${index + 1}题`,
+                  questionText: matchingQuestion.answer.replace('题目: ', ''),
+                  answer: correctAns.answer,
+                  answerText: correctOption.text,
+                  fullAnswer: `${correctAns.answer}. ${correctOption.text}`,
+                  options: matchingQuestion.options,
+                  analysis: correctAns.content.includes('解析:') ?
+                    correctAns.content.split('解析: ')[1].split('\n答案:')[0] : '',
+                  pattern: '合并答案模式',
+                  sourceFiles: ['correctAnswer.xml', 'paper.xml']
+                });
+                successfulMerges++;
+              } else {
+                // 没有找到对应选项，使用普通格式
+                mergedAnswers.push({
+                  question: `第${index + 1}题`,
+                  answer: correctAns.answer,
+                  content: correctAns.content,
+                  pattern: correctAns.pattern
+                });
+              }
+            } else {
+              // 没有选项的题目类型（如填空题、单词题等），直接合并
               mergedAnswers.push({
                 question: `第${index + 1}题`,
-                questionText: matchingQuestion.answer.replace('题目: ', ''),
+                questionText: matchingQuestion.content.replace('题目: ', ''),
                 answer: correctAns.answer,
-                answerText: correctOption.text,
-                fullAnswer: `${correctAns.answer}. ${correctOption.text}`,
-                options: matchingQuestion.options,
+                answerText: correctAns.answer,
+                fullAnswer: correctAns.answer,
                 analysis: correctAns.content.includes('解析:') ?
                   correctAns.content.split('解析: ')[1].split('\n答案:')[0] : '',
                 pattern: '合并答案模式',
                 sourceFiles: ['correctAnswer.xml', 'paper.xml']
               });
               successfulMerges++;
-            } else {
-              // 没有找到对应选项，使用普通格式
-              mergedAnswers.push({
-                question: `第${index + 1}题`,
-                answer: correctAns.answer,
-                content: correctAns.content,
-                pattern: correctAns.pattern
-              });
             }
           } else {
             // 没有找到匹配的题目，使用普通格式
@@ -1437,35 +1459,52 @@ class AnswerProxy {
           const elementId = elementMatch[1];
           const elementContent = elementMatch[2];
 
-          // 提取answers标签中的内容
-          const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answers>/);
+          if (!elementContent.trim()) {
+            return;
+          }
 
+          let analysisText = '';
+
+          const analysisMatch = elementContent.match(/<analysis>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/analysis>/s);
+          if (analysisMatch && analysisMatch[1]) {
+            analysisText = analysisMatch[1].replace(/<[^>]*>/g, '').trim();
+          }
+
+          const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answers>/);
           if (answersMatch && answersMatch[1]) {
             const answerText = answersMatch[1].trim();
-
-            // 提取analysis中的内容作为题目解析
-            const analysisMatch = elementContent.match(/<analysis>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/analysis>/s);
-            let analysisText = '';
-            if (analysisMatch && analysisMatch[1]) {
-              // 清理HTML标签
-              analysisText = analysisMatch[1].replace(/<[^>]*>/g, '').trim();
-            }
-
             answers.push({
-              question: `第${index + 1}题`,
+              question: `第${answers.length + 1}题`,
               answer: answerText,
               content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
               pattern: 'XML正确答案模式',
               elementId: elementId
             });
+          } else {
+            const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/g)];
+            
+            if (answerMatches.length > 0) {
+              answerMatches.forEach((answerMatch, answerIndex) => {
+                const answerText = answerMatch[1].trim();
+                if (answerText) {
+                  answers.push({
+                    question: `第${answers.length + 1}题`,
+                    answer: answerText,
+                    content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
+                    pattern: 'XML正确答案模式',
+                    elementId: elementId,
+                    answerIndex: answerIndex + 1
+                  });
+                }
+              });
+            }
           }
         });
       }
 
       // 处理paper.xml文件
       if (filePath.includes('paper')) {
-        // 提取所有包含题目信息的element元素
-        const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*type="3"[^>]*>(.*?)<\/element>/gs)];
+        const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
 
         elementMatches.forEach((elementMatch) => {
           const elementId = elementMatch[1];
@@ -1477,33 +1516,39 @@ class AnswerProxy {
           // 提取题目文本
           const questionTextMatch = elementContent.match(/<question_text>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/question_text>/s);
 
-          // 提取选项
-          const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/option>/gs)];
+          const knowledgeMatch = elementContent.match(/<knowledge>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/knowledge>/);
 
-          if (questionNoMatch && questionTextMatch && optionsMatches.length > 0) {
+          if (questionNoMatch && questionTextMatch) {
             const questionNo = parseInt(questionNoMatch[1]);
             let questionText = questionTextMatch[1];
 
-            // 清理题目文本中的HTML标签，但保留问题内容
             questionText = questionText.replace(/<img[^>]*>/g, '[音频]').replace(/<[^>]*>/g, '').trim();
 
-            // 格式化选项
-            const optionsText = optionsMatches.map(optionMatch =>
-              `${optionMatch[1]}. ${optionMatch[2].trim()}`
-            ).join('\n');
+            const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*[^>]*>\s*<!\[CDATA\[(.*?)\]\]>\s*<\/option>/gs)];
 
-            answers.push({
+            let answerInfo = {
               question: `第${questionNo}题`,
-              answer: `题目: ${questionText}`,
-              content: `题目: ${questionText}\n\n选项:\n${optionsText}`,
-              pattern: 'XML题目选项模式',
+              answer: knowledgeMatch ? knowledgeMatch[1].trim() : '未找到答案',
+              content: `题目: ${questionText}`,
+              pattern: 'XML题目模式',
               elementId: elementId,
-              questionNo: questionNo,
-              options: optionsMatches.map(optionMatch => ({
+              questionNo: questionNo
+            };
+
+            if (optionsMatches.length > 0) {
+              const optionsText = optionsMatches.map(optionMatch =>
+                `${optionMatch[1]}. ${optionMatch[2].trim()}`
+              ).join('\n');
+
+              answerInfo.content = `题目: ${questionText}\n\n选项:\n${optionsText}`;
+              answerInfo.pattern = 'XML题目选项模式';
+              answerInfo.options = optionsMatches.map(optionMatch => ({
                 id: optionMatch[1],
                 text: optionMatch[2].trim()
-              }))
-            });
+              }));
+            }
+
+            answers.push(answerInfo);
           }
         });
       }
