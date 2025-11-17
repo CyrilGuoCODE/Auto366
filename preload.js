@@ -330,12 +330,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
   chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
   setCachePath: (cachePath) => {
-    if (fs.existsSync(path.join(cachePath, 'resources')) && fs.existsSync(path.join(cachePath, 'flipbooks'))) {
-      resourcePath = path.join(cachePath, 'resources')
-      flipbooksPath = path.join(cachePath, 'flipbooks')
+    try {
+      const normalizedPath = path.resolve(cachePath);
+      const resourcesDir = path.join(normalizedPath, 'resources');
+      const flipbooksDir = path.join(normalizedPath, 'flipbooks');
+
+      if (!fs.existsSync(normalizedPath)) {
+        fs.mkdirSync(normalizedPath, { recursive: true });
+      }
+      if (!fs.existsSync(resourcesDir)) {
+        fs.mkdirSync(resourcesDir, { recursive: true });
+      }
+      if (!fs.existsSync(flipbooksDir)) {
+        fs.mkdirSync(flipbooksDir, { recursive: true });
+      }
+
+      resourcePath = resourcesDir;
+      flipbooksPath = flipbooksDir;
       return 1;
-    }
-    else {
+    } catch (error) {
+      console.error('设置缓存路径失败:', error);
       return 0;
     }
   },
