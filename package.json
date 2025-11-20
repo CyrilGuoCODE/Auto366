@@ -1,6 +1,6 @@
 {
   "name": "auto366",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "天学网自动化答题工具，支持各类题型答案获取和一些自动填写",
   "main": "main.js",
   "author": "Auto366",
