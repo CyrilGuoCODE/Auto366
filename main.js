@@ -150,6 +150,8 @@ function createWindow() {
   })
 }
 
+app.disableHardwareAcceleration();
+
 app.whenReady().then(async () => {
   createWindow()
 
