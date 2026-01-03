@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto366 - 答案查看器</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="icon.png">
+</head>
+<body>
+    <div class="container">
+        <div class="answers-display">
+            <div class="header">
+                <img src="icon_black.png" class="header-logo" alt="Auto366">
+                <h1 class="header-title">Auto366 - 答案查看器</h1>
+            </div>
+            <div class="answers-header">
+                <div class="import-answer-button">
+                    <label for="importAnswer" id="importAnswerBtn">导入答案</label>
+                    <input type="file" accept=".json,application/json" id="importAnswer" class="file-input-hidden">
+                </div>
+                <div class="sort-mode-selector">
+                    <label for="sortMode">排序模式：</label>
+                    <select id="sortMode">
+                        <option value="file">按文件排序</option>
+                        <option value="pattern">按题型排序</option>
+                    </select>
+                </div>
+                <div class="clear-answers-button">
+                    <button id="clearAnswersBtn" class="clear-btn" title="清空提取结果">
+                        <span class="clear-btn-text">清空</span>
+                        <svg t="1756262061386" class="clear-icon" viewBox="0 0 1024 1024" version="1.1"
+                            xmlns="http://www.w3.org/2000/svg" p-id="4752" width="256" height="256">
+                            <path
+                                d="M829.952 271.36h-126.976v-51.2a76.288 76.288 0 0 0-75.776-76.288h-256a76.288 76.288 0 0 0-75.776 76.8v51.2H168.448a25.6 25.6 0 0 0 0 51.2h661.504a25.6 25.6 0 0 0 0-51.712z m-178.176 0h-307.2v-51.2a26.112 26.112 0 0 1 25.6-25.6h256a24.576 24.576 0 0 1 24.576 25.6zM448.512 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0zM601.088 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0z"
+                                fill="" p-id="4753"></path>
+                            <path
+                                d="M735.744 346.624a25.6 25.6 0 0 0-25.6 25.6v381.44a102.4 102.4 0 0 1-102.4 102.4H390.656a102.4 102.4 0 0 1-102.4-102.4V372.224a25.6 25.6 0 0 0-51.2 0v381.44a153.6 153.6 0 0 0 153.6 153.6h217.6a153.6 153.6 0 0 0 153.6-153.6V372.224a25.6 25.6 0 0 0-26.112-25.6z"
+                                fill="" p-id="4754"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="answersContainer" class="answers-container">
+                <div class="no-answers">暂无答案数据</div>
+            </div>
+            <!-- 赞赏码区域 -->
+            <div class="appreciation-section">
+                <div class="appreciation-icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
+                    <svg viewBox="0 0 1024 1024" class="heart-icon">
+                        <path
+                            d="M512 896c-12.8 0-25.6-4.8-35.2-14.4L89.6 494.4c-76.8-76.8-76.8-201.6 0-278.4 38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6L512 356.8l140.8-140.8c38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6c76.8 76.8 76.8 201.6 0 278.4L547.2 881.6c-9.6 9.6-22.4 14.4-35.2 14.4z" />
+                    </svg>
+                    <span class="appreciation-text">赞赏</span>
+                    <div class="appreciation-popup">
+                        <div class="appreciation-content">
+                            <h4>感谢您的支持！</h4>
+                            <div class="appreciation-qr-container">
+                                <img src="prize/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
+                                <img src="prize/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="footer-section">
+            <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
+            <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
+                    style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
+            <p>许可证：GNU General Public License v3.0</p>
+            </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
+
