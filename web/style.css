@@ -258,6 +258,29 @@ body {
     background-color: #0056b3;
 }
 
+.share-answer-button {
+    display: flex;
+    align-items: center;
+}
+
+.share-btn {
+    cursor: pointer;
+    background-color: #28a745;
+    border-radius: 6px;
+    padding: 10px 20px;
+    color: white;
+    font-size: 14px;
+    border: none;
+    transition: all 0.3s ease;
+    margin-left: 10px;
+    display: block;
+    width: fit-content;
+}
+
+.share-btn:hover {
+    background-color: #218838;
+}
+
 .clear-btn {
     padding: 4px 6px;
     background-color: rgba(220, 53, 69, 0.1);

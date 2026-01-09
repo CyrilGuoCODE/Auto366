@@ -15,12 +15,15 @@
   },
   "dependencies": {
     "@nut-tree/nut-js": "^3.1.2",
+    "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.0",
+    "form-data": "^4.0.5",
     "fs": "^0.0.1-security",
     "fs-extra": "^11.1.1",
     "node-mitmproxy": "^3.1.1",
     "node-stream-zip": "^1.15.0",
     "path": "^0.12.7",
+    "supabase-js": "^1.0.4",
     "uuid": "^11.1.0",
     "ws": "^8.14.2"
   },

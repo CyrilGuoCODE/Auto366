@@ -3,6 +3,9 @@ const path = require('path')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
 const { spawn, kill } = require('child_process')
 const fs = require('fs-extra')
+const axios = require('axios')
+const FormData = require('form-data')
+const { createClient } = require('@supabase/supabase-js')
 
 // 引入抓包代理类
 const AnswerProxy = require('./answer-proxy');
@@ -37,6 +40,12 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // 创建抓包代理实例
 let answerProxy = new AnswerProxy();
+
+const SUPABASE_URL = 'https://myenzpblosjnrtvicdor.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU'
+const SUPABASE_BUCKET = 'auto366-share'
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // 安全的IPC发送函数
 function safeIpcSend(channel, data) {
@@ -525,5 +534,59 @@ ipcMain.handle('download-file', async (event, uuid) => {
     return 1;
   } catch (error) {
     return 0;
+  }
+});
+
+ipcMain.handle('share-answer-file', async (event, filePath) => {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: '文件不存在' };
+    }
+
+    const fileName = path.basename(filePath);
+    const fileExtension = path.extname(fileName);
+    const timestamp = Date.now();
+    const randomId = require('uuid').v4().substring(0, 8);
+    const uniqueFileName = `${timestamp}_${randomId}${fileExtension}`;
+
+    const fileBuffer = fs.readFileSync(filePath);
+
+    const { data, error } = await supabase.storage
+      .from(SUPABASE_BUCKET)
+      .upload(uniqueFileName, fileBuffer, {
+        contentType: 'application/json',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Supabase 上传错误:', error);
+      return {
+        success: false,
+        error: `上传失败: ${error.message}`
+      };
+    }
+
+    const { data: urlData } = supabase.storage
+      .from(SUPABASE_BUCKET)
+      .getPublicUrl(uniqueFileName);
+
+    if (!urlData || !urlData.publicUrl) {
+      return {
+        success: false,
+        error: '获取下载链接失败'
+      };
+    }
+
+    return {
+      success: true,
+      fileId: data.path,
+      downloadUrl: urlData.publicUrl
+    };
+  } catch (error) {
+    console.error('分享答案文件失败:', error);
+    return {
+      success: false,
+      error: error.message || '上传失败'
+    };
   }
 });

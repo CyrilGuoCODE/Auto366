@@ -1522,7 +1522,7 @@ class UniversalAnswerFeature {
           }
           event.target.value = '';
         };
-        reader.readAsText(file); // 读取文件内容为文本
+        reader.readAsText(file);
       }
     });
 
@@ -1545,6 +1545,123 @@ class UniversalAnswerFeature {
         }, 300);
       }, 2000);
     });
+
+    document.getElementById('shareAnswerBtn').addEventListener('click', () => {
+      this.handleShareAnswer();
+    });
+  }
+
+  async handleShareAnswer() {
+    if (!this.lastAnswersData || !this.lastAnswersData.file) {
+      this.addErrorLog('没有可分享的答案文件');
+      return;
+    }
+
+    const shareBtn = document.getElementById('shareAnswerBtn');
+    shareBtn.disabled = true;
+    shareBtn.textContent = '上传中...';
+
+    try {
+      const result = await window.electronAPI.shareAnswerFile(this.lastAnswersData.file);
+      
+      if (result.success) {
+        const downloadUrl = result.downloadUrl;
+        const primaryUrl = `https://366.cyril.qzz.io/?url=${encodeURIComponent(downloadUrl)}`;
+        const backupUrl = `https://a366.netlify.app/?url=${encodeURIComponent(downloadUrl)}`;
+
+        const shareModal = document.createElement('div');
+        shareModal.className = 'share-modal';
+        shareModal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 10000;
+        `;
+
+        const shareContent = document.createElement('div');
+        shareContent.style.cssText = `
+          background: white;
+          padding: 30px;
+          border-radius: 8px;
+          max-width: 600px;
+          width: 90%;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        `;
+
+        shareContent.innerHTML = `
+          <h3 style="margin-top: 0; color: #333;">答案文件分享成功！</h3>
+          <p style="color: #666; margin-bottom: 20px;">请复制以下链接分享给他人：</p>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; color: #333; font-weight: bold;">主网址：</label>
+            <div style="display: flex; gap: 10px;">
+              <input type="text" id="primaryUrl" value="${primaryUrl}" readonly 
+                     style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+              <button class="copy-url-btn" data-url="${primaryUrl}" 
+                      style="padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                复制
+              </button>
+            </div>
+          </div>
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 5px; color: #333; font-weight: bold;">备用网址：</label>
+            <div style="display: flex; gap: 10px;">
+              <input type="text" id="backupUrl" value="${backupUrl}" readonly 
+                     style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+              <button class="copy-url-btn" data-url="${backupUrl}" 
+                      style="padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                复制
+              </button>
+            </div>
+          </div>
+          <button id="closeShareModal" 
+                  style="width: 100%; padding: 10px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+            关闭
+          </button>
+        `;
+
+        shareModal.appendChild(shareContent);
+        document.body.appendChild(shareModal);
+
+        shareContent.querySelectorAll('.copy-url-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const url = btn.getAttribute('data-url');
+            this.copyToClipboard(url);
+            btn.textContent = '已复制！';
+            setTimeout(() => {
+              btn.textContent = '复制';
+            }, 2000);
+          });
+        });
+
+        document.getElementById('closeShareModal').addEventListener('click', () => {
+          document.body.removeChild(shareModal);
+        });
+
+        shareModal.addEventListener('click', (e) => {
+          if (e.target === shareModal) {
+            document.body.removeChild(shareModal);
+          }
+        });
+
+        this.addSuccessLog('答案文件上传成功，分享链接已生成');
+      } else {
+        this.addErrorLog(`上传失败: ${result.error}`);
+        alert(`上传失败: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('分享答案文件失败:', error);
+      this.addErrorLog(`分享失败: ${error.message}`);
+      alert(`分享失败: ${error.message}`);
+    } finally {
+      shareBtn.disabled = false;
+      shareBtn.textContent = '分享答案';
+    }
   }
 }
 

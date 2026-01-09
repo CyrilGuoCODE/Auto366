@@ -2,6 +2,7 @@ class AnswerViewer {
   constructor() {
     this.sortMode = 'file';
     this.lastAnswersData = null;
+    this.loadedFromURL = false;
     this.initEventListeners();
     this.loadFromURL();
   }
@@ -41,7 +42,12 @@ class AnswerViewer {
       const container = document.getElementById('answersContainer');
       container.innerHTML = '<div class="no-answers">暂无答案数据</div>';
       this.lastAnswersData = null;
+      this.hideShareButton();
       this.showToast('已清空提取结果');
+    });
+
+    document.getElementById('shareAnswerBtn').addEventListener('click', () => {
+      this.copyCurrentURL();
     });
   }
 
@@ -58,12 +64,35 @@ class AnswerViewer {
         })
         .then(data => {
           this.displayAnswers(data);
+          this.loadedFromURL = true;
+          this.showShareButton();
         })
         .catch(error => {
           console.error('加载JSON文件失败:', error);
           alert('加载JSON文件失败: ' + error.message);
         });
     }
+  }
+
+  showShareButton() {
+    const shareButtonContainer = document.getElementById('shareAnswerButtonContainer');
+    if (shareButtonContainer) {
+      shareButtonContainer.style.display = 'flex';
+    }
+  }
+
+  hideShareButton() {
+    const shareButtonContainer = document.getElementById('shareAnswerButtonContainer');
+    if (shareButtonContainer) {
+      shareButtonContainer.style.display = 'none';
+    }
+    this.loadedFromURL = false;
+  }
+
+  copyCurrentURL() {
+    const currentURL = window.location.href;
+    this.copyToClipboard(currentURL);
+    this.showToast('页面链接已复制到剪贴板！');
   }
 
   copyToClipboard(text) {
