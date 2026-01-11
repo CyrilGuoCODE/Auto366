@@ -361,5 +361,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteResponseRule: (ruleId) => ipcRenderer.invoke('delete-response-rule', ruleId),
   toggleResponseRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
   exportResponseRules: () => ipcRenderer.invoke('export-response-rules'),
-  importResponseRules: () => ipcRenderer.invoke('import-response-rules')
+  importResponseRules: () => ipcRenderer.invoke('import-response-rules'),
+
+  checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+  updateConfirm: () => ipcRenderer.send('update-confirm'),
+  updateInstall: () => ipcRenderer.send('update-install'),
+  onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, data) => callback(data)),
+  onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, data) => callback(data)),
+  onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback)
 })

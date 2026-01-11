@@ -9,6 +9,12 @@
 </head>
 
 <body>
+    <button id="update-notification-btn" class="update-notification-btn" title="发现新版本">
+        <svg class="update-notification-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+        </svg>
+        <span class="update-notification-text">发现新版本</span>
+    </button>
     <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
 
     <div class="container">
@@ -469,7 +475,55 @@
                     <button id="save-settings" class="save-btn">保存设置</button>
                     <button id="reset-settings" class="reset-btn">重置为默认</button>
                 </div>
+                <div class="setting-item" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                    <button id="check-updates" class="browse-btn">检查更新</button>
+                </div>
                 <p id="error-message"></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="update-modal" class="modal">
+        <div class="modal-content update-modal-content">
+            <div class="modal-header">
+                <h2>发现新版本</h2>
+                <span class="close" id="close-update">&times;</span>
+            </div>
+            <div class="update-modal-body">
+                <p><strong>新版本号：</strong><span id="update-version"></span></p>
+                <p><strong>发布日期：</strong><span id="update-date"></span></p>
+                <div class="update-notes-container">
+                    <strong>更新内容：</strong>
+                    <div id="update-notes" class="update-notes"></div>
+                </div>
+                <div id="update-progress-container" class="update-progress-container">
+                    <div class="update-progress-info">
+                        <span id="update-progress-text">下载中: 0%</span>
+                        <span id="update-progress-speed"></span>
+                    </div>
+                    <div class="update-progress-bar">
+                        <div id="update-progress-bar-fill" class="update-progress-bar-fill"></div>
+                    </div>
+                </div>
+                <div class="update-actions">
+                    <button id="update-cancel" class="browse-btn update-btn-cancel">稍后更新</button>
+                    <button id="update-confirm-btn" class="save-btn">立即更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="update-downloaded-modal" class="modal">
+        <div class="modal-content update-downloaded-modal-content">
+            <div class="modal-header">
+                <h2>更新下载完成</h2>
+            </div>
+            <div class="update-modal-body">
+                <p>更新已下载完成，是否现在安装并重启应用？</p>
+                <div class="update-actions">
+                    <button id="update-install-later" class="browse-btn update-btn-cancel">稍后安装</button>
+                    <button id="update-install-now" class="save-btn">立即安装并重启</button>
+                </div>
             </div>
         </div>
     </div>

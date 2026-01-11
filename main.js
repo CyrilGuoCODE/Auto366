@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell, dialog } = require('electron')
 const path = require('path')
+const { autoUpdater } = require('electron-updater')
 const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
 const { spawn, kill } = require('child_process')
 const fs = require('fs-extra')
@@ -20,6 +21,7 @@ let ans
 let flag = 0;
 let pythonProcess
 let globalScale = 100
+let updateInfo = null
 
 process.on('uncaughtException', (error) => {
   if (error.code === 'ECONNRESET') {
@@ -123,6 +125,76 @@ async function robustType(text, retries = 3) {
   }
 }
 
+autoUpdater.setFeedURL({
+  provider: 'github',
+  owner: 'cyrilguocode',
+  repo: 'Auto366'
+})
+
+autoUpdater.autoDownload = false
+
+autoUpdater.on('update-available', (info) => {
+  updateInfo = info
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    let releaseNotes = '新版本已发布，请更新以获得最新功能。'
+    if (info.releaseNotes) {
+      if (typeof info.releaseNotes === 'string') {
+        releaseNotes = info.releaseNotes
+      } else if (info.releaseNotes.body) {
+        releaseNotes = info.releaseNotes.body
+      } else if (Array.isArray(info.releaseNotes)) {
+        releaseNotes = info.releaseNotes.join('\n')
+      }
+    }
+    mainWindow.webContents.send('update-available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: releaseNotes
+    })
+  }
+})
+
+autoUpdater.on('download-progress', (progressObj) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-download-progress', {
+      percent: progressObj.percent,
+      transferred: progressObj.transferred,
+      total: progressObj.total,
+      bytesPerSecond: progressObj.bytesPerSecond
+    })
+  }
+})
+
+autoUpdater.on('update-downloaded', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-downloaded')
+  }
+})
+
+autoUpdater.on('error', (error) => {
+  console.error('更新检查失败:', error)
+})
+
+ipcMain.on('update-confirm', async () => {
+  if (updateInfo) {
+    await autoUpdater.downloadUpdate()
+  }
+})
+
+ipcMain.on('update-install', () => {
+  autoUpdater.quitAndInstall(false, true)
+})
+
+ipcMain.on('check-for-updates', () => {
+  if (!app.isPackaged) {
+    console.log('开发模式下跳过更新检查')
+    return
+  }
+  autoUpdater.checkForUpdates().catch(error => {
+    console.error('检查更新失败:', error)
+  })
+})
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
@@ -165,6 +237,14 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+
+  if (app.isPackaged) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(error => {
+        console.error('检查更新失败:', error)
+      })
+    }, 3000)
+  }
 })
 
 app.on('window-all-closed', function () {

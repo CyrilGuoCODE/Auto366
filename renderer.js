@@ -97,6 +97,10 @@ class Global {
       document.getElementById('cache-path').value = 'D:\\Up366StudentFiles'
       cachePath = 'D:\\Up366StudentFiles'
     })
+    document.getElementById('check-updates').addEventListener('click', function () {
+      window.electronAPI.checkForUpdates()
+      showToast('正在检查更新...', 'info')
+    })
   }
 }
 
@@ -1676,6 +1680,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 响应体更改规则功能
   initResponseRulesFeature();
+  initUpdateFeature();
 });
 
 // 响应体更改规则功能初始化
@@ -2212,3 +2217,122 @@ window.toggleRule = toggleRule;
 window.editRule = editRule;
 window.deleteRule = deleteRule;
 window.removeModifyRule = removeModifyRule;
+
+function initUpdateFeature() {
+  const updateModal = document.getElementById('update-modal');
+  const updateDownloadedModal = document.getElementById('update-downloaded-modal');
+  const closeUpdate = document.getElementById('close-update');
+  const updateCancel = document.getElementById('update-cancel');
+  const updateConfirmBtn = document.getElementById('update-confirm-btn');
+  const updateInstallLater = document.getElementById('update-install-later');
+  const updateInstallNow = document.getElementById('update-install-now');
+
+  if (closeUpdate) {
+    closeUpdate.addEventListener('click', () => {
+      updateModal.style.display = 'none';
+    });
+  }
+
+  if (updateCancel) {
+    updateCancel.addEventListener('click', () => {
+      updateModal.style.display = 'none';
+    });
+  }
+
+  if (updateConfirmBtn) {
+    updateConfirmBtn.addEventListener('click', () => {
+      window.electronAPI.updateConfirm();
+      const progressContainer = document.getElementById('update-progress-container');
+      const confirmBtn = document.getElementById('update-confirm-btn');
+      const cancelBtn = document.getElementById('update-cancel');
+      if (progressContainer) progressContainer.style.display = 'block';
+      if (confirmBtn) confirmBtn.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = true;
+    });
+  }
+
+  if (updateInstallLater) {
+    updateInstallLater.addEventListener('click', () => {
+      updateDownloadedModal.style.display = 'none';
+    });
+  }
+
+  if (updateInstallNow) {
+    updateInstallNow.addEventListener('click', () => {
+      window.electronAPI.updateInstall();
+    });
+  }
+
+  const updateNotificationBtn = document.getElementById('update-notification-btn');
+  if (updateNotificationBtn) {
+    updateNotificationBtn.addEventListener('click', () => {
+      updateModal.style.display = 'flex';
+    });
+  }
+
+  window.electronAPI.onUpdateAvailable((data) => {
+    document.getElementById('update-version').textContent = data.version;
+    const releaseDate = data.releaseDate ? new Date(data.releaseDate).toLocaleDateString('zh-CN') : '未知';
+    document.getElementById('update-date').textContent = releaseDate;
+    
+    let releaseNotes = data.releaseNotes || '新版本已发布，请更新以获得最新功能。';
+    if (typeof releaseNotes !== 'string') {
+      if (Array.isArray(releaseNotes)) {
+        releaseNotes = releaseNotes.join('\n');
+      } else {
+        releaseNotes = '新版本已发布，请更新以获得最新功能。';
+      }
+    }
+    
+    const notesElement = document.getElementById('update-notes');
+    notesElement.innerHTML = releaseNotes.trim();
+    
+    const progressContainer = document.getElementById('update-progress-container');
+    if (progressContainer) progressContainer.style.display = 'none';
+    const confirmBtn = document.getElementById('update-confirm-btn');
+    const cancelBtn = document.getElementById('update-cancel');
+    if (confirmBtn) confirmBtn.disabled = false;
+    if (cancelBtn) cancelBtn.disabled = false;
+    
+    if (updateNotificationBtn) {
+      updateNotificationBtn.style.display = 'flex';
+    }
+  });
+
+  window.electronAPI.onUpdateDownloadProgress((data) => {
+    const progressText = document.getElementById('update-progress-text');
+    const progressSpeed = document.getElementById('update-progress-speed');
+    const progressBarFill = document.getElementById('update-progress-bar-fill');
+    
+    if (progressText) {
+      const percent = Math.round(data.percent || 0);
+      progressText.textContent = `下载中: ${percent}%`;
+    }
+    
+    if (progressSpeed) {
+      if (data.bytesPerSecond) {
+        const speed = formatBytes(data.bytesPerSecond);
+        progressSpeed.textContent = speed + '/s';
+      } else {
+        progressSpeed.textContent = '';
+      }
+    }
+    
+    if (progressBarFill) {
+      progressBarFill.style.width = `${data.percent || 0}%`;
+    }
+  });
+
+  window.electronAPI.onUpdateDownloaded(() => {
+    updateModal.style.display = 'none';
+    updateDownloadedModal.style.display = 'flex';
+  });
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  }
+}
