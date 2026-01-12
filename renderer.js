@@ -2297,6 +2297,15 @@ function initUpdateFeature() {
     if (updateNotificationBtn) {
       updateNotificationBtn.style.display = 'flex';
     }
+    
+    updateModal.style.display = 'flex';
+  });
+
+  window.electronAPI.onUpdateNotAvailable((data) => {
+    if (data && data.isDev) {
+      return;
+    }
+    showToast('已是最新版本', 'info');
   });
 
   window.electronAPI.onUpdateDownloadProgress((data) => {

@@ -187,12 +187,23 @@ ipcMain.on('update-install', () => {
 
 ipcMain.on('check-for-updates', () => {
   if (!app.isPackaged) {
-    console.log('开发模式下跳过更新检查')
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-not-available', { isDev: true })
+    }
     return
   }
   autoUpdater.checkForUpdates().catch(error => {
     console.error('检查更新失败:', error)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-not-available', { error: error.message })
+    }
   })
+})
+
+autoUpdater.on('update-not-available', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-not-available', {})
+  }
 })
 
 function createWindow() {
