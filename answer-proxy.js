@@ -506,8 +506,20 @@ class AnswerProxy {
                   const filePath = path.join(tempDir, requestInfo.responseBody)
                   await this.downloadFileByUuid(uuid, filePath)
                   await this.extractZipFile(filePath, ansDir)
-                  fs.unlink(filePath)
-                  fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
+
+                  try {
+                    const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
+                      localStorage.getItem('keep-cache-files') === 'true'
+                    `);
+                    
+                    if (!shouldKeepCache) {
+                      fs.unlink(filePath)
+                      fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
+                    }
+                  } catch (error) {
+                    fs.unlink(filePath)
+                    fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
+                  }
                 }
 
                 if (fullUrl.includes('words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
@@ -1566,14 +1578,27 @@ class AnswerProxy {
     }
 
     let content = fileInfo.responseBody
-    if (fileInfo.contentType && (fileInfo.contentType.includes('image') || fileInfo.contentType.includes('octet-stream'))) content = fileInfo.originalResponse
-
-    // 使用 fs.promises.writeFile 的异步版本
-    await fs.promises.writeFile(filePath, fileInfo.originalResponse);
+    if (fileInfo.contentType && (fileInfo.contentType.includes('image') || fileInfo.contentType.includes('octet-stream'))) {
+      content = fileInfo.originalResponse
+      await fs.promises.writeFile(filePath, fileInfo.originalResponse);
+    } else {
+      const textContent = typeof content === 'string' ? content : fileInfo.originalResponse.toString('utf-8');
+      await fs.promises.writeFile(filePath, textContent, 'utf-8');
+    }
   }
-  clearCache() {
+  async clearCache() {
     this.trafficCache.clear()
-    fs.rm(tempDir, { recursive: true, force: true });
+    try {
+      const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
+        localStorage.getItem('keep-cache-files') === 'true'
+      `);
+      
+      if (!shouldKeepCache) {
+        fs.rm(tempDir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      fs.rm(tempDir, { recursive: true, force: true });
+    }
   }
   getTrafficByUuid(uuid) {
     return this.trafficCache.get(uuid)

@@ -62,6 +62,7 @@ class Global {
     document.getElementsByClassName('settings-btn')[0].addEventListener('click', () => {
       document.getElementById('settings-modal').style.display = 'flex'
       document.getElementById('cache-path').value = cachePath
+      document.getElementById('keep-cache-files').checked = localStorage.getItem('keep-cache-files') === 'true'
     })
 
     const settingsModal = document.getElementById('settings-modal');
@@ -84,9 +85,13 @@ class Global {
       document.getElementById('cache-path').value = path
     })
     document.getElementById('save-settings').addEventListener('click', function () {
-      if (window.electronAPI.setCachePath(document.getElementById('cache-path').value)) {
-        localStorage.setItem('cache-path', document.getElementById('cache-path').value)
-        cachePath = document.getElementById('cache-path').value
+      const cachePathValue = document.getElementById('cache-path').value
+      const keepCacheFiles = document.getElementById('keep-cache-files').checked
+      
+      if (window.electronAPI.setCachePath(cachePathValue)) {
+        localStorage.setItem('cache-path', cachePathValue)
+        localStorage.setItem('keep-cache-files', keepCacheFiles.toString())
+        cachePath = cachePathValue
         document.getElementById('settings-modal').style.display = 'none'
       }
       else {
@@ -95,6 +100,7 @@ class Global {
     })
     document.getElementById('reset-settings').addEventListener('click', function () {
       document.getElementById('cache-path').value = 'D:\\Up366StudentFiles'
+      document.getElementById('keep-cache-files').checked = false
       cachePath = 'D:\\Up366StudentFiles'
     })
     document.getElementById('check-updates').addEventListener('click', function () {

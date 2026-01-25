@@ -588,9 +588,9 @@ ipcMain.handle('import-response-rules', async () => {
   return { success: false, error: '用户取消操作' };
 });
 
-ipcMain.handle('clear-cache', () => {
+ipcMain.handle('clear-cache', async () => {
   try {
-    answerProxy.clearCache()
+    await answerProxy.clearCache()
     return 1;
   } catch (error) {
     return 0;

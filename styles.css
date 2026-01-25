@@ -750,6 +750,22 @@ button:disabled {
     font-weight: bold;
 }
 
+.setting-item label input[type="checkbox"] {
+    margin-right: 8px;
+    transform: scale(1.2);
+}
+
+.setting-item label {
+    display: flex;
+    align-items: center;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.setting-item small {
+    margin-left: 24px;
+}
+
 .path-input-wrapper {
     display: flex;
     gap: 10px;
