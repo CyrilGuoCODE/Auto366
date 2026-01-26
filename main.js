@@ -511,9 +511,34 @@ ipcMain.on('open-directory-choosing', async () => {
   if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])
 })
 
+ipcMain.on('open-file-choosing', async () => {
+  const result = await dialog.showOpenDialog({ 
+    properties: ['openFile'],
+    filters: [
+      { name: 'All Files', extensions: ['*'] },
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+      { name: 'Videos', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv'] },
+      { name: 'Archives', extensions: ['zip', 'rar', '7z', 'tar', 'gz'] },
+      { name: 'Documents', extensions: ['pdf', 'doc', 'docx', 'txt', 'rtf'] },
+      { name: 'JSON Files', extensions: ['json'] },
+      { name: 'XML Files', extensions: ['xml'] },
+      { name: 'HTML Files', extensions: ['html', 'htm'] }
+    ]
+  });
+  if (!result.canceled) mainWindow.webContents.send('choose-file', result.filePaths[0])
+})
+
 // 响应体更改规则相关IPC处理
 ipcMain.handle('get-response-rules', () => {
-  return answerProxy.getResponseRules();
+  try {
+    console.log('收到 get-response-rules 请求');
+    const rules = answerProxy.getResponseRules();
+    console.log('返回规则数据:', rules);
+    return rules;
+  } catch (error) {
+    console.error('获取响应规则失败:', error);
+    throw error;
+  }
 });
 
 ipcMain.handle('save-response-rule', (event, rule) => {
@@ -586,6 +611,15 @@ ipcMain.handle('import-response-rules', async () => {
   }
 
   return { success: false, error: '用户取消操作' };
+});
+
+// 获取规则类型和动作类型
+ipcMain.handle('get-rule-types', () => {
+  return answerProxy.getRuleTypes();
+});
+
+ipcMain.handle('get-action-types', (event, ruleType) => {
+  return answerProxy.getActionTypes(ruleType);
 });
 
 ipcMain.handle('clear-cache', async () => {

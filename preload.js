@@ -330,6 +330,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
   chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
+  
+  openFileChoosing: () => ipcRenderer.send('open-file-choosing'),
+  chooseFile: (callback) => ipcRenderer.on('choose-file', callback),
   setCachePath: (cachePath) => {
     try {
       const normalizedPath = path.resolve(cachePath);
@@ -362,6 +365,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleResponseRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
   exportResponseRules: () => ipcRenderer.invoke('export-response-rules'),
   importResponseRules: () => ipcRenderer.invoke('import-response-rules'),
+  getRuleTypes: () => ipcRenderer.invoke('get-rule-types'),
+  getActionTypes: (ruleType) => ipcRenderer.invoke('get-action-types', ruleType),
 
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
   updateConfirm: () => ipcRenderer.send('update-confirm'),

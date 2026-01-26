@@ -11,7 +11,8 @@
 <body>
     <button id="update-notification-btn" class="update-notification-btn" title="发现新版本">
         <svg class="update-notification-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+                fill="currentColor" />
         </svg>
         <span class="update-notification-text">发现新版本</span>
     </button>
@@ -59,8 +60,7 @@
                             <div class="appreciation-content">
                                 <h4>感谢您的支持！</h4>
                                 <div class="appreciation-qr-container">
-                                    <img src="prize/Cyril_prize.jpg" alt="Cyril赞赏码"
-                                        class="appreciation-qr">
+                                    <img src="prize/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
                                     <img src="prize/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
                                 </div>
                             </div>
@@ -70,23 +70,25 @@
 
                 <!-- QQ群区域 -->
                 <div class="appreciation-section">
-                <div class="appreciation-icon" title="加入QQ群，获取更多帮助与支持">
-                    <svg class="heart-icon" style="fill: #ffffff;" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-                        <path d="M29.11 26.278c-0.72 0.087-2.804-3.296-2.804-3.296 0 1.959-1.009 4.515-3.191 6.362 1.052 0.325 3.428 1.198 2.863 2.151-0.457 0.772-7.844 0.493-9.977 0.252-2.133 0.24-9.52 0.519-9.977-0.252-0.565-0.953 1.807-1.826 2.861-2.151-2.182-1.846-3.191-4.403-3.191-6.362 0 0-2.083 3.384-2.804 3.296-0.335-0.041-0.776-1.853 0.584-6.231 0.641-2.064 1.375-3.78 2.509-6.611-0.191-7.306 2.828-13.435 10.016-13.435 7.109 0.001 10.197 6.008 10.017 13.435 1.132 2.826 1.869 4.553 2.509 6.611 1.361 4.379 0.92 6.191 0.584 6.231z" />
-                    </svg>
-                    <span class="appreciation-text">QQ群</span>
-                    <div class="appreciation-popup">
-                        <div class="appreciation-content">
-                            <h4>加入QQ群，获取更多帮助与支持</h4>
-                            <h5 style="color: black;">群号：1003718088</h5>
-                            <div class="appreciation-qr-container">
-                                <img src="prize/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
+                    <div class="appreciation-icon" title="加入QQ群，获取更多帮助与支持">
+                        <svg class="heart-icon" style="fill: #ffffff;" xmlns="http://www.w3.org/2000/svg" width="32"
+                            height="32" viewBox="0 0 32 32">
+                            <path
+                                d="M29.11 26.278c-0.72 0.087-2.804-3.296-2.804-3.296 0 1.959-1.009 4.515-3.191 6.362 1.052 0.325 3.428 1.198 2.863 2.151-0.457 0.772-7.844 0.493-9.977 0.252-2.133 0.24-9.52 0.519-9.977-0.252-0.565-0.953 1.807-1.826 2.861-2.151-2.182-1.846-3.191-4.403-3.191-6.362 0 0-2.083 3.384-2.804 3.296-0.335-0.041-0.776-1.853 0.584-6.231 0.641-2.064 1.375-3.78 2.509-6.611-0.191-7.306 2.828-13.435 10.016-13.435 7.109 0.001 10.197 6.008 10.017 13.435 1.132 2.826 1.869 4.553 2.509 6.611 1.361 4.379 0.92 6.191 0.584 6.231z" />
+                        </svg>
+                        <span class="appreciation-text">QQ群</span>
+                        <div class="appreciation-popup">
+                            <div class="appreciation-content">
+                                <h4>加入QQ群，获取更多帮助与支持</h4>
+                                <h5 style="color: black;">群号：1003718088</h5>
+                                <div class="appreciation-qr-container">
+                                    <img src="prize/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
             <div
                 style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
@@ -279,6 +281,7 @@
                     <button id="startProxyBtn">启动代理服务器</button>
                     <button id="stopProxyBtn" disabled>停止代理服务器</button>
                     <button id="responseRulesBtn">更改响应体规则</button>
+                    <button id="testRulesBtn" class="test-btn" style="display: none;">测试规则功能</button>
                     <button id="deleteTempBtn" class="delete-btn">删除缓存</button>
                 </div>
 
@@ -388,6 +391,15 @@
                     <input type="text" id="rule-name" placeholder="请输入规则名称" required>
                 </div>
                 <div class="form-group">
+                    <label for="rule-type">规则类型:</label>
+                    <select id="rule-type">
+                        <option value="response">响应体修改</option>
+                        <option value="request">请求修改</option>
+                        <option value="response-headers">响应头修改</option>
+                    </select>
+                    <small>选择要修改的内容类型</small>
+                </div>
+                <div class="form-group">
                     <label for="rule-url-pattern">URL匹配模式:</label>
                     <input type="text" id="rule-url-pattern" placeholder="支持正则表达式，如: .*\.json$" required>
                     <small>支持正则表达式，留空则匹配所有请求</small>
@@ -402,10 +414,10 @@
                         <option value="DELETE">DELETE</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="content-type-group">
                     <label for="rule-content-type">内容类型:</label>
                     <input type="text" id="rule-content-type" placeholder="如: application/json">
-                    <small>留空则匹配所有内容类型</small>
+                    <small>留空则匹配所有内容类型（仅对响应体规则有效）</small>
                 </div>
                 <div class="form-group">
                     <label for="rule-action">操作类型:</label>
@@ -415,9 +427,27 @@
                         <option value="inject">注入内容</option>
                     </select>
                 </div>
+
+                <!-- 响应体修改相关字段 -->
                 <div class="form-group" id="replace-content-group">
                     <label for="rule-replace-content">替换内容:</label>
+                    <div class="replace-options">
+                        <label>
+                            <input type="radio" name="replace-type" value="text" checked> 文本内容
+                        </label>
+                        <label>
+                            <input type="radio" name="replace-type" value="file"> 从文件替换
+                        </label>
+                    </div>
                     <textarea id="rule-replace-content" rows="8" placeholder="请输入要替换的完整响应体内容"></textarea>
+                    <div id="file-replace-group" style="display: none;">
+                        <label for="rule-file-path">文件路径:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="rule-file-path" placeholder="选择要替换的文件路径" readonly>
+                            <button type="button" id="browse-replace-file">浏览</button>
+                        </div>
+                        <small class="help-text">支持任何类型的文件，包括二进制文件（图片、视频、压缩包等）</small>
+                    </div>
                 </div>
                 <div class="form-group" id="modify-rules-group" style="display: none;">
                     <label>修改规则:</label>
@@ -444,6 +474,43 @@
                         <input type="text" id="rule-inject-target" placeholder="目标内容(当选择指定位置时)" style="display: none;">
                     </div>
                 </div>
+
+                <!-- 请求修改相关字段 -->
+                <div class="form-group" id="request-headers-group" style="display: none;">
+                    <label>请求头修改:</label>
+                    <div class="headers-container">
+                        <div class="header-item">
+                            <input type="text" placeholder="请求头名称" class="header-name-input">
+                            <input type="text" placeholder="请求头值" class="header-value-input">
+                            <button type="button" class="remove-header">删除</button>
+                        </div>
+                    </div>
+                    <button type="button" id="add-request-header">添加请求头</button>
+                </div>
+                <div class="form-group" id="new-url-group" style="display: none;">
+                    <label for="rule-new-url">重定向URL:</label>
+                    <input type="text" id="rule-new-url" placeholder="请输入新的URL">
+                    <small>请求将被重定向到此URL</small>
+                </div>
+
+                <!-- 响应头修改相关字段 -->
+                <div class="form-group" id="response-headers-group" style="display: none;">
+                    <label>响应头修改:</label>
+                    <div class="headers-container">
+                        <div class="header-item">
+                            <input type="text" placeholder="响应头名称" class="header-name-input">
+                            <input type="text" placeholder="响应头值" class="header-value-input">
+                            <button type="button" class="remove-header">删除</button>
+                        </div>
+                    </div>
+                    <button type="button" id="add-response-header">添加响应头</button>
+                </div>
+                <div class="form-group" id="remove-headers-group" style="display: none;">
+                    <label for="rule-remove-headers">删除响应头:</label>
+                    <input type="text" id="rule-remove-headers" placeholder="要删除的响应头名称，多个用逗号分隔">
+                    <small>例如: Content-Security-Policy, X-Frame-Options</small>
+                </div>
+
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="rule-enabled" checked>

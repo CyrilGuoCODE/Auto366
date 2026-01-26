@@ -82,7 +82,10 @@ class AnswerProxy {
 
   // 获取所有规则
   getResponseRules() {
-    return this.responseRules;
+    console.log('AnswerProxy.getResponseRules() 被调用');
+    console.log('当前规则数量:', this.responseRules ? this.responseRules.length : 'undefined');
+    console.log('规则数据:', this.responseRules);
+    return this.responseRules || [];
   }
 
   // 添加或更新规则
@@ -136,11 +139,128 @@ class AnswerProxy {
     }
   }
 
+  // 应用请求修改规则
+  applyRequestRules(url, method, requestOptions, headers) {
+    try {
+      let modifiedOptions = { ...requestOptions };
+      let modifiedHeaders = { ...headers };
+      let appliedRules = [];
+
+      for (const rule of this.responseRules) {
+        if (rule.enabled && rule.type === 'request' && this.matchesRule(rule, url, method)) {
+          console.log(`应用请求规则: ${rule.name} 到 ${url}`);
+
+          switch (rule.action) {
+            case 'modify-headers':
+              if (rule.requestHeaders) {
+                Object.assign(modifiedHeaders, rule.requestHeaders);
+                appliedRules.push(rule.name);
+              }
+              break;
+
+            case 'modify-url':
+              if (rule.newUrl) {
+                const urlObj = new URL(rule.newUrl);
+                modifiedOptions.hostname = urlObj.hostname;
+                modifiedOptions.port = urlObj.port;
+                modifiedOptions.path = urlObj.pathname + urlObj.search;
+                appliedRules.push(rule.name);
+              }
+              break;
+
+            case 'block':
+              // 阻止请求 - 返回错误响应
+              modifiedOptions.blocked = true;
+              appliedRules.push(rule.name);
+              break;
+          }
+        }
+      }
+
+      // 更新请求选项中的headers
+      if (Object.keys(modifiedHeaders).length > 0) {
+        modifiedOptions.headers = modifiedHeaders;
+      }
+
+      return {
+        modified: appliedRules.length > 0,
+        requestOptions: modifiedOptions,
+        headers: modifiedHeaders,
+        appliedRules: appliedRules
+      };
+    } catch (error) {
+      console.error('应用请求修改规则失败:', error);
+      return {
+        modified: false,
+        requestOptions: requestOptions,
+        headers: headers,
+        appliedRules: []
+      };
+    }
+  }
+
+  // 应用响应头修改规则
+  applyResponseHeaderRules(url, method, responseHeaders) {
+    try {
+      let modifiedHeaders = {};
+      let appliedRules = [];
+
+      for (const rule of this.responseRules) {
+        if (rule.enabled && rule.type === 'response-headers' && this.matchesRule(rule, url, method)) {
+          console.log(`应用响应头规则: ${rule.name} 到 ${url}`);
+
+          switch (rule.action) {
+            case 'add-headers':
+              if (rule.responseHeaders) {
+                Object.assign(modifiedHeaders, rule.responseHeaders);
+                appliedRules.push(rule.name);
+              }
+              break;
+
+            case 'remove-headers':
+              if (rule.removeHeaders && Array.isArray(rule.removeHeaders)) {
+                for (const headerName of rule.removeHeaders) {
+                  modifiedHeaders[headerName] = undefined; // 标记为删除
+                }
+                appliedRules.push(rule.name);
+              }
+              break;
+
+            case 'modify-headers':
+              if (rule.responseHeaders) {
+                Object.assign(modifiedHeaders, rule.responseHeaders);
+                appliedRules.push(rule.name);
+              }
+              break;
+          }
+        }
+      }
+
+      return {
+        modified: appliedRules.length > 0,
+        headers: modifiedHeaders,
+        appliedRules: appliedRules
+      };
+    } catch (error) {
+      console.error('应用响应头修改规则失败:', error);
+      return {
+        modified: false,
+        headers: {},
+        appliedRules: []
+      };
+    }
+  }
+
   // 检查URL是否匹配规则
   matchesRule(rule, url, method, contentType) {
     try {
       // 检查是否启用
       if (!rule.enabled) return false;
+
+      // 检查规则类型（如果指定了类型）
+      if (rule.type && !['response', 'request', 'response-headers'].includes(rule.type)) {
+        return false;
+      }
 
       // 检查URL模式
       if (rule.urlPattern && rule.urlPattern.trim()) {
@@ -153,8 +273,8 @@ class AnswerProxy {
         return false;
       }
 
-      // 检查内容类型
-      if (rule.contentType && rule.contentType.trim()) {
+      // 检查内容类型（仅对响应体规则有效）
+      if (rule.type === 'response' && rule.contentType && rule.contentType.trim()) {
         if (!contentType || !contentType.includes(rule.contentType)) {
           return false;
         }
@@ -168,19 +288,41 @@ class AnswerProxy {
   }
 
   // 应用响应体更改规则
-  applyResponseRules(url, method, contentType, responseBody) {
+  applyResponseRules(url, method, contentType, responseBody, responseBuffer) {
     try {
       let modifiedBody = responseBody;
+      let modifiedBuffer = responseBuffer;
       let appliedRules = [];
+      let isBinaryModified = false;
 
       for (const rule of this.responseRules) {
-        if (this.matchesRule(rule, url, method, contentType)) {
-          console.log(`应用规则: ${rule.name} 到 ${url}`);
+        // 只处理响应体规则（默认类型或明确指定为response）
+        if ((!rule.type || rule.type === 'response') && this.matchesRule(rule, url, method, contentType)) {
+          console.log(`应用响应体规则: ${rule.name} 到 ${url}`);
 
           switch (rule.action) {
             case 'replace':
-              modifiedBody = rule.replaceContent || '';
-              appliedRules.push(rule.name);
+              if (rule.replaceWithFile && rule.filePath) {
+                // 从文件替换（支持二进制）
+                try {
+                  if (fs.existsSync(rule.filePath)) {
+                    modifiedBuffer = fs.readFileSync(rule.filePath);
+                    modifiedBody = modifiedBuffer.toString('utf8'); // 尝试转换为字符串用于显示
+                    isBinaryModified = true;
+                    appliedRules.push(rule.name);
+                    console.log(`从文件替换响应体: ${rule.filePath}`);
+                  } else {
+                    console.error(`替换文件不存在: ${rule.filePath}`);
+                  }
+                } catch (error) {
+                  console.error(`读取替换文件失败: ${rule.filePath}`, error);
+                }
+              } else {
+                // 文本替换
+                modifiedBody = rule.replaceContent || '';
+                modifiedBuffer = Buffer.from(modifiedBody, 'utf8');
+                appliedRules.push(rule.name);
+              }
               break;
 
             case 'modify':
@@ -190,6 +332,7 @@ class AnswerProxy {
                     try {
                       const regex = new RegExp(modifyRule.find, 'g');
                       modifiedBody = modifiedBody.replace(regex, modifyRule.replace);
+                      modifiedBuffer = Buffer.from(modifiedBody, 'utf8');
                     } catch (regexError) {
                       console.error('正则表达式错误:', regexError);
                     }
@@ -219,6 +362,7 @@ class AnswerProxy {
                     }
                     break;
                 }
+                modifiedBuffer = Buffer.from(modifiedBody, 'utf8');
                 appliedRules.push(rule.name);
               }
               break;
@@ -229,6 +373,8 @@ class AnswerProxy {
       return {
         modified: appliedRules.length > 0,
         body: modifiedBody,
+        buffer: modifiedBuffer,
+        isBinaryModified: isBinaryModified,
         appliedRules: appliedRules
       };
     } catch (error) {
@@ -236,6 +382,8 @@ class AnswerProxy {
       return {
         modified: false,
         body: responseBody,
+        buffer: responseBuffer,
+        isBinaryModified: false,
         appliedRules: []
       };
     }
@@ -247,8 +395,11 @@ class AnswerProxy {
       try {
         if (!encoding || encoding === 'identity') {
           console.log('无压缩');
-          // 无压缩
-          resolve(buffer.toString());
+          // 无压缩，返回buffer和字符串
+          resolve({
+            buffer: buffer,
+            text: buffer.toString('utf8')
+          });
           return;
         }
 
@@ -257,20 +408,32 @@ class AnswerProxy {
             if (err) {
               console.error('Gzip解压失败:', err);
               // 解压失败时返回原始内容
-              resolve(buffer.toString());
+              resolve({
+                buffer: buffer,
+                text: buffer.toString('utf8')
+              });
             } else {
               console.log('Gzip解压成功');
-              resolve(result.toString());
+              resolve({
+                buffer: result,
+                text: result.toString('utf8')
+              });
             }
           });
         } else if (encoding.includes('deflate')) {
           zlib.inflate(buffer, (err, result) => {
             if (err) {
               console.error('Deflate解压失败:', err);
-              resolve(buffer.toString());
+              resolve({
+                buffer: buffer,
+                text: buffer.toString('utf8')
+              });
             } else {
               console.log('Deflate解压成功');
-              resolve(result.toString());
+              resolve({
+                buffer: result,
+                text: result.toString('utf8')
+              });
             }
           });
         } else if (encoding.includes('br')) {
@@ -278,20 +441,32 @@ class AnswerProxy {
           zlib.brotliDecompress(buffer, (err, result) => {
             if (err) {
               console.error('Brotli解压失败:', err);
-              resolve(buffer.toString());
+              resolve({
+                buffer: buffer,
+                text: buffer.toString('utf8')
+              });
             } else {
               console.log('Brotli解压成功');
-              resolve(result.toString());
+              resolve({
+                buffer: result,
+                text: result.toString('utf8')
+              });
             }
           });
         } else {
           // 未知压缩格式，直接返回
           console.log('未知压缩格式:', encoding)
-          resolve(buffer.toString());
+          resolve({
+            buffer: buffer,
+            text: buffer.toString('utf8')
+          });
         }
       } catch (error) {
         console.error('解压缩过程中出错:', error);
-        resolve(buffer.toString());
+        resolve({
+          buffer: buffer,
+          text: buffer.toString('utf8')
+        });
       }
     });
   }
@@ -361,6 +536,54 @@ class AnswerProxy {
           return false;
         }
       },
+      requestInterceptor: (requestOptions, clientReq, clientRes, ssl, next) => {
+        try {
+          // 构建请求URL
+          const protocol = ssl ? "https" : "http";
+          const fullUrl = `${protocol}://${requestOptions.hostname || requestOptions.host}${requestOptions.path}`;
+
+          // 记录请求信息
+          console.log(`拦截请求: ${clientReq.method} ${fullUrl}`);
+
+          // 应用请求修改规则
+          const modifiedRequest = this.applyRequestRules(fullUrl, clientReq.method, requestOptions, clientReq.headers);
+
+          if (modifiedRequest.modified) {
+            console.log(`请求已被规则修改: ${modifiedRequest.appliedRules.join(', ')}`);
+
+            // 检查是否被阻止
+            if (modifiedRequest.requestOptions.blocked) {
+              console.log(`请求被阻止: ${fullUrl}`);
+              clientRes.writeHead(403, { 'Content-Type': 'text/plain' });
+              clientRes.end('Request blocked by proxy rules');
+              return; // 不调用next()，阻止请求继续
+            }
+
+            // 应用修改后的请求选项
+            Object.assign(requestOptions, modifiedRequest.requestOptions);
+
+            // 应用修改后的请求头
+            if (modifiedRequest.headers) {
+              Object.assign(requestOptions.headers, modifiedRequest.headers);
+            }
+          }
+
+          // 发送请求拦截日志
+          this.safeIpcSend('request-intercepted', {
+            method: clientReq.method,
+            url: fullUrl,
+            headers: requestOptions.headers,
+            modified: modifiedRequest.modified,
+            appliedRules: modifiedRequest.appliedRules || [],
+            timestamp: new Date().toISOString()
+          });
+
+        } catch (error) {
+          console.error('请求拦截器错误:', error);
+        }
+
+        next();
+      },
       responseInterceptor: (req, res, proxyReq, proxyRes, ssl, next) => {
         try {
           // 构建请求信息
@@ -392,196 +615,272 @@ class AnswerProxy {
 
           console.log(`请求: ${fullUrl}, 内容类型: ${contentType}, 是否压缩: ${isCompressed}`);
 
-          if (contentLengthIsZero) {
-            // 非HTML内容或空内容，直接转发
-            Object.keys(proxyRes.headers).forEach(function (key) {
-              if (proxyRes.headers[key] != undefined) {
-                res.setHeader(key, proxyRes.headers[key]);
-              }
-            });
-            res.writeHead(proxyRes.statusCode);
-            proxyRes.pipe(res);
+          // 应用响应头修改规则
+          const headerResult = this.applyResponseHeaderRules(fullUrl, req.method, proxyRes.headers);
 
-            // 发送请求信息
-            requestInfo.statusCode = proxyRes.statusCode;
-            requestInfo.statusMessage = proxyRes.statusMessage;
-            requestInfo.responseHeaders = proxyRes.headers;
-            requestInfo.contentType = contentType;
-            let uuid = uuidv4()
-            requestInfo.uuid = uuid;
+          // 统一处理所有响应，收集完整数据后再发送
+          const chunks = [];
+          let totalLength = 0;
+          let responseHandled = false; // 添加标志防止重复处理
 
-            this.safeIpcSend('traffic-log', requestInfo);
+          proxyRes.on('data', (chunk) => {
+            chunks.push(chunk);
+            totalLength += chunk.length;
+          });
 
-            this.trafficCache.set(uuid, requestInfo)
-          } else {
-            // 捕获响应体并处理压缩
-            Object.keys(proxyRes.headers).forEach(function (key) {
-              if (proxyRes.headers[key] != undefined) {
-                if (key === 'content-length') {
-                  // 不设置content-length，因为我们可能会修改内容
-                } else {
-                  res.setHeader(key, proxyRes.headers[key]);
-                }
-              }
-            });
-            res.writeHead(proxyRes.statusCode);
+          proxyRes.on('end', async () => {
+            if (responseHandled) return; // 防止重复处理
+            responseHandled = true;
 
-            // 收集响应数据
-            const chunks = [];
-            let totalLength = 0;
+            try {
+              // 合并所有chunks
+              const responseBuffer = Buffer.concat(chunks, totalLength);
+              let finalBuffer = responseBuffer;
+              let finalResponseBody = '';
 
-            proxyRes.on('data', (chunk) => {
-              chunks.push(chunk);
-              totalLength += chunk.length;
-              res.write(chunk);
-            });
-
-            proxyRes.on('end', async () => {
-              try {
-                // 合并所有chunks
-                const responseBuffer = Buffer.concat(chunks, totalLength);
-
+              // 只有在内容长度不为0时才处理响应体
+              if (!contentLengthIsZero) {
                 // 解压缩响应体
                 let responseBody = '';
+                let decompressedBuffer = responseBuffer;
                 if (isCompressed) {
                   console.log(`开始解压缩响应 (${contentEncoding})`);
-                  responseBody = await this.decompressResponse(responseBuffer, contentEncoding);
+                  const decompressed = await this.decompressResponse(responseBuffer, contentEncoding);
+                  responseBody = decompressed.text;
+                  decompressedBuffer = decompressed.buffer;
                 } else {
-                  responseBody = responseBuffer.toString();
+                  responseBody = responseBuffer.toString('utf8');
+                  decompressedBuffer = responseBuffer;
                 }
-
-                // 发送完整的请求响应信息
-                requestInfo.statusCode = proxyRes.statusCode;
-                requestInfo.statusMessage = proxyRes.statusMessage;
-                requestInfo.responseHeaders = proxyRes.headers;
-
-                // 根据内容类型格式化响应体
-                if (isJson && responseBody) {
-                  try {
-                    requestInfo.responseBody = JSON.stringify(JSON.parse(responseBody), null, 2);
-                  } catch (e) {
-                    requestInfo.responseBody = responseBody;
-                  }
-                } else if (isFile) {
-                  if (proxyRes.headers["Content-Disposition"]) {
-                    requestInfo.responseBody = proxyRes.headers["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
-                  } else {
-                    requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
-                  }
-                } else {
-                  requestInfo.responseBody = responseBody;
-                }
-
-                requestInfo.contentType = contentType;
-                requestInfo.contentEncoding = contentEncoding;
-                requestInfo.bodySize = responseBody.length;
-                requestInfo.originalBodySize = responseBuffer.length;
-                requestInfo.isCompressed = isCompressed;
-                let uuid = uuidv4()
-                requestInfo.uuid = uuid;
 
                 // 应用响应体更改规则
                 const ruleResult = this.applyResponseRules(
                   fullUrl,
                   req.method,
                   contentType,
-                  responseBody
+                  responseBody,
+                  decompressedBuffer
                 );
+
+                finalResponseBody = responseBody;
 
                 if (ruleResult.modified) {
                   console.log(`响应体已被规则修改: ${ruleResult.appliedRules.join(', ')}`);
-                  requestInfo.responseBody = ruleResult.body;
+                  finalResponseBody = ruleResult.body;
+
+                  // 使用修改后的buffer
+                  let modifiedBuffer = ruleResult.buffer;
+
+                  // 重新压缩修改后的内容（如果原来是压缩的）
+                  if (isCompressed) {
+                    try {
+                      if (contentEncoding.includes('gzip')) {
+                        finalBuffer = await new Promise((resolve, reject) => {
+                          zlib.gzip(modifiedBuffer, (err, result) => {
+                            if (err) reject(err);
+                            else resolve(result);
+                          });
+                        });
+                      } else if (contentEncoding.includes('deflate')) {
+                        finalBuffer = await new Promise((resolve, reject) => {
+                          zlib.deflate(modifiedBuffer, (err, result) => {
+                            if (err) reject(err);
+                            else resolve(result);
+                          });
+                        });
+                      } else if (contentEncoding.includes('br')) {
+                        finalBuffer = await new Promise((resolve, reject) => {
+                          zlib.brotliCompress(modifiedBuffer, (err, result) => {
+                            if (err) reject(err);
+                            else resolve(result);
+                          });
+                        });
+                      } else {
+                        finalBuffer = modifiedBuffer;
+                      }
+                    } catch (compressError) {
+                      console.error('重新压缩失败，发送未压缩内容:', compressError);
+                      finalBuffer = modifiedBuffer;
+                      // 如果压缩失败，需要移除压缩相关的头部
+                      delete proxyRes.headers['content-encoding'];
+                    }
+                  } else {
+                    finalBuffer = modifiedBuffer;
+                  }
+
+                  // 记录修改信息
                   requestInfo.modifiedByRules = ruleResult.appliedRules;
                 }
+              }
 
-                this.safeIpcSend('traffic-log', requestInfo);
+              // 设置所有响应头（在writeHead之前）
+              Object.keys(proxyRes.headers).forEach(function (key) {
+                if (proxyRes.headers[key] != undefined) {
+                  if (key.toLowerCase() === 'content-length') {
+                    // 使用最终buffer的长度
+                    res.setHeader(key, finalBuffer.length);
+                  } else {
+                    res.setHeader(key, proxyRes.headers[key]);
+                  }
+                }
+              });
 
-                requestInfo.originalResponse = responseBuffer;
-                this.trafficCache.set(uuid, requestInfo)
+              // 应用修改后的响应头
+              if (headerResult.modified && headerResult.headers) {
+                Object.keys(headerResult.headers).forEach(function (key) {
+                  if (headerResult.headers[key] !== undefined) {
+                    res.setHeader(key, headerResult.headers[key]);
+                  }
+                });
+                console.log(`响应头已被规则修改: ${headerResult.appliedRules.join(', ')}`);
+                requestInfo.headersModifiedByRules = headerResult.appliedRules;
+              }
 
-                // 检查是否包含答案下载链接
-                if (isFile && requestInfo.responseBody.includes('zip')) {
-                  fs.mkdirSync(tempDir, { recursive: true });
-                  fs.mkdirSync(ansDir, { recursive: true });
-                  const filePath = path.join(tempDir, requestInfo.responseBody)
-                  await this.downloadFileByUuid(uuid, filePath)
-                  await this.extractZipFile(filePath, ansDir)
+              // 发送响应头和响应体
+              res.writeHead(proxyRes.statusCode);
+              res.write(finalBuffer);
+              res.end();
 
-                  try {
-                    const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
-                      localStorage.getItem('keep-cache-files') === 'true'
-                    `);
-                    
-                    if (!shouldKeepCache) {
-                      fs.unlink(filePath)
-                      fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
-                    }
-                  } catch (error) {
+              // 发送完整的请求响应信息
+              requestInfo.statusCode = proxyRes.statusCode;
+              requestInfo.statusMessage = proxyRes.statusMessage;
+              requestInfo.responseHeaders = proxyRes.headers;
+              requestInfo.contentType = contentType;
+              requestInfo.contentEncoding = contentEncoding;
+              requestInfo.bodySize = finalResponseBody.length;
+              requestInfo.originalBodySize = responseBuffer.length;
+              requestInfo.isCompressed = isCompressed;
+              let uuid = uuidv4()
+              requestInfo.uuid = uuid;
+
+              // 根据内容类型格式化响应体
+              if (isJson && finalResponseBody) {
+                try {
+                  requestInfo.responseBody = JSON.stringify(JSON.parse(finalResponseBody), null, 2);
+                } catch (e) {
+                  requestInfo.responseBody = finalResponseBody;
+                }
+              } else if (isFile) {
+                if (proxyRes.headers["Content-Disposition"]) {
+                  requestInfo.responseBody = proxyRes.headers["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
+                } else {
+                  requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
+                }
+              } else {
+                requestInfo.responseBody = finalResponseBody;
+              }
+
+              this.safeIpcSend('traffic-log', requestInfo);
+
+              requestInfo.originalResponse = responseBuffer;
+              this.trafficCache.set(uuid, requestInfo)
+
+              // 检查是否包含答案下载链接
+              if (isFile && requestInfo.responseBody.includes('zip')) {
+                fs.mkdirSync(tempDir, { recursive: true });
+                fs.mkdirSync(ansDir, { recursive: true });
+                const filePath = path.join(tempDir, requestInfo.responseBody)
+                await this.downloadFileByUuid(uuid, filePath)
+                await this.extractZipFile(filePath, ansDir)
+
+                try {
+                  const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
+                    localStorage.getItem('keep-cache-files') === 'true'
+                  `);
+
+                  if (!shouldKeepCache) {
                     fs.unlink(filePath)
                     fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
                   }
+                } catch (error) {
+                  fs.unlink(filePath)
+                  fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
                 }
-
-                if (fullUrl.includes('words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
-                  console.log('检测到单词PK请求，开始解析答案...');
-
-                  try {
-                    const jsonData = JSON.parse(responseBody);
-                    if (jsonData.data && jsonData.data.contentList) {
-                      const answers = this.extractWordPKAnswers(jsonData);
-
-                      if (answers.length > 0) {
-                        const answerFile = path.join(ansDir, `word_pk_answers_${Date.now()}.txt`);
-                        const answerText = answers.map((item, index) =>
-                          `${index + 1}. [${item.categoryId}] ${item.entry}: ${item.paraphrase}`
-                        ).join('\n\n');
-
-                        fs.writeFileSync(answerFile, answerText, 'utf-8');
-
-                        this.safeIpcSend('word-answers-extracted', {
-                          answers: answers,
-                          count: answers.length,
-                          file: answerFile,
-                          url: fullUrl
-                        });
-
-                        console.log(`成功提取 ${answers.length} 个单词PK答案，已保存到: ${answerFile}`);
-                      } else {
-                        console.log('未在单词PK数据中找到有效答案');
-                        this.safeIpcSend('no-word-answers-found', {
-                          message: '未在单词PK数据中找到有效答案',
-                          url: fullUrl
-                        });
-                      }
-                    }
-                  } catch (error) {
-                    console.error('解析单词PK数据失败:', error);
-                    this.safeIpcSend('word-parse-error', {
-                      error: error.message,
-                      url: fullUrl
-                    });
-                  }
-                }
-
-                res.end();
-              } catch (error) {
-                console.error('处理响应数据时出错:', error);
-                res.end();
               }
-            });
 
-            proxyRes.on('error', (error) => {
-              console.error('响应流错误:', error);
-              res.end();
-            });
-          }
+              if (fullUrl.includes('words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
+                console.log('检测到单词PK请求，开始解析答案...');
+
+                try {
+                  const jsonData = JSON.parse(finalResponseBody);
+                  if (jsonData.data && jsonData.data.contentList) {
+                    const answers = this.extractWordPKAnswers(jsonData);
+
+                    if (answers.length > 0) {
+                      const answerFile = path.join(ansDir, `word_pk_answers_${Date.now()}.txt`);
+                      const answerText = answers.map((item, index) =>
+                        `${index + 1}. [${item.categoryId}] ${item.entry}: ${item.paraphrase}`
+                      ).join('\n\n');
+
+                      fs.writeFileSync(answerFile, answerText, 'utf-8');
+
+                      this.safeIpcSend('word-answers-extracted', {
+                        answers: answers,
+                        count: answers.length,
+                        file: answerFile,
+                        url: fullUrl
+                      });
+
+                      console.log(`成功提取 ${answers.length} 个单词PK答案，已保存到: ${answerFile}`);
+                    } else {
+                      console.log('未在单词PK数据中找到有效答案');
+                      this.safeIpcSend('no-word-answers-found', {
+                        message: '未在单词PK数据中找到有效答案',
+                        url: fullUrl
+                      });
+                    }
+                  }
+                } catch (error) {
+                  console.error('解析单词PK数据失败:', error);
+                  this.safeIpcSend('word-parse-error', {
+                    error: error.message,
+                    url: fullUrl
+                  });
+                }
+              }
+
+            } catch (error) {
+              console.error('处理响应数据时出错:', error);
+              try {
+                if (!res.headersSent) {
+                  res.writeHead(proxyRes.statusCode || 500);
+                  res.end('Response processing error');
+                }
+              } catch (e) {
+                console.error('发送错误响应失败:', e);
+              }
+            }
+          });
+
+          proxyRes.on('error', (error) => {
+            if (responseHandled) return; // 防止重复处理
+            responseHandled = true;
+
+            console.error('响应流错误:', error);
+            try {
+              if (!res.headersSent) {
+                res.writeHead(500);
+                res.end('Response stream error');
+              }
+            } catch (e) {
+              console.error('发送错误响应失败:', e);
+            }
+          });
 
         } catch (error) {
           console.error('响应拦截器错误:', error);
-          proxyRes.pipe(res);
+          // 不要使用 pipe，而是手动发送错误响应
+          try {
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'text/plain' });
+              res.end('Proxy error occurred');
+            }
+          } catch (e) {
+            console.error('发送错误响应失败:', e);
+          }
         }
 
-        next();
+        // 不调用 next()，因为我们已经完全处理了响应
       }
     });
 
@@ -1494,7 +1793,7 @@ class AnswerProxy {
             });
           } else {
             const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)\]\]>\s*<\/answer>/g)];
-            
+
             if (answerMatches.length > 0) {
               answerMatches.forEach((answerMatch, answerIndex) => {
                 const answerText = answerMatch[1].trim();
@@ -1592,7 +1891,7 @@ class AnswerProxy {
       const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
         localStorage.getItem('keep-cache-files') === 'true'
       `);
-      
+
       if (!shouldKeepCache) {
         fs.rm(tempDir, { recursive: true, force: true });
       }
@@ -1602,6 +1901,38 @@ class AnswerProxy {
   }
   getTrafficByUuid(uuid) {
     return this.trafficCache.get(uuid)
+  }
+
+  // 获取规则类型列表
+  getRuleTypes() {
+    return [
+      { value: 'response', label: '响应体修改', description: '修改服务器返回的响应内容' },
+      { value: 'request', label: '请求修改', description: '修改客户端发送的请求' },
+      { value: 'response-headers', label: '响应头修改', description: '修改服务器返回的响应头' }
+    ];
+  }
+
+  // 获取动作类型列表
+  getActionTypes(ruleType) {
+    const actions = {
+      'response': [
+        { value: 'replace', label: '替换内容', description: '完全替换响应体内容' },
+        { value: 'modify', label: '修改内容', description: '使用正则表达式修改响应体' },
+        { value: 'inject', label: '注入内容', description: '在响应体中注入新内容' }
+      ],
+      'request': [
+        { value: 'modify-headers', label: '修改请求头', description: '添加或修改请求头' },
+        { value: 'modify-url', label: '修改URL', description: '重定向请求到新的URL' },
+        { value: 'block', label: '阻止请求', description: '阻止请求发送到服务器' }
+      ],
+      'response-headers': [
+        { value: 'add-headers', label: '添加响应头', description: '添加新的响应头' },
+        { value: 'modify-headers', label: '修改响应头', description: '修改现有响应头' },
+        { value: 'remove-headers', label: '删除响应头', description: '删除指定的响应头' }
+      ]
+    };
+
+    return actions[ruleType] || [];
   }
 }
 

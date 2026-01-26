@@ -1181,6 +1181,76 @@ button:disabled {
     font-family: 'Consolas', 'Monaco', monospace;
 }
 
+/* 头部项样式 */
+.headers-container {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    background: #f9f9f9;
+}
+
+.header-item {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.header-item:last-child {
+    margin-bottom: 0;
+}
+
+.header-name-input,
+.header-value-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.header-name-input {
+    max-width: 200px;
+}
+
+.remove-header {
+    padding: 8px 12px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.remove-header:hover {
+    background: #c82333;
+}
+
+/* 注入位置样式 */
+.inject-position {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.inject-position label {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.inject-position select {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 120px;
+}
+
+.inject-position input {
+    flex: 1;
+}
+
 .modify-rules-container {
     border: 1px solid #e2e8f0;
     border-radius: 6px;
@@ -1632,4 +1702,49 @@ button:disabled {
     border-radius: 4px;
     transition: width 0.3s ease;
     width: 0%;
+}/*
+ 替换选项样式 */
+.replace-options {
+    margin-bottom: 10px;
+}
+
+.replace-options label {
+    display: inline-block;
+    margin-right: 20px;
+    font-weight: normal;
+}
+
+.replace-options input[type="radio"] {
+    margin-right: 5px;
+}
+
+.file-input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.file-input-group input[type="text"] {
+    flex: 1;
+    background-color: #f8f9fa;
+}
+
+.file-input-group button {
+    padding: 8px 16px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.file-input-group button:hover {
+    background-color: #0056b3;
+}
+
+.help-text {
+    color: #6c757d;
+    font-size: 12px;
+    margin-top: 5px;
+    display: block;
 }
