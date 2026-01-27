@@ -368,6 +368,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRuleTypes: () => ipcRenderer.invoke('get-rule-types'),
   getActionTypes: (ruleType) => ipcRenderer.invoke('get-action-types', ruleType),
 
+  // PK注入相关API
+  clearPkCache: () => ipcRenderer.invoke('clear-pk-cache'),
+  onPkInjectionStart: (callback) => ipcRenderer.on('pk-injection-start', (event, data) => callback(data)),
+  onPkInjectionSuccess: (callback) => ipcRenderer.on('pk-injection-success', (event, data) => callback(data)),
+  onPkInjectionError: (callback) => ipcRenderer.on('pk-injection-error', (event, data) => callback(data)),
+  onPkRequestProcessed: (callback) => ipcRenderer.on('pk-request-processed', (event, data) => callback(data)),
+
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
   updateConfirm: () => ipcRenderer.send('update-confirm'),
   updateInstall: () => ipcRenderer.send('update-install'),

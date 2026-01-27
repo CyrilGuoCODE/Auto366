@@ -622,6 +622,18 @@ ipcMain.handle('get-action-types', (event, ruleType) => {
   return answerProxy.getActionTypes(ruleType);
 });
 
+// PK注入相关IPC处理
+ipcMain.handle('clear-pk-cache', async () => {
+  try {
+    // 清理PK相关缓存
+    answerProxy.pendingPkRequests.clear();
+    return { success: true, message: 'PK缓存已清理' };
+  } catch (error) {
+    console.error('清理PK缓存失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('clear-cache', async () => {
   try {
     await answerProxy.clearCache()

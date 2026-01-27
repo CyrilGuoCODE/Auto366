@@ -37004,5 +37004,41 @@ const auto = () => {
     items[result].parentNode.parentNode.click();
 }
 
+// 注入成功后显示提示文字
+const showSuccessMessage = () => {
+    // 创建提示元素
+    const messageDiv = document.createElement('div');
+    messageDiv.style.position = 'fixed';
+    messageDiv.style.top = '20px';
+    messageDiv.style.left = '50%';
+    messageDiv.style.transform = 'translateX(-50%)';
+    messageDiv.style.padding = '15px 25px';
+    messageDiv.style.backgroundColor = 'rgba(0, 200, 0, 0.9)';
+    messageDiv.style.color = 'white';
+    messageDiv.style.borderRadius = '5px';
+    messageDiv.style.fontSize = '16px';
+    messageDiv.style.fontWeight = 'bold';
+    messageDiv.style.zIndex = '9999';
+    messageDiv.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
+    messageDiv.textContent = 'Auto366注入成功，请保持天学网在前台运行';
+    
+    // 添加到页面
+    document.body.appendChild(messageDiv);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        messageDiv.style.transition = 'opacity 0.5s';
+        messageDiv.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(messageDiv);
+        }, 500);
+    }, 15000);
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', showSuccessMessage);
+} else {
+    showSuccessMessage();
+}
 
 // 注入部分：<script src="./test.js"></script>， <body onclick="alert(1); setInterval(auto, 10); this.onclick = null;">

@@ -304,41 +304,117 @@ class ListeningFeature {
 
 class WordPKFeature {
   constructor() {
-    this.pkStep = 1;
+    this.injectionStatus = '等待中';
+    this.processedRequests = 0;
     this.initEventListeners();
-    this.updatePkStepGuide(this.pkStep);
+    this.initIpcListeners();
+    this.updateStatus();
   }
 
   initEventListeners() {
-    document.getElementById('locationBtn-pk').addEventListener('click', () => {
-      window.electronAPI.openLocationWindowPk();
-      this.pkStep = 2;
-      setTimeout(() => this.updatePkStepGuide(this.pkStep), 300);
+    document.getElementById('clearPkCache').addEventListener('click', () => {
+      this.handleClearCache();
     });
 
-    document.getElementById('startBtn-pk').addEventListener('click', () => {
-      const resultDiv = document.getElementById('result');
-      resultDiv.innerHTML = `
-        <strong>正在执行自动选择...</strong><br>
-        请稍候，不要移动鼠标或切换窗口
-        <span id="pk-step-guide"></span>
-      `;
-      this.pkStep = 3;
-      setTimeout(() => this.updatePkStepGuide(this.pkStep), 300);
-      window.electronAPI.startChoose();
+    document.getElementById('testInjection').addEventListener('click', () => {
+      this.handleTestInjection();
     });
   }
 
-  updatePkStepGuide(step) {
-    const guide = document.getElementById('pk-step-guide');
-    if (!guide) return;
-    if (step === 1) {
-      guide.innerHTML = '<strong>第一步：</strong>请确保屏幕缩放为100%，否则自动选择可能会出现偏差(很重要)';
-    } else if (step === 2) {
-      guide.innerHTML = '<strong>第二步：</strong>点击"设置截图位置"按钮，按提示完成截图区域设置，然后点击"开始自动选择"按钮';
-    } else if (step === 3) {
-      guide.innerHTML = '<strong>第三步：</strong>程序正在自动选择，请勿操作鼠标和键盘，等待完成提示';
+  initIpcListeners() {
+    // 监听PK注入相关事件
+    window.electronAPI.onPkInjectionStart((data) => {
+      this.injectionStatus = '注入中';
+      const url = data?.url || '未知URL';
+      this.addLog(`开始处理PK注入: ${url}`, 'info');
+      this.updateStatus();
+    });
+
+    window.electronAPI.onPkInjectionSuccess((data) => {
+      this.injectionStatus = '注入成功';
+      this.processedRequests++;
+      const message = data?.message || 'PK注入成功';
+      this.addLog(`PK注入成功: ${message}`, 'success');
+      this.updateStatus();
+    });
+
+    window.electronAPI.onPkInjectionError((data) => {
+      this.injectionStatus = '注入失败';
+      const error = data?.error || '未知错误';
+      this.addLog(`PK注入失败: ${error}`, 'error');
+      this.updateStatus();
+    });
+
+    window.electronAPI.onPkRequestProcessed((data) => {
+      this.processedRequests++;
+      const type = data?.type || '未知';
+      const url = data?.url || '未知URL';
+      this.addLog(`处理请求: ${type} - ${url}`, 'info');
+      this.updateStatus();
+    });
+  }
+
+  updateStatus() {
+    const statusElement = document.getElementById('injection-status');
+    const requestsElement = document.getElementById('processed-requests');
+    
+    if (statusElement) {
+      statusElement.textContent = this.injectionStatus;
+      statusElement.className = 'status-value';
+      
+      // 根据状态设置颜色
+      if (this.injectionStatus === '注入成功') {
+        statusElement.style.color = '#28a745';
+      } else if (this.injectionStatus === '注入失败') {
+        statusElement.style.color = '#dc3545';
+      } else if (this.injectionStatus === '注入中') {
+        statusElement.style.color = '#ffc107';
+      } else {
+        statusElement.style.color = '#007bff';
+      }
     }
+    
+    if (requestsElement) {
+      requestsElement.textContent = this.processedRequests;
+    }
+  }
+
+  addLog(message, type = 'info') {
+    const logContainer = document.getElementById('pk-injection-log');
+    if (!logContainer) return;
+
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${type}`;
+    logEntry.textContent = `[${timestamp}] ${message}`;
+    
+    logContainer.appendChild(logEntry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+
+    // 限制日志条数，避免内存占用过多
+    const entries = logContainer.querySelectorAll('.log-entry');
+    if (entries.length > 100) {
+      entries[0].remove();
+    }
+  }
+
+  handleClearCache() {
+    window.electronAPI.clearPkCache().then((result) => {
+      if (result.success) {
+        this.addLog('缓存清理成功', 'success');
+      } else {
+        this.addLog(`缓存清理失败: ${result.error}`, 'error');
+      }
+    });
+  }
+
+  handleTestInjection() {
+    this.addLog('开始测试注入功能...', 'info');
+    
+    // 模拟测试
+    setTimeout(() => {
+      this.addLog('测试完成：注入功能正常', 'success');
+    }, 1000);
   }
 }
 

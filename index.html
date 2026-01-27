@@ -161,36 +161,41 @@
 
         <div id="wordpk-content" class="content-area">
             <button class="back-btn">返回</button>
-            <h1>单词PK</h1>
+            <h1>单词PK自动注入</h1>
 
             <div class="tutorial">
                 <h2>使用教程</h2>
                 <ol>
-                    <li><strong>输入或手动设置屏幕缩放率：</strong>在下方输入框中输入当前屏幕缩放率（如：100、125、150等或者手动设置为100%，这非常重要）</li>
-                    <li><strong>设置截图位置：</strong>点击"设置截图位置"按钮，首先会出现红色框，请拖动到题面单词位置松手即可，然后会出现蓝色框，请拖动到选项区域松手即可。</li>
-                    <li><strong>开始自动选择：</strong>点击"开始自动选择"按钮，程序会自动识别题面单词并选择正确答案。</li>
+                    <li><strong>启动代理：</strong>确保代理服务器已启动（在主页面启动）</li>
+                    <li><strong>设置代理：</strong>在天学网客户端中设置代理为 127.0.0.1:5291</li>
+                    <li><strong>开始练习：</strong>正常进入单词PK练习，程序会自动注入脚本</li>
+                    <li><strong>自动答题：</strong>注入成功后，点击页面任意位置即可开始自动答题</li>
                 </ol>
             </div>
 
-            <div class="scale-input-container">
-                <label for="scaleInput-pk">屏幕缩放率（%）：</label>
-                <div class="scale-input-wrapper">
-                    <input type="number" id="scaleInput-pk" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input"
-                        value="0">
-                    <button id="getScale-pk" class="clear-memory-btn">获取当前</button>
+            <div class="pkstatus-container">
+                <div class="pkstatus-item">
+                    <span class="pkstatus-label">注入状态：</span>
+                    <span id="injection-status" class="pkstatus-value">等待中</span>
                 </div>
-                <div class="scale-help-text" id="scaleHelpText-pk">程序会自动读取屏幕缩放率，点击"获取当前"可重新获取系统缩放率</div>
+                <div class="pkstatus-item">
+                    <span class="pkstatus-label">处理请求：</span>
+                    <span id="processed-requests" class="pkstatus-value">0</span>
+                </div>
             </div>
 
             <div class="buttons">
-                <button id="locationBtn-pk">设置截图位置</button>
-                <button id="startBtn-pk">开始自动选择</button>
+                <button id="clearPkCache">清理缓存</button>
+                <button id="testInjection">测试注入</button>
             </div>
+
             <div id="result">
-                欢迎使用单词PK功能！此工具支持单词PK自动化填写<br>
-                请按照上方教程步骤操作<br>
-                请在上方输入框中输入你的屏幕缩放率，否则自动选择可能会出现偏差!<br>
-                <span id="pk-step-guide"></span>
+                欢迎使用单词PK自动注入功能！<br>
+                此功能会自动在单词PK练习中注入答题脚本<br>
+                请确保代理服务器已启动并正确设置<br>
+                <div id="pk-injection-log"
+                    style="margin-top: 10px; max-height: 200px; overflow-y: auto; background: #f5f5f5; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                </div>
             </div>
 
             <div

@@ -1748,3 +1748,56 @@ button:disabled {
     margin-top: 5px;
     display: block;
 }
+
+/* pk状态容器样式 */
+.pkstatus-container {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.pkstatus-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.pkstatus-item:last-child {
+    margin-bottom: 0;
+}
+
+.pkstatus-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.pkstatus-value {
+    font-weight: 600;
+    color: #007bff;
+}
+
+/* 注入日志样式 */
+#pk-injection-log {
+    text-align: left;
+    line-height: 1.4;
+}
+
+#pk-injection-log .log-entry {
+    margin-bottom: 4px;
+    padding: 2px 0;
+}
+
+#pk-injection-log .log-entry.success {
+    color: #28a745;
+}
+
+#pk-injection-log .log-entry.error {
+    color: #dc3545;
+}
+
+#pk-injection-log .log-entry.info {
+    color: #17a2b8;
+}
