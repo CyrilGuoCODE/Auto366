@@ -528,6 +528,17 @@ ipcMain.on('open-file-choosing', async () => {
   if (!result.canceled) mainWindow.webContents.send('choose-file', result.filePaths[0])
 })
 
+ipcMain.on('open-pk-zip-choosing', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      { name: 'Zip Files', extensions: ['zip'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  if (!result.canceled) mainWindow.webContents.send('choose-pk-zip', result.filePaths[0]);
+})
+
 // 响应体更改规则相关IPC处理
 ipcMain.handle('get-response-rules', () => {
   try {

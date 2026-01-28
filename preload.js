@@ -333,6 +333,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   openFileChoosing: () => ipcRenderer.send('open-file-choosing'),
   chooseFile: (callback) => ipcRenderer.on('choose-file', callback),
+  openPkZipChoosing: () => ipcRenderer.send('open-pk-zip-choosing'),
+  choosePkZip: (callback) => ipcRenderer.on('choose-pk-zip', (event, filePath) => callback(filePath)),
   setCachePath: (cachePath) => {
     try {
       const normalizedPath = path.resolve(cachePath);

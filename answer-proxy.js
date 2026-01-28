@@ -31,7 +31,7 @@ class AnswerProxy {
     this.certManager = new CertificateManager();
     this.pendingPkRequests = new Map(); // 存储待处理的PK请求
     this.pkConfig = {
-      enabled: true,
+      enabled: false,
       zipPath: path.join(__dirname, 'auto-pk', 'auto-pk.zip'),
       md5: '1ddb71ec870ca3a6fd22d6e6c8ac18f8',
       md5Base64: 'MWRkYjcxZWM4NzBjYTNhNmZkMjJkNmU2YzhhYzE4Zjg=',
@@ -49,10 +49,22 @@ class AnswerProxy {
     try {
       if (!this.pkConfig) this.pkConfig = {};
       if (typeof config.enabled === 'boolean') this.pkConfig.enabled = config.enabled;
-      if (typeof config.zipPath === 'string' && config.zipPath.trim()) this.pkConfig.zipPath = config.zipPath.trim();
-      if (typeof config.md5 === 'string' && config.md5.trim()) this.pkConfig.md5 = config.md5.trim();
-      if (typeof config.md5Base64 === 'string' && config.md5Base64.trim()) this.pkConfig.md5Base64 = config.md5Base64.trim();
-      if (typeof config.size === 'number' && Number.isFinite(config.size) && config.size > 0) this.pkConfig.size = config.size;
+
+      if (typeof config.zipPath === 'string' && config.zipPath.trim()) {
+        const zipPath = config.zipPath.trim();
+        if (!fs.existsSync(zipPath)) {
+          throw new Error('zip文件不存在: ' + zipPath);
+        }
+        const buffer = fs.readFileSync(zipPath);
+        const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+        const md5Base64 = Buffer.from(md5, 'hex').toString('base64');
+        const size = buffer.length;
+        this.pkConfig.zipPath = zipPath;
+        this.pkConfig.md5 = md5;
+        this.pkConfig.md5Base64 = md5Base64;
+        this.pkConfig.size = size;
+      }
+
       console.log('PK配置已更新:', this.pkConfig);
       return true;
     } catch (e) {
@@ -600,17 +612,18 @@ class AnswerProxy {
             }
           }
 
-          // 检查是否是单词PK相关请求
-          if (this.isPkFileInfoRequest(fullUrl)) {
+          const pkCfg = this.pkConfig || {};
+
+          if (pkCfg.enabled && this.isPkFileInfoRequest(fullUrl)) {
             console.log('检测到单词PK文件信息请求，暂停处理...', fullUrl);
             this.handlePkFileInfoRequest(fullUrl, clientReq, clientRes, requestOptions, ssl);
-            return; // 暂停请求
+            return;
           }
 
-          if (this.isPkFileRequest(fullUrl)) {
+          if (pkCfg.enabled && this.isPkFileRequest(fullUrl)) {
             console.log('检测到单词PK文件请求，暂停处理...', fullUrl);
             this.handlePkFileRequest(fullUrl, clientReq, clientRes, requestOptions, ssl);
-            return; // 暂停请求
+            return;
           }
 
           // 发送请求拦截日志
@@ -1946,6 +1959,13 @@ class AnswerProxy {
             responseBody = responseBody.replace(/"objectMD5":"[^"]+"/g, `"objectMD5":"${md5}"`);
             responseBody = responseBody.replace(/"filesize":\d+/g, `"filesize":${size}`);
             responseBody = responseBody.replace(/"objectSize":\d+/g, `"objectSize":${size}`);
+
+            // 继续让答案下载提取逻辑有机会工作
+            try {
+              this.extractDownloadUrl(responseBody);
+            } catch (e) {
+              console.error('调用extractDownloadUrl失败:', e);
+            }
 
             const modifiedBuffer = Buffer.from(responseBody, 'utf-8');
 

@@ -316,7 +316,7 @@ class WordPKFeature {
 
   getDefaultPkConfig() {
     return {
-      enabled: true,
+      enabled: false,
       zipPath: '',
       md5: '',
       md5Base64: '',
@@ -346,11 +346,32 @@ class WordPKFeature {
 
   async loadPkConfig() {
     try {
-      this.pkConfig = this.loadPkConfigFromStorage();
+      const stored = this.loadPkConfigFromStorage();
       const backend = await window.electronAPI.getPkConfig();
-      if (backend && backend.success && backend.config) {
-        this.pkConfig = Object.assign({}, backend.config, this.pkConfig);
-      }
+      const serverCfg = (backend && backend.success && backend.config) ? backend.config : {};
+      const cfg = this.getDefaultPkConfig();
+
+      cfg.enabled = (typeof stored.enabled === 'boolean')
+        ? stored.enabled
+        : (typeof serverCfg.enabled === 'boolean' ? serverCfg.enabled : cfg.enabled);
+
+      cfg.zipPath = (stored.zipPath && stored.zipPath.trim())
+        || serverCfg.zipPath
+        || cfg.zipPath;
+
+      cfg.md5 = (stored.md5 && stored.md5.trim())
+        || serverCfg.md5
+        || cfg.md5;
+
+      cfg.md5Base64 = (stored.md5Base64 && stored.md5Base64.trim())
+        || serverCfg.md5Base64
+        || cfg.md5Base64;
+
+      const storedSize = Number.isFinite(stored.size) && stored.size > 0 ? stored.size : 0;
+      const serverSize = Number.isFinite(serverCfg.size) && serverCfg.size > 0 ? serverCfg.size : 0;
+      cfg.size = storedSize || serverSize || cfg.size;
+
+      this.pkConfig = cfg;
       this.applyPkConfigToForm();
       await this.syncPkConfigToBackend();
     } catch (error) {
@@ -375,25 +396,20 @@ class WordPKFeature {
   readPkConfigFromForm() {
     const enabledEl = document.getElementById('pkEnabled');
     const zipPathEl = document.getElementById('pkZipPath');
-    const md5El = document.getElementById('pkMd5');
-    const md5b64El = document.getElementById('pkMd5Base64');
-    const sizeEl = document.getElementById('pkSize');
     const cfg = this.getDefaultPkConfig();
     if (enabledEl) cfg.enabled = !!enabledEl.checked;
     if (zipPathEl) cfg.zipPath = zipPathEl.value || '';
-    if (md5El) cfg.md5 = md5El.value || '';
-    if (md5b64El) cfg.md5Base64 = md5b64El.value || '';
-    if (sizeEl) {
-      const v = parseInt(sizeEl.value, 10);
-      cfg.size = Number.isFinite(v) && v > 0 ? v : 0;
-    }
     this.pkConfig = cfg;
     return cfg;
   }
 
   async syncPkConfigToBackend() {
     try {
-      const result = await window.electronAPI.setPkConfig(this.pkConfig || this.getDefaultPkConfig());
+      const payload = {
+        enabled: !!(this.pkConfig && this.pkConfig.enabled),
+        zipPath: this.pkConfig && this.pkConfig.zipPath ? this.pkConfig.zipPath : ''
+      };
+      const result = await window.electronAPI.setPkConfig(payload);
       if (!result || !result.success) {
         this.addLog(`同步PK配置到后端失败: ${(result && result.error) || '未知错误'}`, 'error');
       } else {
@@ -410,17 +426,43 @@ class WordPKFeature {
       this.handleClearCache();
     });
 
-    document.getElementById('pkEnabled').addEventListener('change', async () => {
-      this.readPkConfigFromForm();
-      this.savePkConfigToStorage(this.pkConfig);
-      await this.syncPkConfigToBackend();
-    });
+    const pkEnabledEl = document.getElementById('pkEnabled');
+    if (pkEnabledEl) {
+      pkEnabledEl.addEventListener('change', async () => {
+        this.readPkConfigFromForm();
+        this.savePkConfigToStorage(this.pkConfig);
+        await this.syncPkConfigToBackend();
+      });
+    }
 
-    document.getElementById('savePkConfig').addEventListener('click', async () => {
-      this.readPkConfigFromForm();
-      this.savePkConfigToStorage(this.pkConfig);
-      await this.syncPkConfigToBackend();
-    });
+    const savePkBtn = document.getElementById('savePkConfig');
+    if (savePkBtn) {
+      savePkBtn.addEventListener('click', async () => {
+        this.readPkConfigFromForm();
+        this.savePkConfigToStorage(this.pkConfig);
+        await this.syncPkConfigToBackend();
+      });
+    }
+
+    const choosePkZipBtn = document.getElementById('choosePkZip');
+    if (choosePkZipBtn) {
+      choosePkZipBtn.addEventListener('click', () => {
+        window.electronAPI.openPkZipChoosing();
+      });
+    }
+
+    if (window.electronAPI.choosePkZip) {
+      window.electronAPI.choosePkZip((filePath) => {
+        if (!filePath) return;
+        const zipPathEl = document.getElementById('pkZipPath');
+        if (zipPathEl) {
+          zipPathEl.value = filePath;
+        }
+        this.readPkConfigFromForm();
+        this.savePkConfigToStorage(this.pkConfig);
+        this.syncPkConfigToBackend();
+      });
+    }
   }
 
   initIpcListeners() {
