@@ -369,6 +369,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getActionTypes: (ruleType) => ipcRenderer.invoke('get-action-types', ruleType),
 
   // PK注入相关API
+  setPkMode: (mode) => ipcRenderer.invoke('set-pk-mode', mode),
+  getPkMode: () => ipcRenderer.invoke('get-pk-mode'),
   clearPkCache: () => ipcRenderer.invoke('clear-pk-cache'),
   onPkInjectionStart: (callback) => ipcRenderer.on('pk-injection-start', (event, data) => callback(data)),
   onPkInjectionSuccess: (callback) => ipcRenderer.on('pk-injection-success', (event, data) => callback(data)),

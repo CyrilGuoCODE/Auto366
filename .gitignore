@@ -17,6 +17,7 @@ yarn-error.log*
 lerna-debug.log*
 pnpm-debug.log*
 default
+auto-pk.zip
 
 # 环境变量文件
 **/.env.local

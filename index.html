@@ -184,6 +184,24 @@
                 </div>
             </div>
 
+            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <label style="display: block; margin-bottom: 10px; font-weight: bold;">PK注入模式：</label>
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="pkMode" value="simple" id="pkModeSimple" style="margin-right: 8px;">
+                        <span>简单模式</span>
+                    </label>
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="pkMode" value="realtime" id="pkModeRealtime" style="margin-right: 8px;">
+                        <span>实时模式</span>
+                    </label>
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                    <div><strong>简单模式：</strong>直接使用预打包的auto-pk.zip替换，速度快，不需要重新打包</div>
+                    <div style="margin-top: 5px;"><strong>实时模式：</strong>实时解压、注入、重新打包ZIP文件，更灵活但速度较慢</div>
+                </div>
+            </div>
+
             <div class="buttons">
                 <button id="clearPkCache">清理缓存</button>
                 <button id="testInjection">测试注入</button>

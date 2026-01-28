@@ -623,6 +623,26 @@ ipcMain.handle('get-action-types', (event, ruleType) => {
 });
 
 // PK注入相关IPC处理
+ipcMain.handle('set-pk-mode', async (event, mode) => {
+  try {
+    const success = answerProxy.setPkMode(mode);
+    return { success };
+  } catch (error) {
+    console.error('设置PK模式失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-pk-mode', async () => {
+  try {
+    const mode = answerProxy.getPkMode();
+    return { success: true, mode };
+  } catch (error) {
+    console.error('获取PK模式失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('clear-pk-cache', async () => {
   try {
     // 清理PK相关缓存

@@ -306,9 +306,41 @@ class WordPKFeature {
   constructor() {
     this.injectionStatus = '等待中';
     this.processedRequests = 0;
+    this.currentMode = 'simple';
     this.initEventListeners();
     this.initIpcListeners();
+    this.loadPkMode();
     this.updateStatus();
+  }
+
+  async loadPkMode() {
+    try {
+      const result = await window.electronAPI.getPkMode();
+      if (result.success) {
+        this.currentMode = result.mode || 'simple';
+        const radio = document.getElementById(`pkMode${this.currentMode === 'simple' ? 'Simple' : 'Realtime'}`);
+        if (radio) {
+          radio.checked = true;
+        }
+      }
+    } catch (error) {
+      console.error('加载PK模式失败:', error);
+    }
+  }
+
+  async setPkMode(mode) {
+    try {
+      const result = await window.electronAPI.setPkMode(mode);
+      if (result.success) {
+        this.currentMode = mode;
+        this.addLog(`PK模式已切换为: ${mode === 'simple' ? '简单模式' : '实时模式'}`, 'info');
+      } else {
+        this.addLog(`切换PK模式失败: ${result.error || '未知错误'}`, 'error');
+      }
+    } catch (error) {
+      console.error('设置PK模式失败:', error);
+      this.addLog(`设置PK模式失败: ${error.message}`, 'error');
+    }
   }
 
   initEventListeners() {
@@ -318,6 +350,18 @@ class WordPKFeature {
 
     document.getElementById('testInjection').addEventListener('click', () => {
       this.handleTestInjection();
+    });
+
+    document.getElementById('pkModeSimple').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        this.setPkMode('simple');
+      }
+    });
+
+    document.getElementById('pkModeRealtime').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        this.setPkMode('realtime');
+      }
     });
   }
 
