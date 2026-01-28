@@ -166,10 +166,17 @@
             <div class="tutorial">
                 <h2>使用教程</h2>
                 <ol>
-                    <li><strong>启动代理：</strong>确保代理服务器已启动（在主页面启动）</li>
+                    <li><strong>启动代理：</strong>确保代理服务器已启动（在万能答案获取启动）</li>
                     <li><strong>设置代理：</strong>在天学网客户端中设置代理为 127.0.0.1:5291</li>
                     <li><strong>开始练习：</strong>正常进入单词PK练习，程序会自动注入脚本</li>
-                    <li><strong>自动答题：</strong>注入成功后，点击页面任意位置即可开始自动答题</li>
+                    <li><strong>自动答题：</strong>注入成功后，点击页面任意位置后点击"开始PK"按钮即可开始自动答题</li>
+                    <div class="proxy-notice">
+                        <strong>⚠️ 重要提示：</strong>
+                            <ul>
+                                <li>在启用单词PK自动化前，请确保代理服务器已启动并正确设置</li>
+                                <li>在启用单词PK自动化期间，万能答案获取是<strong>不能获取到答案的</strong></li>
+                            </ul>
+                        </div>
                 </ol>
             </div>
 
@@ -186,24 +193,21 @@
 
             <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                 <label style="display: block; margin-bottom: 10px; font-weight: bold;">单词PK自动化设置：</label>
-                <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="pkEnabled" style="margin-right: 8px;">
-                        <span>启用单词PK自动化</span>
-                    </label>
-                </div>
-                <div style="display: grid; grid-template-columns: 120px 1fr; gap: 8px 10px; font-size: 12px; align-items: center;">
-                    <span>zip 文件路径：</span>
+                <div style="display: grid; grid-template-columns: 120px 1fr auto; gap: 8px 10px; font-size: 12px; align-items: center;">
+                    <span>自定义Zip文件路径：</span>
                     <input id="pkZipPath" type="text" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
+                    <button id="choosePkZip">选择zip文件</button>
                     <span>MD5（hex）：</span>
                     <input id="pkMd5" type="text" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
+                    <span></span>
                     <span>MD5（base64）：</span>
                     <input id="pkMd5Base64" type="text" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
+                    <span></span>
                     <span>文件大小（字节）：</span>
                     <input id="pkSize" type="number" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
+                    <span></span>
                 </div>
-                <div style="margin-top: 10px; display: flex; gap: 10px;">
-                    <button id="choosePkZip">选择zip文件</button>
+                <div style="margin-top: 10px;">
                     <button id="savePkConfig">保存设置</button>
                 </div>
                 <div style="margin-top: 8px; font-size: 12px; color: #666;">
@@ -212,6 +216,7 @@
             </div>
 
             <div class="buttons">
+                <button id="togglePkAuto">开启单词PK自动化</button>
                 <button id="clearPkCache">清理缓存</button>
             </div>
 

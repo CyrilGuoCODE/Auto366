@@ -37041,4 +37041,4 @@ if (document.readyState === 'loading') {
     showSuccessMessage();
 }
 
-// 注入规则：<script src="./auto-pk.js"></script>， <body onclick="alert(注入成功，请点击"开始pk"按钮); setInterval(auto, 1000); this.onclick = null;">
+// 注入规则：<script src="./auto-pk.js"></script>， <body onclick="alert('注入成功，请点击(开始PK)按钮'); setInterval(auto, 50); this.onclick = null;">

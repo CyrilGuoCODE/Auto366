@@ -21,6 +21,7 @@
 | 项目 | 值 |
 |------|-----|
 | 版本 | 0.7.0 |
-| MD5 | `1ddb71ec870ca3a6fd22d6e6c8ac18f8` |
-| Base64 | `MWRkYjcxZWM4NzBjYTNhNmZkMjJkNmU2YzhhYzE4Zjg=` |
-| 大小 | 25,329,247 字节 |
+| MD5 | `4fee174277e33fa6c9f6b9b276403c8c` |
+| Base64 | `T+4XQnfjP6bJ9rmydkA8jA==` |
+| 大小 | 25329350 字节 |
+| 延迟 | 10ms |

@@ -33,9 +33,9 @@ class AnswerProxy {
     this.pkConfig = {
       enabled: false,
       zipPath: path.join(__dirname, 'auto-pk', 'auto-pk.zip'),
-      md5: '1ddb71ec870ca3a6fd22d6e6c8ac18f8',
-      md5Base64: 'MWRkYjcxZWM4NzBjYTNhNmZkMjJkNmU2YzhhYzE4Zjg=',
-      size: 25329247
+      md5: '4fee174277e33fa6c9f6b9b276403c8c',
+      md5Base64: 'T+4XQnfjP6bJ9rmydkA8jA==',
+      size: 25329350
     };
     this.loadResponseRules();
   }

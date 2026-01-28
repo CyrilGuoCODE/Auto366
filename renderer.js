@@ -308,6 +308,7 @@ class WordPKFeature {
     this.processedRequests = 0;
     this.pkConfigKey = 'auto366_pk_config';
     this.pkConfig = null;
+    this.pkEnabled = false;
     this.initEventListeners();
     this.initIpcListeners();
     this.loadPkConfig();
@@ -351,10 +352,6 @@ class WordPKFeature {
       const serverCfg = (backend && backend.success && backend.config) ? backend.config : {};
       const cfg = this.getDefaultPkConfig();
 
-      cfg.enabled = (typeof stored.enabled === 'boolean')
-        ? stored.enabled
-        : (typeof serverCfg.enabled === 'boolean' ? serverCfg.enabled : cfg.enabled);
-
       cfg.zipPath = (stored.zipPath && stored.zipPath.trim())
         || serverCfg.zipPath
         || cfg.zipPath;
@@ -372,7 +369,9 @@ class WordPKFeature {
       cfg.size = storedSize || serverSize || cfg.size;
 
       this.pkConfig = cfg;
+      this.pkEnabled = !!serverCfg.enabled;
       this.applyPkConfigToForm();
+      this.updateToggleButtonText();
       await this.syncPkConfigToBackend();
     } catch (error) {
       console.error('加载PK配置失败:', error);
@@ -381,12 +380,10 @@ class WordPKFeature {
 
   applyPkConfigToForm() {
     const cfg = this.pkConfig || this.getDefaultPkConfig();
-    const enabledEl = document.getElementById('pkEnabled');
     const zipPathEl = document.getElementById('pkZipPath');
     const md5El = document.getElementById('pkMd5');
     const md5b64El = document.getElementById('pkMd5Base64');
     const sizeEl = document.getElementById('pkSize');
-    if (enabledEl) enabledEl.checked = !!cfg.enabled;
     if (zipPathEl) zipPathEl.value = cfg.zipPath || '';
     if (md5El) md5El.value = cfg.md5 || '';
     if (md5b64El) md5b64El.value = cfg.md5Base64 || '';
@@ -394,10 +391,8 @@ class WordPKFeature {
   }
 
   readPkConfigFromForm() {
-    const enabledEl = document.getElementById('pkEnabled');
     const zipPathEl = document.getElementById('pkZipPath');
     const cfg = this.getDefaultPkConfig();
-    if (enabledEl) cfg.enabled = !!enabledEl.checked;
     if (zipPathEl) cfg.zipPath = zipPathEl.value || '';
     this.pkConfig = cfg;
     return cfg;
@@ -406,7 +401,7 @@ class WordPKFeature {
   async syncPkConfigToBackend() {
     try {
       const payload = {
-        enabled: !!(this.pkConfig && this.pkConfig.enabled),
+        enabled: !!this.pkEnabled,
         zipPath: this.pkConfig && this.pkConfig.zipPath ? this.pkConfig.zipPath : ''
       };
       const result = await window.electronAPI.setPkConfig(payload);
@@ -425,15 +420,6 @@ class WordPKFeature {
     document.getElementById('clearPkCache').addEventListener('click', () => {
       this.handleClearCache();
     });
-
-    const pkEnabledEl = document.getElementById('pkEnabled');
-    if (pkEnabledEl) {
-      pkEnabledEl.addEventListener('change', async () => {
-        this.readPkConfigFromForm();
-        this.savePkConfigToStorage(this.pkConfig);
-        await this.syncPkConfigToBackend();
-      });
-    }
 
     const savePkBtn = document.getElementById('savePkConfig');
     if (savePkBtn) {
@@ -460,9 +446,34 @@ class WordPKFeature {
         }
         this.readPkConfigFromForm();
         this.savePkConfigToStorage(this.pkConfig);
-        this.syncPkConfigToBackend();
+        this.syncPkConfigToBackend().then(async () => {
+          try {
+            const backend = await window.electronAPI.getPkConfig();
+            if (backend && backend.success && backend.config) {
+              this.pkConfig = Object.assign(this.getDefaultPkConfig(), backend.config);
+              this.applyPkConfigToForm();
+            }
+          } catch (e) {
+            console.error('刷新PK配置失败:', e);
+          }
+        });
       });
     }
+
+    const toggleBtn = document.getElementById('togglePkAuto');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', async () => {
+        this.pkEnabled = !this.pkEnabled;
+        await this.syncPkConfigToBackend();
+        this.updateToggleButtonText();
+      });
+    }
+  }
+
+  updateToggleButtonText() {
+    const toggleBtn = document.getElementById('togglePkAuto');
+    if (!toggleBtn) return;
+    toggleBtn.textContent = this.pkEnabled ? '关闭单词PK自动化' : '开启单词PK自动化';
   }
 
   initIpcListeners() {
