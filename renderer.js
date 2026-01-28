@@ -306,40 +306,102 @@ class WordPKFeature {
   constructor() {
     this.injectionStatus = '等待中';
     this.processedRequests = 0;
-    this.currentMode = 'simple';
+    this.pkConfigKey = 'auto366_pk_config';
+    this.pkConfig = null;
     this.initEventListeners();
     this.initIpcListeners();
-    this.loadPkMode();
+    this.loadPkConfig();
     this.updateStatus();
   }
 
-  async loadPkMode() {
+  getDefaultPkConfig() {
+    return {
+      enabled: true,
+      zipPath: '',
+      md5: '',
+      md5Base64: '',
+      size: 0
+    };
+  }
+
+  loadPkConfigFromStorage() {
     try {
-      const result = await window.electronAPI.getPkMode();
-      if (result.success) {
-        this.currentMode = result.mode || 'simple';
-        const radio = document.getElementById(`pkMode${this.currentMode === 'simple' ? 'Simple' : 'Realtime'}`);
-        if (radio) {
-          radio.checked = true;
-        }
-      }
-    } catch (error) {
-      console.error('加载PK模式失败:', error);
+      const raw = window.localStorage.getItem(this.pkConfigKey);
+      if (!raw) return this.getDefaultPkConfig();
+      const parsed = JSON.parse(raw);
+      return Object.assign(this.getDefaultPkConfig(), parsed || {});
+    } catch (e) {
+      console.error('读取PK配置失败:', e);
+      return this.getDefaultPkConfig();
     }
   }
 
-  async setPkMode(mode) {
+  savePkConfigToStorage(config) {
     try {
-      const result = await window.electronAPI.setPkMode(mode);
-      if (result.success) {
-        this.currentMode = mode;
-        this.addLog(`PK模式已切换为: ${mode === 'simple' ? '简单模式' : '实时模式'}`, 'info');
-      } else {
-        this.addLog(`切换PK模式失败: ${result.error || '未知错误'}`, 'error');
+      window.localStorage.setItem(this.pkConfigKey, JSON.stringify(config || this.pkConfig || this.getDefaultPkConfig()));
+    } catch (e) {
+      console.error('保存PK配置到localStorage失败:', e);
+    }
+  }
+
+  async loadPkConfig() {
+    try {
+      this.pkConfig = this.loadPkConfigFromStorage();
+      const backend = await window.electronAPI.getPkConfig();
+      if (backend && backend.success && backend.config) {
+        this.pkConfig = Object.assign({}, backend.config, this.pkConfig);
       }
+      this.applyPkConfigToForm();
+      await this.syncPkConfigToBackend();
     } catch (error) {
-      console.error('设置PK模式失败:', error);
-      this.addLog(`设置PK模式失败: ${error.message}`, 'error');
+      console.error('加载PK配置失败:', error);
+    }
+  }
+
+  applyPkConfigToForm() {
+    const cfg = this.pkConfig || this.getDefaultPkConfig();
+    const enabledEl = document.getElementById('pkEnabled');
+    const zipPathEl = document.getElementById('pkZipPath');
+    const md5El = document.getElementById('pkMd5');
+    const md5b64El = document.getElementById('pkMd5Base64');
+    const sizeEl = document.getElementById('pkSize');
+    if (enabledEl) enabledEl.checked = !!cfg.enabled;
+    if (zipPathEl) zipPathEl.value = cfg.zipPath || '';
+    if (md5El) md5El.value = cfg.md5 || '';
+    if (md5b64El) md5b64El.value = cfg.md5Base64 || '';
+    if (sizeEl) sizeEl.value = cfg.size || 0;
+  }
+
+  readPkConfigFromForm() {
+    const enabledEl = document.getElementById('pkEnabled');
+    const zipPathEl = document.getElementById('pkZipPath');
+    const md5El = document.getElementById('pkMd5');
+    const md5b64El = document.getElementById('pkMd5Base64');
+    const sizeEl = document.getElementById('pkSize');
+    const cfg = this.getDefaultPkConfig();
+    if (enabledEl) cfg.enabled = !!enabledEl.checked;
+    if (zipPathEl) cfg.zipPath = zipPathEl.value || '';
+    if (md5El) cfg.md5 = md5El.value || '';
+    if (md5b64El) cfg.md5Base64 = md5b64El.value || '';
+    if (sizeEl) {
+      const v = parseInt(sizeEl.value, 10);
+      cfg.size = Number.isFinite(v) && v > 0 ? v : 0;
+    }
+    this.pkConfig = cfg;
+    return cfg;
+  }
+
+  async syncPkConfigToBackend() {
+    try {
+      const result = await window.electronAPI.setPkConfig(this.pkConfig || this.getDefaultPkConfig());
+      if (!result || !result.success) {
+        this.addLog(`同步PK配置到后端失败: ${(result && result.error) || '未知错误'}`, 'error');
+      } else {
+        this.addLog('单词PK自动化配置已应用', 'info');
+      }
+    } catch (e) {
+      console.error('同步PK配置到后端失败:', e);
+      this.addLog(`同步PK配置到后端失败: ${e.message}`, 'error');
     }
   }
 
@@ -348,20 +410,16 @@ class WordPKFeature {
       this.handleClearCache();
     });
 
-    document.getElementById('testInjection').addEventListener('click', () => {
-      this.handleTestInjection();
+    document.getElementById('pkEnabled').addEventListener('change', async () => {
+      this.readPkConfigFromForm();
+      this.savePkConfigToStorage(this.pkConfig);
+      await this.syncPkConfigToBackend();
     });
 
-    document.getElementById('pkModeSimple').addEventListener('change', (e) => {
-      if (e.target.checked) {
-        this.setPkMode('simple');
-      }
-    });
-
-    document.getElementById('pkModeRealtime').addEventListener('change', (e) => {
-      if (e.target.checked) {
-        this.setPkMode('realtime');
-      }
+    document.getElementById('savePkConfig').addEventListener('click', async () => {
+      this.readPkConfigFromForm();
+      this.savePkConfigToStorage(this.pkConfig);
+      await this.syncPkConfigToBackend();
     });
   }
 
@@ -450,15 +508,6 @@ class WordPKFeature {
         this.addLog(`缓存清理失败: ${result.error}`, 'error');
       }
     });
-  }
-
-  handleTestInjection() {
-    this.addLog('开始测试注入功能...', 'info');
-    
-    // 模拟测试
-    setTimeout(() => {
-      this.addLog('测试完成：注入功能正常', 'success');
-    }, 1000);
   }
 }
 

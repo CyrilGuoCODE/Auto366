@@ -185,26 +185,33 @@
             </div>
 
             <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <label style="display: block; margin-bottom: 10px; font-weight: bold;">PK注入模式：</label>
-                <div style="display: flex; gap: 20px; align-items: center;">
+                <label style="display: block; margin-bottom: 10px; font-weight: bold;">单词PK自动化设置：</label>
+                <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
                     <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="radio" name="pkMode" value="simple" id="pkModeSimple" style="margin-right: 8px;">
-                        <span>简单模式</span>
-                    </label>
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="radio" name="pkMode" value="realtime" id="pkModeRealtime" style="margin-right: 8px;">
-                        <span>实时模式</span>
+                        <input type="checkbox" id="pkEnabled" style="margin-right: 8px;">
+                        <span>启用单词PK自动化</span>
                     </label>
                 </div>
-                <div style="margin-top: 10px; font-size: 12px; color: #666;">
-                    <div><strong>简单模式：</strong>直接使用预打包的auto-pk.zip替换，速度快，不需要重新打包</div>
-                    <div style="margin-top: 5px;"><strong>实时模式：</strong>实时解压、注入、重新打包ZIP文件，更灵活但速度较慢</div>
+                <div style="display: grid; grid-template-columns: 120px 1fr; gap: 8px 10px; font-size: 12px; align-items: center;">
+                    <span>zip 文件路径：</span>
+                    <input id="pkZipPath" type="text" style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc;">
+                    <span>MD5（hex）：</span>
+                    <input id="pkMd5" type="text" style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc;">
+                    <span>MD5（base64）：</span>
+                    <input id="pkMd5Base64" type="text" style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc;">
+                    <span>文件大小（字节）：</span>
+                    <input id="pkSize" type="number" style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc;">
+                </div>
+                <div style="margin-top: 10px;">
+                    <button id="savePkConfig">保存设置</button>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                    <div>设置会保存在本地，并在每次启动时自动应用。留空即为该版本默认设定。</div>
                 </div>
             </div>
 
             <div class="buttons">
                 <button id="clearPkCache">清理缓存</button>
-                <button id="testInjection">测试注入</button>
             </div>
 
             <div id="result">

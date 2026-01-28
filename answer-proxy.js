@@ -30,10 +30,13 @@ class AnswerProxy {
     this.responseRules = [];
     this.certManager = new CertificateManager();
     this.pendingPkRequests = new Map(); // 存储待处理的PK请求
-    this.pkMode = 'simple'; // 'simple' 或 'realtime'，默认使用简单模式
-    this.autoPkZipPath = path.join(__dirname, 'auto-pk', 'auto-pk.zip');
-    this.autoPkZipMd5 = '1ddb71ec870ca3a6fd22d6e6c8ac18f8';
-    this.autoPkZipSize = 25329247;
+    this.pkConfig = {
+      enabled: true,
+      zipPath: path.join(__dirname, 'auto-pk', 'auto-pk.zip'),
+      md5: '1ddb71ec870ca3a6fd22d6e6c8ac18f8',
+      md5Base64: 'MWRkYjcxZWM4NzBjYTNhNmZkMjJkNmU2YzhhYzE4Zjg=',
+      size: 25329247
+    };
     this.loadResponseRules();
   }
 
@@ -42,19 +45,24 @@ class AnswerProxy {
     this.mainWindow = window;
   }
 
-  // 设置PK模式
-  setPkMode(mode) {
-    if (mode === 'simple' || mode === 'realtime') {
-      this.pkMode = mode;
-      console.log(`PK模式已设置为: ${mode}`);
+  setPkConfig(config) {
+    try {
+      if (!this.pkConfig) this.pkConfig = {};
+      if (typeof config.enabled === 'boolean') this.pkConfig.enabled = config.enabled;
+      if (typeof config.zipPath === 'string' && config.zipPath.trim()) this.pkConfig.zipPath = config.zipPath.trim();
+      if (typeof config.md5 === 'string' && config.md5.trim()) this.pkConfig.md5 = config.md5.trim();
+      if (typeof config.md5Base64 === 'string' && config.md5Base64.trim()) this.pkConfig.md5Base64 = config.md5Base64.trim();
+      if (typeof config.size === 'number' && Number.isFinite(config.size) && config.size > 0) this.pkConfig.size = config.size;
+      console.log('PK配置已更新:', this.pkConfig);
       return true;
+    } catch (e) {
+      console.error('更新PK配置失败:', e);
+      return false;
     }
-    return false;
   }
 
-  // 获取PK模式
-  getPkMode() {
-    return this.pkMode;
+  getPkConfig() {
+    return this.pkConfig || {};
   }
 
   // 安全的IPC发送函数
@@ -1882,17 +1890,38 @@ class AnswerProxy {
 
   // 处理PK文件信息请求
   handlePkFileInfoRequest(url, clientReq, clientRes, requestOptions, ssl) {
-    console.log(`检测到PK文件信息请求: ${url}, 模式: ${this.pkMode}`);
+    console.log(`检测到PK文件信息请求: ${url}`);
 
-    if (this.pkMode === 'simple') {
-      this.handlePkFileInfoRequestSimple(url, clientReq, clientRes, requestOptions, ssl);
-    } else {
-      this.handlePkFileInfoRequestRealtime(url, clientReq, clientRes, requestOptions, ssl);
+    const config = this.pkConfig || {};
+    if (!config.enabled) {
+      const protocol = ssl ? https : http;
+      try {
+        const req = protocol.request(requestOptions, (res) => {
+          Object.keys(res.headers).forEach(key => {
+            try {
+              clientRes.setHeader(key, res.headers[key]);
+            } catch (e) {
+            }
+          });
+          clientRes.writeHead(res.statusCode);
+          res.pipe(clientRes);
+        });
+        req.on('error', (error) => {
+          console.error('文件信息请求转发错误:', error);
+          this.handleFileInfoError(clientRes, error);
+        });
+        if (clientReq.method === 'POST' || clientReq.method === 'PUT') {
+          clientReq.pipe(req);
+        } else {
+          req.end();
+        }
+      } catch (error) {
+        console.error('创建文件信息转发请求失败:', error);
+        this.handleFileInfoError(clientRes, error);
+      }
+      return;
     }
-  }
 
-  // 简单模式：处理PK文件信息请求
-  async handlePkFileInfoRequestSimple(url, clientReq, clientRes, requestOptions, ssl) {
     const protocol = ssl ? https : http;
 
     try {
@@ -1908,12 +1937,15 @@ class AnswerProxy {
             const responseBuffer = Buffer.concat(chunks);
             let responseBody = responseBuffer.toString('utf-8');
 
-            console.log(`简单模式：修改文件信息响应中的MD5和大小`);
+            console.log('修改文件信息响应中的MD5和大小');
 
-            responseBody = responseBody.replace(/"filemd5":"[^"]+"/g, `"filemd5":"${this.autoPkZipMd5}"`);
-            responseBody = responseBody.replace(/"objectMD5":"[^"]+"/g, `"objectMD5":"${this.autoPkZipMd5}"`);
-            responseBody = responseBody.replace(/"filesize":\d+/g, `"filesize":${this.autoPkZipSize}`);
-            responseBody = responseBody.replace(/"objectSize":\d+/g, `"objectSize":${this.autoPkZipSize}`);
+            const md5 = config.md5 || '1ddb71ec870ca3a6fd22d6e6c8ac18f8';
+            const size = config.size || 25329247;
+
+            responseBody = responseBody.replace(/"filemd5":"[^"]+"/g, `"filemd5":"${md5}"`);
+            responseBody = responseBody.replace(/"objectMD5":"[^"]+"/g, `"objectMD5":"${md5}"`);
+            responseBody = responseBody.replace(/"filesize":\d+/g, `"filesize":${size}`);
+            responseBody = responseBody.replace(/"objectSize":\d+/g, `"objectSize":${size}`);
 
             const modifiedBuffer = Buffer.from(responseBody, 'utf-8');
 
@@ -1989,120 +2021,59 @@ class AnswerProxy {
     }
   }
 
-  // 实时模式：处理PK文件信息请求
-  handlePkFileInfoRequestRealtime(url, clientReq, clientRes, requestOptions, ssl) {
-    const requestId = this.generateRequestId();
-    
-    console.log(`实时模式：处理PK文件信息请求: ${url}, ID: ${requestId}`);
-
-    this.pendingPkRequests.set(requestId, {
-      type: 'fileinfo',
-      url: url,
-      clientReq: clientReq,
-      clientRes: clientRes,
-      requestOptions: requestOptions,
-      ssl: ssl,
-      timestamp: Date.now()
-    });
-
-    console.log(`PK文件信息请求已暂停: ${requestId}`);
-
-    this.safeIpcSend('pk-request-processed', {
-      type: 'fileinfo',
-      url: url,
-      requestId: requestId,
-      mode: 'realtime'
-    });
-
-    const protocol = ssl ? https : http;
-
-    try {
-      const req = protocol.request(requestOptions, (res) => {
-        const chunks = [];
-
-        res.on('data', (chunk) => {
-          chunks.push(chunk);
-        });
-
-        res.on('end', () => {
-          try {
-            const responseBuffer = Buffer.concat(chunks);
-            const responseBody = responseBuffer.toString('utf-8');
-
-            const request = this.pendingPkRequests.get(requestId);
-            if (request) {
-              request.originalResponse = {
-                statusCode: res.statusCode,
-                headers: { ...res.headers },
-                body: responseBody
-              };
-              console.log(`文件信息响应已缓存: ${requestId}`);
-            }
-          } catch (error) {
-            console.error('缓存文件信息响应失败:', error);
-          }
-        });
-
-        res.on('error', (error) => {
-          console.error('文件信息请求响应错误:', error);
-        });
-      });
-
-      req.on('error', (error) => {
-        console.error('文件信息请求发送错误:', error);
-      });
-
-      req.on('timeout', () => {
-        console.log('文件信息请求超时');
-        req.destroy();
-      });
-
-      req.setTimeout(30000);
-
-      if (clientReq.method === 'POST' || clientReq.method === 'PUT') {
-        clientReq.on('data', (chunk) => {
-          req.write(chunk);
-        });
-
-        clientReq.on('end', () => {
-          req.end();
-        });
-
-        clientReq.on('error', (error) => {
-          console.error('客户端请求流错误:', error);
-          req.destroy();
-        });
-      } else {
-        req.end();
-      }
-
-    } catch (error) {
-      console.error('创建文件信息请求失败:', error);
-    }
-  }
-
   // 处理PK文件请求
   handlePkFileRequest(url, clientReq, clientRes, requestOptions, ssl) {
-    console.log(`检测到PK文件请求: ${url}, 模式: ${this.pkMode}`);
+    console.log(`检测到PK文件请求: ${url}`);
 
-    if (this.pkMode === 'simple') {
-      this.handlePkFileRequestSimple(url, clientReq, clientRes, requestOptions, ssl);
-    } else {
-      this.handlePkFileRequestRealtime(url, clientReq, clientRes, requestOptions, ssl);
+    const config = this.pkConfig || {};
+    if (!config.enabled) {
+      const protocol = ssl ? https : http;
+      try {
+        const req = protocol.request(requestOptions, (res) => {
+          Object.keys(res.headers).forEach(key => {
+            try {
+              clientRes.setHeader(key, res.headers[key]);
+            } catch (e) {
+            }
+          });
+          clientRes.writeHead(res.statusCode);
+          res.pipe(clientRes);
+        });
+        req.on('error', (error) => {
+          console.error('文件请求转发错误:', error);
+          this.releaseRequestWithError({ clientRes }, error);
+        });
+        if (clientReq.method === 'POST' || clientReq.method === 'PUT') {
+          clientReq.pipe(req);
+        } else {
+          req.end();
+        }
+      } catch (error) {
+        console.error('创建文件转发请求失败:', error);
+        this.releaseRequestWithError({ clientRes }, error);
+      }
+      return;
     }
+
+    this.handlePkFileRequestSimple(url, clientReq, clientRes, requestOptions, ssl);
   }
 
   // 简单模式：处理PK文件请求
   async handlePkFileRequestSimple(url, clientReq, clientRes, requestOptions, ssl) {
     try {
-      console.log('简单模式：使用auto-pk.zip替换响应');
+      console.log('使用zip替换PK文件响应');
 
-      if (!fs.existsSync(this.autoPkZipPath)) {
-        throw new Error(`auto-pk.zip文件不存在: ${this.autoPkZipPath}`);
+      const config = this.pkConfig || {};
+      const zipPath = config.zipPath || path.join(__dirname, 'auto-pk', 'auto-pk.zip');
+      const md5 = config.md5 || '1ddb71ec870ca3a6fd22d6e6c8ac18f8';
+      const size = config.size || 25329247;
+      const md5Base64 = config.md5Base64 || Buffer.from(md5, 'hex').toString('base64');
+
+      if (!fs.existsSync(zipPath)) {
+        throw new Error(`zip文件不存在: ${zipPath}`);
       }
 
-      const zipBuffer = fs.readFileSync(this.autoPkZipPath);
-      const contentMd5 = Buffer.from(this.autoPkZipMd5, 'hex').toString('base64');
+      const zipBuffer = fs.readFileSync(zipPath);
 
       if (clientRes.destroyed) {
         console.log('客户端连接已断开');
@@ -2112,8 +2083,8 @@ class AnswerProxy {
       try {
         clientRes.setHeader('Content-Type', 'application/zip');
         clientRes.setHeader('Content-Length', zipBuffer.length);
-        clientRes.setHeader('ETag', `"${this.autoPkZipMd5}"`);
-        clientRes.setHeader('Content-MD5', contentMd5);
+        clientRes.setHeader('ETag', `"${md5}"`);
+        clientRes.setHeader('Content-MD5', md5Base64);
         clientRes.setHeader('Access-Control-Allow-Origin', '*');
         clientRes.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         clientRes.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -2130,14 +2101,14 @@ class AnswerProxy {
       this.safeIpcSend('pk-request-processed', {
         type: 'file',
         url: url,
-        mode: 'simple'
+        mode: 'auto'
       });
 
       this.safeIpcSend('pk-injection-success', {
-        message: 'PK注入完成（简单模式）',
+        message: 'PK注入完成',
         url: url,
-        newMd5: this.autoPkZipMd5,
-        newSize: this.autoPkZipSize
+        newMd5: md5,
+        newSize: size
       });
 
     } catch (error) {

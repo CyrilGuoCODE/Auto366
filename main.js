@@ -623,22 +623,22 @@ ipcMain.handle('get-action-types', (event, ruleType) => {
 });
 
 // PK注入相关IPC处理
-ipcMain.handle('set-pk-mode', async (event, mode) => {
+ipcMain.handle('set-pk-config', async (event, config) => {
   try {
-    const success = answerProxy.setPkMode(mode);
+    const success = answerProxy.setPkConfig(config || {});
     return { success };
   } catch (error) {
-    console.error('设置PK模式失败:', error);
+    console.error('设置PK配置失败:', error);
     return { success: false, error: error.message };
   }
 });
 
-ipcMain.handle('get-pk-mode', async () => {
+ipcMain.handle('get-pk-config', async () => {
   try {
-    const mode = answerProxy.getPkMode();
-    return { success: true, mode };
+    const config = answerProxy.getPkConfig();
+    return { success: true, config };
   } catch (error) {
-    console.error('获取PK模式失败:', error);
+    console.error('获取PK配置失败:', error);
     return { success: false, error: error.message };
   }
 });
