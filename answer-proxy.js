@@ -868,6 +868,16 @@ class AnswerProxy {
                 console.error('缓存单词PK词库数据失败:', e);
               }
 
+              // 单词PK词库接口
+              try {
+                if (fullUrl.includes('https://words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
+                  this.wordPkBucketData = finalResponseBody;
+                  console.log('已缓存单词PK词库数据，长度:', finalResponseBody.length);
+                }
+              } catch (e) {
+                console.error('缓存单词PK词库数据失败:', e);
+              }
+
               this.safeIpcSend('traffic-log', requestInfo);
 
               requestInfo.originalResponse = responseBuffer;
@@ -943,6 +953,9 @@ class AnswerProxy {
       }
     });
 
+    // 启动本地词库HTTP服务器
+    this.startBucketServer();
+
     console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291');
     this.safeIpcSend('proxy-status', {
       running: true,
@@ -959,6 +972,64 @@ class AnswerProxy {
         running: false,
         message: '代理服务器已停止'
       });
+    }
+
+    if (this.bucketServer) {
+      try {
+        this.bucketServer.close();
+      } catch (e) {
+        console.error('关闭词库HTTP服务器失败:', e);
+      }
+      this.bucketServer = null;
+    }
+  }
+
+  startBucketServer() {
+    if (this.bucketServer) return;
+
+    try {
+      this.bucketServer = http.createServer((req, res) => {
+        try {
+          if (req.method === 'GET' && req.url && req.url.startsWith('/bucket-detail-info')) {
+            if (!this.wordPkBucketData) {
+              res.writeHead(404, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(JSON.stringify({ error: 'no bucket data' }));
+              return;
+            }
+
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(this.wordPkBucketData);
+          } else {
+            res.writeHead(404, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ error: 'not found' }));
+          }
+        } catch (e) {
+          console.error('词库HTTP服务器处理请求失败:', e);
+          try {
+            res.writeHead(500, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ error: 'server error' }));
+          } catch (_) {}
+        }
+      });
+
+      this.bucketServer.listen(5290, '127.0.0.1', () => {
+        console.log('单词PK词库本地服务器已启动: http://127.0.0.1:5290/bucket-detail-info');
+      });
+    } catch (e) {
+      console.error('启动词库HTTP服务器失败:', e);
+      this.bucketServer = null;
     }
   }
 
@@ -2118,7 +2189,7 @@ class AnswerProxy {
     this.handlePkFileRequestSimple(url, clientReq, clientRes, requestOptions, ssl);
   }
 
-  // 简单模式：处理PK文件请求
+  // 处理PK文件请求
   async handlePkFileRequestSimple(url, clientReq, clientRes, requestOptions, ssl) {
     try {
       console.log('使用zip替换PK文件响应');
@@ -2177,376 +2248,6 @@ class AnswerProxy {
     }
   }
 
-  // 实时模式：处理PK文件请求
-  handlePkFileRequestRealtime(url, clientReq, clientRes, requestOptions, ssl) {
-    const requestId = this.generateRequestId();
-    
-    console.log(`实时模式：处理PK文件请求: ${url}, ID: ${requestId}`);
-
-    this.pendingPkRequests.set(requestId, {
-      type: 'file',
-      url: url,
-      clientReq: clientReq,
-      clientRes: clientRes,
-      requestOptions: requestOptions,
-      ssl: ssl,
-      timestamp: Date.now()
-    });
-
-    console.log(`PK文件请求已暂停: ${requestId}`);
-
-    this.safeIpcSend('pk-request-processed', {
-      type: 'file',
-      url: url,
-      requestId: requestId,
-      mode: 'realtime'
-    });
-
-    this.processPkInjection(requestId);
-  }
-
-  // 生成请求ID
-  generateRequestId() {
-    return `pk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  // 处理PK注入
-  async processPkInjection(fileRequestId) {
-    let extractDir = null;
-    let tempZipPath = null;
-
-    try {
-      console.log('开始处理PK注入...');
-
-      // 发送开始注入事件
-      this.safeIpcSend('pk-injection-start', {
-        message: '开始处理PK注入',
-        requestId: fileRequestId
-      });
-
-      // 获取文件请求信息
-      const fileRequest = this.pendingPkRequests.get(fileRequestId);
-      if (!fileRequest) {
-        throw new Error('找不到文件请求信息');
-      }
-
-      // 等待文件信息请求响应完成（最多等待5秒）
-      console.log('等待文件信息请求响应...');
-      let fileInfoRequest = null;
-      let waitCount = 0;
-      while (waitCount < 50) {
-        fileInfoRequest = this.findMatchingFileInfoRequest();
-        if (fileInfoRequest && fileInfoRequest.request.originalResponse) {
-          console.log('文件信息请求响应已就绪');
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-        waitCount++;
-      }
-
-      if (!fileInfoRequest || !fileInfoRequest.request.originalResponse) {
-        console.warn('文件信息请求响应未就绪，继续处理文件请求');
-      }
-
-      // 先发送原始文件请求获取ZIP
-      console.log('正在获取原始ZIP文件...');
-      const originalZipBuffer = await this.fetchOriginalZip(fileRequest);
-
-      // 解压ZIP
-      extractDir = path.join(tempDir, `pk_extract_${Date.now()}`);
-      fs.ensureDirSync(extractDir);
-
-      // 先将buffer写入临时文件
-      tempZipPath = path.join(tempDir, `temp_${Date.now()}.zip`);
-      fs.writeFileSync(tempZipPath, originalZipBuffer);
-
-      const zip = new StreamZip.async({ file: tempZipPath });
-      await zip.extract(null, extractDir);
-      await zip.close();
-
-      // 删除临时ZIP文件
-      fs.unlinkSync(tempZipPath);
-
-      // 注入auto-pk.js
-      await this.injectAutoPkScript(extractDir);
-
-      // 重新打包ZIP
-      const modifiedZipBuffer = await this.repackZip(extractDir);
-
-      // 计算新的MD5和大小
-      const newMd5 = crypto.createHash('md5').update(modifiedZipBuffer).digest('hex');
-      const newSize = modifiedZipBuffer.length;
-      const newContentMd5 = Buffer.from(newMd5, 'hex').toString('base64');
-
-      console.log(`新ZIP MD5: ${newMd5}, 大小: ${newSize}`);
-
-      // 查找对应的文件信息请求
-      fileInfoRequest = this.findMatchingFileInfoRequest();
-
-      if (fileInfoRequest) {
-        // 先释放文件信息请求（修改MD5和大小）
-        await this.releaseFileInfoRequest(fileInfoRequest.id, fileInfoRequest.request, newMd5, newSize);
-
-        // 再释放文件请求（返回修改后的ZIP）
-        await this.releaseFileRequest(fileRequestId, fileRequest, modifiedZipBuffer, newMd5, newContentMd5);
-      } else {
-        console.warn('未找到匹配的文件信息请求，直接释放文件请求');
-        await this.releaseFileRequest(fileRequestId, fileRequest, modifiedZipBuffer, newMd5, newContentMd5);
-      }
-
-      // 清理临时文件
-      if (extractDir && fs.existsSync(extractDir)) {
-        fs.removeSync(extractDir);
-      }
-
-      console.log('PK注入处理完成');
-
-      // 发送成功事件
-      this.safeIpcSend('pk-injection-success', {
-        message: 'PK注入处理完成',
-        requestId: fileRequestId,
-        newMd5: newMd5,
-        newSize: newSize
-      });
-
-    } catch (error) {
-      console.error('PK注入处理失败:', error);
-
-      // 清理临时文件
-      try {
-        if (tempZipPath && fs.existsSync(tempZipPath)) {
-          fs.unlinkSync(tempZipPath);
-        }
-        if (extractDir && fs.existsSync(extractDir)) {
-          fs.removeSync(extractDir);
-        }
-      } catch (cleanupError) {
-        console.error('清理临时文件失败:', cleanupError);
-      }
-
-      // 发送错误事件
-      this.safeIpcSend('pk-injection-error', {
-        error: error.message,
-        requestId: fileRequestId
-      });
-
-      // 发生错误时释放所有相关请求
-      const fileRequest = this.pendingPkRequests.get(fileRequestId);
-      if (fileRequest) {
-        this.releaseRequestWithError(fileRequest, error);
-      }
-    }
-  }
-
-  // 获取原始ZIP文件
-  async fetchOriginalZip(fileRequest) {
-    return new Promise((resolve, reject) => {
-      const protocol = fileRequest.ssl ? https : http;
-
-      const req = protocol.request(fileRequest.requestOptions, (res) => {
-        const chunks = [];
-
-        res.on('data', (chunk) => {
-          chunks.push(chunk);
-        });
-
-        res.on('end', () => {
-          const buffer = Buffer.concat(chunks);
-          resolve(buffer);
-        });
-
-        res.on('error', reject);
-      });
-
-      req.on('error', reject);
-      req.end();
-    });
-  }
-
-  // 注入auto-pk.js脚本
-  async injectAutoPkScript(extractDir) {
-    try {
-      // 复制auto-pk.js到解压目录
-      const autoPkSource = path.join(__dirname, 'auto-pk.js');
-      const autoPkDest = path.join(extractDir, 'auto-pk.js');
-
-      if (fs.existsSync(autoPkSource)) {
-        fs.copyFileSync(autoPkSource, autoPkDest);
-        console.log('auto-pk.js已复制到解压目录');
-      } else {
-        throw new Error('auto-pk.js源文件不存在');
-      }
-
-      // 查找study.html文件
-      const studyHtmlPath = path.join(extractDir, 'study.html');
-
-      if (fs.existsSync(studyHtmlPath)) {
-        let htmlContent = fs.readFileSync(studyHtmlPath, 'utf-8');
-
-        // 在head中注入脚本引用
-        if (htmlContent.includes('</head>')) {
-          htmlContent = htmlContent.replace('</head>', '    <script src="./auto-pk.js"></script>\n</head>');
-        }
-
-        // 在body标签中注入onclick事件
-        if (htmlContent.includes('<body')) {
-          htmlContent = htmlContent.replace(
-            /<body([^>]*)>/,
-            '<body$1 onclick="alert(1); setInterval(auto, 10); this.onclick = null;">'
-          );
-        }
-
-        fs.writeFileSync(studyHtmlPath, htmlContent, 'utf-8');
-        console.log('study.html注入完成');
-
-      } else {
-        throw new Error('未找到study.html文件');
-      }
-
-    } catch (error) {
-      console.error('注入auto-pk.js失败:', error);
-      throw error;
-    }
-  }
-
-  // 重新打包ZIP
-  async repackZip(extractDir) {
-    return new Promise((resolve, reject) => {
-      try {
-        const archiver = require('archiver');
-        const chunks = [];
-
-        const archive = archiver('zip', {
-          zlib: { level: 9 }
-        });
-
-        archive.on('data', (chunk) => {
-          chunks.push(chunk);
-        });
-
-        archive.on('end', () => {
-          const buffer = Buffer.concat(chunks);
-          resolve(buffer);
-        });
-
-        archive.on('error', reject);
-
-        // 添加目录中的所有文件
-        archive.directory(extractDir, false);
-        archive.finalize();
-
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  // 查找匹配的文件信息请求
-  findMatchingFileInfoRequest() {
-    for (const [id, request] of this.pendingPkRequests) {
-      if (request.type === 'fileinfo') {
-        return { id, request };
-      }
-    }
-    return null;
-  }
-
-  // 释放文件信息请求
-  async releaseFileInfoRequest(requestId, fileInfoRequest, newMd5, newSize) {
-    try {
-      console.log('释放文件信息请求，修改MD5和大小...');
-
-      const protocol = fileInfoRequest.ssl ? https : http;
-
-      const req = protocol.request(fileInfoRequest.requestOptions, (res) => {
-        const chunks = [];
-
-        res.on('data', (chunk) => {
-          chunks.push(chunk);
-        });
-
-        res.on('end', () => {
-          try {
-            const responseBuffer = Buffer.concat(chunks);
-            let responseBody = responseBuffer.toString('utf-8');
-
-            // 修改响应体中的MD5和大小
-            responseBody = responseBody.replace(/"filemd5":"[^"]+"/g, `"filemd5":"${newMd5}"`);
-            responseBody = responseBody.replace(/"objectMD5":"[^"]+"/g, `"objectMD5":"${newMd5}"`);
-            responseBody = responseBody.replace(/"filesize":\d+/g, `"filesize":${newSize}`);
-            responseBody = responseBody.replace(/"objectSize":\d+/g, `"objectSize":${newSize}`);
-
-            const modifiedBuffer = Buffer.from(responseBody, 'utf-8');
-
-            // 设置响应头
-            Object.keys(res.headers).forEach(key => {
-              if (key.toLowerCase() === 'content-length') {
-                fileInfoRequest.clientRes.setHeader(key, modifiedBuffer.length);
-              } else {
-                fileInfoRequest.clientRes.setHeader(key, res.headers[key]);
-              }
-            });
-
-            fileInfoRequest.clientRes.writeHead(res.statusCode);
-            fileInfoRequest.clientRes.write(modifiedBuffer);
-            fileInfoRequest.clientRes.end();
-
-            // 从待处理列表中移除
-            this.pendingPkRequests.delete(requestId);
-
-            console.log('文件信息请求已释放');
-
-          } catch (error) {
-            console.error('处理文件信息响应失败:', error);
-            this.releaseRequestWithError(fileInfoRequest, error);
-          }
-        });
-
-        res.on('error', (error) => {
-          console.error('文件信息请求响应错误:', error);
-          this.releaseRequestWithError(fileInfoRequest, error);
-        });
-      });
-
-      req.on('error', (error) => {
-        console.error('文件信息请求发送错误:', error);
-        this.releaseRequestWithError(fileInfoRequest, error);
-      });
-
-      req.end();
-
-    } catch (error) {
-      console.error('释放文件信息请求失败:', error);
-      this.releaseRequestWithError(fileInfoRequest, error);
-    }
-  }
-
-  // 释放文件请求
-  async releaseFileRequest(requestId, fileRequest, modifiedZipBuffer, newMd5, newContentMd5) {
-    try {
-      console.log('释放文件请求，返回修改后的ZIP...');
-
-      // 设置响应头
-      fileRequest.clientRes.setHeader('Content-Type', 'application/zip');
-      fileRequest.clientRes.setHeader('Content-Length', modifiedZipBuffer.length);
-      fileRequest.clientRes.setHeader('ETag', `"${newMd5}"`);
-      fileRequest.clientRes.setHeader('Content-MD5', newContentMd5);
-
-      fileRequest.clientRes.writeHead(200);
-      fileRequest.clientRes.write(modifiedZipBuffer);
-      fileRequest.clientRes.end();
-
-      // 从待处理列表中移除
-      this.pendingPkRequests.delete(requestId);
-
-      console.log('文件请求已释放');
-
-    } catch (error) {
-      console.error('释放文件请求失败:', error);
-      this.releaseRequestWithError(fileRequest, error);
-    }
-  }
-
   // 错误时释放请求
   releaseRequestWithError(request, error) {
     try {
@@ -2557,37 +2258,6 @@ class AnswerProxy {
     } catch (e) {
       console.error('发送错误响应失败:', e);
     }
-  }
-
-  getRuleTypes() {
-    return [
-      { value: 'response', label: '响应体修改', description: '修改服务器返回的响应内容' },
-      { value: 'request', label: '请求修改', description: '修改客户端发送的请求' },
-      { value: 'response-headers', label: '响应头修改', description: '修改服务器返回的响应头' }
-    ];
-  }
-
-  // 获取动作类型列表
-  getActionTypes(ruleType) {
-    const actions = {
-      'response': [
-        { value: 'replace', label: '替换内容', description: '完全替换响应体内容' },
-        { value: 'modify', label: '修改内容', description: '使用正则表达式修改响应体' },
-        { value: 'inject', label: '注入内容', description: '在响应体中注入新内容' }
-      ],
-      'request': [
-        { value: 'modify-headers', label: '修改请求头', description: '添加或修改请求头' },
-        { value: 'modify-url', label: '修改URL', description: '重定向请求到新的URL' },
-        { value: 'block', label: '阻止请求', description: '阻止请求发送到服务器' }
-      ],
-      'response-headers': [
-        { value: 'add-headers', label: '添加响应头', description: '添加新的响应头' },
-        { value: 'modify-headers', label: '修改响应头', description: '修改现有响应头' },
-        { value: 'remove-headers', label: '删除响应头', description: '删除指定的响应头' }
-      ]
-    };
-
-    return actions[ruleType] || [];
   }
 }
 
