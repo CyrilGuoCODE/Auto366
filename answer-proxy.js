@@ -33,10 +33,19 @@ class AnswerProxy {
     this.pkConfig = {
       enabled: false,
       zipPath: path.join(__dirname, 'auto-pk', 'auto-pk.zip'),
-      md5: '4fee174277e33fa6c9f6b9b276403c8c',
-      md5Base64: 'T+4XQnfjP6bJ9rmydkA8jA==',
-      size: 25329350
+      md5: '',
+      md5Base64: '',
+      size: 0
     };
+    this.wordPkBucketData = null; // 单词PK词库数据
+    this.bucketServer = null; // 本地词库HTTP服务器
+
+    // 启动时自动根据默认zip计算MD5/size
+    try {
+      this.refreshPkZipInfo();
+    } catch (e) {
+      console.error('初始化PK默认zip信息失败:', e);
+    }
     this.loadResponseRules();
   }
 
@@ -75,6 +84,27 @@ class AnswerProxy {
 
   getPkConfig() {
     return this.pkConfig || {};
+  }
+
+  refreshPkZipInfo() {
+    if (!this.pkConfig || !this.pkConfig.zipPath) return;
+    try {
+      const zipPath = this.pkConfig.zipPath;
+      if (!fs.existsSync(zipPath)) {
+        console.warn('默认PK zip不存在:', zipPath);
+        return;
+      }
+      const buffer = fs.readFileSync(zipPath);
+      const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+      const md5Base64 = Buffer.from(md5, 'hex').toString('base64');
+      const size = buffer.length;
+      this.pkConfig.md5 = md5;
+      this.pkConfig.md5Base64 = md5Base64;
+      this.pkConfig.size = size;
+      console.log('默认PK zip信息已自动计算:', this.pkConfig);
+    } catch (e) {
+      console.error('自动计算默认PK zip信息失败:', e);
+    }
   }
 
   // 安全的IPC发送函数
@@ -826,6 +856,16 @@ class AnswerProxy {
                 }
               } else {
                 requestInfo.responseBody = finalResponseBody;
+              }
+
+              // 单词PK词库接口
+              try {
+                if (fullUrl.includes('https://words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
+                  this.wordPkBucketData = finalResponseBody;
+                  console.log('已缓存单词PK词库数据，长度:', finalResponseBody.length);
+                }
+              } catch (e) {
+                console.error('缓存单词PK词库数据失败:', e);
               }
 
               this.safeIpcSend('traffic-log', requestInfo);
