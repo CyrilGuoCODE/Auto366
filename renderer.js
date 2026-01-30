@@ -468,6 +468,54 @@ class WordPKFeature {
         this.updateToggleButtonText();
       });
     }
+
+    const importPkWordListBtn = document.getElementById('importPkWordListBtn');
+    const importPkWordListInput = document.getElementById('importPkWordList');
+    const importPkWordListStatus = document.getElementById('importPkWordListStatus');
+    
+    if (importPkWordListBtn && importPkWordListInput) {
+      importPkWordListBtn.addEventListener('click', () => {
+        importPkWordListInput.click();
+      });
+      
+      importPkWordListInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (!file.name.endsWith('.txt')) {
+          importPkWordListStatus.textContent = '错误：请选择txt文件';
+          importPkWordListStatus.style.color = '#dc3545';
+          return;
+        }
+        
+        importPkWordListStatus.textContent = '正在导入...';
+        importPkWordListStatus.style.color = '#666';
+        
+        try {
+          const fileContent = await file.text();
+          const result = await window.electronAPI.importPkWordList(fileContent);
+          
+          if (result.success) {
+            importPkWordListStatus.textContent = '导入成功';
+            importPkWordListStatus.style.color = '#28a745';
+            this.addLog('词库文件导入成功', 'success');
+            setTimeout(() => {
+              importPkWordListStatus.textContent = '';
+            }, 3000);
+          } else {
+            importPkWordListStatus.textContent = `导入失败: ${result.error}`;
+            importPkWordListStatus.style.color = '#dc3545';
+            this.addLog(`词库文件导入失败: ${result.error}`, 'error');
+          }
+        } catch (error) {
+          importPkWordListStatus.textContent = `导入失败: ${error.message}`;
+          importPkWordListStatus.style.color = '#dc3545';
+          this.addLog(`词库文件导入失败: ${error.message}`, 'error');
+        }
+        
+        importPkWordListInput.value = '';
+      });
+    }
   }
 
   updateToggleButtonText() {
@@ -554,13 +602,17 @@ class WordPKFeature {
   }
 
   handleClearCache() {
-    window.electronAPI.clearPkCache().then((result) => {
-      if (result.success) {
-        this.addLog('缓存清理成功', 'success');
+    if (confirm(`警告：此操作将删除 ${pathJoin(cachePath, 'flipbooks')} 目录下的所有文件！\n\n确定要继续吗？`)) {
+      this.addLog('正在删除flipbook文件夹...', 'info');
+      
+      const result = window.electronAPI.deleteFlipbooksFiles();
+      
+      if (result.error) {
+        this.addLog(`删除失败: ${result.error}`, 'error');
       } else {
-        this.addLog(`缓存清理失败: ${result.error}`, 'error');
+        this.addLog(`删除成功！已删除 ${result.deletedCount} 个文件/目录`, 'success');
       }
-    });
+    }
   }
 }
 
@@ -579,7 +631,7 @@ class HearingFeature {
     });
 
     document.getElementById('deleteFlipbooksBtn').addEventListener('click', () => {
-      this.handleDeleteFlipbooks();
+      this.handleClearFlipbooks();
     });
 
     document.getElementById('replaceBtn').addEventListener('click', () => {
@@ -727,6 +779,33 @@ class HearingFeature {
         ${p2Content}
         ${p3Content}
       `;
+    }
+  }
+
+  handleClearFlipbooks() {
+    const resultDiv = document.getElementById('answerResult');
+
+    if (confirm(`警告：此操作将清理 ${pathJoin(cachePath, 'flipbooks')} 目录下的所有文件！\n\n确定要继续吗？`)) {
+      resultDiv.innerHTML = `
+        <strong>正在清理文件...</strong><br>
+        请稍候
+      `;
+
+      const result = window.electronAPI.deleteFlipbooksFiles();
+
+      if (result.error) {
+        resultDiv.innerHTML = `
+          <strong>清理失败</strong><br>
+          错误信息: ${result.error}
+        `;
+      } else {
+        resultDiv.innerHTML = `
+          <strong>清理成功！</strong><br>
+          已清理 ${result.deletedCount} 个文件/目录<br>
+          <br>
+          <strong>操作完成</strong>
+        `;
+      }
     }
   }
 

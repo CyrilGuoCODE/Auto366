@@ -374,6 +374,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setPkConfig: (config) => ipcRenderer.invoke('set-pk-config', config),
   getPkConfig: () => ipcRenderer.invoke('get-pk-config'),
   clearPkCache: () => ipcRenderer.invoke('clear-pk-cache'),
+  importPkWordList: (content) => ipcRenderer.invoke('import-pk-word-list', content),
   onPkInjectionStart: (callback) => ipcRenderer.on('pk-injection-start', (event, data) => callback(data)),
   onPkInjectionSuccess: (callback) => ipcRenderer.on('pk-injection-success', (event, data) => callback(data)),
   onPkInjectionError: (callback) => ipcRenderer.on('pk-injection-error', (event, data) => callback(data)),

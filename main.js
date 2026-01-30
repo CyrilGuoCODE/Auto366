@@ -665,6 +665,20 @@ ipcMain.handle('clear-pk-cache', async () => {
   }
 });
 
+ipcMain.handle('import-pk-word-list', async (event, content) => {
+  try {
+    if (!content || typeof content !== 'string') {
+      return { success: false, error: '内容不能为空' };
+    }
+    
+    answerProxy.setWordPkBucketData(content);
+    return { success: true, message: '词库导入成功' };
+  } catch (error) {
+    console.error('导入词库失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('clear-cache', async () => {
   try {
     await answerProxy.clearCache()

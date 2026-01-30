@@ -167,6 +167,7 @@
                 <h2>使用教程</h2>
                 <ol>
                     <li><strong>启动代理：</strong>确保代理服务器已启动（在万能答案获取启动）</li>
+                    <li><strong>删除缓存：</strong>点击"清理缓存"按钮，清理缓存</li>
                     <li><strong>设置代理：</strong>在天学网客户端中设置代理为 127.0.0.1:5291</li>
                     <li><strong>开始练习：</strong>正常进入单词PK练习，程序会自动注入脚本</li>
                     <li><strong>自动答题：</strong>注入成功后，点击控制面板的"开始PK"按钮后点击天学网的开始PK按钮即可开始自动答题</li>
@@ -214,11 +215,17 @@
                 <div style="margin-top: 8px; font-size: 12px; color: #666;">
                     <div>设置会保存在本地，并在每次启动时自动应用。留空即为该版本默认设定。</div>
                 </div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd;">
+                    <label for="importPkWordList" style="display: inline-block; margin-right: 10px;">导入词库文件：</label>
+                    <input type="file" id="importPkWordList" accept=".txt" style="display: none;">
+                    <button id="importPkWordListBtn">选择TXT文件</button>
+                    <span id="importPkWordListStatus" style="margin-left: 10px; color: #666; font-size: 12px;"></span>
+                </div>
             </div>
 
             <div class="buttons">
                 <button id="togglePkAuto">开启单词PK自动化</button>
-                <button id="clearPkCache">清理缓存</button>
+                <button id="clearPkCache" class="delete-btn">清理缓存</button>
             </div>
 
             <div id="result">

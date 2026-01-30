@@ -867,10 +867,8 @@ class AnswerProxy {
               } catch (e) {
                 console.error('缓存单词PK词库数据失败:', e);
               }
-
-              // 单词PK词库接口
               try {
-                if (fullUrl.includes('https://words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info')) {
+                if (fullUrl.includes('https://wordsbtl-api.up366.cn/client/wordsbtl/student/start')) {
                   this.wordPkBucketData = finalResponseBody;
                   console.log('已缓存单词PK词库数据，长度:', finalResponseBody.length);
                 }
@@ -981,6 +979,14 @@ class AnswerProxy {
         console.error('关闭词库HTTP服务器失败:', e);
       }
       this.bucketServer = null;
+    }
+  }
+
+  setWordPkBucketData(data) {
+    this.wordPkBucketData = data;
+    console.log('单词PK词库数据已更新，长度:', data ? data.length : 0);
+    if (!this.bucketServer) {
+      this.startBucketServer();
     }
   }
 
