@@ -9,24 +9,27 @@ let autoPkPanel = null;
 
 function loadBucketFromServer() {
     try {
-        fetch('http://127.0.0.1:5290/bucket-detail-info', { cache: 'no-cache' })
-            .then(res => {
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json();
-            })
-            .then(data => {
-                jsonData = data;
-                bucketLoaded = true;
-                bucketError = null;
-                updateAutoPkPanelStatus();
-                console.log('单词PK词库加载成功');
-            })
-            .catch(err => {
-                bucketLoaded = false;
-                bucketError = err.message || String(err);
-                updateAutoPkPanelStatus();
-                console.error('单词PK词库加载失败:', err);
-            });
+        // 添加3秒延迟加载词库(本地服务器好像很慢)
+        setTimeout(() => {
+            fetch('http://127.0.0.1:5290/bucket-detail-info', { cache: 'no-cache' })
+                .then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    jsonData = data;
+                    bucketLoaded = true;
+                    bucketError = null;
+                    updateAutoPkPanelStatus();
+                    console.log('单词PK词库加载成功');
+                })
+                .catch(err => {
+                    bucketLoaded = false;
+                    bucketError = err.message || String(err);
+                    updateAutoPkPanelStatus();
+                    console.error('单词PK词库加载失败:', err);
+                });
+        }, 3000);
     } catch (e) {
         bucketLoaded = false;
         bucketError = e.message || String(e);
