@@ -9,98 +9,185 @@ let autoPkPanel = null;
 
 function loadBucketFromServer() {
     try {
-        // 添加3秒延迟加载词库(本地服务器好像很慢)
-        setTimeout(() => {
-            fetch('http://127.0.0.1:5290/bucket-detail-info', { cache: 'no-cache' })
-                .then(res => {
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    return res.json();
-                })
-                .then(data => {
-                    jsonData = data;
-                    bucketLoaded = true;
-                    bucketError = null;
-                    updateAutoPkPanelStatus();
-                    console.log('单词PK词库加载成功');
-                })
-                .catch(err => {
-                    bucketLoaded = false;
-                    bucketError = err.message || String(err);
-                    updateAutoPkPanelStatus();
-                    console.error('单词PK词库加载失败:', err);
-                });
-        }, 3000);
+        fetch('http://127.0.0.1:5290/bucket-detail-info', { cache: 'no-cache' })
+            .then(res => {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(data => {
+                jsonData = data;
+                bucketLoaded = true;
+                bucketError = null;
+                updateAutoPkPanelStatus();
+                console.log('单词PK词库加载成功');
+            })
+            .catch(err => {
+                bucketLoaded = false;
+                bucketError = err.message || String(err);
+                updateAutoPkPanelStatus();
+                console.error('单词PK词库加载失败:', err);
+                setTimeout(() => {
+                    console.log('自动重试加载词库...');
+                    loadBucketFromServer();
+                }, 1000);
+            });
     } catch (e) {
         bucketLoaded = false;
         bucketError = e.message || String(e);
         updateAutoPkPanelStatus();
         console.error('单词PK词库加载异常:', e);
+        setTimeout(() => {
+            console.log('自动重试加载词库...');
+            loadBucketFromServer();
+        }, 1000);
     }
 }
 
-function findBestMatchIndex(word, candidates) {
-    if (!jsonData || !jsonData.data || !jsonData.data.contentList || !jsonData.data.contentList[0] || !jsonData.data.contentList[0].entryList) {
-        return 0;
-    }
-    // 1. 在 JSON 中查找单词的中文释义或英文单词
-    let targetMeaning = '';
-    let isChineseInput = /[\u4e00-\u9fff]/.test(word); // 判断输入是否为中文
+function normalizeText(text) {
+    if (!text) return '';
+    return text.trim().toLowerCase();
+}
 
-    for (let entry of jsonData.data.contentList[0].entryList) {
-        if (isChineseInput) {
-            // 如果输入是中文，查找该中文对应的英文单词
-            if (entry.paraphrase.includes(word)) {
-                targetMeaning = entry.entry; // 英文单词
+function extractMeanings(text) {
+    if (!text) return [];
+    const meanings = [];
+    const separators = /[；;，,]/;
+    const parts = text.split(separators);
+    
+    for (let part of parts) {
+        part = part.trim();
+        if (part) {
+            meanings.push(part);
+        }
+    }
+    
+    if (meanings.length === 0) {
+        meanings.push(text.trim());
+    }
+    
+    return meanings;
+}
+
+function calculateSimilarity(str1, str2) {
+    const s1 = normalizeText(str1);
+    const s2 = normalizeText(str2);
+    
+    if (s1 === s2) return 100;
+    
+    if (s1.includes(s2) || s2.includes(s1)) {
+        const minLen = Math.min(s1.length, s2.length);
+        const maxLen = Math.max(s1.length, s2.length);
+        return (minLen / maxLen) * 90;
+    }
+    
+    const words1 = s1.split(/[\s，；,;、]/).filter(w => w.length > 0);
+    const words2 = s2.split(/[\s，；,;、]/).filter(w => w.length > 0);
+    
+    if (words1.length === 0 || words2.length === 0) {
+        let commonChars = 0;
+        const minLen = Math.min(s1.length, s2.length);
+        for (let i = 0; i < minLen; i++) {
+            if (s1[i] === s2[i]) commonChars++;
+        }
+        return (commonChars / Math.max(s1.length, s2.length)) * 70;
+    }
+    
+    let matchedWords = 0;
+    for (const w1 of words1) {
+        for (const w2 of words2) {
+            if (w1 === w2) {
+                matchedWords++;
                 break;
-            }
-        } else {
-            // 如果输入是英文，查找该英文的中文释义
-            if (entry.entry.toLowerCase() === word.toLowerCase()) {
-                targetMeaning = entry.paraphrase; // 中文释义
+            } else if (w1.includes(w2) || w2.includes(w1)) {
+                matchedWords += 0.7;
                 break;
             }
         }
     }
+    
+    const wordScore = (matchedWords / Math.max(words1.length, words2.length)) * 80;
+    
+    let commonChars = 0;
+    const minLen = Math.min(s1.length, s2.length);
+    for (let i = 0; i < minLen; i++) {
+        if (s1[i] === s2[i]) commonChars++;
+    }
+    const charScore = (commonChars / Math.max(s1.length, s2.length)) * 20;
+    
+    return wordScore + charScore;
+}
 
-    if (!targetMeaning) {
-        return 0; // 未找到单词，返回-1
+function findBestMatchIndex(word, candidates) {
+    if (!jsonData || !jsonData.data) {
+        return 0;
+    }
+    
+    const isChineseInput = /[\u4e00-\u9fff]/.test(word);
+    let targetMeanings = [];
+    
+    let entryList = [];
+    if (jsonData.data.words && Array.isArray(jsonData.data.words)) {
+        entryList = jsonData.data.words;
+    } else if (jsonData.data.contentList && jsonData.data.contentList[0] && jsonData.data.contentList[0].entryList) {
+        entryList = jsonData.data.contentList[0].entryList;
+    } else {
+        return 0;
     }
 
-    // 2. 计算每个候选词的匹配度
-    let bestIndex = -1;
+    if (isChineseInput) {
+        for (let entry of entryList) {
+            const cn = entry.cn || entry.paraphrase || '';
+            if (cn && cn.includes(word)) {
+                const en = entry.en || entry.entry || '';
+                if (en) {
+                    const meanings = extractMeanings(en);
+                    targetMeanings.push(...meanings);
+                    targetMeanings.push(en);
+                }
+            }
+        }
+    } else {
+        const normalizedWord = normalizeText(word);
+        for (let entry of entryList) {
+            const en = entry.en || entry.entry || '';
+            if (en && normalizeText(en) === normalizedWord) {
+                const cn = entry.cn || entry.paraphrase || '';
+                if (cn) {
+                    const meanings = extractMeanings(cn);
+                    targetMeanings.push(...meanings);
+                    targetMeanings.push(cn);
+                }
+            }
+        }
+    }
+
+    if (targetMeanings.length === 0) {
+        return 0;
+    }
+
+    let bestIndex = 0;
     let bestScore = -1;
 
     for (let i = 0; i < candidates.length; i++) {
         const candidate = candidates[i];
-        let score = 0;
-
-        // 简单匹配：完全匹配得最高分
-        if (candidate.toLowerCase() === targetMeaning.toLowerCase()) {
-            score = 100;
-        } else {
-            // 部分匹配：计算公共字符数比例
-            const targetWords = targetMeaning.split(/[\s，；,;]/).filter(w => w);
-            const candidateWords = candidate.split(/[\s，；,;]/).filter(w => w);
-
-            let matchedWords = 0;
-            for (let tw of targetWords) {
-                for (let cw of candidateWords) {
-                    if (tw.toLowerCase() === cw.toLowerCase()) {
-                        matchedWords++;
-                        break;
-                    }
-                }
+        if (!candidate) continue;
+        
+        let maxScore = 0;
+        
+        for (const targetMeaning of targetMeanings) {
+            const score = calculateSimilarity(targetMeaning, candidate);
+            if (score > maxScore) {
+                maxScore = score;
             }
-            score = (matchedWords / Math.max(targetWords.length, candidateWords.length)) * 100;
         }
-
-        if (score > bestScore) {
-            bestScore = score;
+        
+        if (maxScore > bestScore) {
+            bestScore = maxScore;
             bestIndex = i;
         }
     }
 
-    return bestIndex;
+    return bestIndex >= 0 ? bestIndex : 0;
 }
 
 const auto = () => {
