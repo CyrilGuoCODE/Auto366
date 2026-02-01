@@ -4,7 +4,7 @@ let jsonData = {
 let bucketLoaded = false;
 let bucketError = null;
 let autoPkIntervalId = null;
-let autoPkDelay = 10;
+let autoPkDelay = 1000;
 let autoPkPanel = null;
 
 function loadBucketFromServer() {
@@ -292,6 +292,58 @@ function createAutoPkPanel() {
     delayRow.appendChild(delayLabel);
     delayRow.appendChild(delayInput);
     autoPkPanel.appendChild(delayRow);
+
+    const presetRow = document.createElement('div');
+    presetRow.style.display = 'flex';
+    presetRow.style.gap = '4px';
+    presetRow.style.marginBottom = '6px';
+    
+    const preset1 = document.createElement('button');
+    preset1.textContent = '10ms';
+    preset1.title = '速度最快';
+    preset1.style.flex = '1';
+    preset1.style.fontSize = '11px';
+    preset1.style.padding = '4px';
+    preset1.addEventListener('click', () => {
+        autoPkDelay = 10;
+        delayInput.value = '10';
+        if (autoPkIntervalId) {
+            startAutoPk();
+        }
+    });
+    
+    const preset2 = document.createElement('button');
+    preset2.textContent = '500ms';
+    preset2.title = '均衡';
+    preset2.style.flex = '1';
+    preset2.style.fontSize = '11px';
+    preset2.style.padding = '4px';
+    preset2.addEventListener('click', () => {
+        autoPkDelay = 500;
+        delayInput.value = '500';
+        if (autoPkIntervalId) {
+            startAutoPk();
+        }
+    });
+    
+    const preset3 = document.createElement('button');
+    preset3.textContent = '2000ms';
+    preset3.title = '准确率最高';
+    preset3.style.flex = '1';
+    preset3.style.fontSize = '11px';
+    preset3.style.padding = '4px';
+    preset3.addEventListener('click', () => {
+        autoPkDelay = 2000;
+        delayInput.value = '2000';
+        if (autoPkIntervalId) {
+            startAutoPk();
+        }
+    });
+    
+    presetRow.appendChild(preset1);
+    presetRow.appendChild(preset2);
+    presetRow.appendChild(preset3);
+    autoPkPanel.appendChild(presetRow);
 
     const statusRow = document.createElement('div');
     statusRow.style.fontSize = '12px';
