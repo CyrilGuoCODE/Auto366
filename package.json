@@ -25,7 +25,7 @@
     "node-mitmproxy": "^3.1.1",
     "node-stream-zip": "^1.15.0",
     "path": "^0.12.7",
-    "supabase-js": "^1.0.4",
+    "supabase-js": "^0.0.1-security",
     "uuid": "^11.1.0",
     "ws": "^8.14.2"
   },
