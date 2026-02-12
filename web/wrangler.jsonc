@@ -2,6 +2,9 @@
     "name": "auto366-web",
     "main": "src/api/index.js",
     "compatibility_date": "2026-01-03",
+    "build": {
+        "command": "npm run build:product"
+    },
     "assets": {
         "directory": "./dist",
         "binding": "ASSETS"
@@ -12,7 +15,10 @@
     "env": {
         "production": {
             "vars": {
-                "ENVIRONMENT": "production"
+                "ENVIRONMENT": "production",
+                "VITE_API_BASE_URL": "/api",
+                "VITE_SUPABASE_URL": "https://myenzpblosjnrtvicdor.supabase.co",
+                "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU"
             }
         }
     },
