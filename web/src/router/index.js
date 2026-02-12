@@ -38,6 +38,14 @@ const router = createRouter({
       }
     },
     {
+      path: '/tutorial',
+      name: 'tutorial',
+      component: () => import('../views/Tutorial.vue'),
+      meta: {
+        title: '使用教程'
+      }
+    },
+    {
       path: '/upload',
       name: 'upload',
       component: () => import('../views/Upload.vue'),

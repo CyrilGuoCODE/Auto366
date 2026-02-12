@@ -26,6 +26,9 @@
           <router-link to="/" class="nav-link" @click="closeMobileMenu">
             首页
           </router-link>
+          <router-link to="/tutorial" class="nav-link" @click="closeMobileMenu">
+            使用教程
+          </router-link>
           <router-link to="/rulesets" class="nav-link" @click="closeMobileMenu">
             社区规则集
           </router-link>
@@ -35,31 +38,32 @@
           
           <!-- Admin Section -->
           <div v-if="authStore.isAuthenticated" class="admin-section">
-            <router-link to="/admin/dashboard" class="nav-link admin-link" @click="closeMobileMenu">
-              管理后台
-            </router-link>
+            <button @click="downloadClient" class="nav-link download-link">
+              下载客户端
+            </button>
             <div class="admin-dropdown">
               <button class="admin-user-button" @click="toggleAdminDropdown">
                 <span class="admin-email">{{ authStore.userDisplayName }}</span>
                 <span class="dropdown-arrow" :class="{ 'open': isAdminDropdownOpen }">▼</span>
               </button>
               <div v-if="isAdminDropdownOpen" class="admin-dropdown-menu">
+                <router-link to="/admin/dashboard" class="dropdown-item" @click="closeMobileMenu">
+                  <span>管理后台</span>
+                </router-link>
                 <button @click="handleLogout" class="dropdown-item logout-item">
                   <span>退出登录</span>
                 </button>
               </div>
             </div>
           </div>
-          
-          <!-- Login Link for non-authenticated users -->
-          <router-link 
+
+          <button 
             v-else 
-            to="/admin" 
-            class="nav-link admin-link" 
-            @click="closeMobileMenu"
+            @click="downloadClient" 
+            class="nav-link download-link"
           >
-            管理员登录
-          </router-link>
+            下载客户端
+          </button>
         </div>
       </div>
     </div>
@@ -110,6 +114,16 @@ const handleLogout = async () => {
   } else {
     uiStore.showError(result.error || '退出登录失败')
   }
+}
+
+const downloadClient = () => {
+  const clientDownloadUrl = 'https://github.com/cyrilguocode/Auto366/releases/latest'
+
+  window.open(clientDownloadUrl, '_blank')
+
+  closeMobileMenu()
+
+  uiStore.showSuccess('正在跳转到客户端下载页面...')
 }
 
 // Close dropdown when clicking outside
@@ -230,14 +244,16 @@ onUnmounted(() => {
   background: rgba(24, 144, 255, 0.1);
 }
 
-.admin-link {
+.download-link {
   background: #3b82f6;
   color: white;
   border-radius: 6px;
   font-weight: 500;
+  border: none;
+  cursor: pointer;
 }
 
-.admin-link:hover {
+.download-link:hover {
   background: #2563eb;
   color: white;
 }
@@ -377,7 +393,7 @@ onUnmounted(() => {
     width: 100%;
   }
 
-  .admin-section .admin-link {
+  .admin-section .download-link {
     border-bottom: 1px solid #f0f0f0;
   }
 

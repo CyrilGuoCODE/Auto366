@@ -5,10 +5,34 @@
     viewBox="0 0 24 24" 
     fill="none" 
     xmlns="http://www.w3.org/2000/svg"
-    :class="className"
   >
     <path 
-      d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" 
+      d="M12 2L13.09 8.26L22 9L13.09 9.74L12 16L10.91 9.74L2 9L10.91 8.26L12 2Z" 
+      stroke="currentColor" 
+      stroke-width="2" 
+      stroke-linecap="round" 
+      stroke-linejoin="round"
+    />
+    <path 
+      d="M5 3V7" 
+      stroke="currentColor" 
+      stroke-width="2" 
+      stroke-linecap="round"
+    />
+    <path 
+      d="M19 17V21" 
+      stroke="currentColor" 
+      stroke-width="2" 
+      stroke-linecap="round"
+    />
+    <path 
+      d="M9 21H15" 
+      stroke="currentColor" 
+      stroke-width="2" 
+      stroke-linecap="round"
+    />
+    <path 
+      d="M14 3L16 5L14 7" 
       stroke="currentColor" 
       stroke-width="2" 
       stroke-linecap="round" 
@@ -20,12 +44,8 @@
 <script setup>
 defineProps({
   size: {
-    type: [String, Number],
+    type: [Number, String],
     default: 24
-  },
-  className: {
-    type: String,
-    default: ''
   }
 })
 </script>
