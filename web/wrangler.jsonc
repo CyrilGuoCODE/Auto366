@@ -10,7 +10,7 @@
         "binding": "ASSETS"
     },
     "vars": {
-        "ENVIRONMENT": "development"
+        "ENVIRONMENT": "production"
     },
     "env": {
         "production": {
