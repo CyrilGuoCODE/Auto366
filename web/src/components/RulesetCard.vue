@@ -29,7 +29,7 @@
         </div>
         <div class="meta-item">
           <span class="meta-label">大小:</span>
-          <span class="meta-value">{{ formatFileSize(ruleset.jsonFileSize) }}</span>
+          <span class="meta-value">{{ formatFileSize(totalFileSize) }}</span>
         </div>
       </div>
     </div>
@@ -48,6 +48,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { IconPackage } from './icons/index.js'
 
 const props = defineProps({
@@ -58,6 +59,18 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['click', 'download'])
+
+// Calculate total file size (JSON + ZIP if exists)
+const totalFileSize = computed(() => {
+  if (!props.ruleset) return 0
+  
+  let total = props.ruleset.jsonFileSize || 0
+  if (props.ruleset.hasInjectionPackage && props.ruleset.zipFileSize) {
+    total += props.ruleset.zipFileSize
+  }
+  
+  return total
+})
 
 const handleClick = () => {
   emit('click', props.ruleset)

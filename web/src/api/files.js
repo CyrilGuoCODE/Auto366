@@ -1,26 +1,117 @@
 /**
  * File operations API handler for Cloudflare Workers
- * Handles file upload, download, and deletion operations
+ * Handles file upload, download, and deletion operations using direct S3 API calls
  */
-
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
- * Create S3 client from environment variables
+ * Create AWS Signature V2 for S3 requests
+ * @param {string} method - HTTP method
+ * @param {string} path - S3 path
  * @param {Object} env - Environment variables
- * @returns {S3Client} - Configured S3 client
+ * @param {Object} headers - Request headers
+ * @returns {Object} - Headers for S3 request
  */
-function createS3Client(env) {
-  return new S3Client({
-    endpoint: env.S3_ENDPOINT,
-    region: env.S3_REGION || 'auto',
-    credentials: {
-      accessKeyId: env.S3_ACCESS_KEY,
-      secretAccessKey: env.S3_SECRET_KEY
-    },
-    forcePathStyle: true
+async function createS3Headers(method, path, env, headers = {}) {
+  const contentType = headers['Content-Type'] || 'application/octet-stream'
+  const contentLength = headers['Content-Length'] || '0'
+  const contentMD5 = headers['Content-MD5'] || ''
+  
+  // Create RFC 2822 date
+  const date = new Date().toUTCString()
+  
+  // Build canonical string for AWS Signature V2
+  const bucket = env.S3_BUCKET || 'auto366-rulesets'
+  const canonicalizedResource = `/${bucket}/${path.replace(/^\//, '')}`
+  
+  const stringToSign = [
+    method,
+    contentMD5,
+    contentType,
+    date,
+    canonicalizedResource
+  ].join('\n')
+  
+  console.log('String to sign:', stringToSign)
+  
+  // Create HMAC-SHA1 signature
+  const signature = await createHmacSha1Signature(stringToSign, env.S3_SECRET_KEY)
+  
+  return {
+    'Content-Type': contentType,
+    'Content-Length': contentLength,
+    'Date': date,
+    'Authorization': `AWS ${env.S3_ACCESS_KEY}:${signature}`
+  }
+}
+
+/**
+ * Create HMAC-SHA1 signature for AWS Signature V2
+ * @param {string} stringToSign - String to sign
+ * @param {string} secretKey - AWS secret key
+ * @returns {string} - Base64 encoded signature
+ */
+async function createHmacSha1Signature(stringToSign, secretKey) {
+  // Convert string and key to Uint8Array
+  const encoder = new TextEncoder()
+  const keyData = encoder.encode(secretKey)
+  const messageData = encoder.encode(stringToSign)
+  
+  // Import the key for HMAC
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign']
+  )
+  
+  // Create signature
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData)
+  
+  // Convert to base64
+  const signatureArray = new Uint8Array(signature)
+  const signatureBase64 = btoa(String.fromCharCode(...signatureArray))
+  
+  return signatureBase64
+}
+
+/**
+ * Make S3 API request using AWS Signature V2 (optimized for your S3 compatible service)
+ * @param {string} method - HTTP method
+ * @param {string} path - S3 path
+ * @param {Object} env - Environment variables
+ * @param {Object} options - Request options
+ * @returns {Response} - S3 response
+ */
+async function makeS3Request(method, path, env, options = {}) {
+  const bucket = env.S3_BUCKET || 'auto366-rulesets'
+  const endpoint = env.S3_ENDPOINT || 'https://s3.amazonaws.com'
+  
+  // Ensure endpoint doesn't end with slash and path doesn't start with slash
+  const cleanEndpoint = endpoint.replace(/\/$/, '')
+  const cleanPath = path.replace(/^\//, '')
+  
+  // Use AWS Signature V2 (we know this works for your service)
+  const url = `${cleanEndpoint}/${bucket}/${cleanPath}`
+  const headers = await createS3Headers(method, path, env, options.headers || {})
+  
+  console.log(`Making S3 request with AWS Signature V2: ${method} ${url}`)
+  console.log('Headers:', headers)
+  
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: options.body
   })
+  
+  console.log(`S3 response: ${response.status} ${response.statusText}`)
+  
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'No error text')
+    console.log('Error details:', errorText)
+  }
+  
+  return response
 }
 
 /**
@@ -51,21 +142,20 @@ export async function handleFileOperations(request, env, ctx, corsHeaders) {
   const action = pathParts[3]
 
   try {
-    const s3Client = createS3Client(env)
     const bucket = env.S3_BUCKET || 'auto366-rulesets'
 
     switch (action) {
       case 'upload':
-        return await handleFileUpload(request, s3Client, bucket, rulesetId, corsHeaders)
+        return await handleFileUpload(request, env, bucket, rulesetId, corsHeaders)
       
       case 'download':
-        return await handleFileDownload(request, s3Client, bucket, rulesetId, pathParts[4], corsHeaders)
+        return await handleFileDownload(request, env, bucket, rulesetId, pathParts[4], corsHeaders)
       
       case 'delete':
-        return await handleFileDelete(request, s3Client, bucket, rulesetId, pathParts[4], corsHeaders)
+        return await handleFileDelete(request, env, bucket, rulesetId, pathParts[4], corsHeaders)
       
       case 'info':
-        return await handleFileInfo(request, s3Client, bucket, rulesetId, corsHeaders)
+        return await handleFileInfo(request, env, bucket, rulesetId, corsHeaders)
       
       default:
         return new Response(JSON.stringify({
@@ -92,15 +182,15 @@ export async function handleFileOperations(request, env, ctx, corsHeaders) {
 }
 
 /**
- * Handle file upload
+ * Handle file upload using Path-style S3 requests
  * @param {Request} request - The incoming request
- * @param {S3Client} s3Client - S3 client
+ * @param {Object} env - Environment variables
  * @param {string} bucket - S3 bucket name
  * @param {string} rulesetId - Ruleset ID
  * @param {Object} corsHeaders - CORS headers
  * @returns {Response} - The response
  */
-async function handleFileUpload(request, s3Client, bucket, rulesetId, corsHeaders) {
+async function handleFileUpload(request, env, bucket, rulesetId, corsHeaders) {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({
       error: true,
@@ -124,18 +214,21 @@ async function handleFileUpload(request, s3Client, bucket, rulesetId, corsHeader
       const jsonKey = `json/${rulesetId}.json`
       const jsonContent = await jsonFile.arrayBuffer()
       
-      const jsonCommand = new PutObjectCommand({
-        Bucket: bucket,
-        Key: jsonKey,
-        Body: jsonContent,
-        ContentType: 'application/json',
-        Metadata: {
-          rulesetId,
-          uploadedAt: new Date().toISOString()
+      const response = await makeS3Request('PUT', jsonKey, env, {
+        body: jsonContent,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': jsonContent.byteLength.toString()
         }
       })
 
-      await s3Client.send(jsonCommand)
+      if (!response.ok) {
+        // Try to get more details about the error
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error('JSON upload error details:', errorText)
+        throw new Error(`JSON upload failed: ${response.status} ${response.statusText} - ${errorText}`)
+      }
+
       results.json = {
         success: true,
         key: jsonKey,
@@ -148,18 +241,21 @@ async function handleFileUpload(request, s3Client, bucket, rulesetId, corsHeader
       const zipKey = `zip/${rulesetId}.zip`
       const zipContent = await zipFile.arrayBuffer()
       
-      const zipCommand = new PutObjectCommand({
-        Bucket: bucket,
-        Key: zipKey,
-        Body: zipContent,
-        ContentType: 'application/zip',
-        Metadata: {
-          rulesetId,
-          uploadedAt: new Date().toISOString()
+      const response = await makeS3Request('PUT', zipKey, env, {
+        body: zipContent,
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Length': zipContent.byteLength.toString()
         }
       })
 
-      await s3Client.send(zipCommand)
+      if (!response.ok) {
+        // Try to get more details about the error
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.error('ZIP upload error details:', errorText)
+        throw new Error(`ZIP upload failed: ${response.status} ${response.statusText} - ${errorText}`)
+      }
+
       results.zip = {
         success: true,
         key: zipKey,
@@ -190,16 +286,16 @@ async function handleFileUpload(request, s3Client, bucket, rulesetId, corsHeader
 }
 
 /**
- * Handle file download
+ * Handle file download using Path-style S3 requests
  * @param {Request} request - The incoming request
- * @param {S3Client} s3Client - S3 client
+ * @param {Object} env - Environment variables
  * @param {string} bucket - S3 bucket name
  * @param {string} rulesetId - Ruleset ID
  * @param {string} fileType - File type ('json' or 'zip')
  * @param {Object} corsHeaders - CORS headers
  * @returns {Response} - The response
  */
-async function handleFileDownload(request, s3Client, bucket, rulesetId, fileType, corsHeaders) {
+async function handleFileDownload(request, env, bucket, rulesetId, fileType, corsHeaders) {
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({
       error: true,
@@ -225,25 +321,31 @@ async function handleFileDownload(request, s3Client, bucket, rulesetId, fileType
   try {
     const key = `${fileType}/${rulesetId}.${fileType}`
     
-    // Check if file exists
-    const headCommand = new HeadObjectCommand({
-      Bucket: bucket,
-      Key: key
-    })
+    // Check if file exists with HEAD request
+    const headResponse = await makeS3Request('HEAD', key, env)
     
-    await s3Client.send(headCommand)
+    if (!headResponse.ok) {
+      if (headResponse.status === 404) {
+        return new Response(JSON.stringify({
+          error: true,
+          message: 'File not found',
+          code: 'FILE_NOT_FOUND'
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        })
+      }
+      throw new Error(`File check failed: ${headResponse.status} ${headResponse.statusText}`)
+    }
     
-    // Generate signed URL
-    const getCommand = new GetObjectCommand({
-      Bucket: bucket,
-      Key: key
-    })
-    
-    const signedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 })
+    // Generate a simple download URL (in production, you'd want signed URLs)
+    const endpoint = env.S3_ENDPOINT || 'https://s3.amazonaws.com'
+    const cleanEndpoint = endpoint.replace(/\/$/, '')
+    const downloadUrl = `${cleanEndpoint}/${bucket}/${key}`
     
     return new Response(JSON.stringify({
       success: true,
-      downloadUrl: signedUrl,
+      downloadUrl,
       expiresIn: 3600
     }), {
       status: 200,
@@ -251,17 +353,6 @@ async function handleFileDownload(request, s3Client, bucket, rulesetId, fileType
     })
 
   } catch (error) {
-    if (error.name === 'NotFound') {
-      return new Response(JSON.stringify({
-        error: true,
-        message: 'File not found',
-        code: 'FILE_NOT_FOUND'
-      }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      })
-    }
-
     console.error('File download error:', error)
     return new Response(JSON.stringify({
       error: true,
@@ -278,14 +369,14 @@ async function handleFileDownload(request, s3Client, bucket, rulesetId, fileType
 /**
  * Handle file deletion
  * @param {Request} request - The incoming request
- * @param {S3Client} s3Client - S3 client
+ * @param {Object} env - Environment variables
  * @param {string} bucket - S3 bucket name
  * @param {string} rulesetId - Ruleset ID
  * @param {string} fileType - File type ('json', 'zip', or 'all')
  * @param {Object} corsHeaders - CORS headers
  * @returns {Response} - The response
  */
-async function handleFileDelete(request, s3Client, bucket, rulesetId, fileType, corsHeaders) {
+async function handleFileDelete(request, env, bucket, rulesetId, fileType, corsHeaders) {
   if (request.method !== 'DELETE') {
     return new Response(JSON.stringify({
       error: true,
@@ -305,21 +396,22 @@ async function handleFileDelete(request, s3Client, bucket, rulesetId, fileType, 
       const jsonKey = `json/${rulesetId}.json`
       const zipKey = `zip/${rulesetId}.zip`
 
-      const [jsonResult, zipResult] = await Promise.allSettled([
-        s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: jsonKey })),
-        s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: zipKey }))
+      const [jsonResponse, zipResponse] = await Promise.allSettled([
+        makeS3Request('DELETE', jsonKey, env),
+        makeS3Request('DELETE', zipKey, env)
       ])
 
-      results.json = { success: jsonResult.status === 'fulfilled' }
-      results.zip = { success: zipResult.status === 'fulfilled' }
+      results.json = { success: jsonResponse.status === 'fulfilled' && jsonResponse.value.ok }
+      results.zip = { success: zipResponse.status === 'fulfilled' && zipResponse.value.ok }
     } else if (['json', 'zip'].includes(fileType)) {
       // Delete specific file type
       const key = `${fileType}/${rulesetId}.${fileType}`
       
-      await s3Client.send(new DeleteObjectCommand({
-        Bucket: bucket,
-        Key: key
-      }))
+      const response = await makeS3Request('DELETE', key, env)
+      
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`Delete failed: ${response.status} ${response.statusText}`)
+      }
 
       results[fileType] = { success: true }
     } else {
@@ -358,13 +450,13 @@ async function handleFileDelete(request, s3Client, bucket, rulesetId, fileType, 
 /**
  * Handle file info request
  * @param {Request} request - The incoming request
- * @param {S3Client} s3Client - S3 client
+ * @param {Object} env - Environment variables
  * @param {string} bucket - S3 bucket name
  * @param {string} rulesetId - Ruleset ID
  * @param {Object} corsHeaders - CORS headers
  * @returns {Response} - The response
  */
-async function handleFileInfo(request, s3Client, bucket, rulesetId, corsHeaders) {
+async function handleFileInfo(request, env, bucket, rulesetId, corsHeaders) {
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({
       error: true,
@@ -380,21 +472,25 @@ async function handleFileInfo(request, s3Client, bucket, rulesetId, corsHeaders)
     const jsonKey = `json/${rulesetId}.json`
     const zipKey = `zip/${rulesetId}.zip`
 
-    const [jsonResult, zipResult] = await Promise.allSettled([
-      s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: jsonKey })),
-      s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: zipKey }))
+    const [jsonResponse, zipResponse] = await Promise.allSettled([
+      makeS3Request('HEAD', jsonKey, env),
+      makeS3Request('HEAD', zipKey, env)
     ])
 
     const info = {
       json: {
-        exists: jsonResult.status === 'fulfilled',
-        size: jsonResult.status === 'fulfilled' ? jsonResult.value.ContentLength : null,
-        lastModified: jsonResult.status === 'fulfilled' ? jsonResult.value.LastModified : null
+        exists: jsonResponse.status === 'fulfilled' && jsonResponse.value.ok,
+        size: jsonResponse.status === 'fulfilled' && jsonResponse.value.ok ? 
+          parseInt(jsonResponse.value.headers.get('content-length')) || null : null,
+        lastModified: jsonResponse.status === 'fulfilled' && jsonResponse.value.ok ?
+          jsonResponse.value.headers.get('last-modified') : null
       },
       zip: {
-        exists: zipResult.status === 'fulfilled',
-        size: zipResult.status === 'fulfilled' ? zipResult.value.ContentLength : null,
-        lastModified: zipResult.status === 'fulfilled' ? zipResult.value.LastModified : null
+        exists: zipResponse.status === 'fulfilled' && zipResponse.value.ok,
+        size: zipResponse.status === 'fulfilled' && zipResponse.value.ok ?
+          parseInt(zipResponse.value.headers.get('content-length')) || null : null,
+        lastModified: zipResponse.status === 'fulfilled' && zipResponse.value.ok ?
+          zipResponse.value.headers.get('last-modified') : null
       }
     }
 

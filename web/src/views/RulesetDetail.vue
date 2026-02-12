@@ -70,7 +70,7 @@
             </div>
             <div class="info-item">
               <span class="info-label">文件大小</span>
-              <span class="info-value">{{ formatFileSize(ruleset.jsonFileSize) }}</span>
+              <span class="info-value">{{ formatFileSize(totalFileSize) }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">上传时间</span>
@@ -128,30 +128,6 @@
             </div>
           </div>
         </div>
-
-        <!-- JSON preview -->
-        <div class="preview-section">
-          <div class="preview-header">
-            <h2>JSON 内容预览</h2>
-            <button @click="togglePreview" class="btn btn-secondary btn-sm">
-              {{ showPreview ? '隐藏预览' : '显示预览' }}
-            </button>
-          </div>
-          
-          <div v-if="showPreview" class="preview-content">
-            <div v-if="loadingPreview" class="preview-loading">
-              <div class="loading-spinner"></div>
-              <p>加载预览中...</p>
-            </div>
-            <div v-else-if="previewError" class="preview-error">
-              <p>预览加载失败: {{ previewError }}</p>
-              <button @click="loadPreview" class="btn btn-secondary btn-sm">重试</button>
-            </div>
-            <div v-else-if="jsonPreview" class="preview-code">
-              <pre><code>{{ formatJsonPreview(jsonPreview) }}</code></pre>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -169,10 +145,6 @@ const rulesetsStore = useRulesetsStore()
 // Reactive state
 const loading = ref(true)
 const error = ref(null)
-const showPreview = ref(false)
-const loadingPreview = ref(false)
-const previewError = ref(null)
-const jsonPreview = ref(null)
 const downloadingJson = ref(false)
 const downloadingZip = ref(false)
 const shareLoading = ref(false)
@@ -180,6 +152,18 @@ const shareSuccess = ref(false)
 
 // Computed properties
 const ruleset = computed(() => rulesetsStore.currentRuleset)
+
+// Calculate total file size (JSON + ZIP if exists)
+const totalFileSize = computed(() => {
+  if (!ruleset.value) return 0
+  
+  let total = ruleset.value.jsonFileSize || 0
+  if (ruleset.value.hasInjectionPackage && ruleset.value.zipFileSize) {
+    total += ruleset.value.zipFileSize
+  }
+  
+  return total
+})
 
 // Methods
 const loadRuleset = async () => {
@@ -196,56 +180,6 @@ const loadRuleset = async () => {
     console.error('Load ruleset error:', err)
   } finally {
     loading.value = false
-  }
-}
-
-const loadPreview = async () => {
-  if (!ruleset.value) return
-  
-  loadingPreview.value = true
-  previewError.value = null
-  
-  try {
-    // TODO: Implement actual API call to get JSON content
-    // For now, use mock data
-    await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate loading
-    
-    jsonPreview.value = {
-      name: ruleset.value.name,
-      version: "1.0.0",
-      description: ruleset.value.description,
-      author: ruleset.value.author,
-      rules: [
-        {
-          selector: ".question",
-          action: "click",
-          condition: "visible"
-        },
-        {
-          selector: ".answer-option",
-          action: "select",
-          condition: "contains-text"
-        }
-      ],
-      settings: {
-        delay: 1000,
-        retries: 3,
-        timeout: 30000
-      }
-    }
-  } catch (err) {
-    previewError.value = '预览加载失败'
-    console.error('Load preview error:', err)
-  } finally {
-    loadingPreview.value = false
-  }
-}
-
-const togglePreview = async () => {
-  showPreview.value = !showPreview.value
-  
-  if (showPreview.value && !jsonPreview.value && !loadingPreview.value) {
-    await loadPreview()
   }
 }
 
@@ -400,10 +334,6 @@ const formatDate = (dateString) => {
     hour: '2-digit',
     minute: '2-digit'
   })
-}
-
-const formatJsonPreview = (jsonData) => {
-  return JSON.stringify(jsonData, null, 2)
 }
 
 // Lifecycle
@@ -693,74 +623,6 @@ onMounted(() => {
   justify-content: center;
 }
 
-/* Preview section */
-.preview-section {
-  background: var(--background-white);
-  padding: var(--spacing-xl);
-  border-radius: var(--border-radius-large);
-  box-shadow: var(--box-shadow-light);
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.preview-header h2 {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.preview-content {
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  overflow: hidden;
-}
-
-.preview-loading,
-.preview-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xl);
-  gap: var(--spacing-md);
-}
-
-.preview-loading .loading-spinner {
-  width: 30px;
-  height: 30px;
-  border-width: 2px;
-}
-
-.preview-code {
-  background: #f8f9fa;
-  padding: 0;
-  max-height: 400px;
-  overflow: auto;
-}
-
-.preview-code pre {
-  margin: 0;
-  padding: var(--spacing-lg);
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-  color: var(--text-primary);
-  background: transparent;
-}
-
-.preview-code code {
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-  color: inherit;
-}
-
 /* Buttons */
 .btn {
   padding: var(--spacing-sm) var(--spacing-lg);
@@ -847,20 +709,6 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
   
-  .preview-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--spacing-md);
-  }
-  
-  .preview-code {
-    max-height: 300px;
-  }
-  
-  .preview-code pre {
-    padding: var(--spacing-md);
-    font-size: var(--font-size-xs);
-  }
 }
 
 @media (max-width: 480px) {
@@ -871,8 +719,7 @@ onMounted(() => {
   .detail-header,
   .info-section,
   .description-section,
-  .files-section,
-  .preview-section {
+  .files-section {
     padding: var(--spacing-lg);
   }
   
