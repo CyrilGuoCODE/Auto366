@@ -9,16 +9,6 @@
         "directory": "./dist",
         "binding": "ASSETS"
     },
-    "vars": {
-        "ENVIRONMENT": "development"
-    },
-    "env": {
-        "production": {
-            "vars": {
-                "ENVIRONMENT": "production"
-            }
-        }
-    },
     "dev": {
         "port": 8787
     }

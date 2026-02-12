@@ -26,6 +26,7 @@ auto-pk.zip
 **/.env.development.local
 **/.env.test.local
 **/.env.production.local
+web/wrangler.jsonc
 
 # 编辑器文件
 **/.vscode/
