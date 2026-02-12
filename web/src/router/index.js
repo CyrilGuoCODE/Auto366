@@ -92,13 +92,13 @@ router.beforeEach(async (to, from, next) => {
   // Check if route requires authentication
   if (to.meta.requiresAuth) {
     const authStore = useAuthStore()
-    
+
     // Wait for auth initialization if still loading
     if (authStore.loading) {
       // Wait a bit for auth to initialize
       await new Promise(resolve => setTimeout(resolve, 100))
     }
-    
+
     // Check authentication status
     if (!authStore.isAuthenticated) {
       // Redirect to admin login with return path
@@ -108,7 +108,7 @@ router.beforeEach(async (to, from, next) => {
       })
       return
     }
-    
+
     // Check if route requires admin privileges
     if (to.meta.requiresAdmin && !authStore.isAdmin) {
       // Redirect to home if not admin
@@ -116,13 +116,13 @@ router.beforeEach(async (to, from, next) => {
       return
     }
   }
-  
+
   // If going to admin login and already authenticated, redirect to dashboard
   if (to.name === 'admin-login' && useAuthStore().isAuthenticated) {
     next({ name: 'admin-dashboard' })
     return
   }
-  
+
   // Allow navigation
   next()
 })
@@ -131,7 +131,7 @@ router.beforeEach(async (to, from, next) => {
 router.afterEach((to, from) => {
   // Close mobile menu if it's open
   // This will be handled by the UI store in components
-  
+
   // Log navigation for debugging (remove in production)
   if (import.meta.env.DEV) {
     console.log(`Navigated from ${from.name} to ${to.name}`)

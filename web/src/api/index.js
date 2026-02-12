@@ -63,7 +63,53 @@ export default {
       }
 
       // Serve static files or SPA fallback
-      return env.ASSETS.fetch(request)
+      // For SPA routing, we need to serve index.html for all non-API routes
+      // that don't correspond to actual static files
+      try {
+        // First, try to serve the requested file
+        const response = await env.ASSETS.fetch(request)
+        
+        // If the file exists, serve it
+        if (response.status !== 404) {
+          return response
+        }
+        
+        // If file not found and it's not an API route, serve index.html for SPA routing
+        if (!path.startsWith('/api/')) {
+          const indexRequest = new Request(new URL('/', request.url), {
+            method: 'GET',
+            headers: request.headers
+          })
+          return await env.ASSETS.fetch(indexRequest)
+        }
+        
+        // If it's an API route that wasn't handled above, return 404
+        return response
+      } catch (error) {
+        console.error('Asset serving error:', error)
+        
+        // Fallback to index.html for SPA routing
+        if (!path.startsWith('/api/')) {
+          try {
+            const indexRequest = new Request(new URL('/', request.url), {
+              method: 'GET',
+              headers: request.headers
+            })
+            return await env.ASSETS.fetch(indexRequest)
+          } catch (indexError) {
+            console.error('Index.html serving error:', indexError)
+            return new Response('Application not available', {
+              status: 500,
+              headers: corsHeaders
+            })
+          }
+        }
+        
+        return new Response('Asset not found', {
+          status: 404,
+          headers: corsHeaders
+        })
+      }
 
     } catch (error) {
       console.error('Worker error:', error)

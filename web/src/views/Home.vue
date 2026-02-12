@@ -225,7 +225,7 @@ const openExternal = (url) => {
 
 .hero-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1.4fr;
   gap: 3rem;
   align-items: center;
   min-height: 500px;
