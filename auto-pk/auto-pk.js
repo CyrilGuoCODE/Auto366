@@ -6,20 +6,42 @@ let bucketError = null;
 let autoPkIntervalId = null;
 let autoPkDelay = 1000;
 let autoPkPanel = null;
+let customBucketUrl = localStorage.getItem('customBucketUrl') || '';  // 自定义词库URL
+let logPanel = null;  // 日志面板
+let logMessages = [];  // 日志消息数组
 
 function loadBucketFromServer() {
     try {
-        fetch('http://127.0.0.1:5290/bucket-detail-info', { cache: 'no-cache' })
+        const url = customBucketUrl || 'http://127.0.0.1:5290/bucket-detail-info';
+        fetch(url, { cache: 'no-cache' })
             .then(res => {
                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json();
+                return res.text();
             })
-            .then(data => {
-                jsonData = data;
-                bucketLoaded = true;
-                bucketError = null;
-                updateAutoPkPanelStatus();
-                console.log('单词PK词库加载成功');
+            .then(text => {
+                // 解析JSON数据
+                try {
+                    const fullData = JSON.parse(text);
+
+                    if (fullData && fullData.data && fullData.data.contentList && fullData.data.contentList[0] && fullData.data.contentList[0].entryList) {
+                        const entryList = fullData.data.contentList[0].entryList;
+
+                        addLogMessage('词库加载成功，共 ' + entryList.length + ' 个单词', 'success');
+
+                        jsonData = fullData;
+
+                        bucketLoaded = true;
+                        bucketError = null;
+                        updateAutoPkPanelStatus();
+                        addLogMessage('词库加载成功，共 ' + entryList.length + ' 个单词', 'success');
+                        console.log('单词PK词库加载成功，共' + entryList.length + '个单词');
+                    } else {
+                        throw new Error('数据结构不正确，无法找到entryList');
+                    }
+                } catch (parseError) {
+                    addLogMessage('词库解析失败: ' + parseError.message, 'error');
+                    throw new Error('词库数据解析失败: ' + parseError.message);
+                }
             })
             .catch(err => {
                 bucketLoaded = false;
@@ -121,10 +143,10 @@ function findBestMatchIndex(word, candidates) {
     if (!jsonData || !jsonData.data) {
         return 0;
     }
-    
-    const isChineseInput = /[\u4e00-\u9fff]/.test(word);
+
+    const isChineseInput = /[一-鿿]/.test(word);
     let targetMeanings = [];
-    
+
     let entryList = [];
     if (jsonData.data.words && Array.isArray(jsonData.data.words)) {
         entryList = jsonData.data.words;
@@ -134,11 +156,25 @@ function findBestMatchIndex(word, candidates) {
         return 0;
     }
 
+    // 去除词性标记
+    const removePartOfSpeech = (text) => {
+        if (!text) return '';
+        const dotIndex = text.indexOf('.');
+        if (dotIndex !== -1 && dotIndex < text.length - 1) {
+            return text.substring(dotIndex + 1).trim();
+        }
+        return text.trim();
+    };
+
     if (isChineseInput) {
+        // 看应选英：中文题面，英文选项
+        // 去除题面（中文）的词性标记
+        const cleanedWord = removePartOfSpeech(word);
+
         for (let entry of entryList) {
-            const cn = entry.cn || entry.paraphrase || '';
-            if (cn && cn.includes(word)) {
-                const en = entry.en || entry.entry || '';
+            const cn = entry.paraphrase || '';
+            if (cn && cn.includes(cleanedWord)) {
+                const en = entry.entry || '';
                 if (en) {
                     const meanings = extractMeanings(en);
                     targetMeanings.push(...meanings);
@@ -147,11 +183,12 @@ function findBestMatchIndex(word, candidates) {
             }
         }
     } else {
+        // 看中选英：英文题面，中文选项
         const normalizedWord = normalizeText(word);
         for (let entry of entryList) {
-            const en = entry.en || entry.entry || '';
+            const en = entry.entry || '';
             if (en && normalizeText(en) === normalizedWord) {
-                const cn = entry.cn || entry.paraphrase || '';
+                const cn = entry.paraphrase || '';
                 if (cn) {
                     const meanings = extractMeanings(cn);
                     targetMeanings.push(...meanings);
@@ -162,32 +199,70 @@ function findBestMatchIndex(word, candidates) {
     }
 
     if (targetMeanings.length === 0) {
+        addLogMessage('未找到匹配的释义: ' + word, 'warning');
         return 0;
     }
 
     let bestIndex = 0;
     let bestScore = -1;
+    let secondBestScore = -1;
 
     for (let i = 0; i < candidates.length; i++) {
         const candidate = candidates[i];
         if (!candidate) continue;
-        
+
         let maxScore = 0;
-        
+        let exactMatch = false;
+
         for (const targetMeaning of targetMeanings) {
-            const score = calculateSimilarity(targetMeaning, candidate);
+            let cleanedCandidate, cleanedTarget;
+
+            if (isChineseInput) {
+                // 看应选英：中文题面，英文选项
+                // 不需要去除英文选项的词性标记
+                cleanedCandidate = candidate;
+                cleanedTarget = targetMeaning;
+            } else {
+                // 看中选英：英文题面，中文选项
+                // 需要去除中文选项的词性标记
+                cleanedCandidate = removePartOfSpeech(candidate);
+                cleanedTarget = removePartOfSpeech(targetMeaning);
+            }
+
+            const normalizedCandidate = normalizeText(cleanedCandidate);
+            const normalizedTarget = normalizeText(cleanedTarget);
+
+            if (normalizedCandidate === normalizedTarget) {
+                maxScore = 100;
+                exactMatch = true;
+                break;
+            }
+
+            const score = calculateSimilarity(cleanedTarget, cleanedCandidate);
             if (score > maxScore) {
                 maxScore = score;
             }
         }
-        
+
         if (maxScore > bestScore) {
+            secondBestScore = bestScore;
             bestScore = maxScore;
             bestIndex = i;
+        } else if (maxScore > secondBestScore) {
+            secondBestScore = maxScore;
         }
     }
 
-    return bestIndex >= 0 ? bestIndex : 0;
+    const scoreGap = bestScore - secondBestScore;
+    const confidenceThreshold = 10;
+
+    if (bestScore >= 90 || scoreGap >= confidenceThreshold) {
+        addLogMessage('选择答案: [' + bestIndex + '] ' + candidates[bestIndex] + ' (匹配度: ' + Math.round(bestScore) + '%, 置信度: ' + Math.round(scoreGap) + ')', 'match');
+        return bestIndex >= 0 ? bestIndex : 0;
+    } else {
+        addLogMessage('匹配度不够高，保持默认选择: [' + 0 + '] ' + candidates[0] + ' (最佳匹配度: ' + Math.round(bestScore) + '%, 次佳: ' + Math.round(secondBestScore) + '%)', 'warning');
+        return 0;
+    }
 }
 
 const auto = () => {
@@ -246,6 +321,120 @@ function stopAutoPk() {
     updateAutoPkPanelStatus();
 }
 
+// 添加日志消息
+function addLogMessage(message, type = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    logMessages.unshift({ timestamp, message, type });
+    // 保留最近50条日志
+    if (logMessages.length > 50) {
+        logMessages = logMessages.slice(0, 50);
+    }
+    updateLogPanel();
+}
+
+// 创建日志面板
+function createLogPanel() {
+    if (logPanel) return;
+    logPanel = document.createElement('div');
+    logPanel.id = 'auto-pk-log-panel';
+    logPanel.style.position = 'fixed';
+    logPanel.style.right = '300px';
+    logPanel.style.bottom = '80px';
+    logPanel.style.width = '350px';
+    logPanel.style.height = '400px';
+    logPanel.style.background = 'rgba(0,0,0,0.9)';
+    logPanel.style.color = '#fff';
+    logPanel.style.borderRadius = '8px';
+    logPanel.style.padding = '10px';
+    logPanel.style.zIndex = '9998';
+    logPanel.style.overflow = 'hidden';
+    logPanel.style.display = 'none';
+    logPanel.style.userSelect = 'text'; // 允许文字选中
+    
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.marginBottom = '8px';
+    header.style.paddingBottom = '8px';
+    header.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
+    header.style.cursor = 'move'; // 添加拖动光标
+    
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = '运行日志';
+    titleSpan.style.fontSize = '14px';
+    titleSpan.style.fontWeight = 'bold';
+    header.appendChild(titleSpan);
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.style.fontSize = '18px';
+    closeBtn.style.padding = '0 6px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.background = 'transparent';
+    closeBtn.style.border = 'none';
+    closeBtn.style.color = '#fff';
+    closeBtn.style.userSelect = 'none'; // 关闭按钮不参与文字选中
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 阻止事件冒泡
+        logPanel.style.display = 'none';
+    });
+    header.appendChild(closeBtn);
+    logPanel.appendChild(header);
+    
+    const logContent = document.createElement('div');
+    logContent.id = 'auto-pk-log-content';
+    logContent.style.height = 'calc(100% - 40px)';
+    logContent.style.overflowY = 'auto';
+    logContent.style.fontSize = '11px';
+    logContent.style.fontFamily = 'monospace';
+    logContent.style.userSelect = 'text'; // 日志内容可选中
+    logPanel.appendChild(logContent);
+    
+    document.body.appendChild(logPanel);
+
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    header.addEventListener('mousedown', (e) => {
+        if (e.target === closeBtn) return;
+        isDragging = true;
+        offsetX = e.clientX - logPanel.offsetLeft;
+        offsetY = e.clientY - logPanel.offsetTop;
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        logPanel.style.left = (e.clientX - offsetX) + 'px';
+        logPanel.style.top = (e.clientY - offsetY) + 'px';
+        logPanel.style.right = 'auto';
+        logPanel.style.bottom = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+}
+
+// 更新日志面板
+function updateLogPanel() {
+    if (!logPanel) return;
+    const logContent = document.getElementById('auto-pk-log-content');
+    if (!logContent) return;
+    
+    logContent.innerHTML = logMessages.map(msg => {
+        let color = '#fff';
+        if (msg.type === 'success') color = '#4caf50';
+        if (msg.type === 'error') color = '#f44336';
+        if (msg.type === 'warning') color = '#ff9800';
+        if (msg.type === 'match') color = '#2196f3';
+        
+        return `<div style="margin-bottom: 4px; color: ${color}">[${msg.timestamp}] ${msg.message}</div>`;
+    }).join('');
+}
+
 function createAutoPkPanel() {
     if (autoPkPanel) return;
     autoPkPanel = document.createElement('div');
@@ -261,10 +450,140 @@ function createAutoPkPanel() {
     autoPkPanel.style.cursor = 'move';
 
     const header = document.createElement('div');
-    header.textContent = '单词PK自动化控制面板';
-    header.style.fontSize = '14px';
-    header.style.fontWeight = 'bold';
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
     header.style.marginBottom = '8px';
+    
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = '单词PK自动化控制面板';
+    titleSpan.style.fontSize = '14px';
+    titleSpan.style.fontWeight = 'bold';
+    header.appendChild(titleSpan);
+    
+    const settingsBtn = document.createElement('button');
+    settingsBtn.textContent = '⚙';
+    settingsBtn.title = '设置词库位置';
+    settingsBtn.style.fontSize = '14px';
+    settingsBtn.style.padding = '2px 6px';
+    settingsBtn.style.cursor = 'pointer';
+    settingsBtn.style.background = 'rgba(255,255,255,0.2)';
+    settingsBtn.style.border = 'none';
+    settingsBtn.style.color = '#fff';
+    settingsBtn.style.borderRadius = '3px';
+    settingsBtn.style.marginRight = '4px';
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+
+        const dialog = document.createElement('div');
+        dialog.style.position = 'fixed';
+        dialog.style.left = '50%';
+        dialog.style.top = '50%';
+        dialog.style.transform = 'translate(-50%, -50%)';
+        dialog.style.background = 'rgba(0,0,0,0.9)';
+        dialog.style.color = '#fff';
+        dialog.style.padding = '20px';
+        dialog.style.borderRadius = '8px';
+        dialog.style.zIndex = '10000';
+        dialog.style.minWidth = '300px';
+        dialog.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+        
+        const title = document.createElement('h3');
+        title.textContent = '设置自定义词库URL';
+        title.style.marginTop = '0';
+        title.style.marginBottom = '15px';
+        dialog.appendChild(title);
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = customBucketUrl;
+        input.style.width = '100%';
+        input.style.padding = '8px';
+        input.style.marginBottom = '15px';
+        input.style.boxSizing = 'border-box';
+        input.style.borderRadius = '4px';
+        input.style.border = '1px solid rgba(255,255,255,0.3)';
+        input.style.background = 'rgba(255,255,255,0.1)';
+        input.style.color = '#fff';
+        dialog.appendChild(input);
+        
+        const btnContainer = document.createElement('div');
+        btnContainer.style.display = 'flex';
+        btnContainer.style.justifyContent = 'flex-end';
+        btnContainer.style.gap = '10px';
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = '取消';
+        cancelBtn.style.padding = '8px 16px';
+        cancelBtn.style.borderRadius = '4px';
+        cancelBtn.style.border = 'none';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.background = 'rgba(255,255,255,0.2)';
+        cancelBtn.style.color = '#fff';
+        
+        const confirmBtn = document.createElement('button');
+        confirmBtn.textContent = '确定';
+        confirmBtn.style.padding = '8px 16px';
+        confirmBtn.style.borderRadius = '4px';
+        confirmBtn.style.border = 'none';
+        confirmBtn.style.cursor = 'pointer';
+        confirmBtn.style.background = '#4caf50';
+        confirmBtn.style.color = '#fff';
+        
+        btnContainer.appendChild(cancelBtn);
+        btnContainer.appendChild(confirmBtn);
+        dialog.appendChild(btnContainer);
+        
+        document.body.appendChild(dialog);
+
+        setTimeout(() => input.focus(), 100);
+
+        function closeDialog() {
+            if (dialog.parentNode) {
+                dialog.parentNode.removeChild(dialog);
+            }
+        }
+
+        cancelBtn.addEventListener('click', closeDialog);
+
+        confirmBtn.addEventListener('click', () => {
+            const newUrl = input.value.trim();
+            customBucketUrl = newUrl;
+            localStorage.setItem('customBucketUrl', customBucketUrl);
+            bucketLoaded = false;
+            bucketError = null;
+            updateAutoPkPanelStatus();
+            addLogMessage('词库URL已更新: ' + (customBucketUrl || '使用默认URL'), 'info');
+            loadBucketFromServer();
+            closeDialog();
+        });
+
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                confirmBtn.click();
+            }
+        });
+    });
+    header.appendChild(settingsBtn);
+    
+    const logBtn = document.createElement('button');
+    logBtn.textContent = 'Logs';
+    logBtn.title = '查看日志';
+    logBtn.style.fontSize = '14px';
+    logBtn.style.padding = '2px 6px';
+    logBtn.style.cursor = 'pointer';
+    logBtn.style.background = 'rgba(255,255,255,0.2)';
+    logBtn.style.border = 'none';
+    logBtn.style.color = '#fff';
+    logBtn.style.borderRadius = '3px';
+    logBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 阻止事件冒泡
+        if (!logPanel) {
+            createLogPanel();
+        }
+        logPanel.style.display = logPanel.style.display === 'none' ? 'block' : 'none';
+    });
+    header.appendChild(logBtn);
     autoPkPanel.appendChild(header);
 
     const delayRow = document.createElement('div');
@@ -431,6 +750,8 @@ function updateAutoPkPanelStatus() {
 
 function initAutoPk() {
     createAutoPkPanel();
+    createLogPanel();
+    addLogMessage('系统初始化完成', 'success');
     loadBucketFromServer();
 }
 
