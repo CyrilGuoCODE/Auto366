@@ -1,943 +1,123 @@
 let cachePath = ''
-function pathJoin(...parts) {
-  // 过滤空部分并拼接
-  const filteredParts = parts.filter(part => part && part !== '.');
 
-  // 拼接路径并规范化
-  let joined = filteredParts.join('/')
-    .replace(/\/+/g, '/')          // 将多个斜杠替换为单个斜杠
-    .replace(/^\/+|\/+$/g, '')     // 移除开头和结尾的斜杠
-    .replace(/\/\.\//g, '/')       // 处理当前目录引用
-    .replace(/\/[^\/]+\/\.\.\//g, '/'); // 简单的上级目录处理
-
-  return joined;
-}
 class Global {
   constructor() {
-    this.initScale();
-    this.initBackBtn();
-    this.initSettingsBtn()
-    this.scale = null;
-  }
-
-  async initScale() {
-    this.scale = await window.electronAPI.getScaleFactor()
-    const scaleInput = document.getElementById('scaleInput')
-    const scaleInputPk = document.getElementById('scaleInput-pk')
-    scaleInput.value = scaleInputPk.value = this.scale
-
-    const getScale = document.getElementById('getScale')
-    const getScalePk = document.getElementById('getScale-pk')
-    getScale.addEventListener('click', async () => {
-      this.scale = await window.electronAPI.getScaleFactor()
-      scaleInput.value = scaleInputPk.value = this.scale
-      document.getElementById('scaleHelpText').innerHTML = '当前屏幕缩放获取成功！'
-    })
-    getScalePk.addEventListener('click', async () => {
-      this.scale = await window.electronAPI.getScaleFactor()
-      scaleInput.value = scaleInputPk.value = this.scale
-      document.getElementById('scaleHelpText-pk').innerHTML = '当前屏幕缩放获取成功！'
-    })
-    scaleInput.addEventListener('change', async () => {
-      this.scale = scaleInput.value
-      window.electronAPI.setGlobalScale(this.scale)
-    })
-    scaleInputPk.addEventListener('change', async () => {
-      this.scale = scaleInputPk.value
-      window.electronAPI.setGlobalScale(this.scale)
-    })
-  }
-
-  initBackBtn() {
-    document.querySelectorAll('.back-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        new MainMenu().showMainMenu();
-      });
-    });
+    console.log('Global构造函数开始执行');
+    try {
+      this.initSettingsBtn();
+      console.log('initSettingsBtn执行成功');
+    } catch (error) {
+      console.error('initSettingsBtn执行失败:', error);
+    }
   }
 
   initSettingsBtn() {
     window.electronAPI.setCachePath(localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles')
     cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles'
-    document.getElementsByClassName('settings-btn')[0].addEventListener('click', () => {
-      document.getElementById('settings-modal').style.display = 'flex'
-      document.getElementById('cache-path').value = cachePath
-      document.getElementById('keep-cache-files').checked = localStorage.getItem('keep-cache-files') === 'true'
-    })
 
-    const settingsModal = document.getElementById('settings-modal');
-    const settingsCloseBtn = settingsModal.querySelector('.close');
-
-    settingsCloseBtn.addEventListener('click', () => {
-      settingsModal.style.display = 'none'
-    })
-
-    window.addEventListener('click', (event) => {
-      if (event.target === settingsModal) {
-        settingsModal.style.display = 'none'
-      }
-    })
-
-    document.getElementById('browse-cache').addEventListener('click', function () {
-      window.electronAPI.openDirectoryChoosing()
-    })
+    // 监听目录选择事件
     window.electronAPI.chooseDirectory((event, path) => {
-      document.getElementById('cache-path').value = path
-    })
-    document.getElementById('save-settings').addEventListener('click', function () {
-      const cachePathValue = document.getElementById('cache-path').value
-      const keepCacheFiles = document.getElementById('keep-cache-files').checked
+      if (path) {
+        localStorage.setItem('cache-path', path);
+        cachePath = path;
+        window.electronAPI.setCachePath(path);
 
-      if (window.electronAPI.setCachePath(cachePathValue)) {
-        localStorage.setItem('cache-path', cachePathValue)
-        localStorage.setItem('keep-cache-files', keepCacheFiles.toString())
-        cachePath = cachePathValue
-        document.getElementById('settings-modal').style.display = 'none'
-      }
-      else {
-        document.getElementById('error-message').textContent = '路径不正确，请设置正确的路径'
-      }
-    })
-    document.getElementById('reset-settings').addEventListener('click', function () {
-      document.getElementById('cache-path').value = 'D:\\Up366StudentFiles'
-      document.getElementById('keep-cache-files').checked = false
-      cachePath = 'D:\\Up366StudentFiles'
-    })
-    document.getElementById('check-updates').addEventListener('click', function () {
-      window.electronAPI.checkForUpdates()
-      showToast('正在检查更新...', 'info')
-    })
-  }
-}
-
-class MainMenu {
-  constructor() {
-    this.initEventListeners();
-  }
-
-  initEventListeners() {
-    document.querySelectorAll('.feature-card').forEach(card => {
-      const feature = card.getAttribute('data-type');
-      card.addEventListener('click', () => this.showFeature(feature));
-    });
-  }
-
-  showFeature(feature) {
-    document.getElementById('main-menu').style.display = 'none';
-    document.querySelectorAll('.content-area').forEach(area => {
-      area.classList.remove('active');
-    });
-    document.getElementById(feature + '-content').classList.add('active');
-  }
-
-  showMainMenu() {
-    document.getElementById('main-menu').style.display = 'block';
-    document.querySelectorAll('.content-area').forEach(area => {
-      area.classList.remove('active');
-    });
-  }
-}
-
-class ListeningFeature {
-  constructor() {
-    this.initialFiles = null;
-    this.initLocations()
-    this.initEventListeners();
-  }
-
-  initLocations() {
-    let locations = localStorage.getItem('pos-listening')
-    if (locations) {
-      locations = JSON.parse(locations)
-      window.electronAPI.setLocations(locations);
-    }
-  }
-
-  initEventListeners() {
-    document.getElementById('locationBtn').addEventListener('click', () => {
-      window.electronAPI.openLocationWindow();
-    });
-
-    document.getElementById('startBtn').addEventListener('click', () => {
-      const resultDiv = document.getElementById('result');
-      resultDiv.innerHTML = `
-        <strong>正在执行自动填充...</strong><br>
-        请稍候，不要移动鼠标或切换窗口
-      `;
-      window.electronAPI.startPoint();
-    });
-
-    document.getElementById('deleteBtn').addEventListener('click', () => {
-      this.handleDeleteFiles();
-    });
-
-    document.getElementById('firstCheck').addEventListener('click', () => {
-      this.handleFirstCheck();
-    });
-
-    document.getElementById('secondCheck').addEventListener('click', () => {
-      this.handleSecondCheck();
-    });
-
-    window.electronAPI.updateLocations((event, locations) => {
-      localStorage.setItem('pos-listening', JSON.stringify(locations))
-      const display = `
-        <strong>坐标设置完成！</strong><br>
-        🔴 输入框位置: (${locations.pos1.x}, ${locations.pos1.y})<br>
-        🔵 下一页按钮位置: (${locations.pos2.x}, ${locations.pos2.y})<br>
-        <br>
-        <strong>下一步：</strong><br>
-        点击"开始填充数据"按钮开始自动填写
-      `;
-      document.getElementById('locationData').innerHTML = display;
-      document.getElementById('startBtn').disabled = false;
-    });
-
-    window.electronAPI.onOperationComplete((event, result) => {
-      this.handleOperationComplete(result);
-    });
-  }
-
-  handleDeleteFiles() {
-    const resultDiv = document.getElementById('result');
-
-    if (confirm(`警告：此操作将删除 ${pathJoin(cachePath, 'resources')} 目录下的所有文件！\n\n确定要继续吗？`)) {
-      resultDiv.innerHTML = `
-        <strong>正在删除文件...</strong><br>
-        请稍候
-      `;
-
-      const result = window.electronAPI.deleteAllFiles();
-
-      if (result.error) {
-        resultDiv.innerHTML = `
-          <strong>删除失败</strong><br>
-          错误信息: ${result.error}
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>删除成功！</strong><br>
-          已删除 ${result.deletedCount} 个文件/目录<br>
-          <br>
-          <strong>现在可以：</strong><br>
-          1. 点击"首次检测"按钮<br>
-          2. 下载新的练习
-          3. 点击再次检测按钮
-        `;
-      }
-    }
-  }
-
-  handleFirstCheck() {
-    const resultDiv = document.getElementById('result');
-    const secondCheckBtn = document.getElementById('secondCheck');
-    const firstCheckBtn = document.getElementById('firstCheck');
-
-    this.initialFiles = window.electronAPI.checkFirst();
-
-    if (this.initialFiles === null) {
-      resultDiv.innerHTML = `<span class="error">资源路径不存在: ${pathJoin(cachePath, 'resources')}</span>`;
-      return;
-    }
-
-    resultDiv.innerHTML = `
-      <strong>首次检测完成！</strong><br>
-      当前资源目录包含 ${this.initialFiles.length} 个文件<br>
-      <br>
-      <strong>下一步：</strong><br>
-      1. 清理资源目录（如果有文件请点击"删除已下载"按钮清理资源目录（必须））<br>
-      2. 在天学网中找到并下载一个未下载的练习<br>
-      3. 确保下载完成后，点击"再次检测"按钮
-    `;
-    secondCheckBtn.disabled = false;
-    firstCheckBtn.disabled = true;
-  }
-
-  handleSecondCheck() {
-    const resultDiv = document.getElementById('result');
-    const secondCheckBtn = document.getElementById('secondCheck');
-    const firstCheckBtn = document.getElementById('firstCheck');
-
-    const result = window.electronAPI.checkSecond(this.initialFiles);
-
-    if (result.error) {
-      resultDiv.innerHTML = `<span class="error">${result.error}</span>`;
-    } else {
-      resultDiv.innerHTML = `
-        <strong>再次检测完成！</strong><br>
-        检测到 ${result.answer.length} 个答案<br>
-        <br>
-        <strong>答案列表：</strong><br>
-        ${result.answer.map((ans, index) => `${index + 1}. ${ans}`).join('<br>')}
-        <br>
-        <br>
-        <strong>下一步：</strong><br>
-        点击"定位填充数据"按钮，在练习页面中设置坐标
-      `;
-    }
-
-    secondCheckBtn.disabled = true;
-    firstCheckBtn.disabled = false;
-  }
-
-  handleOperationComplete(result) {
-    const resultDiv = document.getElementById('result');
-    if (result.success) {
-      resultDiv.innerHTML = `
-        <strong>自动填充完成！</strong><br>
-        所有答案已成功填写并翻页<br>
-        <br>
-        <strong>可以开始新的练习：</strong><br>
-        1. 重新点击"首次检测"按钮<br>
-        2. 下载新的练习<br>
-        3. 重复上述流程
-      `;
-    } else {
-      resultDiv.innerHTML = `
-        <strong>操作失败</strong><br>
-        错误信息: ${result.error}<br>
-        <br>
-      `;
-    }
-  }
-}
-
-class WordPKFeature {
-  constructor() {
-    this.injectionStatus = '等待中';
-    this.processedRequests = 0;
-    this.pkConfigKey = 'auto366_pk_config';
-    this.pkConfig = null;
-    this.pkEnabled = false;
-    this.initEventListeners();
-    this.initIpcListeners();
-    this.loadPkConfig();
-    this.updateStatus();
-  }
-
-  getDefaultPkConfig() {
-    return {
-      enabled: false,
-      zipPath: '',
-      md5: '',
-      md5Base64: '',
-      size: 0
-    };
-  }
-
-  loadPkConfigFromStorage() {
-    try {
-      const raw = window.localStorage.getItem(this.pkConfigKey);
-      if (!raw) return this.getDefaultPkConfig();
-      const parsed = JSON.parse(raw);
-      return Object.assign(this.getDefaultPkConfig(), parsed || {});
-    } catch (e) {
-      console.error('读取PK配置失败:', e);
-      return this.getDefaultPkConfig();
-    }
-  }
-
-  savePkConfigToStorage(config) {
-    try {
-      window.localStorage.setItem(this.pkConfigKey, JSON.stringify(config || this.pkConfig || this.getDefaultPkConfig()));
-    } catch (e) {
-      console.error('保存PK配置到localStorage失败:', e);
-    }
-  }
-
-  async loadPkConfig() {
-    try {
-      const stored = this.loadPkConfigFromStorage();
-      const backend = await window.electronAPI.getPkConfig();
-      const serverCfg = (backend && backend.success && backend.config) ? backend.config : {};
-      const cfg = this.getDefaultPkConfig();
-
-      cfg.zipPath = (stored.zipPath && stored.zipPath.trim())
-        || serverCfg.zipPath
-        || cfg.zipPath;
-
-      cfg.md5 = (stored.md5 && stored.md5.trim())
-        || serverCfg.md5
-        || cfg.md5;
-
-      cfg.md5Base64 = (stored.md5Base64 && stored.md5Base64.trim())
-        || serverCfg.md5Base64
-        || cfg.md5Base64;
-
-      const storedSize = Number.isFinite(stored.size) && stored.size > 0 ? stored.size : 0;
-      const serverSize = Number.isFinite(serverCfg.size) && serverCfg.size > 0 ? serverCfg.size : 0;
-      cfg.size = storedSize || serverSize || cfg.size;
-
-      this.pkConfig = cfg;
-      this.pkEnabled = !!serverCfg.enabled;
-      this.applyPkConfigToForm();
-      this.updateToggleButtonText();
-      await this.syncPkConfigToBackend();
-    } catch (error) {
-      console.error('加载PK配置失败:', error);
-    }
-  }
-
-  applyPkConfigToForm() {
-    const cfg = this.pkConfig || this.getDefaultPkConfig();
-    const zipPathEl = document.getElementById('pkZipPath');
-    const md5El = document.getElementById('pkMd5');
-    const md5b64El = document.getElementById('pkMd5Base64');
-    const sizeEl = document.getElementById('pkSize');
-    if (zipPathEl) zipPathEl.value = cfg.zipPath || '';
-    if (md5El) md5El.value = cfg.md5 || '';
-    if (md5b64El) md5b64El.value = cfg.md5Base64 || '';
-    if (sizeEl) sizeEl.value = cfg.size || 0;
-  }
-
-  readPkConfigFromForm() {
-    const zipPathEl = document.getElementById('pkZipPath');
-    const cfg = this.getDefaultPkConfig();
-    if (zipPathEl) cfg.zipPath = zipPathEl.value || '';
-    this.pkConfig = cfg;
-    return cfg;
-  }
-
-  async syncPkConfigToBackend() {
-    try {
-      const payload = {
-        enabled: !!this.pkEnabled,
-        zipPath: this.pkConfig && this.pkConfig.zipPath ? this.pkConfig.zipPath : ''
-      };
-      const result = await window.electronAPI.setPkConfig(payload);
-      if (!result || !result.success) {
-        this.addLog(`同步PK配置到后端失败: ${(result && result.error) || '未知错误'}`, 'error');
-      } else {
-        this.addLog('单词PK自动化配置已应用', 'info');
-      }
-    } catch (e) {
-      console.error('同步PK配置到后端失败:', e);
-      this.addLog(`同步PK配置到后端失败: ${e.message}`, 'error');
-    }
-  }
-
-  initEventListeners() {
-    document.getElementById('clearPkCache').addEventListener('click', () => {
-      this.handleClearCache();
-    });
-
-    const savePkBtn = document.getElementById('savePkConfig');
-    if (savePkBtn) {
-      savePkBtn.addEventListener('click', async () => {
-        this.readPkConfigFromForm();
-        this.savePkConfigToStorage(this.pkConfig);
-        await this.syncPkConfigToBackend();
-      });
-    }
-
-    const choosePkZipBtn = document.getElementById('choosePkZip');
-    if (choosePkZipBtn) {
-      choosePkZipBtn.addEventListener('click', () => {
-        window.electronAPI.openPkZipChoosing();
-      });
-    }
-
-    if (window.electronAPI.choosePkZip) {
-      window.electronAPI.choosePkZip((filePath) => {
-        if (!filePath) return;
-        const zipPathEl = document.getElementById('pkZipPath');
-        if (zipPathEl) {
-          zipPathEl.value = filePath;
+        // 更新设置页面的输入框
+        const cachePathInput = document.getElementById('cachePathInput');
+        if (cachePathInput) {
+          cachePathInput.value = path;
         }
-        this.readPkConfigFromForm();
-        this.savePkConfigToStorage(this.pkConfig);
-        this.syncPkConfigToBackend().then(async () => {
-          try {
-            const backend = await window.electronAPI.getPkConfig();
-            if (backend && backend.success && backend.config) {
-              this.pkConfig = Object.assign(this.getDefaultPkConfig(), backend.config);
-              this.applyPkConfigToForm();
-            }
-          } catch (e) {
-            console.error('刷新PK配置失败:', e);
-          }
-        });
-      });
-    }
-
-    const toggleBtn = document.getElementById('togglePkAuto');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', async () => {
-        this.pkEnabled = !this.pkEnabled;
-        await this.syncPkConfigToBackend();
-        this.updateToggleButtonText();
-      });
-    }
-
-    const importPkWordListBtn = document.getElementById('importPkWordListBtn');
-    const importPkWordListInput = document.getElementById('importPkWordList');
-    const importPkWordListStatus = document.getElementById('importPkWordListStatus');
-    
-    if (importPkWordListBtn && importPkWordListInput) {
-      importPkWordListBtn.addEventListener('click', () => {
-        importPkWordListInput.click();
-      });
-      
-      importPkWordListInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        if (!file.name.endsWith('.txt')) {
-          importPkWordListStatus.textContent = '错误：请选择txt文件';
-          importPkWordListStatus.style.color = '#dc3545';
-          return;
-        }
-        
-        importPkWordListStatus.textContent = '正在导入...';
-        importPkWordListStatus.style.color = '#666';
-        
-        try {
-          const fileContent = await file.text();
-          const result = await window.electronAPI.importPkWordList(fileContent);
-          
-          if (result.success) {
-            importPkWordListStatus.textContent = '导入成功';
-            importPkWordListStatus.style.color = '#28a745';
-            this.addLog('词库文件导入成功', 'success');
-            setTimeout(() => {
-              importPkWordListStatus.textContent = '';
-            }, 3000);
-          } else {
-            importPkWordListStatus.textContent = `导入失败: ${result.error}`;
-            importPkWordListStatus.style.color = '#dc3545';
-            this.addLog(`词库文件导入失败: ${result.error}`, 'error');
-          }
-        } catch (error) {
-          importPkWordListStatus.textContent = `导入失败: ${error.message}`;
-          importPkWordListStatus.style.color = '#dc3545';
-          this.addLog(`词库文件导入失败: ${error.message}`, 'error');
-        }
-        
-        importPkWordListInput.value = '';
-      });
-    }
-  }
-
-  updateToggleButtonText() {
-    const toggleBtn = document.getElementById('togglePkAuto');
-    if (!toggleBtn) return;
-    toggleBtn.textContent = this.pkEnabled ? '关闭单词PK自动化' : '开启单词PK自动化';
-  }
-
-  initIpcListeners() {
-    // 监听PK注入相关事件
-    window.electronAPI.onPkInjectionStart((data) => {
-      this.injectionStatus = '注入中';
-      const url = data?.url || '未知URL';
-      this.addLog(`开始处理PK注入: ${url}`, 'info');
-      this.updateStatus();
-    });
-
-    window.electronAPI.onPkInjectionSuccess((data) => {
-      this.injectionStatus = '注入成功';
-      this.processedRequests++;
-      const message = data?.message || 'PK注入成功';
-      this.addLog(`PK注入成功: ${message}`, 'success');
-      this.updateStatus();
-    });
-
-    window.electronAPI.onPkInjectionError((data) => {
-      this.injectionStatus = '注入失败';
-      const error = data?.error || '未知错误';
-      this.addLog(`PK注入失败: ${error}`, 'error');
-      this.updateStatus();
-    });
-
-    window.electronAPI.onPkRequestProcessed((data) => {
-      this.processedRequests++;
-      const type = data?.type || '未知';
-      const url = data?.url || '未知URL';
-      this.addLog(`处理请求: ${type} - ${url}`, 'info');
-      this.updateStatus();
-    });
-  }
-
-  updateStatus() {
-    const statusElement = document.getElementById('injection-status');
-    const requestsElement = document.getElementById('processed-requests');
-    
-    if (statusElement) {
-      statusElement.textContent = this.injectionStatus;
-      statusElement.className = 'status-value';
-      
-      // 根据状态设置颜色
-      if (this.injectionStatus === '注入成功') {
-        statusElement.style.color = '#28a745';
-      } else if (this.injectionStatus === '注入失败') {
-        statusElement.style.color = '#dc3545';
-      } else if (this.injectionStatus === '注入中') {
-        statusElement.style.color = '#ffc107';
-      } else {
-        statusElement.style.color = '#007bff';
       }
-    }
-    
-    if (requestsElement) {
-      requestsElement.textContent = this.processedRequests;
-    }
-  }
-
-  addLog(message, type = 'info') {
-    const logContainer = document.getElementById('pk-injection-log');
-    if (!logContainer) return;
-
-    const timestamp = new Date().toLocaleTimeString();
-    const logEntry = document.createElement('div');
-    logEntry.className = `log-entry ${type}`;
-    logEntry.textContent = `[${timestamp}] ${message}`;
-    
-    logContainer.appendChild(logEntry);
-    logContainer.scrollTop = logContainer.scrollHeight;
-
-    // 限制日志条数，避免内存占用过多
-    const entries = logContainer.querySelectorAll('.log-entry');
-    if (entries.length > 100) {
-      entries[0].remove();
-    }
-  }
-
-  handleClearCache() {
-    if (confirm(`警告：此操作将删除 ${pathJoin(cachePath, 'flipbooks')} 目录下的所有文件！\n\n确定要继续吗？`)) {
-      this.addLog('正在删除flipbook文件夹...', 'info');
-      
-      const result = window.electronAPI.deleteFlipbooksFiles();
-      
-      if (result.error) {
-        this.addLog(`删除失败: ${result.error}`, 'error');
-      } else {
-        this.addLog(`删除成功！已删除 ${result.deletedCount} 个文件/目录`, 'success');
-      }
-    }
+    });
   }
 }
 
-class HearingFeature {
-  constructor() {
-    this.initEventListeners();
-  }
-
-  initEventListeners() {
-    document.getElementById('findAnswerPathBtn').addEventListener('click', () => {
-      this.handleFindAnswerPath();
-    });
-
-    document.getElementById('getAnswerBtn').addEventListener('click', () => {
-      this.handleGetAnswers();
-    });
-
-    document.getElementById('deleteFlipbooksBtn').addEventListener('click', () => {
-      this.handleClearFlipbooks();
-    });
-
-    document.getElementById('replaceBtn').addEventListener('click', () => {
-      this.handleReplaceAudio();
-    });
-
-    document.getElementById('restoreBtn').addEventListener('click', () => {
-      this.handleRestoreAudio();
-    });
-  }
-
-  handleFindAnswerPath() {
-    const resultDiv = document.getElementById('answerResult');
-    const folderPathInput = document.getElementById('answerFolderPath');
-
-    resultDiv.innerHTML = `
-      <strong>正在寻找可用路径...</strong><br>
-      请稍候
-    `;
-
-    const result = window.electronAPI.getFlipbooksFolders();
-
-    if (result.error) {
-      resultDiv.innerHTML = `
-        <strong>寻找失败</strong><br>
-        错误信息: ${result.error}
-      `;
-    } else {
-      if (result.folders.length === 0) {
-        resultDiv.innerHTML = `
-          <strong>未找到可用路径</strong><br>
-          flipbooks目录下没有找到任何文件夹
-        `;
-      } else if (result.folders.length === 1) {
-        folderPathInput.value = result.folders[0];
-        resultDiv.innerHTML = `
-          <strong>自动填写完成！</strong><br>
-          找到1个文件夹：${result.folders[0]}<br>
-          已自动填写到输入框中
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>找到多个文件夹</strong><br>
-          请从以下列表中选择一个：<br>
-          ${result.folders.map(folder => `• ${folder}`).join('<br>')}<br>
-          <br>
-          请手动输入要使用的文件夹路径
-        `;
-      }
-    }
-  }
-
-  handleGetAnswers() {
-    const resultDiv = document.getElementById('answerResult');
-    const folderPath = document.getElementById('answerFolderPath').value.trim();
-
-    if (!folderPath) {
-      resultDiv.innerHTML = `
-        <strong>错误</strong><br>
-        请输入文件夹路径
-      `;
-      return;
-    }
-
-    resultDiv.innerHTML = `
-      <strong>正在获取听力答案...</strong><br>
-      请稍候
-    `;
-
-    const result = window.electronAPI.getListeningAnswers(folderPath);
-
-    if (result.error) {
-      resultDiv.innerHTML = `
-        <strong>获取失败</strong><br>
-        错误信息: ${result.error}
-      `;
-    } else {
-      let p2Content = '';
-      if (Object.keys(result.P2).length > 0) {
-        p2Content = '<strong>P2听后回答 - 音频标答文件：</strong><br>';
-        for (const [className, files] of Object.entries(result.P2)) {
-          p2Content += `<strong>${className}：</strong><br>`;
-          files.forEach((file, index) => {
-            const audioId = `audio_${className}_${index}`;
-            p2Content += `
-              <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
-                <div style="margin-bottom: 10px; font-weight: bold; color: #333;">音频 ${index + 1}：</div>
-                <audio id="${audioId}" controls style="width: 100%; max-width: 500px; height: 40px; border-radius: 6px; background: #fff;">
-                  <source src="file:///${file}" type="audio/mpeg">
-                  您的浏览器不支持音频播放
-                </audio>
-                <div style="margin-top: 10px; font-size: 11px; color: #888; word-wrap: break-word; word-break: break-all; line-height: 1.4; background: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #007bff;">${file}</div>
-              </div>
-            `;
-          });
-          p2Content += '<br>';
-        }
-      } else {
-        p2Content = '<strong>P2听后回答 - 音频标答文件：</strong> 未找到音频文件<br><br>';
-      }
-
-      let p3Content = '';
-      if (result.P3.length > 0) {
-        p3Content = '<strong>P3听后转述 - 听力标答：</strong><br>';
-        result.P3.forEach((item, index) => {
-          p3Content += `<strong>答案文件 ${index + 1}：</strong><br>`;
-          p3Content += `<div style="font-size: 11px; color: #888; word-wrap: break-word; word-break: break-all; line-height: 1.4; background: #f5f5f5; padding: 8px; border-radius: 4px; border-left: 3px solid #28a745; margin: 5px 0;">${item.path}</div>`;
-          if (item.error) {
-            p3Content += `<div style="color: #dc3545; margin: 5px 0;">错误: ${item.error}</div>`;
-          } else {
-            if (item.data.Data.OriginalStandard) {
-              p3Content += `
-                <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
-                  <div style="margin-bottom: 10px; font-weight: bold; color: #333;">听力音频：</div>
-              `;
-              item.data.Data.OriginalStandard.forEach((item1, index) => {
-                p3Content += `<p>${item1}</p>`;
-              });
-              p3Content += `
-                </div>
-              `;
-            }
-            if (item.data.Data.OriginalReference) {
-              p3Content += `
-                <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
-                  <div style="margin-bottom: 10px; font-weight: bold; color: #333;">参考答案：</div>
-              `;
-              item.data.Data.OriginalReference.forEach((item1, index) => {
-                p3Content += `<p>${item1}</p>`;
-              });
-              p3Content += `
-                </div>
-              `;
-            }
-          }
-          p3Content += '<br>';
-        });
-      } else {
-        p3Content = '<strong>P3听后转述 - 听力标答：</strong> 未找到听力标答文件<br>';
-      }
-
-      resultDiv.innerHTML = `
-        <strong>获取成功！</strong><br>
-        已找到听力答案数据<br><br>
-        ${p2Content}
-        ${p3Content}
-      `;
-    }
-  }
-
-  handleClearFlipbooks() {
-    const resultDiv = document.getElementById('answerResult');
-
-    if (confirm(`警告：此操作将清理 ${pathJoin(cachePath, 'flipbooks')} 目录下的所有文件！\n\n确定要继续吗？`)) {
-      resultDiv.innerHTML = `
-        <strong>正在清理文件...</strong><br>
-        请稍候
-      `;
-
-      const result = window.electronAPI.deleteFlipbooksFiles();
-
-      if (result.error) {
-        resultDiv.innerHTML = `
-          <strong>清理失败</strong><br>
-          错误信息: ${result.error}
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>清理成功！</strong><br>
-          已清理 ${result.deletedCount} 个文件/目录<br>
-          <br>
-          <strong>操作完成</strong>
-        `;
-      }
-    }
-  }
-
-  handleDeleteFlipbooks() {
-    const resultDiv = document.getElementById('answerResult');
-
-    if (confirm(`警告：此操作将删除 ${pathJoin(cachePath, 'flipbooks')} 目录下的所有文件！\n\n确定要继续吗？`)) {
-      resultDiv.innerHTML = `
-        <strong>正在删除文件...</strong><br>
-        请稍候
-      `;
-
-      const result = window.electronAPI.deleteFlipbooksFiles();
-
-      if (result.error) {
-        resultDiv.innerHTML = `
-          <strong>删除失败</strong><br>
-          错误信息: ${result.error}
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>删除成功！</strong><br>
-          已删除 ${result.deletedCount} 个文件/目录<br>
-          <br>
-          <strong>操作完成</strong>
-        `;
-      }
-    }
-  }
-
-  handleReplaceAudio() {
-    const resultDiv = document.getElementById('answerResult');
-    const folderPath = document.getElementById('answerFolderPath').value.trim();
-
-    if (!folderPath) {
-      resultDiv.innerHTML = `
-        <strong>错误</strong><br>
-        请输入文件夹路径
-      `;
-      return;
-    }
-
-    if (confirm(`警告：此操作将替换 ${pathJoin(cachePath, 'flipbooks', folderPath, 'bookres', 'media')} 目录下的所有MP3文件！\n\n确定要继续吗？`)) {
-      resultDiv.innerHTML = `
-        <strong>正在替换音频文件...</strong><br>
-        请稍候
-      `;
-
-      const result = window.electronAPI.replaceAudioFiles(folderPath);
-
-      if (result.error) {
-        resultDiv.innerHTML = `
-          <strong>替换失败</strong><br>
-          错误信息: ${result.error}
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>替换成功！</strong><br>
-          已替换 ${result.replacedCount} 个音频文件<br>
-          <br>
-          <strong>现在可以：</strong><br>
-          1. 进行听力练习<br>
-          2. 完成后点击"还原音频"按钮恢复原文件
-        `;
-      }
-    }
-  }
-
-  handleRestoreAudio() {
-    const resultDiv = document.getElementById('answerResult');
-    const folderPath = document.getElementById('answerFolderPath').value.trim();
-
-    if (!folderPath) {
-      resultDiv.innerHTML = `
-        <strong>错误</strong><br>
-        请输入文件夹路径
-      `;
-      return;
-    }
-
-    if (confirm(`确定要还原 ${pathJoin(cachePath, 'flipbooks', folderPath, 'bookres', 'media')} 目录下的音频文件吗？`)) {
-      resultDiv.innerHTML = `
-        <strong>正在还原音频文件...</strong><br>
-        请稍候
-      `;
-
-      const result = window.electronAPI.restoreAudioFiles(folderPath);
-
-      if (result.error) {
-        resultDiv.innerHTML = `
-          <strong>还原失败</strong><br>
-          错误信息: ${result.error}
-        `;
-      } else {
-        resultDiv.innerHTML = `
-          <strong>还原成功！</strong><br>
-          已还原 ${result.restoredCount} 个音频文件<br>
-          <br>
-          <strong>操作完成</strong>
-        `;
-      }
-    }
-  }
-}
-
-// 初始化所有功能类已移至文件末尾
 class UniversalAnswerFeature {
   constructor() {
+    console.log('UniversalAnswerFeature构造函数开始执行');
     this.isProxyRunning = false;
-    this.isCapturing = false;
     this.sortMode = 'file';
     this.lastAnswersData = null;
-    this.initEventListeners();
-    this.initIpcListeners();
-    this.initImportAnswer()
+    this.currentView = 'answers';
+    this.requestDataMap = new Map(); // 存储完整的请求数据
+    this.selectedLogItem = null; // 当前选中的日志项
+    this.currentEditingRule = null; // 当前编辑的规则
+
+    // 社区规则集相关属性
+    this.communityRulesets = [];
+    this.currentPage = 0;
+    this.pageSize = 20;
+    this.hasMorePages = false;
+    this.isLoadingRulesets = false;
+    this.currentRulesetDetail = null;
+
+    try {
+      this.initEventListeners();
+      console.log('initEventListeners执行成功');
+    } catch (error) {
+      console.error('initEventListeners执行失败:', error);
+    }
+
+    try {
+      this.initIpcListeners();
+      console.log('initIpcListeners执行成功');
+    } catch (error) {
+      console.error('initIpcListeners执行失败:', error);
+    }
+
+    try {
+      this.initImportAnswer();
+      console.log('initImportAnswer执行成功');
+    } catch (error) {
+      console.error('initImportAnswer执行失败:', error);
+    }
+
+    try {
+      this.initSidebar();
+      console.log('initSidebar执行成功');
+    } catch (error) {
+      console.error('initSidebar执行失败:', error);
+    }
+
+    try {
+      this.initResizer();
+      console.log('initResizer执行成功');
+    } catch (error) {
+      console.error('initResizer执行失败:', error);
+    }
+
+    try {
+      this.initCommunityRulesets();
+      console.log('initCommunityRulesets执行成功');
+    } catch (error) {
+      console.error('initCommunityRulesets执行失败:', error);
+    }
+
+    // 自动启动代理
+    setTimeout(() => {
+      this.startProxy();
+    }, 1000);
   }
 
   initEventListeners() {
-    document.getElementById('startProxyBtn').addEventListener('click', () => {
-      this.startProxy();
+    document.getElementById('toggleProxyBtn').addEventListener('click', () => {
+      this.toggleProxy();
     });
 
-    document.getElementById('stopProxyBtn').addEventListener('click', () => {
-      this.stopProxy();
-    });
+    // 检查按钮是否存在再添加事件监听器
+    const browseFileBtn = document.getElementById('browseFileBtn');
+    if (browseFileBtn) {
+      browseFileBtn.addEventListener('click', () => {
+        this.appendImplant();
+      });
+    }
 
     document.getElementById('deleteTempBtn').addEventListener('click', () => {
       this.handleDeleteTemp();
     });
 
-    document.getElementById('testRulesBtn').addEventListener('click', () => {
-      this.testRulesFunction();
+    document.getElementById('deleteFileTempBtn').addEventListener('click', () => {
+      this.handleDeleteFileTemp();
     });
 
     document.getElementById('sortMode').addEventListener('change', (e) => {
@@ -950,11 +130,367 @@ class UniversalAnswerFeature {
         }
       }
     });
+
+    document.getElementById('clearAnswersBtn').addEventListener('click', () => {
+      this.clearAnswers();
+    });
+
+    document.getElementById('shareAnswerBtn').addEventListener('click', () => {
+      this.shareAnswers();
+    });
+
+    // 导出答案按钮
+    document.getElementById('exportAnswerBtn').addEventListener('click', () => {
+      this.exportAnswers();
+    });
+
+    // 清空日志按钮
+    const clearLogsBtn = document.getElementById('clearLogsBtn');
+    if (clearLogsBtn) {
+      clearLogsBtn.addEventListener('click', () => {
+        this.clearLogs();
+      });
+    }
+
+    // 关闭详情按钮
+    const closeDetailsBtn = document.getElementById('closeDetailsBtn');
+    if (closeDetailsBtn) {
+      closeDetailsBtn.addEventListener('click', () => {
+        this.hideRequestDetails();
+      });
+    }
+
+    // 更新通知按钮
+    const updateNotificationBtn = document.getElementById('update-notification-btn');
+    if (updateNotificationBtn) {
+      updateNotificationBtn.addEventListener('click', () => {
+        this.handleUpdateNotification();
+      });
+    }
+
+    // 规则管理相关事件监听器
+    this.initRuleEventListeners();
+  }
+
+  initRuleEventListeners() {
+    // 添加规则集按钮
+    const addRuleGroupBtn = document.getElementById('addRuleGroupBtn');
+    if (addRuleGroupBtn) {
+      addRuleGroupBtn.addEventListener('click', () => {
+        this.showRuleGroupModal();
+      });
+    }
+
+    // 规则集模态框事件
+    const closeRuleGroupModal = document.getElementById('closeRuleGroupModal');
+    if (closeRuleGroupModal) {
+      closeRuleGroupModal.addEventListener('click', () => {
+        this.hideRuleGroupModal();
+      });
+    }
+
+    const cancelRuleGroupBtn = document.getElementById('cancelRuleGroupBtn');
+    if (cancelRuleGroupBtn) {
+      cancelRuleGroupBtn.addEventListener('click', () => {
+        this.hideRuleGroupModal();
+      });
+    }
+
+    const ruleGroupForm = document.getElementById('ruleGroupForm');
+    if (ruleGroupForm) {
+      ruleGroupForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.saveRuleGroup();
+      });
+    }
+
+    const ruleGroupModal = document.getElementById('ruleGroupModal');
+    if (ruleGroupModal) {
+      ruleGroupModal.addEventListener('click', (e) => {
+        if (e.target === ruleGroupModal) {
+          this.hideRuleGroupModal();
+        }
+      });
+    }
+
+    // 关闭规则模态框按钮
+    const closeRuleModal = document.getElementById('closeRuleModal');
+    if (closeRuleModal) {
+      closeRuleModal.addEventListener('click', () => {
+        this.hideRuleModal();
+      });
+    }
+
+    // 取消按钮
+    const cancelRuleBtn = document.getElementById('cancelRuleBtn');
+    if (cancelRuleBtn) {
+      cancelRuleBtn.addEventListener('click', () => {
+        this.hideRuleModal();
+      });
+    }
+
+    // 规则类型选择
+    const ruleType = document.getElementById('ruleType');
+    if (ruleType) {
+      ruleType.addEventListener('change', (e) => {
+        this.showRuleFields(e.target.value);
+      });
+    }
+
+    // 浏览ZIP文件按钮
+    const browseZipBtn = document.getElementById('browseZipBtn');
+    if (browseZipBtn) {
+      browseZipBtn.addEventListener('click', () => {
+        this.browseZipFile();
+      });
+    }
+
+    // 规则表单提交
+    const ruleForm = document.getElementById('ruleForm');
+    if (ruleForm) {
+      ruleForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.saveRule();
+      });
+    }
+
+    // 模态框背景点击关闭
+    const ruleModal = document.getElementById('ruleModal');
+    if (ruleModal) {
+      ruleModal.addEventListener('click', (e) => {
+        if (e.target === ruleModal) {
+          this.hideRuleModal();
+        }
+      });
+    }
+  }
+
+  initSidebar() {
+    // 侧边栏菜单项点击事件
+    const menuItems = document.querySelectorAll('.menu-item');
+    menuItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const view = item.getAttribute('data-view');
+        this.switchView(view);
+      });
+    });
+
+    // 设置页面的事件监听器
+    const browseCacheBtn = document.getElementById('browseCacheBtn');
+    if (browseCacheBtn) {
+      browseCacheBtn.addEventListener('click', () => {
+        window.electronAPI.openDirectoryChoosing();
+      });
+    }
+
+    // 加载缓存路径设置
+    const cachePathInput = document.getElementById('cachePathInput');
+    if (cachePathInput) {
+      const savedPath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
+      cachePathInput.value = savedPath;
+    }
+  }
+
+  initResizer() {
+    const resizer = document.getElementById('resizer');
+    const leftContent = document.getElementById('leftContent');
+    const rightLogs = document.getElementById('rightLogs');
+    const contentArea = document.querySelector('.content-area');
+
+    let isResizing = false;
+    let startX = 0;
+    let startLeftWidth = 0;
+    let startRightWidth = 0;
+
+    // 从localStorage加载保存的宽度比例
+    const savedLeftFlex = localStorage.getItem('leftContentFlex') || '2';
+    const savedRightFlex = localStorage.getItem('rightLogsFlex') || '1';
+
+    leftContent.style.flex = savedLeftFlex;
+    rightLogs.style.flex = savedRightFlex;
+
+    resizer.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startX = e.clientX;
+
+      const leftRect = leftContent.getBoundingClientRect();
+      const rightRect = rightLogs.getBoundingClientRect();
+
+      startLeftWidth = leftRect.width;
+      startRightWidth = rightRect.width;
+
+      resizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+
+      const deltaX = e.clientX - startX;
+      const contentAreaRect = contentArea.getBoundingClientRect();
+      const totalWidth = contentAreaRect.width - 4; // 减去分隔条宽度
+
+      const newLeftWidth = Math.max(300, Math.min(startLeftWidth + deltaX, totalWidth - 250));
+      const newRightWidth = totalWidth - newLeftWidth;
+
+      // 计算flex比例
+      const leftFlex = newLeftWidth / totalWidth * 3; // 乘以3是为了得到合适的flex值
+      const rightFlex = newRightWidth / totalWidth * 3;
+
+      leftContent.style.flex = leftFlex.toString();
+      rightLogs.style.flex = rightFlex.toString();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        resizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        // 保存当前的flex值到localStorage
+        localStorage.setItem('leftContentFlex', leftContent.style.flex);
+        localStorage.setItem('rightLogsFlex', rightLogs.style.flex);
+      }
+    });
+
+    // 防止拖拽时选中文本
+    resizer.addEventListener('selectstart', (e) => {
+      e.preventDefault();
+    });
+
+    // 初始化详情面板拖动功能
+    this.initDetailsResizer();
+  }
+
+  initDetailsResizer() {
+    const detailsResizer = document.getElementById('detailsResizer');
+    const trafficMonitor = document.getElementById('trafficMonitor');
+    const requestDetails = document.getElementById('requestDetails');
+    const logsContainer = document.querySelector('.logs-container');
+
+    let isDetailsResizing = false;
+    let startX = 0;
+    let startMonitorWidth = 0;
+    let startDetailsWidth = 0;
+
+    if (!detailsResizer || !trafficMonitor || !requestDetails) return;
+
+    detailsResizer.addEventListener('mousedown', (e) => {
+      isDetailsResizing = true;
+      startX = e.clientX;
+
+      const monitorRect = trafficMonitor.getBoundingClientRect();
+      const detailsRect = requestDetails.getBoundingClientRect();
+
+      startMonitorWidth = monitorRect.width;
+      startDetailsWidth = detailsRect.width;
+
+      detailsResizer.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDetailsResizing) return;
+
+      const deltaX = e.clientX - startX;
+      const containerRect = logsContainer.getBoundingClientRect();
+      const totalWidth = containerRect.width - 4; // 减去分隔条宽度
+
+      // 限制详情面板最大宽度为容器的50%，最小宽度为300px
+      const maxDetailsWidth = totalWidth * 0.5;
+      const minDetailsWidth = 300;
+      const minMonitorWidth = 200;
+
+      let newMonitorWidth = startMonitorWidth + deltaX;
+      let newDetailsWidth = totalWidth - newMonitorWidth;
+
+      // 确保详情面板不超过最大宽度
+      if (newDetailsWidth > maxDetailsWidth) {
+        newDetailsWidth = maxDetailsWidth;
+        newMonitorWidth = totalWidth - newDetailsWidth;
+      }
+
+      // 确保详情面板不小于最小宽度
+      if (newDetailsWidth < minDetailsWidth) {
+        newDetailsWidth = minDetailsWidth;
+        newMonitorWidth = totalWidth - newDetailsWidth;
+      }
+
+      // 确保监听器面板不小于最小宽度
+      if (newMonitorWidth < minMonitorWidth) {
+        newMonitorWidth = minMonitorWidth;
+        newDetailsWidth = totalWidth - newMonitorWidth;
+      }
+
+      // 计算flex比例
+      const monitorFlex = newMonitorWidth / totalWidth * 2;
+      const detailsFlex = newDetailsWidth / totalWidth * 2;
+
+      trafficMonitor.style.flex = monitorFlex.toString();
+      requestDetails.style.flex = detailsFlex.toString();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDetailsResizing) {
+        isDetailsResizing = false;
+        detailsResizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        // 保存当前的flex值到localStorage
+        localStorage.setItem('trafficMonitorFlex', trafficMonitor.style.flex);
+        localStorage.setItem('requestDetailsFlex', requestDetails.style.flex);
+      }
+    });
+
+    // 防止拖拽时选中文本
+    detailsResizer.addEventListener('selectstart', (e) => {
+      e.preventDefault();
+    });
+  }
+
+  switchView(viewName) {
+    // 更新菜单项状态
+    const menuItems = document.querySelectorAll('.menu-item');
+    menuItems.forEach(item => {
+      item.classList.remove('active');
+      if (item.getAttribute('data-view') === viewName) {
+        item.classList.add('active');
+      }
+    });
+
+    // 更新左侧视图面板（右侧日志始终显示）
+    const viewPanels = document.querySelectorAll('.left-content .view-panel');
+    viewPanels.forEach(panel => {
+      panel.classList.remove('active');
+    });
+
+    const targetPanel = document.getElementById(`${viewName}-view`);
+    if (targetPanel) {
+      targetPanel.classList.add('active');
+    }
+
+    this.currentView = viewName;
+
+    // 如果切换到规则管理视图，加载规则列表
+    if (viewName === 'rules') {
+      this.loadRules();
+    }
+
+    // 如果切换到社区规则集视图，加载规则集列表
+    if (viewName === 'community') {
+      this.loadCommunityRulesets();
+    }
   }
 
   initIpcListeners() {
-
-
     // 监听代理状态
     window.electronAPI.onProxyStatus((event, data) => {
       this.updateProxyStatus(data);
@@ -1003,6 +539,11 @@ class UniversalAnswerFeature {
     // 监听答案提取
     window.electronAPI.onAnswersExtracted((event, data) => {
       this.displayAnswers(data);
+
+      // 输出答案文件位置
+      if (data.file) {
+        this.addSuccessLog(`答案文件已保存到: ${data.file}`);
+      }
     });
 
     // 监听捕获状态
@@ -1014,13 +555,15 @@ class UniversalAnswerFeature {
     window.electronAPI.onProxyError((event, data) => {
       this.addErrorLog(data.message);
       // 如果代理出错，重置按钮状态
-      const startBtn = document.getElementById('startProxyBtn');
-      const stopBtn = document.getElementById('stopProxyBtn');
+      const toggleBtn = document.getElementById('toggleProxyBtn');
       const captureBtn = document.getElementById('startCaptureBtn');
 
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      captureBtn.disabled = true;
+      if (stopBtn) {
+        stopBtn.disabled = true;
+      }
+      if (captureBtn) {
+        captureBtn.disabled = true;
+      }
 
       this.isProxyRunning = false;
       this.updateProxyStatus({ running: false, message: '代理服务器出错' });
@@ -1035,39 +578,60 @@ class UniversalAnswerFeature {
     window.electronAPI.onFilesProcessed((event, data) => {
       this.displayProcessedFiles(data);
     });
+
+    window.electronAPI.chooseImplantZip(async (filePath) => {
+      if (!filePath) {
+        this.addErrorLog('未选择文件');
+        return;
+      }
+      const zipImplantInput = document.getElementById('zipImplant');
+      if (zipImplantInput) {
+        zipImplantInput.value = filePath;
+      }
+    });
+  }
+
+  toggleProxy() {
+    if (this.isProxyRunning) {
+      this.stopProxy();
+    } else {
+      this.startProxy();
+    }
   }
 
   startProxy() {
-    const startBtn = document.getElementById('startProxyBtn');
-    const stopBtn = document.getElementById('stopProxyBtn');
+    const toggleBtn = document.getElementById('toggleProxyBtn');
 
-    // 更新按钮状态，防止重复点击
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
+    // 更新按钮状态
+    if (toggleBtn) {
+      toggleBtn.disabled = true;
+      toggleBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>启动中...</span>';
+    }
 
     window.electronAPI.startAnswerProxy();
     this.addInfoLog('正在启动代理服务器...');
 
-    // 设置超时检查，如果代理没有启动，恢复按钮状态
+    // 设置超时检查，如果代理没有启动，显示错误信息
     setTimeout(() => {
       if (!this.isProxyRunning) {
         this.addErrorLog('代理服务器启动超时，请检查网络或端口占用');
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-      } else {
-        this.addInfoLog('代理服务器启动成功，自动开始监听网络请求...');
-        window.electronAPI.startCapturing();
+        if (toggleBtn) {
+          toggleBtn.disabled = false;
+          toggleBtn.innerHTML = '<i class="bi bi-play-circle"></i><span>启动代理</span>';
+          toggleBtn.className = 'primary-btn';
+        }
       }
-    }, 5000);
+    }, 10000); // 10秒超时
   }
 
   stopProxy() {
-    const startBtn = document.getElementById('startProxyBtn');
-    const stopBtn = document.getElementById('stopProxyBtn');
+    const toggleBtn = document.getElementById('toggleProxyBtn');
 
     // 更新按钮状态，防止重复点击
-    startBtn.disabled = true;
-    stopBtn.disabled = true;
+    if (toggleBtn) {
+      toggleBtn.disabled = true;
+      toggleBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>停止中...</span>';
+    }
 
     window.electronAPI.stopAnswerProxy();
     this.addInfoLog('正在停止代理服务器...');
@@ -1076,31 +640,45 @@ class UniversalAnswerFeature {
     setTimeout(() => {
       if (this.isProxyRunning) {
         this.addErrorLog('代理服务器停止超时，请尝试手动关闭');
-        startBtn.disabled = false;
-        stopBtn.disabled = false;
+        if (toggleBtn) {
+          toggleBtn.disabled = false;
+          toggleBtn.innerHTML = '<i class="bi bi-stop-circle"></i><span>停止代理</span>';
+          toggleBtn.className = 'danger-btn';
+        }
       }
     }, 5000);
   }
 
   updateProxyStatus(data) {
     const statusElement = document.getElementById('proxyStatus');
-    const startBtn = document.getElementById('startProxyBtn');
-    const stopBtn = document.getElementById('stopProxyBtn');
+    const toggleBtn = document.getElementById('toggleProxyBtn');
 
     if (data.running) {
       this.isProxyRunning = true;
-      statusElement.textContent = '运行中';
+      const host = data.host || '127.0.0.1';
+      const port = data.port || '5291';
+      statusElement.textContent = `已开启在 ${host}:${port}`;
       statusElement.className = 'status-value running';
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      this.addSuccessLog(data.message);
+
+      if (toggleBtn) {
+        toggleBtn.disabled = false;
+        toggleBtn.innerHTML = '<i class="bi bi-stop-circle"></i><span>停止代理</span>';
+        toggleBtn.className = 'danger-btn';
+      }
+
+      this.addInfoLog(`代理服务器已启动，监听地址: ${host}:${port}`);
     } else {
       this.isProxyRunning = false;
       statusElement.textContent = '已停止';
       statusElement.className = 'status-value stopped';
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      this.addInfoLog(data.message);
+
+      if (toggleBtn) {
+        toggleBtn.disabled = false;
+        toggleBtn.innerHTML = '<i class="bi bi-play-circle"></i><span>启动代理</span>';
+        toggleBtn.className = 'primary-btn';
+      }
+
+      this.addInfoLog('代理服务器已停止');
     }
   }
 
@@ -1136,18 +714,16 @@ class UniversalAnswerFeature {
     const stopBtn = document.getElementById('stopCaptureBtn');
 
     if (data.capturing) {
-      this.isCapturing = true;
       statusElement.textContent = '监听中';
       statusElement.className = 'status-value running';
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
+      if (startBtn) startBtn.disabled = true;
+      if (stopBtn) stopBtn.disabled = false;
       this.addSuccessLog('网络监听已启动');
     } else {
-      this.isCapturing = false;
       statusElement.textContent = '未开始';
       statusElement.className = 'status-value stopped';
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
+      if (startBtn) startBtn.disabled = false;
+      if (stopBtn) stopBtn.disabled = true;
       this.addInfoLog('网络监听已停止');
     }
   }
@@ -1155,237 +731,109 @@ class UniversalAnswerFeature {
   updateProcessStatus(data) {
     const statusElement = document.getElementById('processStatus');
 
-    if (data.status === 'downloading') {
-      statusElement.textContent = '下载中';
-      statusElement.className = 'status-value processing';
-    } else if (data.status === 'extracting') {
-      statusElement.textContent = '解压中';
-      statusElement.className = 'status-value processing';
-    } else if (data.status === 'processing') {
+    if (data.status === 'processing') {
       statusElement.textContent = '处理中';
       statusElement.className = 'status-value processing';
+      this.addInfoLog(data.message);
+    } else if (data.status === 'completed') {
+      statusElement.textContent = '已完成';
+      statusElement.className = 'status-value success';
+      this.addSuccessLog(data.message);
+    } else if (data.status === 'error') {
+      statusElement.textContent = '处理失败';
+      statusElement.className = 'status-value error';
+      this.addErrorLog(data.message);
+    } else if (data.status === 'idle') {
+      statusElement.textContent = '等待中';
+      statusElement.className = 'status-value stopped';
+      this.addInfoLog(data.message);
     }
-
-    this.addInfoLog(data.message);
   }
 
   addTrafficLog(data) {
     const timestamp = new Date(data.timestamp).toLocaleTimeString();
-    const method = data.method || 'UNKNOWN';
-    const url = data.url || 'Unknown URL';
+    const method = data.method || 'GET';
+    const status = data.statusCode || data.status || '';
+    const url = this.formatUrl(data.url);
+    const size = data.bodySize ? this.formatFileSize(data.bodySize) : '';
 
-    // 创建可展开的日志项
-    const logItem = document.createElement('div');
-    logItem.className = `log-item request-item ${method.toLowerCase()}`;
+    // 生成唯一ID
+    const requestId = data.uuid || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // 创建请求行
-    const requestLine = document.createElement('div');
-    requestLine.className = 'request-line';
+    // 存储完整的请求数据
+    this.requestDataMap.set(requestId, data);
 
-    // 添加状态码显示
-    let statusDisplay = '';
-    if (data.statusCode) {
-      const statusClass = data.statusCode >= 200 && data.statusCode < 300 ? 'success' :
-        data.statusCode >= 400 ? 'error' : 'warning';
-      statusDisplay = ` <span class="status-${statusClass}">[${data.statusCode}]</span>`;
+    let logText = `${method} ${url}`;
+    if (status) logText += ` - ${status}`;
+    if (size) logText += ` (${size})`;
+
+    let logType = 'normal';
+    let iconClass = 'bi-globe';
+
+    if (data.important) {
+      logType = 'important';
+      iconClass = 'bi-star-fill';
+    } else if (status >= 400) {
+      logType = 'error';
+      iconClass = 'bi-x-circle';
+    } else if (status >= 200 && status < 300) {
+      logType = 'success';
+      iconClass = 'bi-check-circle';
     }
 
-    // 格式化URL确保完整显示，并修复重复协议问题
-    let formattedUrl = this.formatUrl(url);
-    // 修复URL重复问题，例如 http://fs.up366.cnhttp://fs.up366.cn/download/xxx
-    formattedUrl = formattedUrl.replace(/(https?:\/\/[^\/]+)\1+/, '$1');
-
-    requestLine.innerHTML = `<span class="log-method ${method}">${method} [${timestamp}]</span>${statusDisplay} ${formattedUrl}`;
-    logItem.appendChild(requestLine);
-
-    // 创建详情容器（默认隐藏）
-    const detailsContainer = document.createElement('div');
-    detailsContainer.className = 'request-details';
-    detailsContainer.style.display = 'none';
-
-    // 添加时间戳
-    const timestampDiv = document.createElement('div');
-    timestampDiv.className = 'detail-item';
-    timestampDiv.innerHTML = `<strong>时间:</strong> ${timestamp}`;
-    detailsContainer.appendChild(timestampDiv);
-
-    // 添加主机信息
-    if (data.host) {
-      const hostDiv = document.createElement('div');
-      hostDiv.className = 'detail-item';
-      hostDiv.innerHTML = `<strong>主机:</strong> ${data.host}`;
-      detailsContainer.appendChild(hostDiv);
-    }
-
-    // 添加协议信息
-    if (data.isHttps !== undefined) {
-      const protocolDiv = document.createElement('div');
-      protocolDiv.className = 'detail-item';
-      protocolDiv.innerHTML = `<strong>协议:</strong> ${data.isHttps ? 'HTTPS' : 'HTTP'}`;
-      detailsContainer.appendChild(protocolDiv);
-    }
-
-    // 添加请求头
-    if (data.requestHeaders) {
-      const headersDiv = document.createElement('div');
-      headersDiv.className = 'detail-item';
-      headersDiv.innerHTML = `<strong>请求头:</strong><pre class="headers">${JSON.stringify(data.requestHeaders, null, 2)}</pre>`;
-      detailsContainer.appendChild(headersDiv);
-    }
-
-    // 添加Cookie（从请求头中提取）
-    if (data.requestHeaders && data.requestHeaders.cookie) {
-      const cookiesDiv = document.createElement('div');
-      cookiesDiv.className = 'detail-item';
-      cookiesDiv.innerHTML = `<strong>Cookie:</strong><pre class="cookies">${data.requestHeaders.cookie}</pre>`;
-      detailsContainer.appendChild(cookiesDiv);
-    }
-
-    // 添加请求体（如果有）
-    if (data.requestBody) {
-      const bodyDiv = document.createElement('div');
-      bodyDiv.className = 'detail-item';
-      bodyDiv.innerHTML = `<strong>请求体:</strong><pre class="request-body">${this.formatBody(data.requestBody)}</pre>`;
-      detailsContainer.appendChild(bodyDiv);
-    }
-
-    // 添加响应状态（如果有）
-    if (data.statusCode) {
-      const statusDiv = document.createElement('div');
-      statusDiv.className = 'detail-item';
-      const statusClass = data.statusCode >= 200 && data.statusCode < 300 ? 'success' :
-        data.statusCode >= 400 ? 'error' : 'warning';
-      statusDiv.innerHTML = `<strong>响应状态:</strong> <span class="status-${statusClass}">${data.statusCode} ${data.statusMessage || ''}</span>`;
-      detailsContainer.appendChild(statusDiv);
-    }
-
-    // 添加响应头
-    if (data.responseHeaders) {
-      const responseHeadersDiv = document.createElement('div');
-      responseHeadersDiv.className = 'detail-item';
-      responseHeadersDiv.innerHTML = `<strong>响应头:</strong><pre class="response-headers">${JSON.stringify(data.responseHeaders, null, 2)}</pre>`;
-      detailsContainer.appendChild(responseHeadersDiv);
-    }
-
-    // 添加内容类型（如果有）
-    if (data.contentType) {
-      const contentTypeDiv = document.createElement('div');
-      contentTypeDiv.className = 'detail-item';
-      contentTypeDiv.innerHTML = `<strong>内容类型:</strong> ${data.contentType}`;
-      detailsContainer.appendChild(contentTypeDiv);
-    }
-
-    // 添加响应体
-    if (data.responseBody) {
-      const responseBodyDiv = document.createElement('div');
-      responseBodyDiv.className = 'detail-item';
-
-      const responseBodyContainer = document.createElement('div');
-      responseBodyContainer.className = 'response-body-container';
-
-      const responseBodyPreview = document.createElement('pre');
-      responseBodyPreview.className = 'response-body';
-      responseBodyPreview.textContent = this.formatBody(data.responseBody);
-
-      const downloadContainer = document.createElement('div');
-      downloadContainer.style.position = 'absolute';
-      downloadContainer.style.right = '5px';
-      downloadContainer.style.top = '5px';
-
-      const downloadBtn = document.createElement('button');
-      downloadBtn.className = 'download-response-btn';
-      downloadBtn.textContent = '下载';
-      downloadBtn.style.padding = '3px 8px';
-      downloadBtn.style.fontSize = '11px';
-      downloadBtn.style.marginLeft = '5px';
-
-      downloadBtn.addEventListener('click', () => {
-        this.downloadResponse(data.uuid);
-      });
-
-      downloadContainer.appendChild(downloadBtn);
-      responseBodyContainer.appendChild(responseBodyPreview);
-      responseBodyContainer.appendChild(downloadContainer);
-
-      responseBodyDiv.innerHTML = '<strong>响应体:</strong>';
-      responseBodyDiv.appendChild(responseBodyContainer);
-      detailsContainer.appendChild(responseBodyDiv);
-    }
-
-    // 添加响应体大小（如果有）
-    if (data.bodySize) {
-      const bodySizeDiv = document.createElement('div');
-      bodySizeDiv.className = 'detail-item';
-      bodySizeDiv.innerHTML = `<strong>响应体大小:</strong> ${this.formatFileSize(data.bodySize)}`;
-      detailsContainer.appendChild(bodySizeDiv);
-    }
-
-    // 添加错误信息（如果有）
-    if (data.error) {
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'detail-item error';
-      errorDiv.innerHTML = `<strong>错误:</strong> <span class="error-text">${data.error}</span>`;
-      detailsContainer.appendChild(errorDiv);
-    }
-
-    logItem.appendChild(detailsContainer);
-
-    // 添加点击事件以展开/折叠详情
-    requestLine.addEventListener('click', () => {
-      detailsContainer.style.display = detailsContainer.style.display === 'none' ? 'block' : 'none';
-      requestLine.classList.toggle('expanded');
-    });
-
-    const trafficLog = document.getElementById('trafficLog');
-    trafficLog.appendChild(logItem);
-    trafficLog.scrollTop = trafficLog.scrollHeight;
-
-    // 限制日志数量
-    const logItems = trafficLog.querySelectorAll('.log-item');
-    if (logItems.length > 100) {
-      trafficLog.removeChild(logItems[0]);
-    }
+    this.addLogItem(logText, logType, iconClass, requestId, timestamp);
   }
 
   // 格式化请求/响应体
-  formatBody(body) {
+  formatBody(body, fullDisplay = false) {
     if (!body) return '';
 
-    // 限制显示长度
-    const maxLength = 5000;
-    let displayBody = body.length > maxLength ? body.substring(0, maxLength) + '\n[内容过长，已截断...]' : body;
-
-    // 尝试格式化JSON
     try {
-      if (displayBody.trim().startsWith('{') || displayBody.trim().startsWith('[')) {
-        const parsed = JSON.parse(displayBody);
-        return JSON.stringify(parsed, null, 2);
+      if (typeof body === 'string') {
+        // 尝试解析JSON
+        try {
+          const parsed = JSON.parse(body);
+          const jsonStr = JSON.stringify(parsed, null, 2);
+          return fullDisplay ? jsonStr : jsonStr.substring(0, 200) + (jsonStr.length > 200 ? '...' : '');
+        } catch (e) {
+          // 不是JSON，直接返回字符串
+          return fullDisplay ? body : body.substring(0, 200) + (body.length > 200 ? '...' : '');
+        }
+      } else if (typeof body === 'object') {
+        const jsonStr = JSON.stringify(body, null, 2);
+        return fullDisplay ? jsonStr : jsonStr.substring(0, 200) + (jsonStr.length > 200 ? '...' : '');
       }
     } catch (e) {
-      // 不是JSON，返回原始内容
+      // 如果不是JSON，直接返回字符串的前200个字符
+      const str = body.toString();
+      return fullDisplay ? str : str.substring(0, 200) + (str.length > 200 ? '...' : '');
     }
 
-    return displayBody;
+    const str = body.toString();
+    return fullDisplay ? str : str.substring(0, 200) + (str.length > 200 ? '...' : '');
   }
 
   // 格式化URL，确保显示完整URL
   formatUrl(url) {
     if (!url) return '';
 
-    // 如果URL不包含协议，尝试补充
-    if (!url.match(/^https?:\/\//)) {
+    // 如果URL太长，显示域名和路径的关键部分
+    if (url.length > 80) {
       try {
-        const parsed = new URL(url);
-        if (!parsed.protocol) {
-          // 如果没有协议，根据是否为HTTPS添加协议
-          const isHttps = url.includes(':443') || url.includes(':8443') ||
-            (url.includes('fs.') && !url.includes(':80'));
-          const protocol = isHttps ? 'https://' : 'http://';
-          url = protocol + url.replace(/^\//, '');
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname;
+        const path = urlObj.pathname;
+        const query = urlObj.search;
+
+        if (path.length > 40) {
+          const pathParts = path.split('/');
+          const fileName = pathParts[pathParts.length - 1];
+          return `${domain}/.../${fileName}${query}`;
         }
+
+        return `${domain}${path}${query}`;
       } catch (e) {
-        // URL解析失败，返回原始URL
-        return url;
+        return url.substring(0, 80) + '...';
       }
     }
 
@@ -1395,1766 +843,2269 @@ class UniversalAnswerFeature {
   // 格式化文件大小
   formatFileSize(bytes) {
     if (bytes < 1024) return bytes + 'B';
-    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
-    return Math.round(bytes / (1024 * 1024)) + 'MB';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + 'GB';
   }
 
   addImportantLog(data) {
     const logText = `[重要] ${data.url} - 包含关键数据`;
-    this.addLogItem(logText, 'important');
+    this.addLogItem(logText, 'important', 'bi-star-fill', null, null);
   }
 
   addSuccessLog(message) {
-    this.addLogItem(`[成功] ${message}`, 'success');
+    this.addLogItem(`${message}`, 'success', 'bi-check-circle', null, null);
   }
 
   addErrorLog(message) {
-    this.addLogItem(`[错误] ${message}`, 'error');
+    this.addLogItem(`${message}`, 'error', 'bi-x-circle', null, null);
   }
 
   addInfoLog(message) {
-    this.addLogItem(`[信息] ${message}`, 'normal');
+    this.addLogItem(`${message}`, 'normal', 'bi-info-circle', null, null);
   }
 
-  addLogItem(text, type) {
+  addLogItem(text, type, iconClass = 'bi-circle', requestId = null, timestamp = null) {
     const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+
     const logItem = document.createElement('div');
-    logItem.className = `log-item ${type}`;
-    logItem.textContent = text;
+    const displayTimestamp = timestamp || new Date().toLocaleTimeString();
+
+    if (requestId) {
+      // 这是一个可点击的请求日志项
+      logItem.className = `log-item ${type} clickable`;
+      logItem.dataset.requestId = requestId;
+
+      logItem.innerHTML = `
+        <div class="log-time">${displayTimestamp}</div>
+        <i class="${iconClass}"></i>
+        <span class="log-text">${text}</span>
+      `;
+
+      // 添加点击事件
+      logItem.addEventListener('click', () => {
+        this.showRequestDetails(requestId);
+
+        // 更新选中状态
+        if (this.selectedLogItem) {
+          this.selectedLogItem.classList.remove('selected');
+        }
+        logItem.classList.add('selected');
+        this.selectedLogItem = logItem;
+      });
+    } else {
+      // 这是一个普通的日志项（状态信息等）
+      logItem.className = `log-item ${type}`;
+      logItem.innerHTML = `
+        <div class="log-time">${displayTimestamp}</div>
+        <i class="${iconClass}"></i>
+        <span class="log-text">${text}</span>
+      `;
+    }
+
+    // 如果是第一个日志项且显示"等待网络请求..."，则替换它
+    const firstItem = trafficLog.querySelector('.log-item');
+    if (firstItem && firstItem.textContent.includes('等待网络请求')) {
+      trafficLog.removeChild(firstItem);
+    }
 
     trafficLog.appendChild(logItem);
-    trafficLog.scrollTop = trafficLog.scrollHeight;
 
-    // 限制日志数量
+    // 限制日志数量，保持最新的100条
     const logItems = trafficLog.querySelectorAll('.log-item');
     if (logItems.length > 100) {
-      trafficLog.removeChild(logItems[0]);
+      const removedItem = logItems[0];
+      // 如果删除的是请求项，也要清理对应的数据
+      if (removedItem.dataset.requestId) {
+        this.requestDataMap.delete(removedItem.dataset.requestId);
+      }
+      trafficLog.removeChild(removedItem);
+    }
+
+    // 自动滚动到底部
+    trafficLog.scrollTop = trafficLog.scrollHeight;
+    
+    // 更新请求计数
+    this.updateRequestCount();
+  }
+
+  // 更新请求计数
+  updateRequestCount() {
+    const trafficLog = document.getElementById('trafficLog');
+    const requestCountElement = document.getElementById('requestCount');
+    
+    if (trafficLog && requestCountElement) {
+      // 计算实际的请求数量（排除"等待网络请求..."的初始项）
+      const logItems = trafficLog.querySelectorAll('.log-item');
+      let requestCount = 0;
+      
+      logItems.forEach(item => {
+        if (!item.textContent.includes('等待网络请求')) {
+          requestCount++;
+        }
+      });
+      
+      requestCountElement.textContent = requestCount;
     }
   }
 
   displayFileStructure(data) {
     this.addInfoLog(`文件结构分析完成，解压目录: ${data.extractDir}`);
 
-    // 可以在这里添加文件结构的可视化显示
-    const structureInfo = this.formatFileStructure(data.structure);
-    this.addInfoLog(`文件结构: ${structureInfo}`);
+    if (data.structure && data.structure.length > 0) {
+      const structureText = this.formatFileStructure(data.structure);
+      this.addLogItem(`文件结构:\n${structureText}`, 'detail', 'bi-folder', null, null);
+    }
   }
 
   async downloadResponse(uuid) {
     let res = await window.electronAPI.downloadFile(uuid)
-    if (res == 1) {
-      this.addSuccessLog(`响应体下载成功`);
-    } else if (res == 0) {
-      this.addErrorLog(`响应体下载失败`);
+    if (res === 1) {
+      this.addSuccessLog('文件下载成功');
+    } else {
+      this.addErrorLog('文件下载失败');
     }
   }
 
   displayProcessedFiles(data) {
     this.addInfoLog(`文件处理完成，共处理 ${data.processedFiles.length} 个文件，提取到 ${data.totalAnswers} 个答案`);
 
-    // 显示每个文件的处理结果
-    data.processedFiles.forEach(file => {
-      if (file.success) {
-        this.addSuccessLog(`✓ ${file.file}: 提取到 ${file.answerCount} 个答案`);
-      } else {
-        this.addErrorLog(`✗ ${file.file}: ${file.error}`);
-      }
-    });
+    if (data.processedFiles && data.processedFiles.length > 0) {
+      data.processedFiles.forEach(file => {
+        const fileName = file.file || file.name || '未知文件';
+        const answerCount = file.answerCount || file.answers || 0;
+        this.addLogItem(`处理文件: ${fileName} - 提取 ${answerCount} 个答案`, 'success', 'bi-file-check', null, null);
+      });
+    }
+
+    // 输出答案文件位置
+    if (data.file) {
+      this.addSuccessLog(`答案文件已保存到: ${data.file}`);
+    }
   }
 
   formatFileStructure(structure, depth = 0) {
     const indent = '  '.repeat(depth);
-    let result = `${indent}${structure.name}`;
+    let result = '';
 
-    if (structure.type === 'file') {
-      result += ` (${structure.ext}, ${this.formatFileSize(structure.size)})`;
-    }
-
-    if (structure.children && structure.children.length > 0) {
-      const childrenInfo = structure.children.slice(0, 3).map(child =>
-        this.formatFileStructure(child, depth + 1)
-      ).join(', ');
-
-      if (structure.children.length > 3) {
-        result += ` [${structure.children.length} items: ${childrenInfo}, ...]`;
+    structure.forEach(item => {
+      if (item.type === 'directory') {
+        result += `${indent}📁 ${item.name}\n`;
+        if (item.children) {
+          result += this.formatFileStructure(item.children, depth + 1);
+        }
       } else {
-        result += ` [${childrenInfo}]`;
+        result += `${indent}📄 ${item.name}\n`;
       }
-    }
+    });
 
     return result;
   }
 
-  formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + 'B';
-    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
-    return Math.round(bytes / (1024 * 1024)) + 'MB';
-  }
-
   displayAnswers(data) {
     const container = document.getElementById('answersContainer');
-    const processStatus = document.getElementById('processStatus');
-
-    this.copyToClipboard = function (text) {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = 0;
-      document.body.appendChild(textarea);
-      textarea.select();
-
-      try {
-        const successful = document.execCommand('copy');
-        if (successful) {
-          const toast = document.createElement('div');
-          toast.className = 'copy-toast show';
-          toast.textContent = '答案已复制到剪贴板！';
-          document.body.appendChild(toast);
-
-          setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => {
-              document.body.removeChild(toast);
-            }, 300);
-          }, 2000);
-        }
-      } catch (err) {
-        console.error('复制失败:', err);
-        const toast = document.createElement('div');
-        toast.className = 'copy-toast error show';
-        toast.textContent = '复制失败，请手动复制';
-        document.body.appendChild(toast);
-        setTimeout(() => {
-          toast.classList.remove('show');
-          setTimeout(() => {
-            document.body.removeChild(toast);
-          }, 300);
-        }, 2000);
-      }
-      document.body.removeChild(textarea);
-    };
-    processStatus.textContent = '完成';
-    processStatus.className = 'status-value running';
-
-    // 清空容器
-    container.innerHTML = '';
-
-    if (data.answers.length === 0) {
-      container.innerHTML = '<div class="no-answers">未找到答案数据</div>';
-      return;
-    }
+    if (!container) return;
 
     this.lastAnswersData = data;
 
-    const patternOrder = {
-      '听后选择': 1,
-      '听后回答': 2,
-      '听后转述': 3,
-      '朗读短文': 4,
-      '分析内容': 5,
-      'JSON句子跟读模式': 6,
-      'JSON单词发音模式': 7,
-      'JSON答案数组模式': 8,
-      'JSON题目模式': 9,
-      '文本答案模式': 10,
-      '文本选项模式': 11,
-      'XML正确答案模式': 12,
-      'XML题目答案模式': 13,
-      '通用XML答案模式': 14
-    };
+    if (!data || !data.answers || data.answers.length === 0) {
+      container.innerHTML = `
+        <div class="no-answers">
+          <i class="bi bi-inbox"></i>
+          <p>暂无答案数据</p>
+        </div>
+      `;
+      return;
+    }
+
+    // 根据排序模式组织数据
+    let organizedData = {};
 
     if (this.sortMode === 'file') {
-      const answersByFile = {};
+      // 按文件分组
       data.answers.forEach(answer => {
-        const sourceFile = answer.sourceFile || '未知文件';
-        if (!answersByFile[sourceFile]) {
-          answersByFile[sourceFile] = [];
+        const fileName = answer.file || '未知文件';
+        if (!organizedData[fileName]) {
+          organizedData[fileName] = [];
         }
-        answersByFile[sourceFile].push(answer);
+        organizedData[fileName].push(answer);
       });
-      Object.keys(answersByFile).forEach(sourceFile => {
-        const fileSection = document.createElement('div');
-        fileSection.className = 'file-section';
-
-        const fileHeader = document.createElement('div');
-        fileHeader.className = 'file-header';
-        fileHeader.innerHTML = `
-          <h4>📁 ${sourceFile}</h4>
-          <span class="answer-count">${answersByFile[sourceFile].length} 个答案</span>
-        `;
-        fileSection.appendChild(fileHeader);
-
-        // 按题型排序答案
-        const sortedAnswers = answersByFile[sourceFile].sort((a, b) => {
-          const patternA = patternOrder[a.pattern] || 99;
-          const patternB = patternOrder[b.pattern] || 99;
-          return patternA - patternB;
-        });
-
-        this.createAnswerDisplay = (answer) => {
-          const answerItem = document.createElement('div');
-          answerItem.className = 'answer-item';
-
-          const answerNumber = document.createElement('div');
-          answerNumber.className = 'answer-number';
-          answerNumber.textContent = answer.question;
-
-          const answerOption = document.createElement('div');
-          answerOption.className = 'answer-option';
-          answerOption.textContent = answer.answer;
-
-          const answerContent = document.createElement('div');
-          answerContent.className = 'answer-content';
-          answerContent.textContent = answer.content || '暂无内容';
-
-          answerContent.style.textAlign = 'center';
-          answerContent.style.color = '#007bff';
-          answerContent.style.fontWeight = 'bold';
-          answerContent.style.padding = '8px';
-          answerContent.style.borderRadius = '4px';
-          answerContent.style.backgroundColor = '#e6f2ff';
-          answerContent.style.cursor = 'pointer';
-          answerContent.style.transition = 'all 0.3s ease';
-
-          const answerPattern = document.createElement('div');
-          answerPattern.className = 'answer-pattern';
-          answerPattern.textContent = `提取模式: ${answer.pattern}`;
-
-          const copyBtn = document.createElement('div');
-          copyBtn.className = 'copy-btn';
-          copyBtn.innerHTML = '📋 复制';
-          copyBtn.title = '点击复制答案';
-
-          answerOption.dataset.answer = answer.answer;
-          answerContent.dataset.answer = answer.content || '暂无内容';
-
-          answerOption.addEventListener('click', () => {
-            this.copyToClipboard(answer.answer);
-          });
-
-          answerContent.addEventListener('click', () => {
-            this.copyToClipboard(answer.content || '暂无内容');
-          });
-
-          copyBtn.addEventListener('click', () => {
-            const fullAnswer = `${answer.answer}\n${answer.content || ''}`.trim();
-            this.copyToClipboard(fullAnswer);
-          });
-
-          // 组装答案元素
-          answerItem.appendChild(answerNumber);
-          answerItem.appendChild(answerOption);
-          answerItem.appendChild(answerContent);
-          if (answer.pattern) {
-            answerItem.appendChild(answerPattern);
-          }
-          answerItem.appendChild(copyBtn);
-
-          if (answer.children) {
-            const childrenItem = document.createElement('div');
-            childrenItem.className = 'children';
-            childrenItem.style.display = 'none';
-            answer.children.forEach(child => {
-              childrenItem.appendChild(this.createAnswerDisplay(child))
-            })
-            answerItem.appendChild(childrenItem);
-            answerContent.style.cursor = 'pointer'
-            answerContent.addEventListener('click', () => {
-              if (childrenItem.style.display == 'none') {
-                childrenItem.style.display = 'block';
-                answerContent.textContent = '点击收起全部回答';
-              } else {
-                childrenItem.style.display = 'none';
-                answerContent.textContent = '点击展开全部回答';
-              }
-            })
-          }
-
-          return answerItem
-        }
-
-        sortedAnswers.forEach(answer => {
-          fileSection.appendChild(this.createAnswerDisplay(answer));
-        });
-
-        container.appendChild(fileSection);
-      });
-
-      this.addSuccessLog(`答案提取完成！共 ${data.count} 题，来自 ${Object.keys(answersByFile).length} 个文件，已保存到: ${data.file}`);
     } else {
-      const answersByPattern = {};
+      // 按题型分组
       data.answers.forEach(answer => {
         const pattern = answer.pattern || '未知题型';
-        if (!answersByPattern[pattern]) {
-          answersByPattern[pattern] = [];
+        if (!organizedData[pattern]) {
+          organizedData[pattern] = [];
         }
-        answersByPattern[pattern].push(answer);
+        organizedData[pattern].push(answer);
       });
+    }
 
-      Object.keys(patternOrder).forEach(pattern => {
-        if (answersByPattern[pattern]) {
-          const patternSection = document.createElement('div');
-          patternSection.className = 'pattern-section';
+    // 生成HTML
+    let html = '';
+    Object.keys(organizedData).forEach(groupName => {
+      const answers = organizedData[groupName];
+      html += `
+        <div class="answer-group">
+          <div class="group-header">
+            <h4>${groupName}</h4>
+            <span class="answer-count">${answers.length} 个答案</span>
+          </div>
+          <div class="answers-list">
+      `;
 
-          const patternHeader = document.createElement('div');
-          patternHeader.className = 'pattern-header';
-          patternHeader.innerHTML = `
-            <h4>📝 ${pattern}</h4>
-            <span class="answer-count">${answersByPattern[pattern].length} 个答案</span>
-          `;
-          patternSection.appendChild(patternHeader);
+      answers.forEach((answer, index) => {
+        const answerId = `answer_${Date.now()}_${index}`;
+        const answerText = answer.answer || '无答案';
 
-          const sortedAnswers = answersByPattern[pattern].sort((a, b) => {
-            const fileA = a.sourceFile || '未知文件';
-            const fileB = b.sourceFile || '未知文件';
-            return fileA.localeCompare(fileB);
-          });
+        // 优先使用questionText字段，如果没有则使用question字段
+        let questionText = answer.questionText || answer.question || '无题目';
 
-          this.createAnswerDisplay = (answer) => {
-            const answerItem = document.createElement('div');
-            answerItem.className = 'answer-item';
-
-            const answerNumber = document.createElement('div');
-            answerNumber.className = 'answer-number';
-            answerNumber.textContent = answer.question;
-
-            const answerOption = document.createElement('div');
-            answerOption.className = 'answer-option';
-            answerOption.textContent = answer.answer;
-
-            const answerContent = document.createElement('div');
-            answerContent.className = 'answer-content';
-            answerContent.textContent = answer.content || '暂无内容';
-
-            answerContent.style.textAlign = 'center';
-            answerContent.style.color = '#007bff';
-            answerContent.style.fontWeight = 'bold';
-            answerContent.style.padding = '8px';
-            answerContent.style.borderRadius = '4px';
-            answerContent.style.backgroundColor = '#e6f2ff';
-            answerContent.style.cursor = 'pointer';
-            answerContent.style.transition = 'all 0.3s ease';
-
-            const answerSource = document.createElement('div');
-            answerSource.className = 'answer-source';
-            answerSource.textContent = `来源: ${answer.sourceFile}`;
-
-            const copyBtn = document.createElement('div');
-            copyBtn.className = 'copy-btn';
-            copyBtn.innerHTML = '📋 复制';
-            copyBtn.title = '点击复制答案';
-
-            answerOption.dataset.answer = answer.answer;
-            answerContent.dataset.answer = answer.content || '暂无内容';
-
-            answerOption.addEventListener('click', () => {
-              this.copyToClipboard(answer.answer);
-            });
-
-            answerContent.addEventListener('click', () => {
-              this.copyToClipboard(answer.content || '暂无内容');
-            });
-
-            copyBtn.addEventListener('click', () => {
-              const fullAnswer = `${answer.answer}\n${answer.content || ''}`.trim();
-              this.copyToClipboard(fullAnswer);
-            });
-
-            answerItem.appendChild(answerNumber);
-            answerItem.appendChild(answerOption);
-            answerItem.appendChild(answerContent);
-            if (answer.sourceFile) {
-              answerItem.appendChild(answerSource);
-            }
-            answerItem.appendChild(copyBtn);
-
-            if (answer.children) {
-              const childrenItem = document.createElement('div');
-              childrenItem.className = 'children';
-              childrenItem.style.display = 'none';
-              answer.children.forEach(child => {
-                childrenItem.appendChild(this.createAnswerDisplay(child))
-              })
-              answerItem.appendChild(childrenItem);
-              answerContent.style.cursor = 'pointer'
-              answerContent.addEventListener('click', () => {
-                if (childrenItem.style.display == 'none') {
-                  childrenItem.style.display = 'block';
-                  answerContent.textContent = '点击收起全部回答';
-                } else {
-                  childrenItem.style.display = 'none';
-                  answerContent.textContent = '点击展开全部回答';
-                }
-              })
-            }
-
-            return answerItem
+        // 如果question字段包含"第X题"格式，尝试从content字段提取真正的题目
+        if (questionText.match(/^第\d+题/) && answer.content) {
+          const contentMatch = answer.content.match(/题目:\s*(.+?)(?:\n|$)/);
+          if (contentMatch) {
+            questionText = contentMatch[1].trim();
           }
-
-          sortedAnswers.forEach(answer => {
-            patternSection.appendChild(this.createAnswerDisplay(answer));
-          });
-
-          container.appendChild(patternSection);
         }
+
+        // 安全地转义HTML和JavaScript字符
+        const safeAnswerText = answerText.replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const safeQuestionText = questionText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        html += `
+          <div class="answer-item">
+            <div class="answer-header">
+              <span class="answer-index">#${index + 1}</span>
+              <span class="answer-type">${answer.pattern || '未知题型'}</span>
+              <button class="copy-answer-btn" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="复制答案">
+                <i class="bi bi-copy"></i>
+              </button>
+            </div>
+            <div class="answer-content">
+              <div class="question">${safeQuestionText}</div>
+              <div class="answer clickable-answer" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="点击复制答案">${safeAnswerText}</div>
+            </div>
+          </div>
+        `;
       });
 
-      this.addSuccessLog(`答案提取完成！共 ${data.count} 题，按题型排序显示，已保存到: ${data.file}`);
+      html += `
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+    this.addSuccessLog(`显示答案完成，共 ${data.answers.length} 个答案`);
+  }
+
+  // 通过索引复制答案功能
+  copyAnswerByIndex(answerIndex, groupName, element) {
+    try {
+      if (!this.lastAnswersData || !this.lastAnswersData.answers) {
+        this.showCopyToast('没有可复制的答案数据', 'error');
+        return;
+      }
+
+      // 根据排序模式找到对应的答案
+      let targetAnswer = null;
+
+      if (this.sortMode === 'file') {
+        const groupAnswers = this.lastAnswersData.answers.filter(answer =>
+          (answer.file || '未知文件') === groupName
+        );
+        targetAnswer = groupAnswers[answerIndex];
+      } else {
+        const groupAnswers = this.lastAnswersData.answers.filter(answer =>
+          (answer.pattern || '未知题型') === groupName
+        );
+        targetAnswer = groupAnswers[answerIndex];
+      }
+
+      if (!targetAnswer) {
+        this.showCopyToast('找不到对应的答案', 'error');
+        return;
+      }
+
+      const answerText = targetAnswer.answer || '无答案';
+      this.copyAnswer(answerText, element);
+
+    } catch (error) {
+      console.error('复制答案失败:', error);
+      this.showCopyToast('复制失败', 'error');
+    }
+  }
+
+  // 复制答案功能
+  copyAnswer(answerText, element) {
+    try {
+      // 使用现代的 Clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(answerText).then(() => {
+          this.showCopyToast('答案已复制到剪贴板', 'success');
+          this.animateCopyButton(element);
+        }).catch(err => {
+          console.error('复制失败:', err);
+          this.fallbackCopyText(answerText, element);
+        });
+      } else {
+        // 降级方案
+        this.fallbackCopyText(answerText, element);
+      }
+    } catch (error) {
+      console.error('复制答案失败:', error);
+      this.showCopyToast('复制失败', 'error');
+    }
+  }
+
+  // 降级复制方案
+  fallbackCopyText(text, element) {
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+
+      if (successful) {
+        this.showCopyToast('答案已复制到剪贴板', 'success');
+        this.animateCopyButton(element);
+      } else {
+        this.showCopyToast('复制失败', 'error');
+      }
+    } catch (err) {
+      console.error('降级复制失败:', err);
+      this.showCopyToast('复制失败', 'error');
+    }
+  }
+
+  // 显示复制提示
+  showCopyToast(message, type = 'success') {
+    // 移除现有的提示
+    const existingToast = document.querySelector('.copy-toast');
+    if (existingToast) {
+      existingToast.remove();
+    }
+
+    // 创建新的提示
+    const toast = document.createElement('div');
+    toast.className = `copy-toast ${type}`;
+    toast.innerHTML = `
+      <i class="bi bi-${type === 'success' ? 'check-circle' : 'x-circle'}"></i>
+      <span>${message}</span>
+    `;
+
+    document.body.appendChild(toast);
+
+    // 显示动画
+    setTimeout(() => {
+      toast.classList.add('show');
+    }, 10);
+
+    // 自动隐藏
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    }, 2000);
+  }
+
+  // 复制按钮动画
+  animateCopyButton(element) {
+    if (element && element.classList) {
+      element.classList.add('copied');
+      setTimeout(() => {
+        element.classList.remove('copied');
+      }, 1000);
     }
   }
 
   handleDeleteTemp() {
     const resultDiv = document.getElementById('trafficLog');
 
-    if (confirm('确定要删除临时缓存文件夹吗？此操作将删除所有已下载的缓存文件。')) {
-      resultDiv.innerHTML = `
-        <div class="log-item">正在删除临时缓存文件夹...</div>
-      `;
+    const confirmHtml = `
+      <div class="log-item warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>确定要清理临时文件吗？此操作不可撤销。</span>
+        <button onclick="this.parentElement.remove()" class="btn-small">取消</button>
+        <button onclick="universalAnswerFeature.confirmDeleteTemp()" class="btn-small btn-danger">确认清理</button>
+      </div>
+    `;
 
-      window.electronAPI.clearCache().then(result => {
-        if (result) {
-          resultDiv.innerHTML = `<div class="log-item success">缓存清理成功</div>`;
+    resultDiv.insertAdjacentHTML('beforeend', confirmHtml);
+    resultDiv.scrollTop = resultDiv.scrollHeight;
+  }
+
+  confirmDeleteTemp() {
+    // 移除确认对话框
+    const confirmDialog = document.querySelector('.log-item.warning');
+    if (confirmDialog) {
+      confirmDialog.remove();
+    }
+    
+    window.electronAPI.clearCache().then(result => {
+      if (result) {
+        this.addSuccessLog('临时文件清理成功');
+      } else {
+        this.addErrorLog('临时文件清理失败');
+      }
+    });
+  }
+
+  handleDeleteFileTemp() {
+    const resultDiv = document.getElementById('trafficLog');
+
+    const confirmHtml = `
+      <div class="log-item warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>确定要清理文件缓存吗？此操作不可撤销。</span>
+        <button onclick="this.parentElement.remove()" class="btn-small">取消</button>
+        <button onclick="universalAnswerFeature.confirmDeleteFileTemp()" class="btn-small btn-danger">确认清理</button>
+      </div>
+    `;
+
+    resultDiv.insertAdjacentHTML('beforeend', confirmHtml);
+    resultDiv.scrollTop = resultDiv.scrollHeight;
+  }
+
+  confirmDeleteFileTemp() {
+    // 移除确认对话框
+    const confirmDialog = document.querySelector('.log-item.warning');
+    if (confirmDialog) {
+      confirmDialog.remove();
+    }
+    
+    const result = window.electronAPI.removeCacheFile()
+    if (result) {
+      this.addSuccessLog('文件缓存清理成功');
+    } else {
+      this.addErrorLog('文件缓存清理失败');
+    }
+  }
+
+  handleUpdateNotification() {
+    // 检查更新功能
+    const updateBtn = document.getElementById('update-notification-btn');
+    this.addInfoLog('正在检查更新...');
+
+    if (window.electronAPI && window.electronAPI.checkForUpdates) {
+      window.electronAPI.checkForUpdates().then(result => {
+        if (result.hasUpdate) {
+          this.addSuccessLog(`发现新版本 ${result.version}，正在下载...`);
+          if (updateBtn) {
+            updateBtn.classList.add('has-update');
+            updateBtn.title = `发现新版本 ${result.version}`;
+          }
         } else {
-          resultDiv.innerHTML = `<div class="log-item error">缓存清理失败</div>`;
+          this.addInfoLog('当前已是最新版本');
+          if (updateBtn) {
+            updateBtn.classList.remove('has-update');
+            updateBtn.title = '当前已是最新版本';
+          }
+        }
+      }).catch(error => {
+        this.addErrorLog('检查更新失败: ' + error.message);
+        if (updateBtn) {
+          updateBtn.classList.remove('has-update');
+          updateBtn.title = '检查更新失败';
+        }
+      });
+    } else {
+      this.addInfoLog('请访问官网下载最新版本');
+      if (window.electronAPI && window.electronAPI.openExternal) {
+        window.electronAPI.openExternal('https://366.cyril.qzz.io');
+      }
+    }
+  }
+
+  // 规则集管理方法
+  showRuleGroupModal(ruleGroup = null) {
+    const modal = document.getElementById('ruleGroupModal');
+    const title = document.getElementById('ruleGroupModalTitle');
+    const form = document.getElementById('ruleGroupForm');
+
+    if (ruleGroup) {
+      // 编辑模式
+      title.textContent = '编辑规则集';
+      this.currentEditingRuleGroup = ruleGroup;
+      this.populateRuleGroupForm(ruleGroup);
+    } else {
+      // 添加模式
+      title.textContent = '添加规则集';
+      this.currentEditingRuleGroup = null;
+      form.reset();
+    }
+
+    modal.style.display = 'flex';
+  }
+
+  hideRuleGroupModal() {
+    const modal = document.getElementById('ruleGroupModal');
+    modal.style.display = 'none';
+    this.currentEditingRuleGroup = null;
+  }
+
+  populateRuleGroupForm(ruleGroup) {
+    document.getElementById('ruleGroupName').value = ruleGroup.name || '';
+    document.getElementById('ruleGroupDescription').value = ruleGroup.description || '';
+    document.getElementById('ruleGroupAuthor').value = ruleGroup.author || '';
+    document.getElementById('ruleGroupEnabled').checked = ruleGroup.enabled !== false;
+  }
+
+  async saveRuleGroup() {
+    const ruleGroup = {
+      id: this.currentEditingRuleGroup?.id || null,
+      name: document.getElementById('ruleGroupName').value.trim(),
+      description: document.getElementById('ruleGroupDescription').value.trim(),
+      author: document.getElementById('ruleGroupAuthor').value.trim(),
+      enabled: document.getElementById('ruleGroupEnabled').checked,
+      isGroup: true,
+      rules: this.currentEditingRuleGroup?.rules || []
+    };
+
+    // 验证必填字段
+    if (!ruleGroup.name) {
+      this.addErrorLog('请输入规则集名称');
+      return;
+    }
+
+    try {
+      // 调用后端API保存规则集
+      const result = await window.electronAPI.saveRule(ruleGroup);
+
+      if (result && result.success) {
+        this.addSuccessLog(this.currentEditingRuleGroup ? '规则集更新成功' : '规则集添加成功');
+        this.hideRuleGroupModal();
+        this.loadRules();
+      } else {
+        this.addErrorLog('保存规则集失败: ' + (result ? result.error : '未知错误'));
+      }
+    } catch (error) {
+      console.error('保存规则集失败:', error);
+      this.addErrorLog('保存规则集失败: ' + error.message);
+    }
+  }
+
+  // 规则管理相关方法
+  showRuleModal(rule = null, groupId = null) {
+    const modal = document.getElementById('ruleModal');
+    const title = document.getElementById('ruleModalTitle');
+    const form = document.getElementById('ruleForm');
+
+    if (rule) {
+      // 编辑模式
+      title.textContent = '编辑规则';
+      this.currentEditingRule = rule;
+      this.currentRuleGroupId = rule.groupId || groupId;
+      this.populateRuleForm(rule);
+    } else {
+      // 添加模式
+      title.textContent = '添加规则';
+      this.currentEditingRule = null;
+      this.currentRuleGroupId = groupId;
+      form.reset();
+      this.showRuleFields('');
+    }
+
+    modal.style.display = 'flex';
+  }
+
+  hideRuleModal() {
+    const modal = document.getElementById('ruleModal');
+    modal.style.display = 'none';
+    this.currentEditingRule = null;
+  }
+
+  showRuleFields(ruleType) {
+    // 隐藏所有规则字段
+    const allFields = document.querySelectorAll('.rule-fields');
+    allFields.forEach(field => {
+      field.style.display = 'none';
+    });
+
+    // 显示对应的字段
+    if (ruleType) {
+      const targetFields = document.getElementById(`${ruleType.replace('-', '')}Fields`);
+      if (targetFields) {
+        targetFields.style.display = 'block';
+      }
+    }
+  }
+
+  populateRuleForm(rule) {
+    document.getElementById('ruleName').value = rule.name || '';
+    document.getElementById('ruleType').value = rule.type || '';
+    document.getElementById('ruleDescription').value = rule.description || '';
+    document.getElementById('ruleEnabled').checked = rule.enabled !== false;
+
+    // 显示对应的字段
+    this.showRuleFields(rule.type);
+
+    // 根据规则类型填充特定字段
+    if (rule.type === 'content-change') {
+      document.getElementById('urlPattern').value = rule.urlPattern || '';
+      document.getElementById('changeType').value = rule.changeType || 'request-body';
+      document.getElementById('originalContent').value = rule.originalContent || '';
+      document.getElementById('newContent').value = rule.newContent || '';
+    } else if (rule.type === 'zip-implant') {
+      document.getElementById('urlZip').value = rule.urlZip || '';
+      document.getElementById('zipImplant').value = rule.zipImplant || '';
+    } else if (rule.type === 'answer-upload') {
+      document.getElementById('urlUpload').value = rule.urlUpload || '';
+      document.getElementById('uploadType').value = rule.uploadType || 'original';
+      document.getElementById('serverLocate').value = rule.serverLocate || '';
+    }
+  }
+
+  async saveRule() {
+    const form = document.getElementById('ruleForm');
+
+    // 基本信息
+    const rule = {
+      id: this.currentEditingRule?.id || null,
+      name: document.getElementById('ruleName').value.trim(),
+      type: document.getElementById('ruleType').value,
+      description: document.getElementById('ruleDescription').value.trim(),
+      enabled: document.getElementById('ruleEnabled').checked,
+      groupId: this.currentRuleGroupId || null
+    };
+
+    // 验证基本字段
+    if (!rule.name) {
+      this.addErrorLog('请输入规则名称');
+      return;
+    }
+
+    if (!rule.type) {
+      this.addErrorLog('请选择规则类型');
+      return;
+    }
+
+    // 根据规则类型添加特定字段
+    if (rule.type === 'content-change') {
+      rule.urlPattern = document.getElementById('urlPattern').value.trim();
+      rule.changeType = document.getElementById('changeType').value;
+      rule.originalContent = document.getElementById('originalContent').value.trim();
+      rule.newContent = document.getElementById('newContent').value.trim();
+      rule.action = 'modify';
+      rule.modifyRules = [
+        {
+          find: rule.originalContent,
+          replace: rule.newContent
+        }
+      ];
+
+      if (!rule.urlPattern) {
+        this.addErrorLog('请输入URL匹配模式');
+        return;
+      }
+    } else if (rule.type === 'zip-implant') {
+      rule.urlZip = document.getElementById('urlZip').value.trim();
+      rule.zipImplant = document.getElementById('zipImplant').value.trim();
+
+      if (!rule.urlZip) {
+        this.addErrorLog('请输入ZIP文件URL匹配');
+        return;
+      }
+
+      if (!rule.zipImplant) {
+        this.addErrorLog('请选择注入ZIP文件');
+        return;
+      }
+    } else if (rule.type === 'answer-upload') {
+      rule.urlUpload = document.getElementById('urlUpload').value.trim();
+      rule.uploadType = document.getElementById('uploadType').value;
+      rule.serverLocate = document.getElementById('serverLocate').value.trim();
+
+      if (!rule.urlUpload) {
+        this.addErrorLog('请输入上传URL匹配');
+        return;
+      }
+    }
+
+    try {
+      // 调用后端API保存规则
+      const result = await window.electronAPI.saveRule(rule);
+
+      if (result && result.success) {
+        this.addSuccessLog(this.currentEditingRule ? '规则更新成功' : '规则添加成功');
+        this.hideRuleModal();
+        this.loadRules();
+      } else {
+        this.addErrorLog('保存规则失败: ' + (result ? result.error : '未知错误'));
+      }
+    } catch (error) {
+      console.error('保存规则失败:', error);
+      this.addErrorLog('保存规则失败: ' + error.message);
+    }
+  }
+
+  async loadRules() {
+    try {
+      const rules = await window.electronAPI.getRules();
+      this.displayRules(rules);
+    } catch (error) {
+      this.addErrorLog(`加载规则失败: ${error.message}`);
+      this.displayRules([]);
+    }
+  }
+
+  displayRules(rules) {
+    const rulesContent = document.querySelector('#rules-view .rules-content');
+
+    if (!rules || rules.length === 0) {
+      rulesContent.innerHTML = `
+        <div class="no-rules">
+          <i class="bi bi-collection"></i>
+          <p>暂无规则集配置</p>
+          <p class="text-muted">点击上方按钮添加新规则集</p>
+        </div>
+      `;
+      return;
+    }
+
+    // 分离规则集和独立规则
+    const ruleGroups = rules.filter(rule => rule.isGroup);
+    const independentRules = rules.filter(rule => !rule.isGroup && !rule.groupId);
+
+    let html = '<div class="rules-list">';
+
+    // 显示规则集
+    ruleGroups.forEach(group => {
+      const groupRules = rules.filter(rule => rule.groupId === group.id);
+      const statusClass = group.enabled ? 'enabled' : 'disabled';
+
+      html += `
+        <div class="rule-group" data-group-id="${group.id}">
+          <div class="rule-group-header">
+            <div class="rule-group-info">
+              <div class="rule-group-name">
+                <i class="bi bi-collection"></i>
+                ${group.name || '未命名规则集'}
+                <label class="rule-toggle">
+                  <input type="checkbox" ${group.enabled ? 'checked' : ''} 
+                         onchange="universalAnswerFeature.toggleRule('${group.id}', this.checked)">
+                  <span class="rule-toggle-slider"></span>
+                </label>
+                <span class="rule-count">(${groupRules.length} 个规则)</span>
+              </div>
+              ${group.description ? `<div class="rule-group-description">${group.description}</div>` : ''}
+              ${group.author ? `<div class="rule-group-author">作者: ${group.author}</div>` : ''}
+            </div>
+            <div class="rule-group-actions">
+              <button class="rule-btn add-rule-btn" onclick="universalAnswerFeature.showRuleModal(null, '${group.id}')" title="添加规则">
+                <i class="bi bi-plus"></i>
+              </button>
+              <button class="rule-btn edit-btn" onclick="universalAnswerFeature.editRuleGroup('${group.id}')" title="编辑规则集">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="rule-btn delete-btn" onclick="universalAnswerFeature.deleteRule('${group.id}')" title="删除规则集">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+          <div class="rule-group-content">
+            ${this.generateGroupRulesHtml(groupRules)}
+          </div>
+        </div>
+      `;
+    });
+
+    // 显示独立规则
+    if (independentRules.length > 0) {
+      html += `
+        <div class="rule-group independent-rules">
+          <div class="rule-group-header">
+            <div class="rule-group-info">
+              <div class="rule-group-name">
+                <i class="bi bi-list-ul"></i>
+                独立规则
+                <span class="rule-count">(${independentRules.length} 个规则)</span>
+              </div>
+            </div>
+          </div>
+          <div class="rule-group-content">
+            ${this.generateGroupRulesHtml(independentRules)}
+          </div>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+    rulesContent.innerHTML = html;
+  }
+
+  generateGroupRulesHtml(rules) {
+    if (!rules || rules.length === 0) {
+      return `
+        <div class="no-group-rules">
+          <i class="bi bi-info-circle"></i>
+          <span>暂无规则</span>
+        </div>
+      `;
+    }
+
+    let html = '';
+    rules.forEach(rule => {
+      const statusClass = rule.enabled ? 'enabled' : 'disabled';
+      const typeClass = rule.type ? rule.type.replace('-', '') : '';
+
+      html += `
+        <div class="rule-item ${statusClass}" data-rule-id="${rule.id}">
+          <div class="rule-header">
+            <div class="rule-info">
+              <div class="rule-name">
+                ${rule.name || '未命名规则'}
+                <label class="rule-toggle">
+                  <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
+                         onchange="universalAnswerFeature.toggleRule('${rule.id}', this.checked)">
+                  <span class="rule-toggle-slider"></span>
+                </label>
+              </div>
+              ${rule.description ? `<div class="rule-description">${rule.description}</div>` : ''}
+            </div>
+            <div class="rule-actions">
+              <button class="rule-btn edit-btn" onclick="universalAnswerFeature.editRule('${rule.id}')" title="编辑">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="rule-btn delete-btn" onclick="universalAnswerFeature.deleteRule('${rule.id}')" title="删除">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+          <div class="rule-config">
+            ${this.formatRuleConfig(rule)}
+          </div>
+        </div>
+      `;
+    });
+
+    return html;
+  }
+
+  async editRuleGroup(groupId) {
+    try {
+      const rules = await window.electronAPI.getRules();
+      const group = rules.find(r => r.id === groupId && r.isGroup);
+      if (group) {
+        this.showRuleGroupModal(group);
+      } else {
+        this.addErrorLog('规则集不存在');
+      }
+    } catch (error) {
+      console.error('获取规则集失败:', error);
+      this.addErrorLog('获取规则集失败: ' + error.message);
+    }
+  }
+
+  getRuleTypeText(type) {
+    const typeMap = {
+      'content-change': '内容修改',
+      'zip-implant': 'ZIP注入',
+      'answer-upload': '答案上传'
+    };
+    return typeMap[type] || type || '未知类型';
+  }
+
+  formatRuleConfig(rule) {
+    let html = '<div class="config-items">';
+
+    if (rule.type === 'content-change') {
+      html += `
+        <div class="config-item">
+          <span class="config-label">URL匹配:</span>
+          <span class="config-value">${rule.urlPattern || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">修改类型:</span>
+          <span class="config-value">${this.getChangeTypeLabel(rule.changeType)}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">原始内容:</span>
+          <span class="config-value">${rule.originalContent || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">新内容:</span>
+          <span class="config-value">${rule.newContent || '未设置'}</span>
+        </div>
+      `;
+    } else if (rule.type === 'zip-implant') {
+      html += `
+        <div class="config-item">
+          <span class="config-label">ZIP URL匹配:</span>
+          <span class="config-value">${rule.urlZip || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">注入文件:</span>
+          <span class="config-value">${rule.zipImplant || '未设置'}</span>
+        </div>
+      `;
+    } else if (rule.type === 'answer-upload') {
+      html += `
+        <div class="config-item">
+          <span class="config-label">上传URL匹配:</span>
+          <span class="config-value">${rule.urlUpload || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">上传类型:</span>
+          <span class="config-value">${rule.uploadType === 'original' ? '原始数据' : '提取的答案'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">服务器位置:</span>
+          <span class="config-value">${rule.serverLocate || '未设置'}</span>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  getChangeTypeLabel(changeType) {
+    const labels = {
+      'request-body': '请求体',
+      'response-body': '响应体',
+      'request-headers': '请求头',
+      'response-headers': '响应头'
+    };
+    return labels[changeType] || changeType || '未设置';
+  }
+
+  async editRule(ruleId) {
+    try {
+      const rules = await window.electronAPI.getRules();
+      const rule = rules.find(r => r.id === ruleId);
+      if (rule) {
+        this.showRuleModal(rule);
+      } else {
+        this.addErrorLog('规则不存在');
+      }
+    } catch (error) {
+      this.addErrorLog(`加载规则失败: ${error.message}`);
+    }
+  }
+
+  async deleteRule(ruleId) {
+    if (!confirm('确定要删除这个规则吗？此操作不可撤销。')) {
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.deleteRule(ruleId);
+      if (result.success) {
+        this.addSuccessLog('规则删除成功');
+        this.loadRules(); // 重新加载规则列表
+      } else {
+        this.addErrorLog(`规则删除失败: ${result.error}`);
+      }
+    } catch (error) {
+      this.addErrorLog(`规则删除失败: ${error.message}`);
+    }
+  }
+
+  async toggleRule(ruleId, enabled) {
+    try {
+      const result = await window.electronAPI.toggleRule(ruleId, enabled);
+      if (result.success) {
+        this.addSuccessLog(`规则已${enabled ? '启用' : '禁用'}`);
+        // 不需要重新加载整个列表，只更新状态显示
+        this.updateRuleStatus(ruleId, enabled);
+      } else {
+        this.addErrorLog(`规则状态更新失败: ${result.error}`);
+        // 恢复开关状态
+        const checkbox = document.querySelector(`input[onchange*="${ruleId}"]`);
+        if (checkbox) {
+          checkbox.checked = !enabled;
+        }
+      }
+    } catch (error) {
+      this.addErrorLog(`规则状态更新失败: ${error.message}`);
+      // 恢复开关状态
+      const checkbox = document.querySelector(`input[onchange*="${ruleId}"]`);
+      if (checkbox) {
+        checkbox.checked = !enabled;
+      }
+    }
+  }
+
+  updateRuleStatus(ruleId, enabled) {
+    const ruleItem = document.querySelector(`input[onchange*="${ruleId}"]`)?.closest('.rule-item');
+    if (ruleItem) {
+      const statusSpan = ruleItem.querySelector('.rule-status');
+      if (statusSpan) {
+        statusSpan.textContent = enabled ? '已启用' : '已禁用';
+        statusSpan.className = `rule-status ${enabled ? 'enabled' : 'disabled'}`;
+      }
+      ruleItem.className = `rule-item ${enabled ? 'enabled' : 'disabled'}`;
+    }
+  }
+
+  browseZipFile() {
+    window.electronAPI.openImplantZipChoosing();
+  }
+
+  // 显示请求详情
+  showRequestDetails(requestId) {
+    const requestData = this.requestDataMap.get(requestId);
+    if (!requestData) return;
+
+    const detailsPanel = document.getElementById('requestDetails');
+    const detailsResizer = document.getElementById('detailsResizer');
+    const detailsContent = document.getElementById('detailsContent');
+
+    // 显示详情面板
+    detailsPanel.style.display = 'flex';
+    detailsResizer.style.display = 'block';
+
+    // 从localStorage恢复保存的宽度比例
+    const savedMonitorFlex = localStorage.getItem('trafficMonitorFlex') || '1';
+    const savedDetailsFlex = localStorage.getItem('requestDetailsFlex') || '1';
+
+    const trafficMonitor = document.getElementById('trafficMonitor');
+    trafficMonitor.style.flex = savedMonitorFlex;
+    detailsPanel.style.flex = savedDetailsFlex;
+
+    // 生成详情内容
+    let html = '';
+
+    // 基本信息
+    html += `
+      <div class="detail-section">
+        <h5>基本信息</h5>
+        <div class="detail-item">
+          <span class="detail-label">方法:</span>
+          <span class="detail-value">${requestData.method || 'GET'}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">URL:</span>
+          <span class="detail-value">${requestData.url || ''}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">状态码:</span>
+          <span class="detail-value">${requestData.statusCode || requestData.status || '未知'}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">时间:</span>
+          <span class="detail-value">${new Date(requestData.timestamp).toLocaleString()}</span>
+        </div>
+        ${requestData.bodySize ? `
+        <div class="detail-item">
+          <span class="detail-label">大小:</span>
+          <span class="detail-value">${this.formatFileSize(requestData.bodySize)}</span>
+        </div>
+        ` : ''}
+      </div>
+    `;
+
+    // 请求头
+    if (requestData.requestHeaders) {
+      html += `
+        <div class="detail-section">
+          <h5>请求头</h5>
+          <div class="detail-json">${this.formatHeaders(requestData.requestHeaders)}</div>
+        </div>
+      `;
+    }
+
+    // 请求体
+    if (requestData.requestBody) {
+      html += `
+        <div class="detail-section">
+          <h5>请求体</h5>
+          <div class="detail-json">${this.formatBody(requestData.requestBody, true)}</div>
+        </div>
+      `;
+    }
+
+    // 响应头
+    if (requestData.responseHeaders) {
+      html += `
+        <div class="detail-section">
+          <h5>响应头</h5>
+          <div class="detail-json">${this.formatHeaders(requestData.responseHeaders)}</div>
+        </div>
+      `;
+    }
+
+    // 响应体
+    if (requestData.responseBody) {
+      html += `
+        <div class="detail-section">
+          <h5>响应体</h5>
+          <div class="detail-json">${this.formatBody(requestData.responseBody, true)}</div>
+        </div>
+      `;
+    }
+
+    // 下载按钮（如果有UUID）
+    if (requestData.uuid) {
+      html += `
+        <div class="detail-section">
+          <h5>操作</h5>
+          <button class="download-response-btn" onclick="universalAnswerFeature.downloadResponse('${requestData.uuid}')">
+            <i class="bi bi-download"></i>
+            <span>下载响应文件</span>
+          </button>
+        </div>
+      `;
+    }
+
+    detailsContent.innerHTML = html;
+  }
+
+  // 隐藏请求详情
+  hideRequestDetails() {
+    const detailsPanel = document.getElementById('requestDetails');
+    const detailsResizer = document.getElementById('detailsResizer');
+
+    detailsPanel.style.display = 'none';
+    detailsResizer.style.display = 'none';
+
+    // 重置流量监控器的flex
+    const trafficMonitor = document.getElementById('trafficMonitor');
+    trafficMonitor.style.flex = '1';
+
+    // 清除选中状态
+    if (this.selectedLogItem) {
+      this.selectedLogItem.classList.remove('selected');
+      this.selectedLogItem = null;
+    }
+  }
+
+  // 格式化请求头/响应头
+  formatHeaders(headers) {
+    if (!headers) return '';
+
+    if (typeof headers === 'object') {
+      return JSON.stringify(headers, null, 2);
+    }
+
+    return headers.toString();
+  }
+
+  // 清空日志
+  clearLogs() {
+    const trafficLog = document.getElementById('trafficLog');
+    if (trafficLog) {
+      trafficLog.innerHTML = `
+        <div class="log-item">
+          <i class="bi bi-hourglass-split"></i>
+          <span>等待网络请求...</span>
+        </div>
+      `;
+    }
+
+    // 清空请求数据映射
+    this.requestDataMap.clear();
+
+    // 隐藏详情面板
+    this.hideRequestDetails();
+
+    // 重置请求计数
+    this.updateRequestCount();
+
+    this.addInfoLog('日志已清空');
+  }
+
+  // 清空答案
+  clearAnswers() {
+    if (!confirm('确定要清空所有答案数据吗？此操作不可撤销。')) {
+      return;
+    }
+
+    const container = document.getElementById('answersContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="no-answers">
+          <i class="bi bi-inbox"></i>
+          <p>暂无答案数据</p>
+        </div>
+      `;
+    }
+
+    this.lastAnswersData = null;
+    this.addSuccessLog('答案数据已清空');
+  }
+
+  // 分享答案到服务器
+  async shareAnswers() {
+    if (!this.lastAnswersData || !this.lastAnswersData.answers || this.lastAnswersData.answers.length === 0) {
+      this.addErrorLog('没有可分享的答案数据');
+      return;
+    }
+
+    try {
+      this.addInfoLog('正在上传答案到服务器...');
+
+      // 使用现有的答案文件路径
+      let filePath = this.lastAnswersData.file;
+
+      if (!filePath) {
+        this.addErrorLog('没有找到答案文件，请先提取答案');
+        return;
+      }
+
+      // 上传到服务器
+      const result = await window.electronAPI.shareAnswerFile(filePath);
+
+      if (result && result.success) {
+        const downloadUrl = result.downloadUrl;
+        const viewerUrl = `https://366.cyril.qzz.io/answer-viewer?url=${encodeURIComponent(downloadUrl)}`;
+        const sortParam = this.sortMode === 'pattern' ? '&sort=pattern' : '';
+        const finalViewerUrl = viewerUrl + sortParam;
+
+        this.addSuccessLog(`答案已分享成功！查看地址: ${finalViewerUrl}`);
+
+        // 显示分享结果小窗口
+        this.showShareResultModal(downloadUrl);
+
+        // 复制查看地址到剪贴板
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(finalViewerUrl);
+          this.addInfoLog('查看地址已复制到剪贴板');
+        }
+      } else {
+        this.addErrorLog(`分享失败: ${result?.error || '未知错误'}`);
+      }
+
+    } catch (error) {
+      this.addErrorLog(`分享失败: ${error.message}`);
+    }
+  }
+
+  // 导出答案文件
+  exportAnswers() {
+    if (!this.lastAnswersData || !this.lastAnswersData.answers || this.lastAnswersData.answers.length === 0) {
+      this.addErrorLog('没有可导出的答案数据');
+      return;
+    }
+
+    try {
+      // 生成导出数据
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        totalAnswers: this.lastAnswersData.answers.length,
+        answers: this.lastAnswersData.answers,
+        version: '1.0',
+        exportedBy: 'UniversalAnswerTool'
+      };
+
+      // 创建下载链接
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+
+      // 创建下载链接
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `answers_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // 清理URL对象
+      URL.revokeObjectURL(url);
+
+      this.addSuccessLog(`答案文件已导出: ${link.download}`);
+
+    } catch (error) {
+      this.addErrorLog(`导出失败: ${error.message}`);
+    }
+  }
+
+  // 显示分享结果模态框
+  showShareResultModal(downloadUrl) {
+    // 生成查看器地址
+    const mainUrl = `https://366.cyril.qzz.io/answer-viewer?url=${encodeURIComponent(downloadUrl)}`;
+    const backupUrl = `https://a366.netlify.app/answer-viewer?url=${encodeURIComponent(downloadUrl)}`;
+
+    // 根据当前排序模式添加sort参数
+    const sortParam = this.sortMode === 'pattern' ? '&sort=pattern' : '';
+    const mainUrlWithSort = mainUrl + sortParam;
+    const backupUrlWithSort = backupUrl + sortParam;
+
+    // 创建模态框HTML
+    const modalHtml = `
+      <div class="share-result-modal" id="shareResultModal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h4><i class="bi bi-check-circle text-success"></i> 分享成功</h4>
+            <button class="close-btn" onclick="universalAnswerFeature.hideShareResultModal()">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p class="share-info">答案已成功上传到服务器，您可以通过以下地址在线查看：</p>
+            <div class="url-section">
+              <label><i class="bi bi-link-45deg"></i> 主地址：</label>
+              <div class="url-input-group">
+                <input type="text" value="${mainUrlWithSort}" readonly class="url-input" id="mainUrl">
+                <button class="copy-url-btn" onclick="universalAnswerFeature.copyUrl('mainUrl')" title="复制主地址">
+                  <i class="bi bi-copy"></i>
+                </button>
+                <button class="open-url-btn" onclick="window.open('${mainUrlWithSort}', '_blank')" title="打开主地址">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+              </div>
+            </div>
+            <div class="url-section">
+              <label><i class="bi bi-link-45deg"></i> 备用地址：</label>
+              <div class="url-input-group">
+                <input type="text" value="${backupUrlWithSort}" readonly class="url-input" id="backupUrl">
+                <button class="copy-url-btn" onclick="universalAnswerFeature.copyUrl('backupUrl')" title="复制备用地址">
+                  <i class="bi bi-copy"></i>
+                </button>
+                <button class="open-url-btn" onclick="window.open('${backupUrlWithSort}', '_blank')" title="打开备用地址">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+              </div>
+            </div>
+            <div class="sort-info">
+              <p><i class="bi bi-funnel"></i> 当前排序方式：${this.sortMode === 'pattern' ? '按题型排序' : '按文件排序'}</p>
+            </div>
+            <div class="share-tips">
+              <p><i class="bi bi-info-circle"></i> 提示：如果主地址无法访问，请尝试使用备用地址。点击 <i class="bi bi-box-arrow-up-right"></i> 按钮可直接在浏览器中打开</p>
+            </div>
+            <div class="modal-footer">
+              <button class="primary-btn" onclick="universalAnswerFeature.copyUrl('mainUrl')">
+                <i class="bi bi-copy"></i>
+                复制主地址
+              </button>
+              <button class="open-btn" onclick="window.open('${mainUrlWithSort}', '_blank')">
+                <i class="bi bi-box-arrow-up-right"></i>
+                打开查看
+              </button>
+              <button class="secondary-btn" onclick="universalAnswerFeature.hideShareResultModal()">
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 添加到页面
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // 显示模态框
+    const modal = document.getElementById('shareResultModal');
+    modal.style.display = 'flex';
+
+    // 添加点击背景关闭功能
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        this.hideShareResultModal();
+      }
+    });
+  }
+
+  // 隐藏分享结果模态框
+  hideShareResultModal() {
+    const modal = document.getElementById('shareResultModal');
+    if (modal) {
+      modal.remove();
+    }
+  }
+
+  // 复制URL
+  async copyUrl(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+      try {
+        await navigator.clipboard.writeText(input.value);
+        this.showCopyToast('地址已复制到剪贴板', 'success');
+      } catch (error) {
+        // 降级方案
+        input.select();
+        document.execCommand('copy');
+        this.showCopyToast('地址已复制到剪贴板', 'success');
+      }
+    }
+  }
+
+  initImportAnswer() {
+    const importInput = document.getElementById('importAnswer');
+    if (importInput) {
+      importInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          this.importAnswerFile(file);
         }
       });
     }
   }
 
-  initImportAnswer() {
-    document.getElementById('importAnswer').addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const content = e.target.result;
-          try {
-            const answersData = JSON.parse(content);
-            this.displayAnswers(answersData);
-          } catch (error) {
-            console.error(error)
-            alert('解析答案文件失败')
-          }
-          event.target.value = '';
-        };
-        reader.readAsText(file);
+  importAnswerFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.answers && Array.isArray(data.answers)) {
+          this.displayAnswers(data);
+          this.addSuccessLog(`成功导入 ${data.answers.length} 个答案`);
+        } else {
+          this.addErrorLog('导入文件格式不正确');
+        }
+      } catch (error) {
+        this.addErrorLog('导入文件解析失败: ' + error.message);
       }
-    });
-
-    document.getElementById('clearAnswersBtn').addEventListener('click', () => {
-      const container = document.getElementById('answersContainer');
-
-      container.innerHTML = `<div class="no-answers">暂无答案数据</div>`;
-
-      this.lastAnswersData = null;
-
-      const toast = document.createElement('div');
-      toast.className = 'copy-toast show';
-      toast.textContent = '已清空提取结果';
-      document.body.appendChild(toast);
-
-      setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => {
-          document.body.removeChild(toast);
-        }, 300);
-      }, 2000);
-    });
-
-    document.getElementById('shareAnswerBtn').addEventListener('click', () => {
-      this.handleShareAnswer();
-    });
+    };
+    reader.readAsText(file);
   }
 
-  async handleShareAnswer() {
-    if (!this.lastAnswersData || !this.lastAnswersData.file) {
-      this.addErrorLog('没有可分享的答案文件');
-      return;
+  // ==================== 社区规则集相关方法 ====================
+
+  initCommunityRulesets() {
+    // 初始化社区规则集相关事件监听器
+    const searchInput = document.getElementById('rulesetSearchInput');
+    const searchBtn = document.getElementById('searchRulesetsBtn');
+    const refreshBtn = document.getElementById('refreshRulesetsBtn');
+    const uploadBtn = document.getElementById('uploadRulesetBtn');
+    const sortBySelect = document.getElementById('sortBySelect');
+    const sortOrderSelect = document.getElementById('sortOrderSelect');
+    const prevPageBtn = document.getElementById('prevPageBtn');
+    const nextPageBtn = document.getElementById('nextPageBtn');
+
+    if (searchInput) {
+      searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          this.searchRulesets();
+        }
+      });
     }
 
-    const shareBtn = document.getElementById('shareAnswerBtn');
-    shareBtn.disabled = true;
-    shareBtn.textContent = '上传中...';
+    if (searchBtn) {
+      searchBtn.addEventListener('click', () => {
+        this.searchRulesets();
+      });
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this.refreshRulesets();
+      });
+    }
+
+    if (uploadBtn) {
+      uploadBtn.addEventListener('click', () => {
+        this.showUploadRulesetModal();
+      });
+    }
+
+    if (sortBySelect) {
+      sortBySelect.addEventListener('change', () => {
+        this.searchRulesets();
+      });
+    }
+
+    if (sortOrderSelect) {
+      sortOrderSelect.addEventListener('change', () => {
+        this.searchRulesets();
+      });
+    }
+
+    if (prevPageBtn) {
+      prevPageBtn.addEventListener('click', () => {
+        this.previousPage();
+      });
+    }
+
+    if (nextPageBtn) {
+      nextPageBtn.addEventListener('click', () => {
+        this.nextPage();
+      });
+    }
+
+    // 规则集详情模态框事件
+    const closeDetailModal = document.getElementById('closeRulesetDetailModal');
+    const cancelDetailBtn = document.getElementById('cancelRulesetDetailBtn');
+    const installBtn = document.getElementById('installRulesetBtn');
+
+    if (closeDetailModal) {
+      closeDetailModal.addEventListener('click', () => {
+        this.hideRulesetDetailModal();
+      });
+    }
+
+    if (cancelDetailBtn) {
+      cancelDetailBtn.addEventListener('click', () => {
+        this.hideRulesetDetailModal();
+      });
+    }
+
+    if (installBtn) {
+      installBtn.addEventListener('click', () => {
+        this.installCurrentRuleset();
+      });
+    }
+
+    // 上传规则集模态框事件
+    const closeUploadModal = document.getElementById('closeUploadRulesetModal');
+    const cancelUploadBtn = document.getElementById('cancelUploadRulesetBtn');
+    const uploadForm = document.getElementById('uploadRulesetForm');
+    const rulesetSelect = document.getElementById('uploadRulesetSelect');
+
+    if (closeUploadModal) {
+      closeUploadModal.addEventListener('click', () => {
+        this.hideUploadRulesetModal();
+      });
+    }
+
+    if (cancelUploadBtn) {
+      cancelUploadBtn.addEventListener('click', () => {
+        this.hideUploadRulesetModal();
+      });
+    }
+
+    if (uploadForm) {
+      uploadForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.submitUploadRuleset();
+      });
+    }
+
+    if (rulesetSelect) {
+      rulesetSelect.addEventListener('change', () => {
+        this.onRulesetSelectChange();
+      });
+    }
+
+    // 模态框背景点击关闭
+    const detailModal = document.getElementById('rulesetDetailModal');
+    if (detailModal) {
+      detailModal.addEventListener('click', (e) => {
+        if (e.target === detailModal) {
+          this.hideRulesetDetailModal();
+        }
+      });
+    }
+
+    const uploadModal = document.getElementById('uploadRulesetModal');
+    if (uploadModal) {
+      uploadModal.addEventListener('click', (e) => {
+        if (e.target === uploadModal) {
+          this.hideUploadRulesetModal();
+        }
+      });
+    }
+  }
+
+  async loadCommunityRulesets(reset = true) {
+    if (this.isLoadingRulesets) return;
+
+    if (reset) {
+      this.currentPage = 0;
+      this.communityRulesets = [];
+    }
+
+    this.isLoadingRulesets = true;
+    this.showLoadingState();
 
     try {
-      const result = await window.electronAPI.shareAnswerFile(this.lastAnswersData.file);
+      const searchTerm = document.getElementById('rulesetSearchInput')?.value || '';
+      const sortBy = document.getElementById('sortBySelect')?.value || 'created_at';
+      const sortOrder = document.getElementById('sortOrderSelect')?.value || 'desc';
 
-      if (result.success) {
-        const downloadUrl = result.downloadUrl;
-        const primaryUrl = `https://366.cyril.qzz.io/?url=${encodeURIComponent(downloadUrl)}`;
-        const backupUrl = `https://a366.netlify.app/?url=${encodeURIComponent(downloadUrl)}`;
+      const params = new URLSearchParams({
+        search: searchTerm,
+        status: 'approved',
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+        limit: this.pageSize.toString(),
+        offset: (this.currentPage * this.pageSize).toString()
+      });
 
-        const shareModal = document.createElement('div');
-        shareModal.className = 'share-modal';
-        shareModal.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          z-index: 10000;
-        `;
+      const response = await fetch(`https://366.cyril.qzz.io/api/rulesets?${params}`);
 
-        const shareContent = document.createElement('div');
-        shareContent.style.cssText = `
-          background: white;
-          padding: 30px;
-          border-radius: 8px;
-          max-width: 600px;
-          width: 90%;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        `;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-        shareContent.innerHTML = `
-          <h3 style="margin-top: 0; color: #333;">答案文件分享成功！</h3>
-          <p style="color: #666; margin-bottom: 20px;">请复制以下链接分享给他人：</p>
-          <div style="margin-bottom: 15px;">
-            <label style="display: block; margin-bottom: 5px; color: #333; font-weight: bold;">主网址：</label>
-            <div style="display: flex; gap: 10px;">
-              <input type="text" id="primaryUrl" value="${primaryUrl}" readonly 
-                     style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
-              <button class="copy-url-btn" data-url="${primaryUrl}" 
-                      style="padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                复制
-              </button>
-            </div>
-          </div>
-          <div style="margin-bottom: 20px;">
-            <label style="display: block; margin-bottom: 5px; color: #333; font-weight: bold;">备用网址：</label>
-            <div style="display: flex; gap: 10px;">
-              <input type="text" id="backupUrl" value="${backupUrl}" readonly 
-                     style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
-              <button class="copy-url-btn" data-url="${backupUrl}" 
-                      style="padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                复制
-              </button>
-            </div>
-          </div>
-          <button id="closeShareModal" 
-                  style="width: 100%; padding: 10px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
-            关闭
-          </button>
-        `;
+      const data = await response.json();
 
-        shareModal.appendChild(shareContent);
-        document.body.appendChild(shareModal);
+      if (data.success) {
+        if (reset) {
+          this.communityRulesets = data.data;
+        } else {
+          this.communityRulesets.push(...data.data);
+        }
 
-        shareContent.querySelectorAll('.copy-url-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const url = btn.getAttribute('data-url');
-            this.copyToClipboard(url);
-            btn.textContent = '已复制！';
-            setTimeout(() => {
-              btn.textContent = '复制';
-            }, 2000);
-          });
-        });
+        // 检查已安装状态
+        await this.checkInstalledStatus();
 
-        document.getElementById('closeShareModal').addEventListener('click', () => {
-          document.body.removeChild(shareModal);
-        });
-
-        shareModal.addEventListener('click', (e) => {
-          if (e.target === shareModal) {
-            document.body.removeChild(shareModal);
-          }
-        });
-
-        this.addSuccessLog('答案文件上传成功，分享链接已生成');
+        this.hasMorePages = data.pagination.hasMore;
+        this.displayRulesets();
+        this.updatePaginationControls();
       } else {
-        this.addErrorLog(`上传失败: ${result.error}`);
-        alert(`上传失败: ${result.error}`);
+        throw new Error(data.message || '获取规则集列表失败');
       }
     } catch (error) {
-      console.error('分享答案文件失败:', error);
-      this.addErrorLog(`分享失败: ${error.message}`);
-      alert(`分享失败: ${error.message}`);
+      console.error('加载社区规则集失败:', error);
+      this.showErrorState(error.message);
     } finally {
-      shareBtn.disabled = false;
-      shareBtn.textContent = '分享答案';
+      this.isLoadingRulesets = false;
     }
   }
-}
 
-// 初始化代码
-document.addEventListener('DOMContentLoaded', () => {
-  new Global();
-  new MainMenu();
-  new ListeningFeature();
-  new WordPKFeature();
-  new HearingFeature();
-  new UniversalAnswerFeature();
+  displayRulesets() {
+    const container = document.getElementById('rulesetsContainer');
+    if (!container) return;
 
-  // 响应体更改规则功能
-  setTimeout(() => {
-    initResponseRulesFeature();
-  }, 100);
-  initUpdateFeature();
-});
-
-// 响应体更改规则功能初始化
-function initResponseRulesFeature() {
-  console.log('初始化响应体更改规则功能...');
-  
-  // 检查 electronAPI 是否可用
-  if (!window.electronAPI) {
-    console.error('window.electronAPI 未定义');
-    return;
-  }
-  
-  if (!window.electronAPI.getResponseRules) {
-    console.error('window.electronAPI.getResponseRules 未定义');
-    return;
-  }
-  
-  console.log('electronAPI 检查通过');
-  
-  const responseRulesBtn = document.getElementById('responseRulesBtn');
-  const responseRulesModal = document.getElementById('response-rules-modal');
-  const closeResponseRules = document.getElementById('close-response-rules');
-  const ruleEditModal = document.getElementById('rule-edit-modal');
-  const closeRuleEdit = document.getElementById('close-rule-edit');
-
-  if (!responseRulesBtn) {
-    console.error('未找到 responseRulesBtn 元素');
-    return;
-  }
-  
-  if (!responseRulesModal) {
-    console.error('未找到 response-rules-modal 元素');
-    return;
-  }
-
-  // 打开规则管理弹窗
-  responseRulesBtn.addEventListener('click', () => {
-    console.log('响应规则按钮被点击');
-    responseRulesModal.style.display = 'flex';
-    loadResponseRules();
-  });
-
-  // 关闭规则管理弹窗
-  closeResponseRules.addEventListener('click', () => {
-    responseRulesModal.style.display = 'none';
-  });
-
-  // 关闭规则编辑弹窗
-  closeRuleEdit.addEventListener('click', () => {
-    ruleEditModal.style.display = 'none';
-  });
-
-  // 点击弹窗外部关闭
-  window.addEventListener('click', (event) => {
-    if (event.target === responseRulesModal) {
-      responseRulesModal.style.display = 'none';
-    }
-    if (event.target === ruleEditModal) {
-      ruleEditModal.style.display = 'none';
-    }
-  });
-
-  // 新建规则
-  document.getElementById('add-rule-btn').addEventListener('click', () => {
-    openRuleEditor();
-  });
-
-  // 导入规则
-  document.getElementById('import-rules-btn').addEventListener('click', async () => {
-    try {
-      const result = await window.electronAPI.importResponseRules();
-      if (result.success) {
-        showToast(`成功导入 ${result.count} 条规则`, 'success');
-        loadResponseRules();
-      } else {
-        showToast(`导入失败: ${result.error}`, 'error');
-      }
-    } catch (error) {
-      showToast(`导入失败: ${error.message}`, 'error');
-    }
-  });
-
-  // 导出规则
-  document.getElementById('export-rules-btn').addEventListener('click', async () => {
-    try {
-      const result = await window.electronAPI.exportResponseRules();
-      if (result.success) {
-        showToast(`规则已导出到: ${result.path}`, 'success');
-      } else {
-        showToast(`导出失败: ${result.error}`, 'error');
-      }
-    } catch (error) {
-      showToast(`导出失败: ${error.message}`, 'error');
-    }
-  });
-
-  // 调用规则编辑表单初始化
-  initRuleEditForm();
-}
-
-// 规则编辑表单初始化
-function initRuleEditForm() {
-  console.log('初始化规则编辑表单事件监听器...');
-  
-  // 规则类型变化事件
-  const ruleTypeSelect = document.getElementById('rule-type');
-  if (ruleTypeSelect) {
-    ruleTypeSelect.addEventListener('change', (e) => {
-      console.log('规则类型变化:', e.target.value);
-      handleRuleTypeChange(e.target.value);
-    });
-  } else {
-    console.error('未找到 rule-type 元素');
-  }
-
-  // 操作类型变化事件
-  const ruleActionSelect = document.getElementById('rule-action');
-  if (ruleActionSelect) {
-    ruleActionSelect.addEventListener('change', (e) => {
-      console.log('操作类型变化:', e.target.value);
-      const ruleType = document.getElementById('rule-type').value;
-      handleActionChange(e.target.value, ruleType);
-    });
-  } else {
-    console.error('未找到 rule-action 元素');
-  }
-
-  // 注入位置变化事件
-  const injectPositionSelect = document.getElementById('rule-inject-position');
-  if (injectPositionSelect) {
-    injectPositionSelect.addEventListener('change', (e) => {
-      handleInjectPositionChange(e.target.value);
-    });
-  }
-
-  // 添加修改规则按钮
-  const addModifyRuleBtn = document.getElementById('add-modify-rule');
-  if (addModifyRuleBtn) {
-    addModifyRuleBtn.addEventListener('click', addModifyRule);
-  }
-
-  // 添加请求头按钮
-  const addRequestHeaderBtn = document.getElementById('add-request-header');
-  if (addRequestHeaderBtn) {
-    addRequestHeaderBtn.addEventListener('click', addRequestHeader);
-  }
-
-  // 添加响应头按钮
-  const addResponseHeaderBtn = document.getElementById('add-response-header');
-  if (addResponseHeaderBtn) {
-    addResponseHeaderBtn.addEventListener('click', addResponseHeader);
-  }
-
-  // 保存规则按钮
-  const saveRuleBtn = document.getElementById('save-rule-btn');
-  if (saveRuleBtn) {
-    saveRuleBtn.addEventListener('click', () => {
-      console.log('保存规则按钮被点击');
-      saveRule();
-    });
-    console.log('保存规则按钮事件监听器已绑定');
-  } else {
-    console.error('未找到 save-rule-btn 元素');
-  }
-
-  // 测试规则按钮
-  const testRuleBtn = document.getElementById('test-rule-btn');
-  if (testRuleBtn) {
-    testRuleBtn.addEventListener('click', () => {
-      console.log('测试规则按钮被点击');
-      testRule();
-    });
-    console.log('测试规则按钮事件监听器已绑定');
-  } else {
-    console.error('未找到 test-rule-btn 元素');
-  }
-
-  // 取消按钮
-  const cancelRuleBtn = document.getElementById('cancel-rule-btn');
-  if (cancelRuleBtn) {
-    cancelRuleBtn.addEventListener('click', () => {
-      console.log('取消按钮被点击');
-      document.getElementById('rule-edit-modal').style.display = 'none';
-    });
-    console.log('取消按钮事件监听器已绑定');
-  } else {
-    console.error('未找到 cancel-rule-btn 元素');
-  }
-
-  // 替换类型切换
-  const replaceTypeRadios = document.querySelectorAll('input[name="replace-type"]');
-  replaceTypeRadios.forEach(radio => {
-    radio.addEventListener('change', handleReplaceTypeChange);
-  });
-
-  // 浏览文件按钮
-  const browseFileBtn = document.getElementById('browse-replace-file');
-  if (browseFileBtn) {
-    browseFileBtn.addEventListener('click', () => {
-      window.electronAPI.openFileChoosing();
-    });
-  }
-
-  // 监听文件选择结果
-  window.electronAPI.chooseFile((event, filePath) => {
-    if (filePath) {
-      document.getElementById('rule-file-path').value = filePath;
-    }
-  });
-}
-
-// 加载响应体更改规则
-async function loadResponseRules() {
-  console.log('开始加载响应体更改规则...');
-  try {
-    console.log('调用 window.electronAPI.getResponseRules()...');
-    const rules = await window.electronAPI.getResponseRules();
-    console.log('获取到的规则:', rules);
-    
-    if (!Array.isArray(rules)) {
-      console.error('规则数据不是数组:', typeof rules, rules);
-      showToast('规则数据格式错误', 'error');
-      return;
-    }
-    
-    displayResponseRules(rules);
-    updateRulesStatus(rules);
-    console.log('规则加载完成');
-  } catch (error) {
-    console.error('加载规则失败:', error);
-    console.error('错误详情:', error.message, error.stack);
-    showToast(`加载规则失败: ${error.message}`, 'error');
-  }
-}
-
-// 更新规则状态显示
-function updateRulesStatus(rules) {
-  const totalCount = rules.length;
-  const enabledCount = rules.filter(rule => rule.enabled).length;
-
-  const rulesCountElement = document.getElementById('rules-count');
-  const activeRulesCountElement = document.getElementById('active-rules-count');
-  
-  if (rulesCountElement) {
-    rulesCountElement.textContent = `规则数量: ${totalCount}`;
-  }
-  
-  if (activeRulesCountElement) {
-    activeRulesCountElement.textContent = `启用: ${enabledCount}`;
-  }
-}
-
-// 显示规则列表
-function displayResponseRules(rules) {
-  const rulesList = document.getElementById('rules-list');
-
-  if (rules.length === 0) {
-    rulesList.innerHTML = '<div class="no-rules">暂无规则，点击"新建规则"开始添加</div>';
-    return;
-  }
-
-  rulesList.innerHTML = rules.map(rule => `
-        <div class="rule-item" data-rule-id="${rule.id}">
-            <input type="checkbox" class="rule-checkbox" ${rule.enabled ? 'checked' : ''} 
-                   onchange="toggleRule('${rule.id}', this.checked)">
-            <div class="rule-info">
-                <div class="rule-name">${escapeHtml(rule.name)}</div>
-                <div class="rule-details">
-                    <div class="rule-detail-item">
-                        <span>类型:</span>
-                        <span>${getRuleTypeText(rule.type || 'response')}</span>
-                    </div>
-                    <div class="rule-detail-item">
-                        <span>URL:</span>
-                        <span>${rule.urlPattern || '所有'}</span>
-                    </div>
-                    <div class="rule-detail-item">
-                        <span>方法:</span>
-                        <span>${rule.method || '所有'}</span>
-                    </div>
-                    <div class="rule-detail-item">
-                        <span>操作:</span>
-                        <span>${getActionText(rule.action, rule.type)}</span>
-                    </div>
-                    <div class="rule-detail-item">
-                        <span class="rule-status ${rule.enabled ? 'enabled' : 'disabled'}">
-                            ${rule.enabled ? '启用' : '禁用'}
-                        </span>
-                    </div>
-                </div>
-            </div>
-            <div class="rule-actions">
-                <button class="rule-action-btn edit" onclick="editRule('${rule.id}')">编辑</button>
-                <button class="rule-action-btn delete" onclick="deleteRule('${rule.id}')">删除</button>
-            </div>
+    if (this.communityRulesets.length === 0) {
+      container.innerHTML = `
+        <div class="no-rulesets">
+          <i class="bi bi-collection"></i>
+          <p>未找到规则集</p>
+          <p class="text-muted">尝试调整搜索条件或刷新列表</p>
         </div>
-    `).join('');
-}
-
-// 获取规则类型文本
-function getRuleTypeText(type) {
-  const typeMap = {
-    'response': '响应体修改',
-    'request': '请求修改',
-    'response-headers': '响应头修改'
-  };
-  return typeMap[type] || type;
-}
-
-// 获取操作类型文本
-function getActionText(action, ruleType = 'response') {
-  const actionMaps = {
-    'response': {
-      'replace': '替换响应体',
-      'modify': '修改响应体',
-      'inject': '注入内容'
-    },
-    'request': {
-      'modify-headers': '修改请求头',
-      'modify-url': '重定向URL',
-      'block': '阻止请求'
-    },
-    'response-headers': {
-      'add-headers': '添加响应头',
-      'modify-headers': '修改响应头',
-      'remove-headers': '删除响应头'
+      `;
+      return;
     }
-  };
 
-  const actionMap = actionMaps[ruleType] || actionMaps['response'];
-  return actionMap[action] || action;
-}
-
-// 切换规则启用状态
-async function toggleRule(ruleId, enabled) {
-  try {
-    const success = await window.electronAPI.toggleResponseRule(ruleId, enabled);
-    if (success) {
-      loadResponseRules();
-    } else {
-      showToast('切换规则状态失败', 'error');
-    }
-  } catch (error) {
-    console.error('切换规则状态失败:', error);
-    showToast('切换规则状态失败', 'error');
+    const html = this.communityRulesets.map(ruleset => this.createRulesetItemHTML(ruleset)).join('');
+    container.innerHTML = html;
   }
-}
 
-// 编辑规则
-async function editRule(ruleId) {
-  try {
-    const rules = await window.electronAPI.getResponseRules();
-    const rule = rules.find(r => r.id === ruleId);
-    if (rule) {
-      openRuleEditor(rule);
-    }
-  } catch (error) {
-    console.error('加载规则失败:', error);
-    showToast('加载规则失败', 'error');
-  }
-}
-
-// 删除规则
-async function deleteRule(ruleId) {
-  if (confirm('确定要删除这条规则吗？')) {
+  async checkInstalledStatus() {
     try {
-      const success = await window.electronAPI.deleteResponseRule(ruleId);
-      if (success) {
-        loadResponseRules();
-        showToast('规则已删除', 'success');
+      // 获取本地所有规则集
+      const localRules = await window.electronAPI.getRules();
+      const localRuleGroups = localRules.filter(rule => rule.isGroup);
+
+      // 为每个社区规则集检查是否已安装
+      this.communityRulesets.forEach(ruleset => {
+        // 通过多种方式匹配判断是否已安装
+        const isInstalled = localRuleGroups.some(localGroup => {
+          // 方式1: 通过社区规则集ID匹配（最准确）
+          if (localGroup.communityRulesetId === ruleset.id) {
+            return true;
+          }
+
+          // 方式2: 通过名称和作者匹配
+          if (localGroup.name === ruleset.name && localGroup.author === ruleset.author) {
+            return true;
+          }
+
+          // 方式3: 通过名称匹配（兼容旧数据）
+          if (localGroup.name === ruleset.name) {
+            return true;
+          }
+
+          return false;
+        });
+
+        ruleset.isInstalled = isInstalled;
+      });
+    } catch (error) {
+      console.error('检查安装状态失败:', error);
+    }
+  }
+
+  createRulesetItemHTML(ruleset) {
+    const downloadCount = ruleset.download_count || 0;
+    const createdDate = new Date(ruleset.created_at).toLocaleDateString('zh-CN');
+    const hasInjection = ruleset.has_injection_package;
+    const isInstalled = ruleset.isInstalled;
+
+    return `
+      <div class="ruleset-item ${isInstalled ? 'installed' : ''}" onclick="universalAnswerFeature.showRulesetDetail('${ruleset.id}')">
+        <div class="ruleset-header">
+          <div class="ruleset-info">
+            <div class="ruleset-name">
+              ${this.escapeHtml(ruleset.name)}
+              ${isInstalled ? '<span class="installed-badge"><i class="bi bi-check-circle"></i> 已安装</span>' : ''}
+            </div>
+            <div class="ruleset-author">作者: ${this.escapeHtml(ruleset.author)}</div>
+            <div class="ruleset-description">${this.escapeHtml(ruleset.description || '暂无描述')}</div>
+            <div class="ruleset-meta">
+              <div class="ruleset-downloads">
+                <i class="bi bi-download"></i>
+                <span>${downloadCount} 次下载</span>
+              </div>
+              <div class="ruleset-date">${createdDate}</div>
+            </div>
+            <div class="ruleset-tags">
+              ${hasInjection ? '<span class="ruleset-tag has-injection">包含注入文件</span>' : ''}
+              <span class="ruleset-tag">已审核</span>
+            </div>
+          </div>
+          <div class="ruleset-actions" onclick="event.stopPropagation()">
+            <button class="view-details-btn" onclick="universalAnswerFeature.showRulesetDetail('${ruleset.id}')">
+              <i class="bi bi-eye"></i>
+              <span>查看详情</span>
+            </button>
+            <button class="install-btn ${isInstalled ? 'installed' : ''}" 
+                    onclick="universalAnswerFeature.installRuleset('${ruleset.id}')"
+                    ${isInstalled ? 'disabled' : ''}>
+              <i class="bi bi-${isInstalled ? 'check-circle' : 'download'}"></i>
+              <span>${isInstalled ? '已安装' : '安装'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  async showRulesetDetail(rulesetId) {
+    try {
+      const response = await fetch(`https://366.cyril.qzz.io/api/rulesets/${rulesetId}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        this.currentRulesetDetail = data.data;
+        this.displayRulesetDetail(data.data);
+        this.showRulesetDetailModal();
       } else {
-        showToast('删除规则失败', 'error');
+        throw new Error(data.message || '获取规则集详情失败');
       }
     } catch (error) {
-      console.error('删除规则失败:', error);
-      showToast('删除规则失败', 'error');
-    }
-  }
-}
-
-// 打开规则编辑器
-async function openRuleEditor(rule = null) {
-  const modal = document.getElementById('rule-edit-modal');
-  const title = document.getElementById('rule-edit-title');
-
-  if (rule) {
-    title.textContent = '编辑规则';
-    await fillRuleForm(rule);
-  } else {
-    title.textContent = '新建规则';
-    await clearRuleForm();
-  }
-
-  modal.style.display = 'flex';
-}
-
-// 填充规则表单
-async function fillRuleForm(rule) {
-  document.getElementById('rule-name').value = rule.name || '';
-  document.getElementById('rule-type').value = rule.type || 'response';
-  document.getElementById('rule-url-pattern').value = rule.urlPattern || '';
-  document.getElementById('rule-method').value = rule.method || '';
-  document.getElementById('rule-enabled').checked = rule.enabled !== false;
-
-  // 处理规则类型变化
-  await handleRuleTypeChange(rule.type || 'response');
-
-  // 内容类型只对响应体规则有效
-  if (rule.type === 'response') {
-    document.getElementById('rule-content-type').value = rule.contentType || '';
-  }
-
-  // 设置操作类型
-  document.getElementById('rule-action').value = rule.action || 'replace';
-
-  // 根据规则类型和操作类型显示相应的内容区域
-  handleActionChange(rule.action, rule.type || 'response');
-
-  // 填充具体内容
-  if (rule.type === 'response') {
-    switch (rule.action) {
-      case 'replace':
-        if (rule.replaceWithFile && rule.filePath) {
-          // 文件替换
-          document.querySelector('input[name="replace-type"][value="file"]').checked = true;
-          document.getElementById('rule-file-path').value = rule.filePath || '';
-          document.getElementById('file-replace-group').style.display = 'block';
-          document.getElementById('rule-replace-content').style.display = 'none';
-        } else {
-          // 文本替换
-          document.querySelector('input[name="replace-type"][value="text"]').checked = true;
-          document.getElementById('rule-replace-content').value = rule.replaceContent || '';
-          document.getElementById('file-replace-group').style.display = 'none';
-          document.getElementById('rule-replace-content').style.display = 'block';
-        }
-        break;
-      case 'modify':
-        fillModifyRules(rule.modifyRules || []);
-        break;
-      case 'inject':
-        document.getElementById('rule-inject-content').value = rule.injectContent || '';
-        document.getElementById('rule-inject-position').value = rule.injectPosition || 'start';
-        document.getElementById('rule-inject-target').value = rule.injectTarget || '';
-        handleInjectPositionChange(rule.injectPosition);
-        break;
-    }
-  } else if (rule.type === 'request') {
-    switch (rule.action) {
-      case 'modify-headers':
-        fillRequestHeaders(rule.requestHeaders || {});
-        break;
-      case 'modify-url':
-        document.getElementById('rule-new-url').value = rule.newUrl || '';
-        break;
-    }
-  } else if (rule.type === 'response-headers') {
-    switch (rule.action) {
-      case 'add-headers':
-      case 'modify-headers':
-        fillResponseHeaders(rule.responseHeaders || {});
-        break;
-      case 'remove-headers':
-        document.getElementById('rule-remove-headers').value = (rule.removeHeaders || []).join(', ');
-        break;
+      console.error('获取规则集详情失败:', error);
+      this.addErrorLog('获取规则集详情失败: ' + error.message);
     }
   }
 
-  // 存储规则ID用于更新
-  document.getElementById('rule-edit-modal').dataset.ruleId = rule.id || '';
-}
+  displayRulesetDetail(ruleset) {
+    const content = document.getElementById('rulesetDetailContent');
+    if (!content) return;
 
-// 清空规则表单
-async function clearRuleForm() {
-  document.getElementById('rule-name').value = '';
-  document.getElementById('rule-type').value = 'response';
-  document.getElementById('rule-url-pattern').value = '';
-  document.getElementById('rule-method').value = '';
-  document.getElementById('rule-content-type').value = '';
-  document.getElementById('rule-enabled').checked = true;
-  document.getElementById('rule-replace-content').value = '';
-  document.getElementById('rule-file-path').value = '';
-  document.getElementById('rule-inject-content').value = '';
-  document.getElementById('rule-inject-position').value = 'start';
-  document.getElementById('rule-inject-target').value = '';
-  document.getElementById('rule-new-url').value = '';
-  document.getElementById('rule-remove-headers').value = '';
+    const downloadCount = ruleset.download_count || 0;
+    const createdDate = new Date(ruleset.created_at).toLocaleDateString('zh-CN');
+    const totalSize = this.formatFileSize(ruleset.file_info?.totalSize || 0);
+    const fileCount = ruleset.file_info?.totalFiles || 0;
 
-  // 重置替换类型为文本
-  document.querySelector('input[name="replace-type"][value="text"]').checked = true;
-  document.getElementById('file-replace-group').style.display = 'none';
-
-  // 清空修改规则
-  const modifyContainer = document.querySelector('.modify-rules-container');
-  if (modifyContainer) {
-    modifyContainer.innerHTML = '<div class="modify-rule-item"><input type="text" placeholder="查找内容(支持正则)" class="find-input"><input type="text" placeholder="替换为" class="replace-input"><button type="button" class="remove-modify-rule" onclick="removeModifyRule(this)">删除</button></div>';
-  }
-
-  // 清空请求头
-  const requestHeadersContainer = document.querySelector('#request-headers-group .headers-container');
-  if (requestHeadersContainer) {
-    requestHeadersContainer.innerHTML = '<div class="header-item"><input type="text" placeholder="请求头名称" class="header-name-input"><input type="text" placeholder="请求头值" class="header-value-input"><button type="button" class="remove-header" onclick="removeHeader(this)">删除</button></div>';
-  }
-
-  // 清空响应头
-  const responseHeadersContainer = document.querySelector('#response-headers-group .headers-container');
-  if (responseHeadersContainer) {
-    responseHeadersContainer.innerHTML = '<div class="header-item"><input type="text" placeholder="响应头名称" class="header-name-input"><input type="text" placeholder="响应头值" class="header-value-input"><button type="button" class="remove-header" onclick="removeHeader(this)">删除</button></div>';
-  }
-
-  // 处理默认规则类型
-  await handleRuleTypeChange('response');
-
-  document.getElementById('rule-edit-modal').dataset.ruleId = '';
-}
-
-// 填充修改规则
-function fillModifyRules(modifyRules) {
-  const container = document.querySelector('.modify-rules-container');
-  container.innerHTML = '';
-
-  if (modifyRules.length === 0) {
-    addModifyRule();
-  } else {
-    modifyRules.forEach(rule => {
-      const div = document.createElement('div');
-      div.className = 'modify-rule-item';
-      div.innerHTML = `
-        <input type="text" placeholder="查找内容(支持正则)" class="find-input" value="${escapeHtml(rule.find || '')}">
-        <input type="text" placeholder="替换为" class="replace-input" value="${escapeHtml(rule.replace || '')}">
-        <button type="button" class="remove-modify-rule" onclick="removeModifyRule(this)">删除</button>
-      `;
-      container.appendChild(div);
-    });
-  }
-}
-
-// 填充请求头
-function fillRequestHeaders(headers) {
-  const container = document.querySelector('#request-headers-group .headers-container');
-  container.innerHTML = '';
-
-  const headerEntries = Object.entries(headers);
-  if (headerEntries.length === 0) {
-    addRequestHeader();
-  } else {
-    headerEntries.forEach(([name, value]) => {
-      const div = document.createElement('div');
-      div.className = 'header-item';
-      div.innerHTML = `
-        <input type="text" placeholder="请求头名称" class="header-name-input" value="${escapeHtml(name)}">
-        <input type="text" placeholder="请求头值" class="header-value-input" value="${escapeHtml(value)}">
-        <button type="button" class="remove-header" onclick="removeHeader(this)">删除</button>
-      `;
-      container.appendChild(div);
-    });
-  }
-}
-
-// 填充响应头
-function fillResponseHeaders(headers) {
-  const container = document.querySelector('#response-headers-group .headers-container');
-  container.innerHTML = '';
-
-  const headerEntries = Object.entries(headers);
-  if (headerEntries.length === 0) {
-    addResponseHeader();
-  } else {
-    headerEntries.forEach(([name, value]) => {
-      const div = document.createElement('div');
-      div.className = 'header-item';
-      div.innerHTML = `
-        <input type="text" placeholder="响应头名称" class="header-name-input" value="${escapeHtml(name)}">
-        <input type="text" placeholder="响应头值" class="header-value-input" value="${escapeHtml(value)}">
-        <button type="button" class="remove-header" onclick="removeHeader(this)">删除</button>
-      `;
-      container.appendChild(div);
-    });
-  }
-}
-
-// 处理规则类型变化
-async function handleRuleTypeChange(ruleType) {
-  const contentTypeGroup = document.getElementById('content-type-group');
-  const actionSelect = document.getElementById('rule-action');
-
-  // 内容类型字段只对响应体规则有效
-  if (ruleType === 'response') {
-    contentTypeGroup.style.display = 'block';
-  } else {
-    contentTypeGroup.style.display = 'none';
-  }
-
-  // 根据规则类型更新操作选项
-  try {
-    const actionTypes = await window.electronAPI.getActionTypes(ruleType);
-    actionSelect.innerHTML = '';
-
-    actionTypes.forEach(actionType => {
-      const option = document.createElement('option');
-      option.value = actionType.value;
-      option.textContent = actionType.label;
-      option.title = actionType.description;
-      actionSelect.appendChild(option);
-    });
-
-    // 触发操作类型变化处理
-    if (actionTypes.length > 0) {
-      handleActionChange(actionTypes[0].value, ruleType);
+    let filesHTML = '';
+    if (ruleset.file_info?.files) {
+      filesHTML = ruleset.file_info.files.map(file => `
+        <div class="file-item">
+          <div class="file-info">
+            <i class="file-icon bi ${this.getFileIcon(file.type)}"></i>
+            <span class="file-name">${this.escapeHtml(file.name)}</span>
+          </div>
+          <span class="file-size">${this.formatFileSize(file.size)}</span>
+        </div>
+      `).join('');
     }
-  } catch (error) {
-    console.error('获取操作类型失败:', error);
-  }
-}
 
-// 添加请求头
-function addRequestHeader() {
-  const container = document.querySelector('#request-headers-group .headers-container');
-  const div = document.createElement('div');
-  div.className = 'header-item';
-  div.innerHTML = `
-    <input type="text" placeholder="请求头名称" class="header-name-input">
-    <input type="text" placeholder="请求头值" class="header-value-input">
-    <button type="button" class="remove-header" onclick="removeHeader(this)">删除</button>
-  `;
-  container.appendChild(div);
-}
-
-// 添加响应头
-function addResponseHeader() {
-  const container = document.querySelector('#response-headers-group .headers-container');
-  const div = document.createElement('div');
-  div.className = 'header-item';
-  div.innerHTML = `
-    <input type="text" placeholder="响应头名称" class="header-name-input">
-    <input type="text" placeholder="响应头值" class="header-value-input">
-    <button type="button" class="remove-header" onclick="removeHeader(this)">删除</button>
-  `;
-  container.appendChild(div);
-}
-
-// 删除头部
-function removeHeader(button) {
-  const container = button.closest('.headers-container');
-  if (container.children.length > 1) {
-    button.parentElement.remove();
-  } else {
-    showToast('至少需要保留一个头部项', 'error');
-  }
-}
-
-// 处理操作类型变化
-function handleActionChange(action, ruleType) {
-  const replaceGroup = document.getElementById('replace-content-group');
-  const modifyGroup = document.getElementById('modify-rules-group');
-  const injectGroup = document.getElementById('inject-content-group');
-  const requestHeadersGroup = document.getElementById('request-headers-group');
-  const newUrlGroup = document.getElementById('new-url-group');
-  const responseHeadersGroup = document.getElementById('response-headers-group');
-  const removeHeadersGroup = document.getElementById('remove-headers-group');
-
-  // 隐藏所有组
-  replaceGroup.style.display = 'none';
-  modifyGroup.style.display = 'none';
-  injectGroup.style.display = 'none';
-  requestHeadersGroup.style.display = 'none';
-  newUrlGroup.style.display = 'none';
-  responseHeadersGroup.style.display = 'none';
-  removeHeadersGroup.style.display = 'none';
-
-  // 根据规则类型和操作类型显示对应的组
-  if (ruleType === 'response') {
-    switch (action) {
-      case 'replace':
-        replaceGroup.style.display = 'block';
-        break;
-      case 'modify':
-        modifyGroup.style.display = 'block';
-        break;
-      case 'inject':
-        injectGroup.style.display = 'block';
-        break;
-    }
-  } else if (ruleType === 'request') {
-    switch (action) {
-      case 'modify-headers':
-        requestHeadersGroup.style.display = 'block';
-        break;
-      case 'modify-url':
-        newUrlGroup.style.display = 'block';
-        break;
-      case 'block':
-        // 阻止请求不需要额外字段
-        break;
-    }
-  } else if (ruleType === 'response-headers') {
-    switch (action) {
-      case 'add-headers':
-      case 'modify-headers':
-        responseHeadersGroup.style.display = 'block';
-        break;
-      case 'remove-headers':
-        removeHeadersGroup.style.display = 'block';
-        break;
-    }
-  }
-}
-
-// 处理注入位置变化
-function handleInjectPositionChange(position) {
-  const targetInput = document.getElementById('rule-inject-target');
-  if (position === 'before' || position === 'after') {
-    targetInput.style.display = 'block';
-    targetInput.required = true;
-  } else {
-    targetInput.style.display = 'none';
-    targetInput.required = false;
-  }
-}
-
-// 添加修改规则
-function addModifyRule() {
-  const container = document.querySelector('.modify-rules-container');
-  const div = document.createElement('div');
-  div.className = 'modify-rule-item';
-  div.innerHTML = `
-        <input type="text" placeholder="查找内容(支持正则)" class="find-input">
-        <input type="text" placeholder="替换为" class="replace-input">
-        <button type="button" class="remove-modify-rule" onclick="removeModifyRule(this)">删除</button>
+    content.innerHTML = `
+      <div class="detail-header">
+        <div class="detail-title">${this.escapeHtml(ruleset.name)}</div>
+        <div class="detail-author">作者: ${this.escapeHtml(ruleset.author)}</div>
+        <div class="detail-description">${this.escapeHtml(ruleset.description || '暂无描述')}</div>
+        <div class="detail-stats">
+          <div class="detail-stat">
+            <i class="bi bi-download"></i>
+            <span>${downloadCount} 次下载</span>
+          </div>
+          <div class="detail-stat">
+            <i class="bi bi-calendar"></i>
+            <span>${createdDate}</span>
+          </div>
+          <div class="detail-stat">
+            <i class="bi bi-files"></i>
+            <span>${fileCount} 个文件</span>
+          </div>
+          <div class="detail-stat">
+            <i class="bi bi-hdd"></i>
+            <span>${totalSize}</span>
+          </div>
+        </div>
+      </div>
+      ${filesHTML ? `
+        <div class="detail-files">
+          <h4>包含文件</h4>
+          <div class="file-list">
+            ${filesHTML}
+          </div>
+        </div>
+      ` : ''}
     `;
-  container.appendChild(div);
-}
-
-// 删除修改规则
-function removeModifyRule(button) {
-  const container = document.querySelector('.modify-rules-container');
-  if (container.children.length > 1) {
-    button.parentElement.remove();
-  } else {
-    showToast('至少需要保留一条修改规则', 'error');
   }
-}
 
-// 保存规则
-async function saveRule() {
-  console.log('saveRule 函数被调用');
-  try {
-    const rule = collectRuleData();
-    console.log('收集到的规则数据:', rule);
-    if (!validateRule(rule)) {
-      console.log('规则验证失败');
+  async installRuleset(rulesetId) {
+    const ruleset = this.communityRulesets.find(r => r.id === rulesetId) || this.currentRulesetDetail;
+    if (!ruleset) {
+      this.addErrorLog('未找到规则集信息');
       return;
     }
 
-    console.log('开始保存规则...');
-    const success = await window.electronAPI.saveResponseRule(rule);
-    if (success) {
-      document.getElementById('rule-edit-modal').style.display = 'none';
-      loadResponseRules();
-      showToast('规则保存成功', 'success');
-      console.log('规则保存成功');
-    } else {
-      showToast('规则保存失败', 'error');
-      console.log('规则保存失败');
+    // 如果已安装，不允许重复安装
+    if (ruleset.isInstalled) {
+      this.addInfoLog(`规则集 "${ruleset.name}" 已经安装`);
+      return;
     }
-  } catch (error) {
-    console.error('保存规则失败:', error);
-    showToast('保存规则失败', 'error');
-  }
-}
 
-// 收集规则数据
-function collectRuleData() {
-  const ruleId = document.getElementById('rule-edit-modal').dataset.ruleId;
-  const ruleType = document.getElementById('rule-type').value;
-  const rule = {
-    name: document.getElementById('rule-name').value.trim(),
-    type: ruleType,
-    urlPattern: document.getElementById('rule-url-pattern').value.trim(),
-    method: document.getElementById('rule-method').value,
-    action: document.getElementById('rule-action').value,
-    enabled: document.getElementById('rule-enabled').checked
-  };
-
-  // 内容类型只对响应体规则有效
-  if (ruleType === 'response') {
-    rule.contentType = document.getElementById('rule-content-type').value.trim();
-  }
-
-  if (ruleId) {
-    rule.id = ruleId;
-  }
-
-  // 根据规则类型和操作类型收集具体数据
-  if (ruleType === 'response') {
-    switch (rule.action) {
-      case 'replace':
-        const replaceType = document.querySelector('input[name="replace-type"]:checked').value;
-        if (replaceType === 'file') {
-          rule.replaceWithFile = true;
-          rule.filePath = document.getElementById('rule-file-path').value;
-          rule.replaceContent = ''; // 清空文本内容
-        } else {
-          rule.replaceWithFile = false;
-          rule.filePath = '';
-          rule.replaceContent = document.getElementById('rule-replace-content').value;
-        }
-        break;
-      case 'modify':
-        rule.modifyRules = [];
-        const modifyItems = document.querySelectorAll('.modify-rule-item');
-        modifyItems.forEach(item => {
-          const find = item.querySelector('.find-input').value.trim();
-          const replace = item.querySelector('.replace-input').value;
-          if (find) {
-            rule.modifyRules.push({ find, replace });
-          }
-        });
-        break;
-      case 'inject':
-        rule.injectContent = document.getElementById('rule-inject-content').value;
-        rule.injectPosition = document.getElementById('rule-inject-position').value;
-        rule.injectTarget = document.getElementById('rule-inject-target').value.trim();
-        break;
-    }
-  } else if (ruleType === 'request') {
-    switch (rule.action) {
-      case 'modify-headers':
-        rule.requestHeaders = {};
-        const requestHeaderItems = document.querySelectorAll('#request-headers-group .header-item');
-        requestHeaderItems.forEach(item => {
-          const name = item.querySelector('.header-name-input').value.trim();
-          const value = item.querySelector('.header-value-input').value.trim();
-          if (name) {
-            rule.requestHeaders[name] = value;
-          }
-        });
-        break;
-      case 'modify-url':
-        rule.newUrl = document.getElementById('rule-new-url').value.trim();
-        break;
-      case 'block':
-        // 阻止请求不需要额外数据
-        break;
-    }
-  } else if (ruleType === 'response-headers') {
-    switch (rule.action) {
-      case 'add-headers':
-      case 'modify-headers':
-        rule.responseHeaders = {};
-        const responseHeaderItems = document.querySelectorAll('#response-headers-group .header-item');
-        responseHeaderItems.forEach(item => {
-          const name = item.querySelector('.header-name-input').value.trim();
-          const value = item.querySelector('.header-value-input').value.trim();
-          if (name) {
-            rule.responseHeaders[name] = value;
-          }
-        });
-        break;
-      case 'remove-headers':
-        const removeHeadersValue = document.getElementById('rule-remove-headers').value.trim();
-        rule.removeHeaders = removeHeadersValue ? removeHeadersValue.split(',').map(h => h.trim()) : [];
-        break;
-    }
-  }
-
-  return rule;
-}
-
-// 验证规则数据
-function validateRule(rule) {
-  if (!rule.name) {
-    showToast('请输入规则名称', 'error');
-    return false;
-  }
-
-  // 验证URL模式是否为有效正则表达式
-  if (rule.urlPattern) {
     try {
-      new RegExp(rule.urlPattern);
-    } catch (e) {
-      showToast('URL匹配模式不是有效的正则表达式', 'error');
-      return false;
-    }
-  }
+      this.addInfoLog(`开始安装规则集: ${ruleset.name}`);
 
-  // 根据规则类型和操作类型验证具体内容
-  if (rule.type === 'response') {
-    switch (rule.action) {
-      case 'replace':
-        if (rule.replaceWithFile) {
-          if (!rule.filePath) {
-            showToast('请选择替换文件', 'error');
-            return false;
-          }
-        } else {
-          if (!rule.replaceContent && rule.replaceContent !== '') {
-            showToast('请输入替换内容', 'error');
-            return false;
-          }
-        }
-        break;
-      case 'modify':
-        if (!rule.modifyRules || rule.modifyRules.length === 0) {
-          showToast('请至少添加一条修改规则', 'error');
-          return false;
-        }
-        // 验证正则表达式
-        for (const modifyRule of rule.modifyRules) {
-          try {
-            new RegExp(modifyRule.find);
-          } catch (e) {
-            showToast(`修改规则中的查找内容不是有效的正则表达式: ${modifyRule.find}`, 'error');
-            return false;
-          }
-        }
-        break;
-      case 'inject':
-        if (!rule.injectContent) {
-          showToast('请输入注入内容', 'error');
-          return false;
-        }
-        if ((rule.injectPosition === 'before' || rule.injectPosition === 'after') && !rule.injectTarget) {
-          showToast('请输入目标内容', 'error');
-          return false;
-        }
-        break;
-    }
-  } else if (rule.type === 'request') {
-    switch (rule.action) {
-      case 'modify-headers':
-        if (!rule.requestHeaders || Object.keys(rule.requestHeaders).length === 0) {
-          showToast('请至少添加一个请求头', 'error');
-          return false;
-        }
-        break;
-      case 'modify-url':
-        if (!rule.newUrl) {
-          showToast('请输入重定向URL', 'error');
-          return false;
-        }
-        try {
-          new URL(rule.newUrl);
-        } catch (e) {
-          showToast('重定向URL格式不正确', 'error');
-          return false;
-        }
-        break;
-      case 'block':
-        // 阻止请求不需要验证额外内容
-        break;
-    }
-  } else if (rule.type === 'response-headers') {
-    switch (rule.action) {
-      case 'add-headers':
-      case 'modify-headers':
-        if (!rule.responseHeaders || Object.keys(rule.responseHeaders).length === 0) {
-          showToast('请至少添加一个响应头', 'error');
-          return false;
-        }
-        break;
-      case 'remove-headers':
-        if (!rule.removeHeaders || rule.removeHeaders.length === 0) {
-          showToast('请输入要删除的响应头名称', 'error');
-          return false;
-        }
-        break;
-    }
-  }
-
-  return true;
-}
-
-// 测试规则
-function testRule() {
-  console.log('testRule 函数被调用');
-  const rule = collectRuleData();
-  console.log('收集到的规则数据:', rule);
-  if (!validateRule(rule)) {
-    console.log('规则验证失败');
-    return;
-  }
-
-  // 这里可以实现规则测试逻辑
-  console.log('规则验证通过');
-  showToast('规则验证通过', 'success');
-}
-
-// HTML转义
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-// 显示提示消息
-function showToast(message, type = 'info') {
-  // 创建提示元素
-  const toast = document.createElement('div');
-  toast.className = `copy-toast ${type === 'error' ? 'error' : ''}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  // 显示提示
-  setTimeout(() => {
-    toast.classList.add('show');
-  }, 100);
-
-  // 3秒后隐藏
-  setTimeout(() => {
-    toast.classList.remove('show');
-    setTimeout(() => {
-      document.body.removeChild(toast);
-    }, 300);
-  }, 3000);
-}
-
-// 将函数暴露到全局作用域，供HTML中的onclick使用
-window.toggleRule = toggleRule;
-window.editRule = editRule;
-window.deleteRule = deleteRule;
-window.removeModifyRule = removeModifyRule;
-window.removeHeader = removeHeader;
-
-function initUpdateFeature() {
-  const updateModal = document.getElementById('update-modal');
-  const updateDownloadedModal = document.getElementById('update-downloaded-modal');
-  const closeUpdate = document.getElementById('close-update');
-  const updateCancel = document.getElementById('update-cancel');
-  const updateConfirmBtn = document.getElementById('update-confirm-btn');
-  const updateInstallLater = document.getElementById('update-install-later');
-  const updateInstallNow = document.getElementById('update-install-now');
-
-  if (closeUpdate) {
-    closeUpdate.addEventListener('click', () => {
-      updateModal.style.display = 'none';
-    });
-  }
-
-  if (updateCancel) {
-    updateCancel.addEventListener('click', () => {
-      updateModal.style.display = 'none';
-    });
-  }
-
-  if (updateConfirmBtn) {
-    updateConfirmBtn.addEventListener('click', () => {
-      window.electronAPI.updateConfirm();
-      const progressContainer = document.getElementById('update-progress-container');
-      const confirmBtn = document.getElementById('update-confirm-btn');
-      const cancelBtn = document.getElementById('update-cancel');
-      if (progressContainer) progressContainer.style.display = 'block';
-      if (confirmBtn) confirmBtn.disabled = true;
-      if (cancelBtn) cancelBtn.disabled = true;
-    });
-  }
-
-  if (updateInstallLater) {
-    updateInstallLater.addEventListener('click', () => {
-      updateDownloadedModal.style.display = 'none';
-    });
-  }
-
-  if (updateInstallNow) {
-    updateInstallNow.addEventListener('click', () => {
-      window.electronAPI.updateInstall();
-    });
-  }
-
-  const updateNotificationBtn = document.getElementById('update-notification-btn');
-  if (updateNotificationBtn) {
-    updateNotificationBtn.addEventListener('click', () => {
-      updateModal.style.display = 'flex';
-    });
-  }
-
-  window.electronAPI.onUpdateAvailable((data) => {
-    document.getElementById('update-version').textContent = data.version;
-    const releaseDate = data.releaseDate ? new Date(data.releaseDate).toLocaleDateString('zh-CN') : '未知';
-    document.getElementById('update-date').textContent = releaseDate;
-
-    let releaseNotes = data.releaseNotes || '新版本已发布，请更新以获得最新功能。';
-    if (typeof releaseNotes !== 'string') {
-      if (Array.isArray(releaseNotes)) {
-        releaseNotes = releaseNotes.join('\n');
-      } else {
-        releaseNotes = '新版本已发布，请更新以获得最新功能。';
+      // 下载规则文件
+      const jsonUrl = ruleset.file_urls.find(url => url.includes('.json'));
+      if (!jsonUrl) {
+        throw new Error('未找到规则文件');
       }
+
+      const response = await fetch(jsonUrl);
+      if (!response.ok) {
+        throw new Error(`下载规则文件失败: HTTP ${response.status}`);
+      }
+
+      let rulesData = await response.json();
+
+      // 如果有注入文件，先下载并处理路径
+      if (ruleset.has_injection_package) {
+        const zipUrl = ruleset.file_urls.find(url => url.includes('.zip'));
+        if (zipUrl) {
+          try {
+            const localZipPath = await this.downloadAndSaveInjectionPackage(zipUrl, ruleset.name);
+
+            // 更新规则数据中的ZIP路径
+            let rulesToUpdate = [];
+            if (Array.isArray(rulesData)) {
+              // 纯JSON格式：直接是规则数组
+              rulesToUpdate = rulesData;
+            } else if (rulesData.rules) {
+              // 包含rules的对象格式
+              rulesToUpdate = rulesData.rules;
+            }
+
+            // 替换ZIP路径
+            rulesToUpdate.forEach(rule => {
+              if (rule.type === 'zip-implant' && rule.zipImplant) {
+                rule.zipImplant = localZipPath;
+              }
+            });
+          } catch (error) {
+            console.error('下载注入包失败:', error);
+            this.addErrorLog(`注入包下载失败: ${error.message}`);
+            // 继续安装规则，但不包含注入包
+          }
+        }
+      }
+
+      // 为规则集添加社区标识
+      if (rulesData.group) {
+        rulesData.group.communityRulesetId = ruleset.id;
+      } else if (Array.isArray(rulesData)) {
+        // 如果是纯JSON数组格式，创建一个规则集包装它
+        rulesData = {
+          group: {
+            id: this.generateUUID(),
+            name: ruleset.name,
+            author: ruleset.author,
+            description: ruleset.description,
+            enabled: true,
+            isGroup: true,
+            communityRulesetId: ruleset.id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          },
+          rules: rulesData
+        };
+      } else if (!rulesData.group && rulesData.rules) {
+        // 如果有rules但没有group，创建group
+        rulesData.group = {
+          id: this.generateUUID(),
+          name: ruleset.name,
+          author: ruleset.author,
+          description: ruleset.description,
+          enabled: true,
+          isGroup: true,
+          communityRulesetId: ruleset.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      // 导入规则到本地
+      const result = await window.electronAPI.importResponseRulesFromData(rulesData);
+
+      if (result.success) {
+        this.addSuccessLog(`规则集 "${ruleset.name}" 安装成功，共导入 ${result.count} 条规则`);
+
+        // 更新已安装状态
+        ruleset.isInstalled = true;
+
+        // 刷新显示
+        this.displayRulesets();
+
+        // 关闭详情模态框
+        this.hideRulesetDetailModal();
+
+        // 如果当前在规则管理页面，刷新规则列表
+        if (this.currentView === 'rules') {
+          this.loadRules();
+        }
+      } else {
+        throw new Error(result.error || '导入规则失败');
+      }
+    } catch (error) {
+      console.error('安装规则集失败:', error);
+      this.addErrorLog(`安装规则集失败: ${error.message}`);
+    }
+  }
+
+  async downloadAndSaveInjectionPackage(zipUrl, rulesetName) {
+    this.addInfoLog(`正在下载注入包...`);
+
+    const response = await fetch(zipUrl);
+    if (!response.ok) {
+      throw new Error(`下载注入包失败: HTTP ${response.status}`);
     }
 
-    const notesElement = document.getElementById('update-notes');
-    notesElement.innerHTML = releaseNotes.trim();
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
 
-    const progressContainer = document.getElementById('update-progress-container');
-    if (progressContainer) progressContainer.style.display = 'none';
-    const confirmBtn = document.getElementById('update-confirm-btn');
-    const cancelBtn = document.getElementById('update-cancel');
-    if (confirmBtn) confirmBtn.disabled = false;
-    if (cancelBtn) cancelBtn.disabled = false;
+    // 计算新文件的MD5
+    const newFileMD5 = await this.calculateMD5(arrayBuffer);
 
-    if (updateNotificationBtn) {
-      updateNotificationBtn.style.display = 'flex';
+    // 生成一个有意义的文件名，而不是使用UUID
+    // 使用规则集名称 + .zip 作为文件名
+    const safeRulesetName = rulesetName.replace(/[<>:"/\\|?*]/g, '_');
+    const fileName = `${safeRulesetName}_injection.zip`;
+
+    // 通过IPC发送数据到主进程处理，包含MD5信息用于重复检测
+    const result = await window.electronAPI.downloadAndSaveInjectionPackageWithMD5(
+      arrayBuffer, 
+      fileName, 
+      rulesetName, 
+      newFileMD5
+    );
+
+    if (result.success) {
+      if (result.skipped) {
+        this.addInfoLog(`注入包已存在且内容相同，跳过下载: ${result.finalFileName}`);
+      } else if (result.renamed) {
+        this.addInfoLog(`检测到重名文件但内容不同，已重命名保存: ${result.finalFileName}`);
+      } else {
+        this.addSuccessLog(`注入包下载完成: ${result.finalFileName}`);
+      }
+      return result.localPath; // 返回本地保存路径
+    } else {
+      throw new Error(result.error || '保存注入包失败');
+    }
+  }
+
+  // 计算文件的MD5哈希值
+  async calculateMD5(arrayBuffer) {
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+  }
+
+  searchRulesets() {
+    this.currentPage = 0;
+    this.loadCommunityRulesets(true);
+  }
+
+  refreshRulesets() {
+    this.currentPage = 0;
+    this.loadCommunityRulesets(true);
+  }
+
+  previousPage() {
+    if (this.currentPage > 0) {
+      this.currentPage--;
+      this.loadCommunityRulesets(true);
+    }
+  }
+
+  nextPage() {
+    if (this.hasMorePages) {
+      this.currentPage++;
+      this.loadCommunityRulesets(true);
+    }
+  }
+
+  updatePaginationControls() {
+    const paginationControls = document.getElementById('paginationControls');
+    const prevBtn = document.getElementById('prevPageBtn');
+    const nextBtn = document.getElementById('nextPageBtn');
+    const pageInfo = document.getElementById('pageInfo');
+
+    if (paginationControls) {
+      paginationControls.style.display = this.communityRulesets.length > 0 ? 'flex' : 'none';
     }
 
-    updateModal.style.display = 'flex';
-  });
+    if (prevBtn) {
+      prevBtn.disabled = this.currentPage === 0;
+    }
 
-  window.electronAPI.onUpdateNotAvailable((data) => {
-    if (data && data.isDev) {
+    if (nextBtn) {
+      nextBtn.disabled = !this.hasMorePages;
+    }
+
+    if (pageInfo) {
+      pageInfo.textContent = `第 ${this.currentPage + 1} 页`;
+    }
+  }
+
+  showLoadingState() {
+    const container = document.getElementById('rulesetsContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="loading-state">
+          <i class="bi bi-hourglass-split"></i>
+          <p>正在加载规则集...</p>
+        </div>
+      `;
+    }
+  }
+
+  showErrorState(message) {
+    const container = document.getElementById('rulesetsContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="error-state">
+          <i class="bi bi-exclamation-triangle"></i>
+          <p>加载失败</p>
+          <p class="text-muted">${this.escapeHtml(message)}</p>
+          <button class="retry-btn" onclick="universalAnswerFeature.refreshRulesets()">
+            <i class="bi bi-arrow-clockwise"></i>
+            <span>重试</span>
+          </button>
+        </div>
+      `;
+    }
+  }
+
+  showRulesetDetailModal() {
+    const modal = document.getElementById('rulesetDetailModal');
+    if (modal) {
+      modal.style.display = 'flex';
+    }
+  }
+
+  hideRulesetDetailModal() {
+    const modal = document.getElementById('rulesetDetailModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+    this.currentRulesetDetail = null;
+  }
+
+  installCurrentRuleset() {
+    if (this.currentRulesetDetail) {
+      this.installRuleset(this.currentRulesetDetail.id);
+    }
+  }
+
+  async showUploadRulesetModal() {
+    try {
+      // 加载本地规则集列表
+      const rules = await window.electronAPI.getRules();
+      const ruleGroups = rules.filter(rule => rule.isGroup);
+
+      const select = document.getElementById('uploadRulesetSelect');
+      if (select) {
+        select.innerHTML = '<option value="">请选择要上传的规则集</option>';
+        ruleGroups.forEach(group => {
+          const option = document.createElement('option');
+          option.value = group.id;
+          option.textContent = `${group.name} (${group.author || '未知作者'})`;
+          select.appendChild(option);
+        });
+      }
+
+      // 显示模态框
+      const modal = document.getElementById('uploadRulesetModal');
+      if (modal) {
+        modal.style.display = 'flex';
+      }
+    } catch (error) {
+      console.error('加载规则集列表失败:', error);
+      this.addErrorLog('加载规则集列表失败: ' + error.message);
+    }
+  }
+
+  hideUploadRulesetModal() {
+    const modal = document.getElementById('uploadRulesetModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+
+    // 重置表单
+    const form = document.getElementById('uploadRulesetForm');
+    if (form) {
+      form.reset();
+    }
+
+    // 隐藏进度条
+    const progress = document.getElementById('uploadProgress');
+    if (progress) {
+      progress.style.display = 'none';
+    }
+  }
+
+  async onRulesetSelectChange() {
+    const select = document.getElementById('uploadRulesetSelect');
+    const nameInput = document.getElementById('uploadRulesetName');
+    const descInput = document.getElementById('uploadRulesetDescription');
+    const authorInput = document.getElementById('uploadRulesetAuthor');
+    const includeInjectionCheckbox = document.getElementById('uploadIncludeInjection');
+
+    if (!select.value) {
+      nameInput.value = '';
+      descInput.value = '';
+      authorInput.value = '';
+      includeInjectionCheckbox.checked = false;
       return;
     }
-    showToast('已是最新版本', 'info');
-  });
 
-  window.electronAPI.onUpdateDownloadProgress((data) => {
-    const progressText = document.getElementById('update-progress-text');
-    const progressSpeed = document.getElementById('update-progress-speed');
-    const progressBarFill = document.getElementById('update-progress-bar-fill');
+    try {
+      // 获取选中的规则集详情
+      const rules = await window.electronAPI.getRules();
+      const selectedGroup = rules.find(rule => rule.id === select.value);
+      const groupRules = rules.filter(rule => rule.groupId === select.value);
 
-    if (progressText) {
-      const percent = Math.round(data.percent || 0);
-      progressText.textContent = `下载中: ${percent}%`;
-    }
+      if (selectedGroup) {
+        nameInput.value = selectedGroup.name || '';
+        descInput.value = selectedGroup.description || '';
+        authorInput.value = selectedGroup.author || '';
 
-    if (progressSpeed) {
-      if (data.bytesPerSecond) {
-        const speed = formatBytes(data.bytesPerSecond);
-        progressSpeed.textContent = speed + '/s';
-      } else {
-        progressSpeed.textContent = '';
+        // 检查是否包含ZIP注入规则
+        const hasZipRules = groupRules.some(rule => rule.type === 'zip-implant');
+        includeInjectionCheckbox.checked = hasZipRules;
       }
+    } catch (error) {
+      console.error('获取规则集详情失败:', error);
     }
-
-    if (progressBarFill) {
-      progressBarFill.style.width = `${data.percent || 0}%`;
-    }
-  });
-
-  window.electronAPI.onUpdateDownloaded(() => {
-    updateModal.style.display = 'none';
-    updateDownloadedModal.style.display = 'flex';
-  });
-
-  function formatBytes(bytes) {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
-}// 处理替换类型
-切换
-function handleReplaceTypeChange() {
-  const replaceType = document.querySelector('input[name="replace-type"]:checked').value;
-  const textArea = document.getElementById('rule-replace-content');
-  const fileGroup = document.getElementById('file-replace-group');
-  
-  if (replaceType === 'file') {
-    textArea.style.display = 'none';
-    fileGroup.style.display = 'block';
-  } else {
-    textArea.style.display = 'block';
-    fileGroup.style.display = 'none';
+
+  async submitUploadRuleset() {
+    const form = document.getElementById('uploadRulesetForm');
+    const submitBtn = document.getElementById('submitUploadRulesetBtn');
+    const progress = document.getElementById('uploadProgress');
+    const progressFill = document.getElementById('uploadProgressFill');
+    const progressText = document.getElementById('uploadProgressText');
+
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+
+    const rulesetId = document.getElementById('uploadRulesetSelect').value;
+    const name = document.getElementById('uploadRulesetName').value;
+    const description = document.getElementById('uploadRulesetDescription').value;
+    const author = document.getElementById('uploadRulesetAuthor').value;
+    const includeInjection = document.getElementById('uploadIncludeInjection').checked;
+
+    try {
+      // 禁用提交按钮并显示进度条
+      submitBtn.disabled = true;
+      progress.style.display = 'block';
+      progressText.textContent = '准备上传...';
+      progressFill.style.width = '0%';
+
+      // 获取规则集数据
+      const rules = await window.electronAPI.getRules();
+      const selectedGroup = rules.find(rule => rule.id === rulesetId);
+      const groupRules = rules.filter(rule => rule.groupId === rulesetId);
+
+      if (!selectedGroup || groupRules.length === 0) {
+        throw new Error('未找到规则集或规则集为空');
+      }
+
+      progressText.textContent = '正在上传规则集...';
+      progressFill.style.width = '30%';
+
+      // 调用上传API
+      const result = await window.electronAPI.uploadRules(
+        name,
+        description,
+        author,
+        groupRules, // 直接传递规则数组
+        (progress) => {
+          progressFill.style.width = `${30 + progress * 0.7}%`;
+          progressText.textContent = `上传中... ${Math.round(progress)}%`;
+        }
+      );
+
+      if (result.status === 200 || result.status === 201) {
+        progressFill.style.width = '100%';
+        progressText.textContent = '上传成功！';
+
+        this.addSuccessLog(`规则集 "${name}" 上传成功，等待审核`);
+
+        setTimeout(() => {
+          this.hideUploadRulesetModal();
+        }, 2000);
+      } else {
+        throw new Error(result.data?.message || `上传失败 (HTTP ${result.status})`);
+      }
+    } catch (error) {
+      console.error('上传规则集失败:', error);
+      this.addErrorLog('上传规则集失败: ' + error.message);
+
+      progressText.textContent = '上传失败';
+      progressFill.style.width = '0%';
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = Math.random() * 16 | 0;
+      const v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  getFileIcon(mimeType) {
+    if (mimeType.includes('json')) return 'bi-file-code';
+    if (mimeType.includes('zip')) return 'bi-file-zip';
+    if (mimeType.includes('text')) return 'bi-file-text';
+    return 'bi-file';
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + 'GB';
   }
 }
+
+// 全局实例
+let global;
+let universalAnswerFeature;
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM内容加载完成，开始初始化');
+  try {
+    global = new Global();
+    console.log('Global实例创建成功');
+  } catch (error) {
+    console.error('Global实例创建失败:', error);
+  }
+
+  try {
+    universalAnswerFeature = new UniversalAnswerFeature();
+    console.log('UniversalAnswerFeature实例创建成功');
+  } catch (error) {
+    console.error('UniversalAnswerFeature实例创建失败:', error);
+  }
+});

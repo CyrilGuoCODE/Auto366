@@ -5,645 +5,520 @@
     <meta charset="UTF-8">
     <title>Auto366</title>
     <link rel="icon" type="image/png" href="icon.png">
+    <link rel="stylesheet" href="node_modules/bootstrap-icons/font/bootstrap-icons.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-    <button id="update-notification-btn" class="update-notification-btn" title="发现新版本">
-        <svg class="update-notification-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
-                fill="currentColor" />
-        </svg>
-        <span class="update-notification-text">发现新版本</span>
-    </button>
-    <button class="settings-btn"><img src="setting.svg" alt="设置" class="settings-icon"> 设置</button>
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <img src="icon_black.png" alt="Auto366" class="app-icon">
+            <span class="app-title">Auto366</span>
+        </div>
 
-    <div class="container">
-        <div id="main-menu">
-            <div style="text-align: center; margin-bottom: 20px;">
-                <img src="icon_black.png" alt="Auto366" style="width: 87px; height: 87px; margin-bottom: 10px;">
+        <div class="sidebar-menu">
+            <div class="menu-item active" data-view="answers">
+                <i class="bi bi-list-check"></i>
+                <span>答案结果</span>
             </div>
-            <h1>Auto366</h1>
-            <h2>天学网自动化工具</h2>
-            <p>请选择要使用的功能：</p>
+            <div class="menu-item" data-view="rules">
+                <i class="bi bi-list-ul"></i>
+                <span>规则管理</span>
+            </div>
+            <div class="menu-item" data-view="community">
+                <i class="bi bi-cloud-download"></i>
+                <span>社区规则集</span>
+            </div>
+            <div class="menu-item" data-view="settings">
+                <i class="bi bi-gear"></i>
+                <span>设置</span>
+            </div>
+        </div>
 
-            <div class="feature-grid">
-                <div class="feature-card" data-type="universal-answer">
-                    <h3>万能答案获取</h3>
-                    <p>通过代理拦截网络请求，自动获取各类题目答案</p>
-                </div>
-                <div class="feature-card" data-type="hearing">
-                    <h3>听力测试</h3>
-                    <p>替换提示音频为1秒空白，自动获取听力标准答案</p>
-                </div>
-                <div class="feature-card" data-type="listening">
-                    <h3>听音写词</h3>
-                    <p>自动提取答案，并自动填写答案</p>
-                </div>
-                <div class="feature-card" data-type="wordpk">
-                    <h3>单词PK</h3>
-                    <p>自动完成单词PK练习</p>
+        <div class="sidebar-footer">
+            <button id="update-notification-btn" class="update-btn" title="发现新版本">
+                <i class="bi bi-arrow-up-circle"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 主界面容器 -->
+    <div class="main-container">
+        <!-- 控制面板 -->
+        <div class="control-panel">
+            <div class="control-group">
+                <div class="status-group">
+                    <div class="status-item">
+                        <i class="bi bi-router"></i>
+                        <span class="status-label">代理状态:</span>
+                        <span id="proxyStatus" class="status-value stopped">未启动</span>
+                    </div>
+                    <div class="status-item">
+                        <i class="bi bi-shield-lock"></i>
+                        <span class="status-label">证书:</span>
+                        <span id="certificateStatus" class="status-value stopped">未检查</span>
+                    </div>
+                    <div class="status-item">
+                        <i class="bi bi-cpu"></i>
+                        <span class="status-label">处理:</span>
+                        <span id="processStatus" class="status-value stopped">等待中</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- 赞赏码和QQ群区域 -->
-            <div class="appreciation-wrapper">
-                <!-- 赞赏码区域 -->
-                <div class="appreciation-section">
-                    <div class="appreciation-icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
-                        <svg viewBox="0 0 1024 1024" class="heart-icon">
-                            <path
-                                d="M512 896c-12.8 0-25.6-4.8-35.2-14.4L89.6 494.4c-76.8-76.8-76.8-201.6 0-278.4 38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6L512 356.8l140.8-140.8c38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6c76.8 76.8 76.8 201.6 0 278.4L547.2 881.6c-9.6 9.6-22.4 14.4-35.2 14.4z" />
-                        </svg>
-                        <span class="appreciation-text">赞赏</span>
-                        <div class="appreciation-popup">
-                            <div class="appreciation-content">
-                                <h4>感谢您的支持！</h4>
-                                <div class="appreciation-qr-container">
-                                    <img src="prize/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
-                                    <img src="prize/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
-                                </div>
+            <div class="control-group">
+                <div class="control-buttons">
+                    <button id="toggleProxyBtn" class="primary-btn">
+                        <i class="bi bi-play-circle"></i>
+                        <span>启动代理</span>
+                    </button>
+                    <button id="deleteTempBtn" class="danger-btn">
+                        <i class="bi bi-trash"></i>
+                        <span>清理Auto366缓存</span>
+                    </button>
+                    <button id="deleteFileTempBtn" class="danger-btn">
+                        <i class="bi bi-file-earmark-x"></i>
+                        <span>清理天学网缓存</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 内容区域 -->
+        <div class="content-area">
+            <!-- 左侧视图区域 -->
+            <div class="left-content" id="leftContent">
+                <!-- 答案结果视图 -->
+                <div class="view-panel active" id="answers-view">
+                    <div class="panel-header">
+                        <h3>答案结果</h3>
+                        <div class="header-controls">
+                            <button id="clearAnswersBtn" class="clear-btn" title="清空提取结果">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <div class="sort-mode-selector">
+                                <label for="sortMode">排序：</label>
+                                <select id="sortMode">
+                                    <option value="file">按文件</option>
+                                    <option value="pattern">按题型</option>
+                                </select>
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- QQ群区域 -->
-                <div class="appreciation-section">
-                    <div class="appreciation-icon" title="加入QQ群，获取更多帮助与支持">
-                        <svg class="heart-icon" style="fill: #ffffff;" xmlns="http://www.w3.org/2000/svg" width="32"
-                            height="32" viewBox="0 0 32 32">
-                            <path
-                                d="M29.11 26.278c-0.72 0.087-2.804-3.296-2.804-3.296 0 1.959-1.009 4.515-3.191 6.362 1.052 0.325 3.428 1.198 2.863 2.151-0.457 0.772-7.844 0.493-9.977 0.252-2.133 0.24-9.52 0.519-9.977-0.252-0.565-0.953 1.807-1.826 2.861-2.151-2.182-1.846-3.191-4.403-3.191-6.362 0 0-2.083 3.384-2.804 3.296-0.335-0.041-0.776-1.853 0.584-6.231 0.641-2.064 1.375-3.78 2.509-6.611-0.191-7.306 2.828-13.435 10.016-13.435 7.109 0.001 10.197 6.008 10.017 13.435 1.132 2.826 1.869 4.553 2.509 6.611 1.361 4.379 0.92 6.191 0.584 6.231z" />
-                        </svg>
-                        <span class="appreciation-text">QQ群</span>
-                        <div class="appreciation-popup">
-                            <div class="appreciation-content">
-                                <h4>加入QQ群，获取更多帮助与支持</h4>
-                                <h5 style="color: black;">群号：1003718088</h5>
-                                <div class="appreciation-qr-container">
-                                    <img src="prize/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
-                                </div>
+                    <div class="answers-display">
+                        <div id="answersContainer" class="answers-container">
+                            <div class="no-answers">
+                                <i class="bi bi-inbox"></i>
+                                <p>暂无答案数据</p>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div
-                style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
-                <h3>如果程序出现任何错误与异常，请使用 <strong>Ctrl+Shift+Q</strong> 退出当前正在执行的操作</h3>
-                <h4>使用 <strong>Ctrl+F12</strong> 打开开发者工具</h4> <br>
-                <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
-                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
-                        style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
-                <p>许可证：GNU General Public License v3.0</p>
-            </div>
-        </div>
-
-        <div id="listening-content" class="content-area">
-            <button class="back-btn">返回</button>
-            <h1>听音写词</h1>
-
-            <div class="tutorial">
-                <h2>使用教程</h2>
-                <ol>
-                    <li><strong>输入或手动设置屏幕缩放率：</strong>在下方输入框中输入当前屏幕缩放率（如：100、125、150等或者手动设置为100%，这非常重要）</li>
-                    <li><strong>首次检测：</strong>点击"首次检测"按钮，记录当前资源目录状态</li>
-                    <li><strong>清理文件：</strong>如果有文件请点击"删除已下载"按钮清理资源目录（将保留系统文件夹）</li>
-                    <li><strong>下载练习：</strong>在天学网中找到并下载一个未下载的练习（必须是新下载的）</li>
-                    <li><strong>再次检测：</strong>点击"再次检测"按钮，检测新下载的练习并提取答案</li>
-                    <li><strong>定位坐标：</strong>点击"定位填充数据"按钮，在练习页面中：
-                        <ul>
-                            <li>🔴 拖拽到答案输入框位置</li>
-                            <li>🔵 拖拽到"下一页"按钮位置</li>
-                            <li>点击右下角确定</li>
-                        </ul>
-                    </li>
-                    <li><strong>开始填充：</strong>点击"开始填充数据"按钮，自动填写答案并翻页</li>
-                    <li><strong>清理文件：</strong>完成后可点击"删除已下载"按钮清理资源目录（将保留系统文件夹）</li>
-                </ol>
-            </div>
-
-            <div class="scale-input-container">
-                <label for="scaleInput">屏幕缩放率（%）：</label>
-                <div class="scale-input-wrapper">
-                    <input type="number" id="scaleInput" placeholder="请输入当前屏幕缩放率，如：100" class="scale-input" value="0">
-                    <button id="getScale" class="clear-memory-btn">获取当前</button>
-                </div>
-                <div class="scale-help-text" id="scaleHelpText">程序会自动读取屏幕缩放率，点击"获取当前"可重新获取系统缩放率</div>
-            </div>
-
-            <div class="buttons">
-                <button id="firstCheck">首次检测</button>
-                <button id="secondCheck" disabled>再次检测</button>
-                <button id="locationBtn">定位填充数据</button>
-                <button id="startBtn" disabled>开始填充数据</button>
-                <button id="deleteBtn" class="delete-btn">删除已下载</button>
-            </div>
-            <div id="locationData">暂无数据</div>
-            <div id="result">
-                <strong>欢迎使用听音写词功能！</strong><br>
-                请按照上方教程步骤操作<br>
-                请在上方输入框中输入你的屏幕缩放率，否则自动选择可能会出现偏差!
-                <hr>
-                <strong>第一步：</strong>输入屏幕缩放率，然后点击"首次检测"按钮开始
-            </div>
-
-            <div
-                style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
-                <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
-                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
-                        style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
-                <p>许可证：GNU General Public License v3.0</p>
-            </div>
-        </div>
-
-        <div id="wordpk-content" class="content-area">
-            <button class="back-btn">返回</button>
-            <h1>单词PK自动注入</h1>
-
-            <div class="tutorial">
-                <h2>使用教程</h2>
-                <ol>
-                    <li><strong>启动代理：</strong>确保代理服务器已启动（在万能答案获取启动）</li>
-                    <li><strong>删除缓存：</strong>点击"清理缓存"按钮，清理缓存</li>
-                    <li><strong>设置代理：</strong>在天学网客户端中设置代理为 127.0.0.1:5291</li>
-                    <li><strong>开始练习：</strong>正常进入单词PK练习，程序会自动注入脚本</li>
-                    <li><strong>自动答题：</strong>注入成功后，点击控制面板的"开始PK"按钮后点击天学网的开始PK按钮即可开始自动答题</li>
-                    <div class="proxy-notice">
-                        <strong>⚠️ 重要提示：</strong>
-                            <ul>
-                                <li>请保持本地端口127.0.0.1:5291和127.0.0.1:5290不被其他程序占用</li>
-                                <li>在启用单词PK自动化前，请确保代理服务器已启动并正确设置</li>
-                                <li>在启用单词PK自动化期间，万能答案获取是<strong>不能获取到答案的</strong></li>
-                            </ul>
-                        </div>
-                </ol>
-            </div>
-
-            <div class="pkstatus-container">
-                <div class="pkstatus-item">
-                    <span class="pkstatus-label">注入状态：</span>
-                    <span id="injection-status" class="pkstatus-value">等待中</span>
-                </div>
-                <div class="pkstatus-item">
-                    <span class="pkstatus-label">处理请求：</span>
-                    <span id="processed-requests" class="pkstatus-value">0</span>
-                </div>
-            </div>
-
-            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <label style="display: block; margin-bottom: 10px; font-weight: bold;">单词PK自动化设置：</label>
-                <div style="display: grid; grid-template-columns: 120px 1fr auto; gap: 8px 10px; font-size: 12px; align-items: center;">
-                    <span>自定义Zip文件路径：</span>
-                    <input id="pkZipPath" type="text" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
-                    <button id="choosePkZip">选择zip文件</button>
-                    <span>MD5（hex）：</span>
-                    <input id="pkMd5" type="text" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
-                    <span></span>
-                    <span>MD5（base64）：</span>
-                    <input id="pkMd5Base64" type="text" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
-                    <span></span>
-                    <span>文件大小（字节）：</span>
-                    <input id="pkSize" type="number" readonly style="width: 100%; padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; background: #f5f5f5;">
-                    <span></span>
-                </div>
-                <div style="margin-top: 10px;">
-                    <button id="savePkConfig">保存设置</button>
-                </div>
-                <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                    <div>设置会保存在本地，并在每次启动时自动应用。留空即为该版本默认设定。</div>
-                </div>
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd;">
-                    <label for="importPkWordList" style="display: inline-block; margin-right: 10px;">导入词库文件：</label>
-                    <input type="file" id="importPkWordList" accept=".txt" style="display: none;">
-                    <button id="importPkWordListBtn">选择TXT文件</button>
-                    <span id="importPkWordListStatus" style="margin-left: 10px; color: #666; font-size: 12px;"></span>
-                </div>
-            </div>
-
-            <div class="buttons">
-                <button id="togglePkAuto">开启单词PK自动化</button>
-                <button id="clearPkCache" class="delete-btn">清理缓存</button>
-            </div>
-
-            <div id="result">
-                欢迎使用单词PK自动注入功能！<br>
-                此功能会自动在单词PK练习中注入答题脚本<br>
-                请确保代理服务器已启动并正确设置<br>
-                <div id="pk-injection-log"
-                    style="margin-top: 10px; max-height: 200px; overflow-y: auto; background: #f5f5f5; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px;">
-                </div>
-            </div>
-
-            <div
-                style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
-                <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
-                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
-                        style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
-                <p>许可证：GNU General Public License v3.0</p>
-            </div>
-        </div>
-
-        <div id="hearing-content" class="content-area">
-            <button class="back-btn">返回</button>
-            <h1>听力测试</h1>
-
-            <div class="tutorial">
-                <h2>使用教程</h2>
-                <ol>
-                    <li><strong>自动寻找路径：</strong>点击"自动寻找"按钮，系统会自动扫描flipbooks目录下的文件夹</li>
-                    <li><strong>输入路径：</strong>如果只有一个文件夹会自动填写，多个文件夹请手动选择输入</li>
-                    <li><strong>替换音频：</strong>点击"替换音频"按钮，将指定文件夹中的所有提示音频文件替换为1秒空白音频</li>
-                    <li><strong>还原音频：</strong>完成后可点击"还原音频"按钮，恢复原始音频文件</li>
-                    <li><strong>获取答案：</strong>点击"获取答案"按钮，系统将扫描并提取听力答案</li>
-                    <li><strong>查看结果：</strong>P2听后回答部分显示音频标答文件，P3听后转述部分显示解析的JSON答案</li>
-                    <li><strong>删除文件：</strong>点击"删除文件"按钮，删除flipbooks目录中的所有文件</li>
-                    <li><strong>注意事项：</strong>替换前会自动备份原文件，还原时会删除备份文件<br>听力标答音频排序可能为<strong>乱序</strong>，请根据实际题目判断</li>
-                </ol>
-            </div>
-
-            <div class="path-input-container">
-                <label for="answerFolderPath">文件夹路径：</label>
-                <div class="path-input-wrapper">
-                    <input type="text" id="answerFolderPath" placeholder="请输入文件夹路径" class="path-input">
-                    <button id="findAnswerPathBtn" class="find-path-btn">自动寻找</button>
-                </div>
-            </div>
-
-            <div class="buttons">
-                <button id="replaceBtn">替换音频</button>
-                <button id="restoreBtn">还原音频</button>
-                <button id="getAnswerBtn">获取答案</button>
-                <button id="deleteFlipbooksBtn" class="delete-btn">删除文件</button>
-            </div>
-            <div id="answerResult">
-                <strong>欢迎使用听力测试功能！</strong><br>
-                此功能用于：<br>
-                1.获取听后回答和转述的标准答案<br>
-                2.替换提示音频为1秒空白<br>
-                请按照上方教程步骤操作<br>
-                输入文件夹路径后点击获取答案按钮<br>
-                <strong>注意：听力标答音频可能为乱序，请根据实际题目判断</strong>
-            </div>
-
-            <div
-                style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
-                <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
-                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
-                        style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
-                <p>许可证：GNU General Public License v3.0</p>
-            </div>
-        </div>
-
-        <div id="universal-answer-content" class="content-area">
-            <button class="back-btn">返回</button>
-            <h1>万能答案获取</h1>
-
-            <div class="tutorial">
-                <h2>使用教程</h2>
-                <ol>
-                    <li><strong>启动代理服务器：</strong>点击"启动代理服务器"按钮（代理启动后会自动开始监听）</li>
-                    <li><strong>设置客户端代理：</strong>在天学网客户端设置HTTP代理为 127.0.0.1:5291</li>
-                    <li><strong>下载题目：</strong>在天学网客户端下载需要的题目</li>
-                    <li><strong>自动处理：</strong>程序会自动检测、下载、解压并提取答案</li>
-                    <li><strong>查看答案：</strong>答案会显示在下方区域，并自动保存到文件</li>
-                </ol>
-                <div class="proxy-notice">
-                    <strong>⚠️ 重要提示：</strong>
-                    <ul>
-                        <li>必须设置为 <strong>HTTP代理</strong>，不是SOCKS5代理</li>
-                        <li>代理地址：127.0.0.1，端口：5291</li>
-                        <li>确保端口5291没有被其他程序占用</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="proxy-controls">
-                <div class="buttons">
-                    <button id="startProxyBtn">启动代理服务器</button>
-                    <button id="stopProxyBtn" disabled>停止代理服务器</button>
-                    <button id="responseRulesBtn">更改响应体规则</button>
-                    <button id="testRulesBtn" class="test-btn" style="display: none;">测试规则功能</button>
-                    <button id="deleteTempBtn" class="delete-btn">删除缓存</button>
-                </div>
-
-                <div class="status-indicators">
-                    <div class="status-item">
-                        <span class="status-label">代理状态：</span>
-                        <span id="proxyStatus" class="status-value">未启动</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">证书状态：</span>
-                        <span id="certificateStatus" class="status-value">未检查</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">处理状态：</span>
-                        <span id="processStatus" class="status-value">等待中</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="traffic-monitor">
-                <h3>监听日志</h3>
-                <div id="trafficLog" class="traffic-log">
-                    <div class="log-item">等待网络请求...</div>
-                </div>
-            </div>
-
-            <div class="answers-display">
-                <div class="answers-header">
-                    <h3>此次结果</h3>
-                    <div class="clear-answers-button">
-                        <button id="clearAnswersBtn" class="clear-btn" title="清空提取结果">
-                            <svg t="1756262061386" class="clear-icon" viewBox="0 0 1024 1024" version="1.1"
-                                xmlns="http://www.w3.org/2000/svg" p-id="4752" width="256" height="256">
-                                <path
-                                    d="M829.952 271.36h-126.976v-51.2a76.288 76.288 0 0 0-75.776-76.288h-256a76.288 76.288 0 0 0-75.776 76.8v51.2H168.448a25.6 25.6 0 0 0 0 51.2h661.504a25.6 25.6 0 0 0 0-51.712z m-178.176 0h-307.2v-51.2a26.112 26.112 0 0 1 25.6-25.6h256a24.576 24.576 0 0 1 24.576 25.6zM448.512 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0zM601.088 677.376V398.336a25.6 25.6 0 0 0-51.2 0v279.04a25.6 25.6 0 0 0 51.2 0z"
-                                    fill="" p-id="4753"></path>
-                                <path
-                                    d="M735.744 346.624a25.6 25.6 0 0 0-25.6 25.6v381.44a102.4 102.4 0 0 1-102.4 102.4H390.656a102.4 102.4 0 0 1-102.4-102.4V372.224a25.6 25.6 0 0 0-51.2 0v381.44a153.6 153.6 0 0 0 153.6 153.6h217.6a153.6 153.6 0 0 0 153.6-153.6V372.224a25.6 25.6 0 0 0-26.112-25.6z"
-                                    fill="" p-id="4754"></path>
-                            </svg>
+                    <div class="import-export-section">
+                        <label for="importAnswer" id="importAnswerBtn" class="import-btn">
+                            <i class="bi bi-upload"></i>
+                            <span>导入答案</span>
+                        </label>
+                        <input type="file" accept="json" id="importAnswer">
+                        <button id="shareAnswerBtn" class="share-btn" title="分享答案到服务器">
+                            <i class="bi bi-share"></i>
+                            <span>分享答案</span>
+                        </button>
+                        <button id="exportAnswerBtn" class="export-btn" title="导出答案文件">
+                            <i class="bi bi-download"></i>
+                            <span>导出答案</span>
                         </button>
                     </div>
-                    <div class="sort-mode-selector">
-                        <label for="sortMode">排序模式：</label>
-                        <select id="sortMode">
-                            <option value="file">按文件排序</option>
-                            <option value="pattern">按题型排序</option>
-                        </select>
-                    </div>
-                    <div class="import-answer-button">
-                        <label for="importAnswer" id="importAnswerBtn">导入答案</label>
-                        <input type="file" accept="json" id="importAnswer">
-                    </div>
-                    <div class="share-answer-button">
-                        <button id="shareAnswerBtn" class="share-btn" title="分享答案">分享答案</button>
-                    </div>
-                </div>
-                <div id="answersContainer" class="answers-container">
-                    <div class="no-answers">暂无答案数据</div>
-                </div>
-            </div>
-
-            <div
-                style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #666; font-size: 12px;">
-                <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
-                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
-                        style="color: #007bff;">https://github.com/cyrilguocode/Auto366</a></p>
-                <p>许可证：GNU General Public License v3.0</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- 响应体更改规则弹窗 -->
-    <div id="response-rules-modal" class="modal">
-        <div class="modal-content response-rules-modal">
-            <div class="modal-header">
-                <h2>响应体更改规则</h2>
-                <span class="close" id="close-response-rules">&times;</span>
-            </div>
-            <div class="rules-container">
-                <div class="rules-toolbar">
-                    <button id="add-rule-btn" class="add-rule-btn">新建规则</button>
-                    <button id="import-rules-btn" class="import-btn">导入规则</button>
-                    <button id="export-rules-btn" class="export-btn">导出规则</button>
-                    <div class="rules-status">
-                        <span id="rules-count">规则数量: 0</span>
-                        <span id="active-rules-count">启用: 0</span>
-                    </div>
-                </div>
-                <div class="rules-list" id="rules-list">
-                    <div class="no-rules">暂无规则，点击"新建规则"开始添加</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 规则编辑弹窗 -->
-    <div id="rule-edit-modal" class="modal">
-        <div class="modal-content rule-edit-modal">
-            <div class="modal-header">
-                <h2 id="rule-edit-title">新建规则</h2>
-                <span class="close" id="close-rule-edit">&times;</span>
-            </div>
-            <div class="rule-form">
-                <div class="form-group">
-                    <label for="rule-name">规则名称:</label>
-                    <input type="text" id="rule-name" placeholder="请输入规则名称" required>
-                </div>
-                <div class="form-group">
-                    <label for="rule-type">规则类型:</label>
-                    <select id="rule-type">
-                        <option value="response">响应体修改</option>
-                        <option value="request">请求修改</option>
-                        <option value="response-headers">响应头修改</option>
-                    </select>
-                    <small>选择要修改的内容类型</small>
-                </div>
-                <div class="form-group">
-                    <label for="rule-url-pattern">URL匹配模式:</label>
-                    <input type="text" id="rule-url-pattern" placeholder="支持正则表达式，如: .*\.json$" required>
-                    <small>支持正则表达式，留空则匹配所有请求</small>
-                </div>
-                <div class="form-group">
-                    <label for="rule-method">请求方法:</label>
-                    <select id="rule-method">
-                        <option value="">所有方法</option>
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
-                    </select>
-                </div>
-                <div class="form-group" id="content-type-group">
-                    <label for="rule-content-type">内容类型:</label>
-                    <input type="text" id="rule-content-type" placeholder="如: application/json">
-                    <small>留空则匹配所有内容类型（仅对响应体规则有效）</small>
-                </div>
-                <div class="form-group">
-                    <label for="rule-action">操作类型:</label>
-                    <select id="rule-action">
-                        <option value="replace">替换响应体</option>
-                        <option value="modify">修改响应体</option>
-                        <option value="inject">注入内容</option>
-                    </select>
                 </div>
 
-                <!-- 响应体修改相关字段 -->
-                <div class="form-group" id="replace-content-group">
-                    <label for="rule-replace-content">替换内容:</label>
-                    <div class="replace-options">
-                        <label>
-                            <input type="radio" name="replace-type" value="text" checked> 文本内容
-                        </label>
-                        <label>
-                            <input type="radio" name="replace-type" value="file"> 从文件替换
-                        </label>
-                    </div>
-                    <textarea id="rule-replace-content" rows="8" placeholder="请输入要替换的完整响应体内容"></textarea>
-                    <div id="file-replace-group" style="display: none;">
-                        <label for="rule-file-path">文件路径:</label>
-                        <div class="file-input-group">
-                            <input type="text" id="rule-file-path" placeholder="选择要替换的文件路径" readonly>
-                            <button type="button" id="browse-replace-file">浏览</button>
-                        </div>
-                        <small class="help-text">支持任何类型的文件，包括二进制文件（图片、视频、压缩包等）</small>
-                    </div>
-                </div>
-                <div class="form-group" id="modify-rules-group" style="display: none;">
-                    <label>修改规则:</label>
-                    <div class="modify-rules-container">
-                        <div class="modify-rule-item">
-                            <input type="text" placeholder="查找内容(支持正则)" class="find-input">
-                            <input type="text" placeholder="替换为" class="replace-input">
-                            <button type="button" class="remove-modify-rule">删除</button>
+                <!-- 规则管理视图 -->
+                <div class="view-panel" id="rules-view">
+                    <div class="panel-header">
+                        <h3>规则管理</h3>
+                        <div class="header-controls">
+                            <button id="addRuleGroupBtn" class="primary-btn">
+                                <i class="bi bi-plus"></i>
+                                <span>添加规则集</span>
+                            </button>
                         </div>
                     </div>
-                    <button type="button" id="add-modify-rule">添加修改规则</button>
-                </div>
-                <div class="form-group" id="inject-content-group" style="display: none;">
-                    <label for="rule-inject-content">注入内容:</label>
-                    <textarea id="rule-inject-content" rows="4" placeholder="要注入的内容"></textarea>
-                    <div class="inject-position">
-                        <label>注入位置:</label>
-                        <select id="rule-inject-position">
-                            <option value="start">开头</option>
-                            <option value="end">结尾</option>
-                            <option value="before">指定内容前</option>
-                            <option value="after">指定内容后</option>
-                        </select>
-                        <input type="text" id="rule-inject-target" placeholder="目标内容(当选择指定位置时)" style="display: none;">
-                    </div>
-                </div>
-
-                <!-- 请求修改相关字段 -->
-                <div class="form-group" id="request-headers-group" style="display: none;">
-                    <label>请求头修改:</label>
-                    <div class="headers-container">
-                        <div class="header-item">
-                            <input type="text" placeholder="请求头名称" class="header-name-input">
-                            <input type="text" placeholder="请求头值" class="header-value-input">
-                            <button type="button" class="remove-header">删除</button>
+                    <div class="rules-content">
+                        <div class="no-rules">
+                            <i class="bi bi-collection"></i>
+                            <p>暂无规则集配置</p>
+                            <p class="text-muted">点击上方按钮添加新规则集</p>
                         </div>
                     </div>
-                    <button type="button" id="add-request-header">添加请求头</button>
-                </div>
-                <div class="form-group" id="new-url-group" style="display: none;">
-                    <label for="rule-new-url">重定向URL:</label>
-                    <input type="text" id="rule-new-url" placeholder="请输入新的URL">
-                    <small>请求将被重定向到此URL</small>
                 </div>
 
-                <!-- 响应头修改相关字段 -->
-                <div class="form-group" id="response-headers-group" style="display: none;">
-                    <label>响应头修改:</label>
-                    <div class="headers-container">
-                        <div class="header-item">
-                            <input type="text" placeholder="响应头名称" class="header-name-input">
-                            <input type="text" placeholder="响应头值" class="header-value-input">
-                            <button type="button" class="remove-header">删除</button>
+                <!-- 社区规则集视图 -->
+                <div class="view-panel" id="community-view">
+                    <div class="panel-header">
+                        <h3>社区规则集</h3>
+                        <div class="header-controls">
+                            <button id="uploadRulesetBtn" class="primary-btn" title="上传规则集到社区">
+                                <i class="bi bi-cloud-upload"></i>
+                                <span>上传规则集</span>
+                            </button>
+                            <button id="refreshRulesetsBtn" class="secondary-btn" title="刷新规则集列表">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                <span>刷新</span>
+                            </button>
                         </div>
                     </div>
-                    <button type="button" id="add-response-header">添加响应头</button>
-                </div>
-                <div class="form-group" id="remove-headers-group" style="display: none;">
-                    <label for="rule-remove-headers">删除响应头:</label>
-                    <input type="text" id="rule-remove-headers" placeholder="要删除的响应头名称，多个用逗号分隔">
-                    <small>例如: Content-Security-Policy, X-Frame-Options</small>
+                    <div class="community-content">
+                        <div class="search-section">
+                            <div class="search-box">
+                                <input type="text" id="rulesetSearchInput" class="form-input" placeholder="搜索规则集...">
+                                <button id="searchRulesetsBtn" class="primary-btn">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <div class="search-filters">
+                                <select id="sortBySelect" class="form-input">
+                                    <option value="created_at">按创建时间</option>
+                                    <option value="downloads">按下载量</option>
+                                    <option value="name">按名称</option>
+                                </select>
+                                <select id="sortOrderSelect" class="form-input">
+                                    <option value="desc">降序</option>
+                                    <option value="asc">升序</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="rulesets-container" id="rulesetsContainer">
+                            <div class="loading-state">
+                                <i class="bi bi-hourglass-split"></i>
+                                <p>正在加载规则集...</p>
+                            </div>
+                        </div>
+                        <div class="pagination-controls" id="paginationControls" style="display: none;">
+                            <button id="prevPageBtn" class="secondary-btn" disabled>
+                                <i class="bi bi-chevron-left"></i>
+                                <span>上一页</span>
+                            </button>
+                            <span id="pageInfo" class="page-info">第 1 页</span>
+                            <button id="nextPageBtn" class="secondary-btn">
+                                <span>下一页</span>
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="rule-enabled" checked>
-                        启用此规则
-                    </label>
+                <!-- 设置视图 -->
+                <div class="view-panel" id="settings-view">
+                    <div class="panel-header">
+                        <h3>设置</h3>
+                    </div>
+                    <div class="settings-content">
+                        <div class="setting-group">
+                            <h4>缓存路径</h4>
+                            <div class="setting-item">
+                                <input type="text" id="cachePathInput" class="form-input" placeholder="选择缓存路径">
+                                <button id="browseCacheBtn" class="secondary-btn">
+                                    <i class="bi bi-folder"></i>
+                                    <span>浏览</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="setting-group">
+                            <h4>代理设置</h4>
+                            <div class="setting-item">
+                                <label>
+                                    <input type="checkbox" id="autoStartProxy" checked>
+                                    <span>启动时自动开启代理</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-actions">
-                    <button type="button" id="save-rule-btn" class="save-btn">保存规则</button>
-                    <button type="button" id="test-rule-btn" class="test-btn">测试规则</button>
-                    <button type="button" id="cancel-rule-btn" class="cancel-btn">取消</button>
+            </div>
+
+            <!-- 可拖动分隔条 -->
+            <div class="resizer" id="resizer">
+                <div class="resizer-line"></div>
+            </div>
+
+            <!-- 右侧日志区域 -->
+            <div class="right-logs" id="rightLogs">
+                <div class="panel-header">
+                    <h3>监听日志</h3>
+                    <button id="clearLogsBtn" class="clear-btn" title="清空日志">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+                <div class="logs-container">
+                    <div class="logs-main-area">
+                        <div class="traffic-monitor" id="trafficMonitor">
+                            <div id="trafficLog" class="traffic-log">
+                                <div class="log-item">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    <span>等待网络请求...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 日志详情分隔条 -->
+                        <div class="details-resizer" id="detailsResizer" style="display: none;">
+                            <div class="resizer-line"></div>
+                        </div>
+
+                        <div class="request-details" id="requestDetails" style="display: none;">
+                            <div class="details-header">
+                                <h4>请求详情</h4>
+                                <button id="closeDetailsBtn" class="close-btn">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            <div class="details-content" id="detailsContent">
+                                <!-- 详情内容将在这里显示 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 日志统计信息 - 固定在底部 -->
+                    <div class="logs-stats" id="logsStats">
+                        <div class="stats-item">
+                            <i class="bi bi-list-ul"></i>
+                            <span>共 <span id="requestCount">0</span> 条信息</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="settings-modal" class="modal">
+    <!-- 规则集管理模态框 -->
+    <div class="modal" id="ruleGroupModal" style="display: none;">
         <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>设置</h2>
-            <div class="settings-container">
-                <div class="setting-item">
-                    <label for="cache-path">天学网缓存文件夹路径：</label>
-                    <div class="path-input-wrapper">
-                        <input type="text" id="cache-path" placeholder="请输入缓存文件夹路径" class="path-input">
-                        <button id="browse-cache" class="browse-btn">浏览</button>
+            <div class="modal-header">
+                <h3 id="ruleGroupModalTitle">添加规则集</h3>
+                <button class="close-btn" id="closeRuleGroupModal">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="ruleGroupForm">
+                    <div class="form-group">
+                        <label for="ruleGroupName">规则集名称</label>
+                        <input type="text" id="ruleGroupName" class="form-input" placeholder="输入规则集名称" required>
                     </div>
-                </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="checkbox" id="keep-cache-files">
-                        不自动删除缓存文件（保留下载的临时文件）
-                    </label>
-                    <small style="color: #666; display: block; ">
-                        勾选后，程序不会自动删除下载的ZIP文件和解压后的临时文件夹
-                    </small>
-                </div>
-                <div class="setting-item">
-                    <button id="save-settings" class="save-btn">保存设置</button>
-                    <button id="reset-settings" class="reset-btn">重置为默认</button>
-                </div>
-                <div class="setting-item" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
-                    <button id="check-updates" class="browse-btn">检查更新</button>
-                </div>
-                <p id="error-message"></p>
+
+                    <div class="form-group">
+                        <label for="ruleGroupDescription">规则集描述</label>
+                        <textarea id="ruleGroupDescription" class="form-input" placeholder="输入规则集描述"
+                            rows="3"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="ruleGroupAuthor">作者</label>
+                        <input type="text" id="ruleGroupAuthor" class="form-input" placeholder="输入作者名称">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="ruleGroupEnabled" checked>
+                            <span>启用此规则集</span>
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="secondary-btn" id="cancelRuleGroupBtn">取消</button>
+                <button type="submit" form="ruleGroupForm" class="primary-btn" id="saveRuleGroupBtn">保存规则集</button>
             </div>
         </div>
     </div>
 
-    <div id="update-modal" class="modal">
-        <div class="modal-content update-modal-content">
+    <!-- 规则管理模态框 -->
+    <div class="modal" id="ruleModal" style="display: none;">
+        <div class="modal-content">
             <div class="modal-header">
-                <h2>发现新版本</h2>
-                <span class="close" id="close-update">&times;</span>
+                <h3 id="ruleModalTitle">添加规则</h3>
+                <button class="close-btn" id="closeRuleModal">
+                    <i class="bi bi-x"></i>
+                </button>
             </div>
-            <div class="update-modal-body">
-                <p><strong>新版本号：</strong><span id="update-version"></span></p>
-                <p><strong>发布日期：</strong><span id="update-date"></span></p>
-                <div class="update-notes-container">
-                    <strong>更新内容：</strong>
-                    <div id="update-notes" class="update-notes"></div>
-                </div>
-                <div id="update-progress-container" class="update-progress-container">
-                    <div class="update-progress-info">
-                        <span id="update-progress-text">下载中: 0%</span>
-                        <span id="update-progress-speed"></span>
+            <div class="modal-body">
+                <form id="ruleForm">
+                    <div class="form-group">
+                        <label for="ruleName">规则名称</label>
+                        <input type="text" id="ruleName" class="form-input" placeholder="输入规则名称" required>
                     </div>
-                    <div class="update-progress-bar">
-                        <div id="update-progress-bar-fill" class="update-progress-bar-fill"></div>
+
+                    <div class="form-group">
+                        <label for="ruleType">规则类型</label>
+                        <select id="ruleType" class="form-input" required>
+                            <option value="">选择规则类型</option>
+                            <option value="content-change">内容修改</option>
+                            <option value="zip-implant">ZIP注入</option>
+                            <option value="answer-upload">答案上传</option>
+                        </select>
                     </div>
-                </div>
-                <div class="update-actions">
-                    <button id="update-cancel" class="browse-btn update-btn-cancel">稍后更新</button>
-                    <button id="update-confirm-btn" class="save-btn">立即更新</button>
-                </div>
+
+                    <div class="form-group">
+                        <label for="ruleDescription">规则描述</label>
+                        <textarea id="ruleDescription" class="form-input" placeholder="输入规则描述" rows="3"></textarea>
+                    </div>
+
+                    <!-- 内容修改规则字段 -->
+                    <div id="contentchangeFields" class="rule-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="urlPattern">URL匹配模式</label>
+                            <input type="text" id="urlPattern" class="form-input" placeholder="输入URL匹配模式">
+                        </div>
+                        <div class="form-group">
+                            <label for="changeType">修改类型</label>
+                            <select id="changeType" class="form-input">
+                                <option value="request-body">请求体</option>
+                                <option value="response-body">响应体</option>
+                                <option value="request-headers">请求头</option>
+                                <option value="response-headers">响应头</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="originalContent">原始内容</label>
+                            <textarea id="originalContent" class="form-input" placeholder="输入要替换的原始内容"
+                                rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="newContent">新内容</label>
+                            <textarea id="newContent" class="form-input" placeholder="输入替换后的新内容" rows="3"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- ZIP注入规则字段 -->
+                    <div id="zipimplantFields" class="rule-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="urlZip">ZIP文件URL匹配</label>
+                            <input type="text" id="urlZip" class="form-input" placeholder="输入ZIP文件URL匹配模式">
+                        </div>
+                        <div class="form-group">
+                            <label for="zipImplant">注入ZIP文件路径</label>
+                            <div class="file-input-group">
+                                <input type="text" id="zipImplant" class="form-input" placeholder="选择ZIP文件" readonly>
+                                <button type="button" id="browseZipBtn" class="secondary-btn">
+                                    <i class="bi bi-folder"></i>
+                                    <span>浏览</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 答案上传规则字段 -->
+                    <div id="answeruploadFields" class="rule-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="urlUpload">上传URL匹配</label>
+                            <input type="text" id="urlUpload" class="form-input" placeholder="输入上传URL匹配模式">
+                        </div>
+                        <div class="form-group">
+                            <label for="uploadType">上传类型</label>
+                            <select id="uploadType" class="form-input">
+                                <option value="original">原始数据</option>
+                                <option value="extracted">提取的答案</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="serverLocate">服务器位置</label>
+                            <input type="text" id="serverLocate" class="form-input" placeholder="输入服务器位置路径">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="ruleEnabled" checked>
+                            <span>启用此规则</span>
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="secondary-btn" id="cancelRuleBtn">取消</button>
+                <button type="submit" form="ruleForm" class="primary-btn" id="saveRuleBtn">保存规则</button>
             </div>
         </div>
     </div>
 
-    <div id="update-downloaded-modal" class="modal">
-        <div class="modal-content update-downloaded-modal-content">
+    <!-- 规则集详情模态框 -->
+    <div class="modal" id="rulesetDetailModal" style="display: none;">
+        <div class="modal-content">
             <div class="modal-header">
-                <h2>更新下载完成</h2>
+                <h3 id="rulesetDetailTitle">规则集详情</h3>
+                <button class="close-btn" id="closeRulesetDetailModal">
+                    <i class="bi bi-x"></i>
+                </button>
             </div>
-            <div class="update-modal-body">
-                <p>更新已下载完成，是否现在安装并重启应用？</p>
-                <div class="update-actions">
-                    <button id="update-install-later" class="browse-btn update-btn-cancel">稍后安装</button>
-                    <button id="update-install-now" class="save-btn">立即安装并重启</button>
+            <div class="modal-body">
+                <div id="rulesetDetailContent">
+                    <!-- 规则集详情内容将在这里显示 -->
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="secondary-btn" id="cancelRulesetDetailBtn">取消</button>
+                <button type="button" class="primary-btn" id="installRulesetBtn">
+                    <i class="bi bi-download"></i>
+                    <span>安装规则集</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 上传规则集模态框 -->
+    <div class="modal" id="uploadRulesetModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>上传规则集到社区</h3>
+                <button class="close-btn" id="closeUploadRulesetModal">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="uploadRulesetForm">
+                    <div class="form-group">
+                        <label for="uploadRulesetSelect">选择规则集</label>
+                        <select id="uploadRulesetSelect" class="form-input" required>
+                            <option value="">请选择要上传的规则集</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="uploadRulesetName">规则集名称</label>
+                        <input type="text" id="uploadRulesetName" class="form-input" placeholder="输入规则集名称" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="uploadRulesetDescription">规则集描述</label>
+                        <textarea id="uploadRulesetDescription" class="form-input" placeholder="输入规则集描述" rows="4"
+                            required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="uploadRulesetAuthor">作者</label>
+                        <input type="text" id="uploadRulesetAuthor" class="form-input" placeholder="输入作者名称" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="uploadIncludeInjection">
+                            <span>包含注入文件（如果规则集中有ZIP注入规则）</span>
+                        </label>
+                    </div>
+
+                    <div class="upload-progress" id="uploadProgress" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="uploadProgressFill"></div>
+                        </div>
+                        <div class="progress-text" id="uploadProgressText">准备上传...</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="secondary-btn" id="cancelUploadRulesetBtn">取消</button>
+                <button type="submit" form="uploadRulesetForm" class="primary-btn" id="submitUploadRulesetBtn">
+                    <i class="bi bi-cloud-upload"></i>
+                    <span>上传规则集</span>
+                </button>
             </div>
         </div>
     </div>

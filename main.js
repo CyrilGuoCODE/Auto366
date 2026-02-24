@@ -1,26 +1,13 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, shell, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
 const path = require('path')
 const { autoUpdater } = require('electron-updater')
-const { mouse, straightTo, Point, Button, keyboard, Key, screen: nutScreen } = require('@nut-tree/nut-js');
-const { spawn, kill } = require('child_process')
 const fs = require('fs-extra')
-const axios = require('axios')
-const FormData = require('form-data')
 const { createClient } = require('@supabase/supabase-js')
 
 // 引入抓包代理类
 const AnswerProxy = require('./answer-proxy');
-const { async } = require('node-stream-zip');
 
 let mainWindow
-let locationWindow
-let locationWindowPk
-let pos
-let pos_pk = {}
-let ans
-let flag = 0;
-let pythonProcess
-let globalScale = 100
 let updateInfo = null
 
 process.on('uncaughtException', (error) => {
@@ -48,82 +35,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const SUPABASE_BUCKET = 'auto366-share'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-// 安全的IPC发送函数
-function safeIpcSend(channel, data) {
-  try {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(channel, data);
-    }
-  } catch (error) {
-    console.error(`发送IPC消息失败 [${channel}]:`, error);
-  }
-}
-
-// 根据缩放率调整坐标
-function adjustCoordinates(x, y, scale) {
-  const scaleFactor = scale / 100
-  return {
-    x: Math.round(x * scaleFactor),
-    y: Math.round(y * scaleFactor)
-  }
-}
-
-ipcMain.handle('get-scale-factor', () => {
-  globalScale = screen.getPrimaryDisplay().scaleFactor * 100;
-  console.log('全局缩放率设置为:', globalScale)
-  return globalScale;
-});
-
-// 增强的点击函数
-async function robustClick(x, y, retries = 3) {
-  try {
-    const adjustedCoords = adjustCoordinates(x, y, globalScale);
-    await mouse.setPosition(new Point(adjustedCoords.x, adjustedCoords.y));
-    await mouse.click(Button.LEFT);
-    return true;
-  } catch (error) {
-    if (retries > 0) {
-      console.warn(`点击失败，剩余重试次数: ${retries}`);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return robustClick(x, y, retries - 1);
-    }
-    throw new Error(`点击操作失败: ${error.message}`);
-  }
-}
-
-// 增强的窗口激活函数
-async function robustActivateWindow(x, y, retries = 3) {
-  try {
-    const adjustedCoords = adjustCoordinates(x, y, globalScale);
-    await mouse.setPosition(new Point(adjustedCoords.x, adjustedCoords.y));
-    await mouse.click(Button.LEFT);
-    await new Promise(resolve => setTimeout(resolve, 300)); // 等待窗口响应
-    return true;
-  } catch (error) {
-    if (retries > 0) {
-      console.warn(`窗口激活失败，剩余重试次数: ${retries}`);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return robustActivateWindow(x, y, retries - 1);
-    }
-    throw new Error(`窗口激活失败: ${error.message}`);
-  }
-}
-
-// 增强的输入函数
-async function robustType(text, retries = 3) {
-  try {
-    await keyboard.type(text);
-    return true;
-  } catch (error) {
-    if (retries > 0) {
-      console.warn(`输入失败，剩余重试次数: ${retries}`);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return robustType(text, retries - 1);
-    }
-    throw new Error(`输入操作失败: ${error.message}`);
-  }
-}
 
 autoUpdater.setFeedURL({
   provider: 'github',
@@ -208,8 +119,8 @@ autoUpdater.on('update-not-available', () => {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 1010,
+    width: 1400,
+    height: 900,
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -235,11 +146,6 @@ function createWindow() {
     shell.openExternal(url);
     return { action: 'deny' }; // 阻止在Electron中打开
   });
-
-  globalShortcut.register('Ctrl+Shift+Q', () => {
-    flag = 0
-    stopPythonScript()
-  })
 }
 
 app.whenReady().then(async () => {
@@ -262,241 +168,6 @@ app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
 })
 
-ipcMain.on('open-location-window', () => {
-  if (locationWindow) return;
-  if (mainWindow) mainWindow.minimize()
-
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
-  locationWindow = new BrowserWindow({
-    width: width,
-    height: height,
-    x: 0,
-    y: 0,
-    modal: true,
-    icon: path.join(__dirname, 'icon.png'),
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: true,
-      enableRemoteModule: false,
-      preload: `${__dirname}/preload.js`
-    },
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    focusable: true,
-    type: 'panel',
-    titleBarStyle: 'hidden',
-    visualEffectState: 'active',
-    transparent: true,
-    hasShadow: false,
-    skipTaskbar: true,
-  });
-
-  locationWindow.loadFile('location.html');
-  locationWindow.setMenu(null);
-  locationWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-
-  locationWindow.on('closed', () => {
-    locationWindow = null;
-  });
-});
-
-ipcMain.on('set-locations', (event, locations) => {
-  if (mainWindow) mainWindow.restore()
-  pos = locations
-  mainWindow.webContents.send('update-locations', locations);
-});
-
-ipcMain.on('start-point', async () => {
-  if (mainWindow) mainWindow.minimize()
-  flag = 1
-  try {
-    // 先激活目标窗口
-    await robustActivateWindow(pos.pos1.x, pos.pos1.y, 3);
-
-    for (let i = 0; i < ans.length; i++) {
-      if (!flag) {
-        mainWindow.webContents.send('operation-complete', { success: false, error: '填充被用户取消' });
-        return
-      }
-
-      // 再次确保窗口激活
-      await robustClick(pos.pos1.x, pos.pos1.y);
-
-      // 输入答案
-      await robustType(ans[i]);
-
-      // 点击提交或确认按钮
-      await robustClick(pos.pos2.x, pos.pos2.y);
-
-      // 添加操作间隔
-      await new Promise(resolve => setTimeout(resolve, 800));
-    }
-
-    mainWindow.webContents.send('operation-complete', { success: true });
-  } catch (error) {
-    console.error('执行过程中出错:', error);
-    mainWindow.webContents.send('operation-complete', {
-      success: false,
-      error: error.message
-    });
-  }
-})
-
-ipcMain.on('set-answer', (event, answer) => {
-  ans = answer
-})
-
-ipcMain.on('open-location-window-pk', () => {
-  if (locationWindowPk) locationWindowPk.close();
-  if (mainWindow) mainWindow.minimize()
-
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
-  locationWindowPk = new BrowserWindow({
-    width: width,
-    height: height,
-    x: 0,
-    y: 0,
-    modal: true,
-    icon: path.join(__dirname, 'icon.png'),
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: true,
-      enableRemoteModule: false,
-      preload: `${__dirname}/preload.js`
-    },
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    focusable: true,
-    type: 'panel',
-    titleBarStyle: 'hidden',
-    visualEffectState: 'active',
-    transparent: true,
-    hasShadow: false,
-    skipTaskbar: true,
-  });
-
-  locationWindowPk.loadFile('selection1.html');
-  locationWindowPk.setMenu(null);
-  locationWindowPk.setAlwaysOnTop(true, 'screen-saver', 1);
-
-  locationWindowPk.on('closed', () => {
-    locationWindowPk = null;
-  });
-});
-
-ipcMain.on('set-locations-pk-1', (event, pos1) => {
-  pos_pk.pos1 = pos1
-
-  if (locationWindowPk) locationWindowPk.close();
-
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
-  locationWindowPk = new BrowserWindow({
-    width: width,
-    height: height,
-    x: 0,
-    y: 0,
-    modal: true,
-    icon: path.join(__dirname, 'icon.png'),
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: true,
-      enableRemoteModule: false,
-      preload: `${__dirname}/preload.js`
-    },
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    focusable: true,
-    type: 'panel',
-    titleBarStyle: 'hidden',
-    visualEffectState: 'active',
-    transparent: true,
-    hasShadow: false,
-    skipTaskbar: true,
-  });
-
-  locationWindowPk.loadFile('selection2.html');
-  locationWindowPk.setMenu(null);
-  locationWindowPk.setAlwaysOnTop(true, 'screen-saver', 1);
-
-  locationWindowPk.on('closed', () => {
-    locationWindowPk = null;
-  });
-})
-
-ipcMain.on('set-locations-pk-2', (event, pos2) => {
-  if (mainWindow) mainWindow.restore()
-  pos_pk.pos2 = pos2
-  mainWindow.webContents.send('update-locations-pk', pos_pk);
-})
-
-ipcMain.on('start-choose', () => {
-  if (mainWindow) mainWindow.minimize()
-  pythonProcess = spawn('python', ['backend.py', JSON.stringify(pos_pk)])
-
-  let buffer = '';
-
-  pythonProcess.stdout.on('data', (data) => {
-    buffer += data.toString();
-
-    // 尝试解析完整的JSON
-    try {
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // 保留最后一个可能不完整的行
-
-      for (const line of lines) {
-        if (line.trim()) {
-          const result = JSON.parse(line);
-          console.log('Received result:', result);
-
-          if (result.error) {
-            console.log('Python error:', result.error);
-            mainWindow.webContents.send('choose-error', `Python error: ${result.error}`);
-          } else if (result.matched_position) {
-            let x = result.matched_position.x + result.matched_position.width / 2
-            let y = result.matched_position.y + result.matched_position.height / 2
-            robustClick(x, y)
-          } else {
-            console.log('定位失败，请手动选择')
-            mainWindow.webContents.send('choose-error', '定位失败，请手动选择');
-          }
-        }
-      }
-    } catch (e) {
-      console.log('JSON parsing error:', e);
-    }
-  })
-
-  pythonProcess.stderr.on('data', (data) => {
-    console.error(`Python error: ${data}`)
-    mainWindow.webContents.send('choose-error', `Python error: ${data}`);
-  })
-})
-
-// 添加全局缩放率设置事件
-ipcMain.on('set-global-scale', (event, scale) => {
-  globalScale = scale;
-  console.log('全局缩放率设置为:', scale)
-});
-
-function stopPythonScript() {
-  if (pythonProcess) {
-    pythonProcess.kill('SIGTERM'); // 或 'SIGKILL' 强制终止
-    pythonProcess = null;
-  }
-}
-
 // IPC事件处理 - 抓包代理相关
 ipcMain.on('start-answer-proxy', async () => {
   await answerProxy.startProxy(mainWindow);
@@ -512,7 +183,7 @@ ipcMain.on('open-directory-choosing', async () => {
 })
 
 ipcMain.on('open-file-choosing', async () => {
-  const result = await dialog.showOpenDialog({ 
+  const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
       { name: 'All Files', extensions: ['*'] },
@@ -528,40 +199,65 @@ ipcMain.on('open-file-choosing', async () => {
   if (!result.canceled) mainWindow.webContents.send('choose-file', result.filePaths[0])
 })
 
-ipcMain.on('open-pk-zip-choosing', async () => {
+ipcMain.on('open-implant-zip-choosing', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openFile'],
     filters: [
-      { name: 'Zip Files', extensions: ['zip'] },
-      { name: 'All Files', extensions: ['*'] }
+      { name: 'Zip Files', extensions: ['zip'] }
     ]
   });
-  if (!result.canceled) mainWindow.webContents.send('choose-pk-zip', result.filePaths[0]);
+  if (!result.canceled) mainWindow.webContents.send('choose-implant-zip', result.filePaths[0]);
 })
 
 // 响应体更改规则相关IPC处理
 ipcMain.handle('get-response-rules', () => {
   try {
-    console.log('收到 get-response-rules 请求');
     const rules = answerProxy.getResponseRules();
-    console.log('返回规则数据:', rules);
     return rules;
   } catch (error) {
     console.error('获取响应规则失败:', error);
-    throw error;
+    return [];
   }
 });
 
 ipcMain.handle('save-response-rule', (event, rule) => {
-  return answerProxy.saveRule(rule);
+  try {
+    const success = answerProxy.saveRule(rule);
+    return { success };
+  } catch (error) {
+    console.error('保存规则失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-response-rules', (event, rules) => {
+  try {
+    const success = answerProxy.saveResponseRules(rules);
+    return { success };
+  } catch (error) {
+    console.error('保存规则失败:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('delete-response-rule', (event, ruleId) => {
-  return answerProxy.deleteRule(ruleId);
+  try {
+    const success = answerProxy.deleteRule(ruleId);
+    return { success };
+  } catch (error) {
+    console.error('删除规则失败:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('toggle-response-rule', (event, ruleId, enabled) => {
-  return answerProxy.toggleRule(ruleId, enabled);
+  try {
+    const success = answerProxy.toggleRule(ruleId, enabled);
+    return { success };
+  } catch (error) {
+    console.error('切换规则状态失败:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('export-response-rules', async () => {
@@ -624,57 +320,91 @@ ipcMain.handle('import-response-rules', async () => {
   return { success: false, error: '用户取消操作' };
 });
 
-// 获取规则类型和动作类型
-ipcMain.handle('get-rule-types', () => {
-  return answerProxy.getRuleTypes();
-});
-
-ipcMain.handle('get-action-types', (event, ruleType) => {
-  return answerProxy.getActionTypes(ruleType);
-});
-
-// PK注入相关IPC处理
-ipcMain.handle('set-pk-config', async (event, config) => {
+ipcMain.handle('import-response-rules-from-data', async (event, rulesData) => {
   try {
-    const success = answerProxy.setPkConfig(config || {});
-    return { success };
-  } catch (error) {
-    console.error('设置PK配置失败:', error);
-    return { success: false, error: error.message };
-  }
-});
+    let rules;
+    if (typeof rulesData === 'string') {
+      rules = JSON.parse(rulesData);
+    } else {
+      rules = rulesData;
+    }
 
-ipcMain.handle('get-pk-config', async () => {
-  try {
-    const config = answerProxy.getPkConfig();
-    return { success: true, config };
-  } catch (error) {
-    console.error('获取PK配置失败:', error);
-    return { success: false, error: error.message };
-  }
-});
+    let rulesToImport = [];
+    let groupToImport = null;
 
-ipcMain.handle('clear-pk-cache', async () => {
-  try {
-    // 清理PK相关缓存
-    answerProxy.pendingPkRequests.clear();
-    return { success: true, message: 'PK缓存已清理' };
-  } catch (error) {
-    console.error('清理PK缓存失败:', error);
-    return { success: false, error: error.message };
-  }
-});
+    if (Array.isArray(rules)) {
+      // 格式1：直接是规则数组（纯JSON规则集）
+      rulesToImport = rules;
+    } else if (rules.group && rules.rules) {
+      // 格式2：包含group和rules的对象
+      groupToImport = rules.group;
+      rulesToImport = rules.rules;
+    } else if (rules.rules && Array.isArray(rules.rules)) {
+      // 格式3：只有rules数组，没有group
+      rulesToImport = rules.rules;
+    } else {
+      return { success: false, error: '无效的规则数据格式' };
+    }
 
-ipcMain.handle('import-pk-word-list', async (event, content) => {
-  try {
-    if (!content || typeof content !== 'string') {
-      return { success: false, error: '内容不能为空' };
+    const currentRules = answerProxy.getResponseRules();
+    
+    // 如果有规则集信息，检查并处理规则集
+    if (groupToImport) {
+      // 检查是否已存在相同的规则集
+      const existingGroupIndex = currentRules.findIndex(rule => 
+        rule.isGroup && (
+          rule.communityRulesetId === groupToImport.communityRulesetId ||
+          (rule.name === groupToImport.name && rule.author === groupToImport.author)
+        )
+      );
+      
+      if (existingGroupIndex !== -1) {
+        // 如果规则集已存在，先删除旧的规则集和相关规则
+        const existingGroup = currentRules[existingGroupIndex];
+        const groupId = existingGroup.id;
+        
+        console.log(`发现已存在的规则集: ${existingGroup.name}，正在替换...`);
+        
+        // 删除旧的规则集和所有属于该规则集的规则
+        answerProxy.responseRules = answerProxy.responseRules.filter(rule => 
+          rule.id !== groupId && rule.groupId !== groupId
+        );
+      }
+      
+      // 添加新的规则集
+      answerProxy.responseRules.push(groupToImport);
+      
+      // 为规则添加groupId
+      rulesToImport.forEach(rule => {
+        rule.groupId = groupToImport.id;
+      });
+    } else {
+      // 如果没有规则集信息，检查是否有重复的独立规则
+      // 这里可以根据规则的特征（如name, urlPattern等）来判断重复
+      const existingRuleNames = currentRules
+        .filter(rule => !rule.isGroup && rule.name)
+        .map(rule => rule.name);
+        
+      const originalCount = rulesToImport.length;
+      rulesToImport = rulesToImport.filter(rule => {
+        if (rule.name && existingRuleNames.includes(rule.name)) {
+          console.log(`跳过重复规则: ${rule.name}`);
+          return false;
+        }
+        return true;
+      });
+      
+      if (originalCount > rulesToImport.length) {
+        console.log(`过滤了 ${originalCount - rulesToImport.length} 个重复规则`);
+      }
     }
     
-    answerProxy.setWordPkBucketData(content);
-    return { success: true, message: '词库导入成功' };
+    // 添加规则
+    answerProxy.responseRules = [...answerProxy.responseRules, ...rulesToImport];
+    answerProxy.saveResponseRules();
+
+    return { success: true, count: rulesToImport.length };
   } catch (error) {
-    console.error('导入词库失败:', error);
     return { success: false, error: error.message };
   }
 });
@@ -685,6 +415,147 @@ ipcMain.handle('clear-cache', async () => {
     return 1;
   } catch (error) {
     return 0;
+  }
+});
+
+ipcMain.handle('import-implant-zip', async (event, sourcePath) => {
+  try {
+    return await answerProxy.importZipToDir(sourcePath);
+  } catch (error) {
+    console.error('导入压缩包失败:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('download-and-import-injection-package', async (event, arrayBuffer, rulesetName) => {
+  try {
+    const buffer = Buffer.from(arrayBuffer);
+    const tempPath = path.join(require('os').tmpdir(), `injection_${Date.now()}.zip`);
+    
+    // 保存到临时文件
+    fs.writeFileSync(tempPath, buffer);
+    
+    // 导入注入包
+    const result = await answerProxy.importZipToDir(tempPath);
+    
+    // 清理临时文件
+    try {
+      fs.unlinkSync(tempPath);
+    } catch (error) {
+      console.warn('清理临时文件失败:', error);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('下载并导入注入包失败:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('download-and-save-injection-package', async (event, arrayBuffer, originalFileName, rulesetName) => {
+  try {
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // 确保文件名安全，但保持原始文件名
+    const safeFileName = originalFileName.replace(/[<>:"/\\|?*]/g, '_');
+    
+    // 创建保存目录（在应用运行目录下的file文件夹）
+    const appDir = path.dirname(process.execPath);
+    const fileDir = path.join(appDir, 'file');
+    
+    // 如果是开发环境，使用当前工作目录
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    const targetDir = isDev ? path.join(process.cwd(), 'file') : fileDir;
+    
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    
+    // 保存文件
+    const localPath = path.join(targetDir, safeFileName);
+    fs.writeFileSync(localPath, buffer);
+    
+    console.log(`注入包已保存到: ${localPath}`);
+    
+    return {
+      success: true,
+      localPath: localPath,
+      originalFileName: safeFileName
+    };
+  } catch (error) {
+    console.error('下载并保存注入包失败:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('download-and-save-injection-package-with-md5', async (event, arrayBuffer, fileName, rulesetName, newFileMD5) => {
+  try {
+    const crypto = require('crypto');
+    const buffer = Buffer.from(arrayBuffer);
+
+    const appDir = path.dirname(process.execPath);
+    const fileDir = path.join(appDir, 'file');
+
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    const targetDir = isDev ? path.join(process.cwd(), 'file') : fileDir;
+    
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    
+    const targetPath = path.join(targetDir, fileName);
+    let finalFileName = fileName;
+    let finalPath = targetPath;
+
+    if (fs.existsSync(targetPath)) {
+
+      const existingBuffer = fs.readFileSync(targetPath);
+      const existingMD5 = crypto.createHash('sha256').update(existingBuffer).digest('hex');
+      
+      if (existingMD5 === newFileMD5) {
+        console.log(`文件已存在且内容相同，跳过下载: ${fileName}`);
+        return {
+          success: true,
+          skipped: true,
+          localPath: targetPath,
+          finalFileName: fileName
+        };
+      } else {
+        const nameWithoutExt = path.parse(fileName).name;
+        const ext = path.parse(fileName).ext;
+        const timestamp = Date.now();
+        finalFileName = `${nameWithoutExt}_${timestamp}${ext}`;
+        finalPath = path.join(targetDir, finalFileName);
+        
+        console.log(`检测到重名文件但内容不同，重命名为: ${finalFileName}`);
+      }
+    }
+
+    fs.writeFileSync(finalPath, buffer);
+    
+    console.log(`注入包已保存到: ${finalPath}`);
+    
+    return {
+      success: true,
+      renamed: finalFileName !== fileName,
+      localPath: finalPath,
+      finalFileName: finalFileName
+    };
+  } catch (error) {
+    console.error('下载并保存注入包失败:', error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 });
 
@@ -715,6 +586,7 @@ ipcMain.handle('download-file', async (event, uuid) => {
     await answerProxy.downloadFileByUuid(uuid, result.filePath)
     return 1;
   } catch (error) {
+    console.error('下载文件失败:', error);
     return 0;
   }
 });

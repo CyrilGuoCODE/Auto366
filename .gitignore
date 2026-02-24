@@ -7,8 +7,6 @@
 **/tesseract/
 backend.exe
 backend.spec
-.kiro
-.wrangler
 
 # 日志文件
 logs
@@ -26,7 +24,6 @@ auto-pk.zip
 **/.env.development.local
 **/.env.test.local
 **/.env.production.local
-web/wrangler.jsonc
 
 # 编辑器文件
 **/.vscode/
@@ -44,6 +41,8 @@ web/wrangler.jsonc
 **/temp/
 **/answers/
 .eslintcache
+.http-mitm-proxy/
+file/
 
 # 测试覆盖率
 coverage/
