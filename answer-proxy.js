@@ -1921,16 +1921,70 @@ class AnswerProxy {
 
   async clearCache() {
     this.trafficCache.clear()
+    let filesDeleted = 0;
+    let dirsDeleted = 0;
+    
     try {
       const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
         localStorage.getItem('keep-cache-files') === 'true'
       `);
 
       if (!shouldKeepCache) {
-        fs.rm(tempDir, { recursive: true, force: true });
+        const countItems = (dirPath) => {
+          if (fs.existsSync(dirPath)) {
+            const stats = fs.statSync(dirPath);
+            if (stats.isDirectory()) {
+              const items = fs.readdirSync(dirPath);
+              for (const item of items) {
+                const itemPath = path.join(dirPath, item);
+                const itemStats = fs.statSync(itemPath);
+                if (itemStats.isDirectory()) {
+                  countItems(itemPath);
+                } else {
+                  filesDeleted++;
+                }
+              }
+              dirsDeleted++;
+            } else {
+              filesDeleted++;
+            }
+          }
+        };
+        
+        countItems(tempDir);
+        fs.rmSync(tempDir, { recursive: true, force: true });
       }
+      
+      return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
-      fs.rm(tempDir, { recursive: true, force: true });
+      try {
+        const countItems = (dirPath) => {
+          if (fs.existsSync(dirPath)) {
+            const stats = fs.statSync(dirPath);
+            if (stats.isDirectory()) {
+              const items = fs.readdirSync(dirPath);
+              for (const item of items) {
+                const itemPath = path.join(dirPath, item);
+                const itemStats = fs.statSync(itemPath);
+                if (itemStats.isDirectory()) {
+                  countItems(itemPath);
+                } else {
+                  filesDeleted++;
+                }
+              }
+              dirsDeleted++;
+            } else {
+              filesDeleted++;
+            }
+          }
+        };
+        
+        countItems(tempDir);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        return { success: true, filesDeleted, dirsDeleted };
+      } catch (fallbackError) {
+        return { success: false, error: fallbackError.message, filesDeleted: 0, dirsDeleted: 0 };
+      }
     }
   }
   getTrafficByUuid(uuid) {

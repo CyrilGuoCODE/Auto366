@@ -50,4 +50,5 @@ coverage/
 
 # 特殊忽略
 *.zip
+auto-pk/
 auto-fill/

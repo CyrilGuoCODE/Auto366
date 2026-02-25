@@ -456,10 +456,10 @@ ipcMain.handle('import-response-rules-from-data', async (event, rulesData) => {
 
 ipcMain.handle('clear-cache', async () => {
   try {
-    await answerProxy.clearCache()
-    return 1;
+    const result = await answerProxy.clearCache();
+    return result;
   } catch (error) {
-    return 0;
+    return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
   }
 });
 

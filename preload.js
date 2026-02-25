@@ -65,12 +65,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   removeCacheFile: () => {
     try {
-      fs.rmSync(path.join(cachePath, 'resources'), { recursive: true, force: true });
-      fs.rmSync(path.join(cachePath, 'flipbooks'), { recursive: true, force: true });
-      return 1;
+      let filesDeleted = 0;
+      let dirsDeleted = 0;
+      
+      const countAndDelete = (dirPath) => {
+        if (fs.existsSync(dirPath)) {
+          const stats = fs.statSync(dirPath);
+          if (stats.isDirectory()) {
+            const items = fs.readdirSync(dirPath);
+            for (const item of items) {
+              const itemPath = path.join(dirPath, item);
+              const itemStats = fs.statSync(itemPath);
+              if (itemStats.isDirectory()) {
+                countAndDelete(itemPath);
+              } else {
+                filesDeleted++;
+              }
+            }
+            dirsDeleted++;
+          } else {
+            filesDeleted++;
+          }
+        }
+      };
+      
+      const resourcesPath = path.join(cachePath, 'resources');
+      const flipbooksPath = path.join(cachePath, 'flipbooks');
+      
+      countAndDelete(resourcesPath);
+      countAndDelete(flipbooksPath);
+      
+      fs.rmSync(resourcesPath, { recursive: true, force: true });
+      fs.rmSync(flipbooksPath, { recursive: true, force: true });
+      
+      return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
       console.error('删除缓存文件失败:', error);
-      return 0;
+      return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
     }
   },
 

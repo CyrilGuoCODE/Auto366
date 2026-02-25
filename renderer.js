@@ -673,7 +673,7 @@ class UniversalAnswerFeature {
       // 监听代理状态变化
       const checkStopped = () => {
         if (resolved) return;
-        
+
         if (!this.isProxyRunning) {
           resolved = true;
           if (timeoutId) clearTimeout(timeoutId);
@@ -681,7 +681,7 @@ class UniversalAnswerFeature {
           resolve();
           return;
         }
-        
+
         // 检查是否超过最大等待时间
         const elapsed = Date.now() - stopStartTime;
         if (elapsed < 8000) { // 8秒内继续检查
@@ -696,20 +696,20 @@ class UniversalAnswerFeature {
       timeoutId = setTimeout(() => {
         if (resolved) return;
         resolved = true;
-        
+
         if (this.isProxyRunning) {
           this.addErrorLog('代理服务器停止超时，请尝试手动关闭进程或重启应用');
-          
+
           // 强制更新状态为停止
           this.isProxyRunning = false;
-          this.updateProxyStatus({ 
-            running: false, 
-            message: '代理服务器停止超时' 
+          this.updateProxyStatus({
+            running: false,
+            message: '代理服务器停止超时'
           });
         } else {
           this.addInfoLog('代理服务器已停止');
         }
-        
+
         resolve(); // 即使超时也要resolve，避免阻塞后续操作
       }, 8000); // 8秒超时
     });
@@ -754,14 +754,14 @@ class UniversalAnswerFeature {
       // 从主进程获取当前状态
       const isEnabled = await window.electronAPI.getAnswerCaptureEnabled();
       toggleElement.checked = isEnabled;
-      
+
       // 监听开关变化
       toggleElement.addEventListener('change', async () => {
         const enabled = toggleElement.checked;
-        
+
         try {
           await window.electronAPI.setAnswerCaptureEnabled(enabled);
-          
+
           if (enabled) {
             this.addSuccessLog('答案获取已启用');
           } else {
@@ -844,7 +844,7 @@ class UniversalAnswerFeature {
         keepCacheCheckbox.addEventListener('change', () => {
           const newValue = keepCacheCheckbox.checked;
           localStorage.setItem('keep-cache-files', newValue.toString());
-          
+
           if (newValue) {
             this.addSuccessLog('已启用缓存文件保留，答案提取的临时文件将不会被自动删除');
           } else {
@@ -1199,12 +1199,12 @@ class UniversalAnswerFeature {
   addRuleLog(data) {
     const iconClass = data.type === 'success' ? 'bi-gear-fill' : 'bi-exclamation-triangle-fill';
     const logType = data.type === 'success' ? 'rule-success' : 'rule-error';
-    
+
     let message = data.message;
     if (data.details) {
       message += ` (${data.details})`;
     }
-    
+
     this.addLogItem(message, logType, iconClass, null, null);
   }
 
@@ -1579,9 +1579,11 @@ class UniversalAnswerFeature {
     const confirmHtml = `
       <div class="log-item warning">
         <i class="bi bi-exclamation-triangle"></i>
-        <span>确定要清理临时文件吗？此操作不可撤销。</span>
-        <button onclick="this.parentElement.remove()" class="btn-small">取消</button>
-        <button onclick="universalAnswerFeature.confirmDeleteTemp()" class="btn-small btn-danger">确认清理</button>
+        <span>确定要清理Auto366临时文件吗？此操作不可撤销。</span>
+        <div class="cache-buttons">
+          <button onclick="this.parentElement.remove()" class="btn-small btn-cancel">取消</button>
+          <button onclick="universalAnswerFeature.confirmDeleteTemp()" class="btn-small btn-danger">确认清理</button>
+        </div>
       </div>
     `;
 
@@ -1596,12 +1598,19 @@ class UniversalAnswerFeature {
       confirmDialog.remove();
     }
 
+    // 显示清理进度
+    this.addInfoLog('正在清理Auto366缓存...');
+
     window.electronAPI.clearCache().then(result => {
-      if (result) {
-        this.addSuccessLog('临时文件清理成功');
+      if (result && result.success) {
+        this.addSuccessLog(`Auto366缓存清理成功 - 已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
+      } else if (result && !result.success) {
+        this.addErrorLog(`Auto366缓存清理失败: ${result.error || '未知错误'}`);
       } else {
-        this.addErrorLog('临时文件清理失败');
+        this.addSuccessLog('Auto366缓存清理完成');
       }
+    }).catch(error => {
+      this.addErrorLog(`Auto366缓存清理失败: ${error.message || error}`);
     });
   }
 
@@ -1611,9 +1620,11 @@ class UniversalAnswerFeature {
     const confirmHtml = `
       <div class="log-item warning">
         <i class="bi bi-exclamation-triangle"></i>
-        <span>确定要清理文件缓存吗？此操作不可撤销。</span>
-        <button onclick="this.parentElement.remove()" class="btn-small">取消</button>
-        <button onclick="universalAnswerFeature.confirmDeleteFileTemp()" class="btn-small btn-danger">确认清理</button>
+        <span>确定要清理天学网文件缓存吗？此操作不可撤销。</span>
+        <div class="cache-buttons">
+          <button onclick="this.parentElement.remove()" class="btn-small btn-cancel">取消</button>
+          <button onclick="universalAnswerFeature.confirmDeleteFileTemp()" class="btn-small btn-danger">确认清理</button>
+        </div>
       </div>
     `;
 
@@ -1628,11 +1639,18 @@ class UniversalAnswerFeature {
       confirmDialog.remove();
     }
 
-    const result = window.electronAPI.removeCacheFile()
-    if (result) {
-      this.addSuccessLog('文件缓存清理成功');
+    // 显示清理进度
+    this.addInfoLog('正在清理天学网缓存...');
+
+    const result = window.electronAPI.removeCacheFile();
+    if (result && result.success) {
+      this.addSuccessLog(`天学网缓存清理成功 - 已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
+    } else if (result && !result.success) {
+      this.addErrorLog(`天学网缓存清理失败: ${result.error || '未知错误'}`);
+    } else if (result) {
+      this.addSuccessLog('天学网缓存清理完成');
     } else {
-      this.addErrorLog('文件缓存清理失败');
+      this.addErrorLog('天学网缓存清理失败');
     }
   }
 
@@ -2006,7 +2024,7 @@ class UniversalAnswerFeature {
       const isEffective = rule.enabled && parentGroupEnabled;
       const statusClass = isEffective ? 'enabled' : 'disabled';
       const typeClass = rule.type ? rule.type.replace('-', '') : '';
-      
+
       // 如果父规则集被禁用，子规则的开关应该显示为禁用状态
       const isDisabledByParent = !parentGroupEnabled;
 
@@ -2174,11 +2192,11 @@ class UniversalAnswerFeature {
       const result = await window.electronAPI.toggleRule(ruleId, enabled);
       if (result.success) {
         this.addSuccessLog(`规则已${enabled ? '启用' : '禁用'}`);
-        
+
         // 检查是否是规则集，如果是规则集则重新加载整个列表以更新子规则状态
         const rules = await window.electronAPI.getRules();
         const toggledRule = rules.find(r => r.id === ruleId);
-        
+
         if (toggledRule && toggledRule.isGroup) {
           // 如果是规则集，重新加载整个规则列表
           this.loadRules();

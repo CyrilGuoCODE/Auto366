@@ -3375,3 +3375,40 @@ select.form-input {
 .rule-toggle.disabled-by-parent .rule-toggle-slider:before {
     background-color: #999 !important;
 }
+
+.cache-buttons {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-cancel {
+    background: #6c757d;
+    color: white;
+    border-color: #5a6268;
+}
+
+.btn-cancel:hover {
+    background: #5a6268;
+    border-color: #545b62;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+    border-color: #bd2130;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    border-color: #a71e2a;
+}
