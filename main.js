@@ -173,8 +173,12 @@ ipcMain.on('start-answer-proxy', async () => {
   await answerProxy.startProxy(mainWindow);
 })
 
-ipcMain.on('stop-answer-proxy', () => {
-  answerProxy.stopProxy();
+ipcMain.on('stop-answer-proxy', async () => {
+  try {
+    await answerProxy.stopProxy();
+  } catch (error) {
+    console.error('停止代理服务器失败:', error);
+  }
 })
 
 // 设置代理端口
@@ -205,6 +209,17 @@ ipcMain.handle('set-bucket-port', async (event, port) => {
 // 获取答案服务器端口
 ipcMain.handle('get-bucket-port', () => {
   return answerProxy.getBucketPort();
+});
+
+// 设置答案获取开关状态
+ipcMain.handle('set-answer-capture-enabled', (event, enabled) => {
+  answerProxy.setAnswerCaptureEnabled(enabled);
+  return { success: true };
+});
+
+// 获取答案获取开关状态
+ipcMain.handle('get-answer-capture-enabled', () => {
+  return answerProxy.isAnswerCaptureEnabled();
 });
 
 ipcMain.on('open-directory-choosing', async () => {

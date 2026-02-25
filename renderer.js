@@ -144,6 +144,13 @@ class UniversalAnswerFeature {
       this.exportAnswers();
     });
 
+    // 答案获取开关
+    const answerCaptureToggle = document.getElementById('answerCaptureEnabled');
+    if (answerCaptureToggle) {
+      // 从主进程加载当前设置
+      this.initAnswerCaptureToggle(answerCaptureToggle);
+    }
+
     // 清空日志按钮
     const clearLogsBtn = document.getElementById('clearLogsBtn');
     if (clearLogsBtn) {
@@ -607,9 +614,9 @@ class UniversalAnswerFeature {
     });
   }
 
-  toggleProxy() {
+  async toggleProxy() {
     if (this.isProxyRunning) {
-      this.stopProxy();
+      await this.stopProxy();
     } else {
       this.startProxy();
     }
@@ -641,28 +648,66 @@ class UniversalAnswerFeature {
   }
 
   stopProxy() {
-    const toggleBtn = document.getElementById('toggleProxyBtn');
+    return new Promise((resolve) => {
+      const toggleBtn = document.getElementById('toggleProxyBtn');
 
-    // 更新按钮状态，防止重复点击
-    if (toggleBtn) {
-      toggleBtn.disabled = true;
-      toggleBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>停止中...</span>';
-    }
-
-    window.electronAPI.stopAnswerProxy();
-    this.addInfoLog('正在停止代理服务器...');
-
-    // 设置超时检查，如果代理没有停止，恢复按钮状态
-    setTimeout(() => {
-      if (this.isProxyRunning) {
-        this.addErrorLog('代理服务器停止超时，请尝试手动关闭');
-        if (toggleBtn) {
-          toggleBtn.disabled = false;
-          toggleBtn.innerHTML = '<i class="bi bi-stop-circle"></i><span>停止代理</span>';
-          toggleBtn.className = 'danger-btn';
-        }
+      // 更新按钮状态，防止重复点击
+      if (toggleBtn) {
+        toggleBtn.disabled = true;
+        toggleBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>停止中...</span>';
       }
-    }, 5000);
+
+      window.electronAPI.stopAnswerProxy();
+      this.addInfoLog('正在停止代理服务器...');
+
+      // 设置停止开始时间
+      const stopStartTime = Date.now();
+      let timeoutId = null;
+      let resolved = false;
+
+      // 监听代理状态变化
+      const checkStopped = () => {
+        if (resolved) return;
+        
+        if (!this.isProxyRunning) {
+          resolved = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          this.addSuccessLog('代理服务器已成功停止');
+          resolve();
+          return;
+        }
+        
+        // 检查是否超过最大等待时间
+        const elapsed = Date.now() - stopStartTime;
+        if (elapsed < 8000) { // 8秒内继续检查
+          setTimeout(checkStopped, 200); // 每200ms检查一次
+        }
+      };
+
+      // 开始检查
+      checkStopped();
+
+      // 设置超时处理
+      timeoutId = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        
+        if (this.isProxyRunning) {
+          this.addErrorLog('代理服务器停止超时，请尝试手动关闭进程或重启应用');
+          
+          // 强制更新状态为停止
+          this.isProxyRunning = false;
+          this.updateProxyStatus({ 
+            running: false, 
+            message: '代理服务器停止超时' 
+          });
+        } else {
+          this.addInfoLog('代理服务器已停止');
+        }
+        
+        resolve(); // 即使超时也要resolve，避免阻塞后续操作
+      }, 8000); // 8秒超时
+    });
   }
 
   updateProxyStatus(data) {
@@ -695,6 +740,38 @@ class UniversalAnswerFeature {
       }
 
       this.addInfoLog('代理服务器已停止');
+    }
+  }
+
+  // 初始化答案获取开关
+  async initAnswerCaptureToggle(toggleElement) {
+    try {
+      // 从主进程获取当前状态
+      const isEnabled = await window.electronAPI.getAnswerCaptureEnabled();
+      toggleElement.checked = isEnabled;
+      
+      // 监听开关变化
+      toggleElement.addEventListener('change', async () => {
+        const enabled = toggleElement.checked;
+        
+        try {
+          await window.electronAPI.setAnswerCaptureEnabled(enabled);
+          
+          if (enabled) {
+            this.addSuccessLog('答案获取已启用');
+          } else {
+            this.addInfoLog('答案获取已禁用');
+          }
+        } catch (error) {
+          this.addErrorLog(`设置答案获取开关失败: ${error.message}`);
+          // 恢复开关状态
+          toggleElement.checked = !enabled;
+        }
+      });
+    } catch (error) {
+      console.error('初始化答案获取开关失败:', error);
+      // 默认启用
+      toggleElement.checked = true;
     }
   }
 
@@ -872,10 +949,17 @@ class UniversalAnswerFeature {
         // 如果代理正在运行，重启代理服务器
         if (this.isProxyRunning) {
           this.addInfoLog('正在重启代理服务器...');
-          await this.stopProxy();
-          setTimeout(() => {
+          try {
+            await this.stopProxy();
+            // 等待一小段时间确保完全停止
+            await new Promise(resolve => setTimeout(resolve, 500));
             this.startProxy();
-          }, 1000);
+          } catch (error) {
+            this.addErrorLog(`重启代理服务器失败: ${error.message}`);
+            // 如果停止失败，仍然尝试启动
+            this.addInfoLog('尝试强制启动代理服务器...');
+            this.startProxy();
+          }
         }
       } else {
         this.addErrorLog(`修改端口失败: ${result.error}`);
@@ -904,10 +988,17 @@ class UniversalAnswerFeature {
         // 如果代理正在运行，重启代理服务器以应用新的答案服务器端口
         if (this.isProxyRunning) {
           this.addInfoLog('正在重启代理服务器以应用新的答案服务器端口...');
-          await this.stopProxy();
-          setTimeout(() => {
+          try {
+            await this.stopProxy();
+            // 等待一小段时间确保完全停止
+            await new Promise(resolve => setTimeout(resolve, 500));
             this.startProxy();
-          }, 1000);
+          } catch (error) {
+            this.addErrorLog(`重启代理服务器失败: ${error.message}`);
+            // 如果停止失败，仍然尝试启动
+            this.addInfoLog('尝试强制启动代理服务器...');
+            this.startProxy();
+          }
         }
       } else {
         this.addErrorLog(`修改答案服务器端口失败: ${result.error}`);

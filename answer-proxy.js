@@ -4,7 +4,6 @@ const https = require('https')
 const fs = require('fs-extra')
 const StreamZip = require('node-stream-zip')
 const Proxy = require('http-mitm-proxy').Proxy;
-const proxy = new Proxy();
 const zlib = require('zlib')
 const path = require('path')
 const { app } = require('electron')
@@ -27,8 +26,20 @@ class AnswerProxy {
     this.serverDatas = {}
     this.proxyPort = 5291; // 默认代理端口
     this.bucketPort = 5290; // 默认词库服务器端口
+    this.isStopping = false; // 停止状态标志
+    this.answerCaptureEnabled = true; // 答案获取开关状态，默认启用
+    this.proxy = null; // 代理服务器实例
 
     this.loadResponseRules();
+  }
+
+  isAnswerCaptureEnabled() {
+    return this.answerCaptureEnabled;
+  }
+
+  setAnswerCaptureEnabled(enabled) {
+    this.answerCaptureEnabled = enabled;
+    console.log(`答案获取已${enabled ? '启用' : '禁用'}`);
   }
 
   findLocalFile(url) {
@@ -174,24 +185,24 @@ class AnswerProxy {
     try {
       // 查找要删除的规则
       const ruleToDelete = this.responseRules.find(r => r.id === ruleId);
-      
+
       if (!ruleToDelete) {
         console.warn('未找到要删除的规则:', ruleId);
         return false;
       }
-      
+
       // 如果是规则集，需要删除规则集和所有属于它的规则
       if (ruleToDelete.isGroup) {
         console.log('删除规则集及其所有规则:', ruleToDelete.name);
         // 删除规则集本身和所有属于该规则集的规则
-        this.responseRules = this.responseRules.filter(r => 
+        this.responseRules = this.responseRules.filter(r =>
           r.id !== ruleId && r.groupId !== ruleId
         );
       } else {
         // 如果是单个规则，只删除该规则
         this.responseRules = this.responseRules.filter(r => r.id !== ruleId);
       }
-      
+
       return this.saveResponseRules();
     } catch (error) {
       console.error('删除规则失败:', error);
@@ -388,13 +399,19 @@ class AnswerProxy {
 
   startProxyPromise() {
     return new Promise((resolve) => {
-      proxy.onError(function (ctx, err) {
+      // 创建新的代理实例
+      this.proxy = new Proxy();
+
+      this.proxy.onError(function (ctx, err) {
         console.error('代理出错:', err);
       });
 
-      proxy.onRequest((ctx, callback) => {
+      this.proxy.onRequest((ctx, callback) => {
         const protocol = "http"; // 不知道怎么检测http还是https
         const fullUrl = `${protocol}://${ctx.clientToProxyRequest.headers.host}${ctx.clientToProxyRequest.url}`;
+
+        const isAnswerCaptureEnabled = this.isAnswerCaptureEnabled();
+
         let requestInfo = {
           method: ctx.clientToProxyRequest.method,
           url: fullUrl,
@@ -404,6 +421,11 @@ class AnswerProxy {
           requestHeaders: ctx.clientToProxyRequest.headers,
           uuid: uuidv4(),
         }
+
+        if (!isAnswerCaptureEnabled) {
+          return callback();
+        }
+
         let requestBody = [], responseBody = [];
         ctx.onRequestData((ctx, chunk, callback) => {
           requestBody.push(chunk)
@@ -438,6 +460,8 @@ class AnswerProxy {
           if (responseBodyRules.includes(2) && ctx.serverToProxyResponse.statusCode !== 200) {
             ctx.serverToProxyResponse.statusCode = 200;
             ctx.serverToProxyResponse.headers['content-type'] = 'application/octet-stream'
+            delete ctx.serverToProxyResponse.headers['content-range'];
+            delete ctx.serverToProxyResponse.headers['accept-ranges'];
           }
           requestInfo.statusCode = ctx.serverToProxyResponse.statusCode;
           requestInfo.statusMessage = ctx.serverToProxyResponse.statusMessage;
@@ -519,7 +543,7 @@ class AnswerProxy {
         return callback();
       });
 
-      proxy.listen({ host: '127.0.0.1', port: this.proxyPort }, resolve);
+      this.proxy.listen({ host: '127.0.0.1', port: this.proxyPort }, resolve);
     });
   }
 
@@ -527,7 +551,10 @@ class AnswerProxy {
   async startProxy(mainWindow) {
     this.mainWindow = mainWindow;
 
-    this.stopProxy();
+    // 如果代理已经存在，先停止它
+    if (this.proxy) {
+      await this.stopProxy();
+    }
 
     // 创建MITM代理实例
     await this.startProxyPromise();
@@ -572,24 +599,86 @@ class AnswerProxy {
   }
 
   stopProxy() {
-    try {
-      proxy.close();
-      this.safeIpcSend('proxy-status', {
-        running: false,
-        host: null,
-        port: null,
-        message: '代理服务器已停止'
-      });
-      if (this.bucketServer) {
-        try {
-          this.bucketServer.close();
-        } catch (e) {
-          console.error('关闭词库HTTP服务器失败:', e);
+    return new Promise((resolve) => {
+      try {
+        this.isStopping = true;
+        console.log('开始停止代理服务器...');
+
+        // 关闭代理服务器
+        if (this.proxy) {
+          console.log('代理对象存在，检查close方法...');
+          console.log('代理对象类型:', typeof this.proxy);
+          console.log('代理对象close方法:', typeof this.proxy.close);
+
+          if (typeof this.proxy.close === 'function') {
+            try {
+              // 不使用回调，直接关闭
+              this.proxy.close();
+              console.log('代理服务器关闭命令已发送');
+
+              // 清理代理对象引用
+              this.proxy = null;
+
+              this.handleProxyStop();
+              resolve();
+            } catch (closeError) {
+              console.error('调用proxy.close时出错:', closeError);
+              this.proxy = null;
+              this.handleProxyStop();
+              resolve();
+            }
+          } else {
+            console.log('代理对象没有close方法，直接处理停止');
+            this.handleProxyStop();
+            resolve();
+          }
+        } else {
+          console.log('代理服务器未运行或已关闭');
+          this.handleProxyStop();
+          resolve();
         }
-        this.bucketServer = null;
+
+        setTimeout(() => {
+          if (this.isStopping) {
+            console.log('代理服务器停止超时，强制完成');
+            this.proxy = null;
+            this.handleProxyStop();
+            resolve();
+          }
+        }, 3000);
+
+      } catch (error) {
+        console.error('停止代理服务器时出错:', error);
+        this.proxy = null;
+        this.handleProxyStop();
+        resolve();
       }
+    });
+  }
+
+  handleProxyStop() {
+    this.isStopping = false;
+    console.log('处理代理服务器停止...');
+
+    if (this.bucketServer) {
+      try {
+        this.bucketServer.close(() => {
+          console.log('答案服务器已关闭');
+        });
+      } catch (e) {
+        console.error('关闭答案服务器失败:', e);
+      }
+      this.bucketServer = null;
     }
-    catch (_) { }
+
+    this.safeIpcSend('proxy-status', {
+      running: false,
+      host: null,
+      port: null,
+      message: '代理服务器已停止'
+    });
+
+    console.log('代理服务器停止处理完成');
   }
 
   startBucketServer() {
@@ -654,6 +743,20 @@ class AnswerProxy {
   async extractZipFile(zipPath, ansDir) {
     let mergedAnswers = {};
     try {
+      if (!fs.existsSync(zipPath)) {
+        throw new Error(`ZIP文件不存在: ${zipPath}`);
+      }
+
+      const stats = fs.statSync(zipPath);
+      if (stats.size === 0) {
+        throw new Error('ZIP文件为空');
+      }
+
+      const buffer = fs.readFileSync(zipPath);
+      if (buffer.length < 4 || buffer.readUInt32LE(0) !== 0x04034b50) {
+        throw new Error('文件不是有效的ZIP格式');
+      }
+
       const extractDir = zipPath.replace('.zip', '');
 
       if (fs.existsSync(extractDir)) {
@@ -662,9 +765,31 @@ class AnswerProxy {
 
       fs.ensureDirSync(extractDir);
 
-      const zip = new StreamZip.async({ file: zipPath });
-      await zip.extract(null, extractDir);
-      await zip.close();
+      this.safeIpcSend('process-status', { status: 'processing', message: '正在解压ZIP文件...' });
+
+      try {
+        const zip = new StreamZip.async({ file: zipPath });
+
+        const entries = await zip.entries();
+        if (Object.keys(entries).length === 0) {
+          await zip.close();
+          throw new Error('ZIP文件为空或损坏');
+        }
+
+        await zip.extract(null, extractDir);
+        await zip.close();
+
+        console.log(`ZIP文件解压成功: ${zipPath} -> ${extractDir}`);
+      } catch (zipError) {
+        console.error('StreamZip解压失败，尝试使用备用方法:', zipError);
+
+        try {
+          // 简化的备用解压方法，直接抛出错误让用户知道问题
+          throw new Error(`ZIP文件解压失败，可能文件已损坏: ${zipError.message}`);
+        } catch (backupError) {
+          throw new Error(`解压失败: ${zipError.message}`);
+        }
+      }
 
       this.safeIpcSend('process-status', { status: 'processing', message: '正在分析文件结构...' });
 
@@ -776,6 +901,7 @@ class AnswerProxy {
       }
 
     } catch (error) {
+      console.error('解压ZIP文件失败:', error);
       this.safeIpcSend('process-error', { error: `解压失败: ${error.message}` });
     }
     return mergedAnswers;
