@@ -602,6 +602,11 @@ class UniversalAnswerFeature {
       this.displayProcessedFiles(data);
     });
 
+    // 监听规则触发日志
+    window.electronAPI.onRuleLog((event, data) => {
+      this.addRuleLog(data);
+    });
+
     window.electronAPI.chooseImplantZip(async (filePath) => {
       if (!filePath) {
         this.addErrorLog('未选择文件');
@@ -1189,6 +1194,18 @@ class UniversalAnswerFeature {
 
   addInfoLog(message) {
     this.addLogItem(`${message}`, 'normal', 'bi-info-circle', null, null);
+  }
+
+  addRuleLog(data) {
+    const iconClass = data.type === 'success' ? 'bi-gear-fill' : 'bi-exclamation-triangle-fill';
+    const logType = data.type === 'success' ? 'rule-success' : 'rule-error';
+    
+    let message = data.message;
+    if (data.details) {
+      message += ` (${data.details})`;
+    }
+    
+    this.addLogItem(message, logType, iconClass, null, null);
   }
 
   addLogItem(text, type, iconClass = 'bi-circle', requestId = null, timestamp = null) {

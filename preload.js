@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onFileStructure: (callback) => ipcRenderer.on('file-structure', callback),
   onFilesProcessed: (callback) => ipcRenderer.on('files-processed', callback),
   onCertificateStatus: (callback) => ipcRenderer.on('certificate-status', callback),
+  onRuleLog: (callback) => ipcRenderer.on('rule-log', callback),
 
   clearCache: () => ipcRenderer.invoke('clear-cache'),
   downloadFile: (uuid) => ipcRenderer.invoke('download-file', uuid),

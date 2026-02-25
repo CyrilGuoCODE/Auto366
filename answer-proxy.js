@@ -226,7 +226,17 @@ class AnswerProxy {
     }
   }
 
-  // 获取需要应用的规则
+  // 检查URL是否匹配规则模式（支持通配符）
+  urlMatchesPattern(url, pattern) {
+    // 将通配符模式转换为正则表达式
+    const regexPattern = pattern
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // 转义特殊字符
+      .replace(/\\\*\\\*/g, '.*') // 先处理 ** 替换为匹配任意字符（包括斜杠）
+      .replace(/\\\*/g, '[^/]*'); // 再处理单个 * 替换为匹配非斜杠的任意字符
+    
+    const regex = new RegExp('^' + regexPattern + '$');
+    return regex.test(url);
+  }
   haveRules(url, type) {
     let l = [];
     try {
@@ -243,20 +253,64 @@ class AnswerProxy {
             console.error('注入zip不存在');
             continue;
           }
-          if (url.includes('http://fs.up366.cn/fileinfo/') && url.includes(rule.urlZip)) {
+          
+          // 检查URL是否匹配规则中的ZIP URL模式（支持通配符）
+          const urlMatches = this.urlMatchesPattern(url, rule.urlZip);
+          
+          // 支持文件信息请求的多种域名模式
+          const isFileInfoRequest = url.includes('/fileinfo/') || 
+                                   url.includes('/files/') ||
+                                   url.includes('.json') ||
+                                   (url.includes('up366.cn') && !url.endsWith('.zip'));
+          
+          // 支持文件下载请求的多种模式  
+          const isFileDownloadRequest = url.endsWith('.zip') || 
+                                       url.includes('/download/') ||
+                                       url.includes('/cn/files/');
+          
+          if (urlMatches && isFileInfoRequest) {
             l.push(2)
+            // 发送规则匹配日志
+            this.safeIpcSend('rule-log', {
+              type: 'success',
+              message: `规则 "${rule.name}" 匹配URL - 准备MD5校验绕过`,
+              ruleId: rule.id,
+              ruleName: rule.name,
+              url: url
+            });
           }
-          else if (url.includes('http://fs-v2.up366.cn/download/') && url.includes(rule.urlZip)) {
+          else if (urlMatches && isFileDownloadRequest) {
             l.push(2)
+            // 发送规则匹配日志
+            this.safeIpcSend('rule-log', {
+              type: 'success',
+              message: `规则 "${rule.name}" 匹配URL - 准备文件替换`,
+              ruleId: rule.id,
+              ruleName: rule.name,
+              url: url
+            });
           }
         }
         if (type === 'response-body' && rule.type === 'answer-upload') {
           if (!url.includes(rule.urlUpload)) continue;
           l.push(3)
+          // 发送规则匹配日志
+          this.safeIpcSend('rule-log', {
+            type: 'success',
+            message: `规则 "${rule.name}" 匹配URL - 准备答案上传`,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            url: url
+          });
         }
       }
     } catch (error) {
       console.error('获取需要应用的规则失败:', error);
+      this.safeIpcSend('rule-log', {
+        type: 'error',
+        message: `规则检查失败: ${error.message}`,
+        url: url
+      });
       return [];
     }
     return l;
@@ -271,23 +325,73 @@ class AnswerProxy {
         if (rule.type === 'zip-implant') {
           if (!fs.existsSync(rule.zipImplant)) {
             console.error('注入zip不存在');
+            this.safeIpcSend('rule-log', {
+              type: 'error',
+              message: `规则 "${rule.name}" 的注入文件不存在: ${rule.zipImplant}`,
+              ruleId: rule.id,
+              ruleName: rule.name,
+              url: url
+            });
             continue;
           }
-          if (url.includes('http://fs.up366.cn/fileinfo/') && url.includes(rule.urlZip)) {
+          
+          // 检查URL是否匹配规则中的ZIP URL模式（支持通配符）
+          const urlMatches = this.urlMatchesPattern(url, rule.urlZip);
+          
+          if (!urlMatches) continue;
+          
+          // 支持文件信息请求的多种域名模式
+          const isFileInfoRequest = url.includes('/fileinfo/') || 
+                                   url.includes('/files/') ||
+                                   url.includes('.json') ||
+                                   (url.includes('up366.cn') && !url.endsWith('.zip'));
+          
+          // 支持文件下载请求的多种模式  
+          const isFileDownloadRequest = url.endsWith('.zip') || 
+                                       url.includes('/download/') ||
+                                       url.includes('/cn/files/');
+          
+          if (isFileInfoRequest) {
             const buffer = fs.readFileSync(rule.zipImplant);
             const md5 = crypto.createHash('md5').update(buffer).digest('hex');
             responseBody = responseBody.toString();
             responseBody = responseBody.replace(/"filemd5":"[^"]+"/g, `"filemd5":"${md5}"`);
             responseBody = responseBody.replace(/"objectMD5":"[^"]+"/g, `"objectMD5":"${md5}"`);
+            
+            // 发送规则触发日志
+            this.safeIpcSend('rule-log', {
+              type: 'success',
+              message: `规则 "${rule.name}" 已触发 - MD5校验绕过`,
+              ruleId: rule.id,
+              ruleName: rule.name,
+              url: url,
+              details: `替换文件MD5为: ${md5}`
+            });
+            
             return Buffer.from(responseBody);
           }
-          else if (url.includes('http://fs-v2.up366.cn/download/') && url.includes(rule.urlZip)) {
+          else if (isFileDownloadRequest) {
+            // 发送规则触发日志
+            this.safeIpcSend('rule-log', {
+              type: 'success',
+              message: `规则 "${rule.name}" 已触发 - 文件替换`,
+              ruleId: rule.id,
+              ruleName: rule.name,
+              url: url,
+              details: `替换下载文件: ${rule.zipImplant}`
+            });
+            
             return fs.readFileSync(rule.zipImplant);
           }
         }
       }
     } catch (error) {
       console.error('应用zip注入规则失败:', error);
+      this.safeIpcSend('rule-log', {
+        type: 'error',
+        message: `应用zip注入规则失败: ${error.message}`,
+        url: url
+      });
       return {};
     }
   }
@@ -300,6 +404,17 @@ class AnswerProxy {
         if (rule.isGroup) continue;
         if (rule.type === 'answer-upload') {
           if (!url.includes(rule.urlUpload)) continue;
+          
+          // 发送规则触发日志
+          this.safeIpcSend('rule-log', {
+            type: 'success',
+            message: `规则 "${rule.name}" 已触发 - 答案上传`,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            url: url,
+            details: `上传类型: ${rule.uploadType}, 服务器位置: ${rule.serverLocate}`
+          });
+          
           if (rule.uploadType === 'original') {
             try {
               this.serverDatas[rule.serverLocate] = JSON.parse(responseBody.toString());
@@ -315,6 +430,11 @@ class AnswerProxy {
       }
     } catch (error) {
       console.error('应用答案上传规则失败:', error);
+      this.safeIpcSend('rule-log', {
+        type: 'error',
+        message: `应用答案上传规则失败: ${error.message}`,
+        url: url
+      });
       return {};
     }
   }

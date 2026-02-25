@@ -156,9 +156,17 @@ body {
 }
 
 @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.7; }
-    100% { opacity: 1; }
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 /* 控制面板 */
@@ -369,6 +377,7 @@ body {
         opacity: 0;
         transform: translateY(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -760,11 +769,11 @@ body {
     border-radius: 50%;
 }
 
-.toggle-switch input:checked + .toggle-slider {
+.toggle-switch input:checked+.toggle-slider {
     background-color: #007bff;
 }
 
-.toggle-switch input:checked + .toggle-slider:before {
+.toggle-switch input:checked+.toggle-slider:before {
     transform: translateX(20px);
 }
 
@@ -1242,6 +1251,16 @@ body {
 
 .log-item.normal {
     color: #495057;
+}
+
+.log-item.rule-success {
+    color: #17a2b8;
+    font-weight: normal;
+}
+
+.log-item.rule-error {
+    color: #dc3545;
+    font-weight: normal;
 }
 
 .log-item i {
@@ -2831,8 +2850,9 @@ select.form-input {
 .share-result-modal .secondary-btn:hover {
     background: #545b62;
     transform: translateY(-1px);
-}/* 社
-区规则集样式 */
+}
+
+/* 社区规则集样式 */
 .community-content {
     flex: 1;
     padding: 20px;
@@ -2888,8 +2908,13 @@ select.form-input {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .no-rulesets {
