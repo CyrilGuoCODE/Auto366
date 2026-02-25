@@ -233,10 +233,21 @@ class AnswerProxy {
       .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // 转义特殊字符
       .replace(/\\\*\\\*/g, '.*') // 先处理 ** 替换为匹配任意字符（包括斜杠）
       .replace(/\\\*/g, '[^/]*'); // 再处理单个 * 替换为匹配非斜杠的任意字符
-    
+
     const regex = new RegExp('^' + regexPattern + '$');
     return regex.test(url);
   }
+
+  // 检查是否有启用的zip注入规则
+  hasEnabledZipImplantRules() {
+    return this.responseRules.some(rule =>
+      rule.enabled &&
+      !rule.isGroup &&
+      rule.type === 'zip-implant' &&
+      fs.existsSync(rule.zipImplant)
+    );
+  }
+
   haveRules(url, type) {
     let l = [];
     try {
@@ -253,42 +264,46 @@ class AnswerProxy {
             console.error('注入zip不存在');
             continue;
           }
-          
+
           // 检查URL是否匹配规则中的ZIP URL模式（支持通配符）
-          const urlMatches = this.urlMatchesPattern(url, rule.urlZip);
-          
-          // 支持文件信息请求的多种域名模式
-          const isFileInfoRequest = url.includes('/fileinfo/') || 
-                                   url.includes('/files/') ||
-                                   url.includes('.json') ||
-                                   (url.includes('up366.cn') && !url.endsWith('.zip'));
-          
+          const zipUrlMatches = this.urlMatchesPattern(url, rule.urlZip);
+
+          // 检查URL是否匹配规则中的fileinfo URL模式（如果规则有定义的话）
+          const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
+
+          // 支持文件信息请求的多种域名模式（更精确的判断）
+          const isFileInfoRequest = url.includes('/fileinfo/') ||
+            (url.includes('/files/') && !url.endsWith('.zip')) ||
+            (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+
           // 支持文件下载请求的多种模式  
-          const isFileDownloadRequest = url.endsWith('.zip') || 
-                                       url.includes('/download/') ||
-                                       url.includes('/cn/files/');
-          
-          if (urlMatches && isFileInfoRequest) {
+          const isFileDownloadRequest = url.endsWith('.zip') ||
+            url.includes('/download/') ||
+            url.includes('/cn/files/');
+
+          // 对于文件信息请求，优先使用fileinfo URL模式匹配，如果没有设置则使用通用匹配
+          // 对于文件下载请求，使用ZIP URL模式匹配
+          if ((isFileInfoRequest && fileinfoUrlMatches) || (zipUrlMatches && isFileDownloadRequest)) {
             l.push(2)
-            // 发送规则匹配日志
-            this.safeIpcSend('rule-log', {
-              type: 'success',
-              message: `规则 "${rule.name}" 匹配URL - 准备MD5校验绕过`,
-              ruleId: rule.id,
-              ruleName: rule.name,
-              url: url
-            });
-          }
-          else if (urlMatches && isFileDownloadRequest) {
-            l.push(2)
-            // 发送规则匹配日志
-            this.safeIpcSend('rule-log', {
-              type: 'success',
-              message: `规则 "${rule.name}" 匹配URL - 准备文件替换`,
-              ruleId: rule.id,
-              ruleName: rule.name,
-              url: url
-            });
+            if (isFileInfoRequest) {
+              // 发送规则匹配日志
+              this.safeIpcSend('rule-log', {
+                type: 'success',
+                message: `规则 "${rule.name}" 匹配URL - 准备MD5校验绕过`,
+                ruleId: rule.id,
+                ruleName: rule.name,
+                url: url
+              });
+            } else {
+              // 发送规则匹配日志
+              this.safeIpcSend('rule-log', {
+                type: 'success',
+                message: `规则 "${rule.name}" 匹配URL - 准备文件替换`,
+                ruleId: rule.id,
+                ruleName: rule.name,
+                url: url
+              });
+            }
           }
         }
         if (type === 'response-body' && rule.type === 'answer-upload') {
@@ -334,30 +349,42 @@ class AnswerProxy {
             });
             continue;
           }
-          
+
           // 检查URL是否匹配规则中的ZIP URL模式（支持通配符）
-          const urlMatches = this.urlMatchesPattern(url, rule.urlZip);
-          
-          if (!urlMatches) continue;
-          
-          // 支持文件信息请求的多种域名模式
-          const isFileInfoRequest = url.includes('/fileinfo/') || 
-                                   url.includes('/files/') ||
-                                   url.includes('.json') ||
-                                   (url.includes('up366.cn') && !url.endsWith('.zip'));
-          
+          const zipUrlMatches = this.urlMatchesPattern(url, rule.urlZip);
+
+          // 检查URL是否匹配规则中的fileinfo URL模式（如果规则有定义的话）
+          const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
+
+          // 支持文件信息请求的多种域名模式（更精确的判断）
+          const isFileInfoRequest = url.includes('/fileinfo/') ||
+            (url.includes('/files/') && !url.endsWith('.zip')) ||
+            (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+
           // 支持文件下载请求的多种模式  
-          const isFileDownloadRequest = url.endsWith('.zip') || 
-                                       url.includes('/download/') ||
-                                       url.includes('/cn/files/');
-          
-          if (isFileInfoRequest) {
+          const isFileDownloadRequest = url.endsWith('.zip') ||
+            url.includes('/download/') ||
+            url.includes('/cn/files/');
+
+          // 对于文件信息请求，优先使用fileinfo URL模式匹配，如果没有设置则使用通用匹配
+          // 对于文件下载请求，使用ZIP URL模式匹配
+          if (isFileInfoRequest && fileinfoUrlMatches) {
             const buffer = fs.readFileSync(rule.zipImplant);
             const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+            const fileSize = buffer.length;
+
             responseBody = responseBody.toString();
+
+            // 替换MD5相关字段
             responseBody = responseBody.replace(/"filemd5":"[^"]+"/g, `"filemd5":"${md5}"`);
             responseBody = responseBody.replace(/"objectMD5":"[^"]+"/g, `"objectMD5":"${md5}"`);
-            
+
+            // 替换文件大小相关字段
+            responseBody = responseBody.replace(/"filesize":\s*\d+/g, `"filesize":${fileSize}`);
+            responseBody = responseBody.replace(/"filesize":\s*"\d+"/g, `"filesize":"${fileSize}"`);
+            responseBody = responseBody.replace(/"objectSize":\s*\d+/g, `"objectSize":${fileSize}`);
+            responseBody = responseBody.replace(/"objectSize":\s*"\d+"/g, `"objectSize":"${fileSize}"`);
+
             // 发送规则触发日志
             this.safeIpcSend('rule-log', {
               type: 'success',
@@ -365,12 +392,12 @@ class AnswerProxy {
               ruleId: rule.id,
               ruleName: rule.name,
               url: url,
-              details: `替换文件MD5为: ${md5}`
+              details: `替换文件MD5为: ${md5}, 文件大小为: ${fileSize} 字节`
             });
-            
+
             return Buffer.from(responseBody);
           }
-          else if (isFileDownloadRequest) {
+          else if (zipUrlMatches && isFileDownloadRequest) {
             // 发送规则触发日志
             this.safeIpcSend('rule-log', {
               type: 'success',
@@ -380,7 +407,7 @@ class AnswerProxy {
               url: url,
               details: `替换下载文件: ${rule.zipImplant}`
             });
-            
+
             return fs.readFileSync(rule.zipImplant);
           }
         }
@@ -404,7 +431,7 @@ class AnswerProxy {
         if (rule.isGroup) continue;
         if (rule.type === 'answer-upload') {
           if (!url.includes(rule.urlUpload)) continue;
-          
+
           // 发送规则触发日志
           this.safeIpcSend('rule-log', {
             type: 'success',
@@ -414,7 +441,7 @@ class AnswerProxy {
             url: url,
             details: `上传类型: ${rule.uploadType}, 服务器位置: ${rule.serverLocate}`
           });
-          
+
           if (rule.uploadType === 'original') {
             try {
               this.serverDatas[rule.serverLocate] = JSON.parse(responseBody.toString());
@@ -583,6 +610,46 @@ class AnswerProxy {
             delete ctx.serverToProxyResponse.headers['content-range'];
             delete ctx.serverToProxyResponse.headers['accept-ranges'];
           }
+
+          // 如果是文件下载请求且需要应用规则，修改响应头
+          if (responseBodyRules.includes(2)) {
+            // 检查是否是文件下载请求
+            const isFileDownloadRequest = fullUrl.endsWith('.zip') ||
+              fullUrl.includes('/download/') ||
+              fullUrl.includes('/cn/files/');
+
+            if (isFileDownloadRequest) {
+              // 获取匹配的规则并计算新文件的MD5
+              for (const rule of this.responseRules) {
+                if (!rule.enabled || rule.isGroup || rule.type !== 'zip-implant') continue;
+
+                const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
+                if (urlMatches && fs.existsSync(rule.zipImplant)) {
+                  const buffer = fs.readFileSync(rule.zipImplant);
+                  const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+                  const md5Base64 = Buffer.from(md5, 'hex').toString('base64');
+
+                  // 修改响应头
+                  ctx.serverToProxyResponse.headers['etag'] = md5;
+                  ctx.serverToProxyResponse.headers['content-md5'] = md5Base64;
+                  ctx.serverToProxyResponse.headers['content-length'] = buffer.length.toString();
+
+                  // 发送响应头修改日志
+                  this.safeIpcSend('rule-log', {
+                    type: 'success',
+                    message: `规则 "${rule.name}" 修改响应头`,
+                    ruleId: rule.id,
+                    ruleName: rule.name,
+                    url: fullUrl,
+                    details: `ETag: ${md5}, Content-MD5: ${md5Base64}`
+                  });
+
+                  break;
+                }
+              }
+            }
+          }
+
           requestInfo.statusCode = ctx.serverToProxyResponse.statusCode;
           requestInfo.statusMessage = ctx.serverToProxyResponse.statusMessage;
           requestInfo.responseHeaders = ctx.serverToProxyResponse.headers;

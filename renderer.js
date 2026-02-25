@@ -1801,6 +1801,7 @@ class UniversalAnswerFeature {
       document.getElementById('originalContent').value = rule.originalContent || '';
       document.getElementById('newContent').value = rule.newContent || '';
     } else if (rule.type === 'zip-implant') {
+      document.getElementById('urlFileinfo').value = rule.urlFileinfo || '';
       document.getElementById('urlZip').value = rule.urlZip || '';
       document.getElementById('zipImplant').value = rule.zipImplant || '';
     } else if (rule.type === 'answer-upload') {
@@ -1853,6 +1854,7 @@ class UniversalAnswerFeature {
         return;
       }
     } else if (rule.type === 'zip-implant') {
+      rule.urlFileinfo = document.getElementById('urlFileinfo').value.trim();
       rule.urlZip = document.getElementById('urlZip').value.trim();
       rule.zipImplant = document.getElementById('zipImplant').value.trim();
 
@@ -2084,6 +2086,10 @@ class UniversalAnswerFeature {
       `;
     } else if (rule.type === 'zip-implant') {
       html += `
+        <div class="config-item">
+          <span class="config-label">文件信息URL匹配:</span>
+          <span class="config-value">${rule.urlFileinfo || '未设置（匹配所有fileinfo请求）'}</span>
+        </div>
         <div class="config-item">
           <span class="config-label">ZIP URL匹配:</span>
           <span class="config-value">${rule.urlZip || '未设置'}</span>
