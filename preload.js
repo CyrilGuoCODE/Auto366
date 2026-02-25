@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   //答案获取相关API
   startAnswerProxy: () => ipcRenderer.send('start-answer-proxy'),
   stopAnswerProxy: () => ipcRenderer.send('stop-answer-proxy'),
+  setProxyPort: (port) => ipcRenderer.invoke('set-proxy-port', port),
+  getProxyPort: () => ipcRenderer.invoke('get-proxy-port'),
+  setBucketPort: (port) => ipcRenderer.invoke('set-bucket-port', port),
+  getBucketPort: () => ipcRenderer.invoke('get-bucket-port'),
 
   // 监听事件
   onProxyStatus: (callback) => ipcRenderer.on('proxy-status', callback),

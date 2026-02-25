@@ -177,6 +177,36 @@ ipcMain.on('stop-answer-proxy', () => {
   answerProxy.stopProxy();
 })
 
+// 设置代理端口
+ipcMain.handle('set-proxy-port', async (event, port) => {
+  try {
+    answerProxy.setProxyPort(port);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取代理端口
+ipcMain.handle('get-proxy-port', () => {
+  return answerProxy.getProxyPort();
+});
+
+// 设置答案服务器端口
+ipcMain.handle('set-bucket-port', async (event, port) => {
+  try {
+    answerProxy.setBucketPort(port);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取答案服务器端口
+ipcMain.handle('get-bucket-port', () => {
+  return answerProxy.getBucketPort();
+});
+
 ipcMain.on('open-directory-choosing', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0])

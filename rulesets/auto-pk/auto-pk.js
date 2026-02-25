@@ -12,7 +12,7 @@ let logMessages = [];  // 日志消息数组
 
 function loadBucketFromServer() {
     try {
-        const url = customBucketUrl || 'http://127.0.0.1:5290/bucket-detail-info';
+        const url = customBucketUrl || 'http://127.0.0.1:5290//word-pk-answer';
         fetch(url, { cache: 'no-cache' })
             .then(res => {
                 if (!res.ok) throw new Error('HTTP ' + res.status);

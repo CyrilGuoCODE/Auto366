@@ -25,6 +25,8 @@ class AnswerProxy {
     this.certManager = new CertificateManager();
     this.bucketServer = null; // 本地词库HTTP服务器
     this.serverDatas = {}
+    this.proxyPort = 5291; // 默认代理端口
+    this.bucketPort = 5290; // 默认词库服务器端口
 
     this.loadResponseRules();
   }
@@ -517,7 +519,7 @@ class AnswerProxy {
         return callback();
       });
 
-      proxy.listen({ host: '127.0.0.1', port: 5291 }, resolve);
+      proxy.listen({ host: '127.0.0.1', port: this.proxyPort }, resolve);
     });
   }
 
@@ -560,12 +562,12 @@ class AnswerProxy {
     // 启动本地词库HTTP服务器
     this.startBucketServer();
 
-    console.log('万能答案获取代理服务器已启动: 127.0.0.1:5291');
+    console.log(`万能答案获取代理服务器已启动: 127.0.0.1:${this.proxyPort}`);
     this.safeIpcSend('proxy-status', {
       running: true,
       host: '127.0.0.1',
-      port: '5291',
-      message: '代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:5291'
+      port: this.proxyPort.toString(),
+      message: `代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:${this.proxyPort}`
     });
   }
 
@@ -639,8 +641,8 @@ class AnswerProxy {
         }
       });
 
-      this.bucketServer.listen(5290, '127.0.0.1', () => {
-        console.log('本地服务器已启动: http://127.0.0.1:5290/');
+      this.bucketServer.listen(this.bucketPort, '127.0.0.1', () => {
+        console.log(`本地服务器已启动: http://127.0.0.1:${this.bucketPort}/`);
       });
     } catch (e) {
       console.error('启动HTTP服务器失败:', e);
@@ -1561,6 +1563,35 @@ class AnswerProxy {
       await fs.promises.writeFile(filePath, textContent, 'utf-8');
     }
   }
+  // 设置代理端口
+  setProxyPort(port) {
+    const newPort = parseInt(port);
+    if (newPort < 1024 || newPort > 65535) {
+      throw new Error('端口号必须在1024-65535之间');
+    }
+    this.proxyPort = newPort;
+    this.bucketPort = newPort - 1; // 词库服务器端口为代理端口-1
+  }
+
+  // 获取当前端口
+  getProxyPort() {
+    return this.proxyPort;
+  }
+
+  // 设置答案服务器端口
+  setBucketPort(port) {
+    const newPort = parseInt(port);
+    if (newPort < 1024 || newPort > 65535) {
+      throw new Error('端口号必须在1024-65535之间');
+    }
+    this.bucketPort = newPort;
+  }
+
+  // 获取答案服务器端口
+  getBucketPort() {
+    return this.bucketPort;
+  }
+
   async clearCache() {
     this.trafficCache.clear()
     try {

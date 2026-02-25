@@ -53,6 +53,9 @@
                         <i class="bi bi-router"></i>
                         <span class="status-label">代理状态:</span>
                         <span id="proxyStatus" class="status-value stopped">未启动</span>
+                        <button id="changePortBtn" class="port-change-btn" title="修改端口">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
                     </div>
                     <div class="status-item">
                         <i class="bi bi-shield-lock"></i>
@@ -225,10 +228,32 @@
                         <div class="setting-group">
                             <h4>代理设置</h4>
                             <div class="setting-item">
+                                <label for="proxyPortInput">代理端口:</label>
+                                <input type="number" id="proxyPortInput" class="form-input" value="5291" min="1024" max="65535" placeholder="5291">
+                            </div>
+                            <div class="setting-item">
+                                <label for="bucketPortInput">答案服务器端口:</label>
+                                <input type="number" id="bucketPortInput" class="form-input" value="5290" min="1024" max="65535" placeholder="5290">
+                            </div>
+                            <div class="setting-item">
                                 <label>
                                     <input type="checkbox" id="autoStartProxy" checked>
                                     <span>启动时自动开启代理</span>
                                 </label>
+                            </div>
+                        </div>
+                        <div class="setting-group">
+                            <h4>缓存设置</h4>
+                            <div class="setting-item">
+                                <div class="setting-item-content">
+                                    <label>
+                                        <input type="checkbox" id="keepCacheFiles">
+                                        <span>保留答案提取缓存文件</span>
+                                    </label>
+                                    <div class="setting-description">
+                                        启用后，答案提取过程中的临时文件将不会被自动删除，便于调试和查看
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

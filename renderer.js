@@ -289,6 +289,22 @@ class UniversalAnswerFeature {
       const savedPath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
       cachePathInput.value = savedPath;
     }
+
+    // 加载代理端口设置
+    this.initProxyPortSettings();
+
+    // 初始化缓存设置
+    this.initCacheSettings();
+
+    // 端口修改按钮事件
+    const changePortBtn = document.getElementById('changePortBtn');
+    if (changePortBtn) {
+      changePortBtn.addEventListener('click', () => {
+        this.showPortChangeDialog();
+      });
+    } else {
+      console.error('未找到端口修改按钮元素');
+    }
   }
 
   initResizer() {
@@ -682,6 +698,225 @@ class UniversalAnswerFeature {
     }
   }
 
+  // 初始化代理端口设置
+  async initProxyPortSettings() {
+    try {
+      // 初始化代理端口
+      const currentProxyPort = await window.electronAPI.getProxyPort();
+
+      // 保存端口到localStorage，供其他脚本使用
+      localStorage.setItem('proxy-port', currentProxyPort.toString());
+
+      const proxyPortInput = document.getElementById('proxyPortInput');
+      if (proxyPortInput) {
+        proxyPortInput.value = currentProxyPort;
+
+        // 监听代理端口输入变化
+        proxyPortInput.addEventListener('change', async () => {
+          const newPort = parseInt(proxyPortInput.value);
+          if (newPort >= 1024 && newPort <= 65535) {
+            await this.changeProxyPort(newPort);
+          } else {
+            this.addErrorLog('端口号必须在1024-65535之间');
+            proxyPortInput.value = currentProxyPort;
+          }
+        });
+      }
+
+      // 初始化答案服务器端口
+      const currentBucketPort = await window.electronAPI.getBucketPort();
+
+      // 保存答案服务器端口到localStorage，供其他脚本使用
+      localStorage.setItem('bucket-port', currentBucketPort.toString());
+
+      const bucketPortInput = document.getElementById('bucketPortInput');
+      if (bucketPortInput) {
+        bucketPortInput.value = currentBucketPort;
+
+        // 监听答案服务器端口输入变化
+        bucketPortInput.addEventListener('change', async () => {
+          const newPort = parseInt(bucketPortInput.value);
+          if (newPort >= 1024 && newPort <= 65535) {
+            await this.changeBucketPort(newPort);
+          } else {
+            this.addErrorLog('端口号必须在1024-65535之间');
+            bucketPortInput.value = currentBucketPort;
+          }
+        });
+      }
+    } catch (error) {
+      console.error('初始化代理端口设置失败:', error);
+    }
+  }
+
+  // 初始化缓存设置
+  initCacheSettings() {
+    try {
+      const keepCacheCheckbox = document.getElementById('keepCacheFiles');
+      if (keepCacheCheckbox) {
+        // 加载当前设置
+        const keepCache = localStorage.getItem('keep-cache-files') === 'true';
+        keepCacheCheckbox.checked = keepCache;
+
+        // 监听设置变化
+        keepCacheCheckbox.addEventListener('change', () => {
+          const newValue = keepCacheCheckbox.checked;
+          localStorage.setItem('keep-cache-files', newValue.toString());
+          
+          if (newValue) {
+            this.addSuccessLog('已启用缓存文件保留，答案提取的临时文件将不会被自动删除');
+          } else {
+            this.addInfoLog('已禁用缓存文件保留，答案提取的临时文件将被自动删除');
+          }
+        });
+      }
+    } catch (error) {
+      console.error('初始化缓存设置失败:', error);
+    }
+  }
+
+  // 显示端口修改对话框
+  showPortChangeDialog() {
+    const currentPort = document.getElementById('proxyPortInput')?.value || '5291';
+
+    // 创建自定义对话框
+    this.createPortChangeModal(currentPort);
+  }
+
+  // 创建端口修改模态对话框
+  createPortChangeModal(currentPort) {
+    // 移除已存在的对话框
+    const existingModal = document.getElementById('portChangeModal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // 创建模态对话框HTML
+    const modalHTML = `
+      <div id="portChangeModal" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>修改代理端口</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="newPortInput">新端口号 (1024-65535):</label>
+              <input type="number" id="newPortInput" class="form-input" 
+                     value="${currentPort}" min="1024" max="65535" 
+                     placeholder="请输入端口号">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">
+              取消
+            </button>
+            <button class="primary-btn" id="confirmPortChange">
+              确定
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 添加到页面
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // 绑定确定按钮事件
+    const confirmBtn = document.getElementById('confirmPortChange');
+    const newPortInput = document.getElementById('newPortInput');
+
+    confirmBtn.addEventListener('click', () => {
+      const newPort = parseInt(newPortInput.value);
+      if (newPort >= 1024 && newPort <= 65535) {
+        this.changeProxyPort(newPort);
+        document.getElementById('portChangeModal').remove();
+      } else {
+        this.addErrorLog('端口号必须在1024-65535之间');
+        newPortInput.focus();
+      }
+    });
+
+    // 绑定回车键事件
+    newPortInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        confirmBtn.click();
+      }
+    });
+
+    // 自动聚焦并选中输入框内容
+    setTimeout(() => {
+      newPortInput.focus();
+      newPortInput.select();
+    }, 100);
+  }
+
+  // 修改代理端口
+  async changeProxyPort(port) {
+    try {
+      const result = await window.electronAPI.setProxyPort(port);
+      if (result.success) {
+        // 保存端口到localStorage，供其他脚本使用
+        localStorage.setItem('proxy-port', port.toString());
+
+        // 更新设置页面的输入框
+        const proxyPortInput = document.getElementById('proxyPortInput');
+        if (proxyPortInput) {
+          proxyPortInput.value = port;
+        }
+
+        this.addSuccessLog(`代理端口已修改为: ${port}`);
+
+        // 如果代理正在运行，重启代理服务器
+        if (this.isProxyRunning) {
+          this.addInfoLog('正在重启代理服务器...');
+          await this.stopProxy();
+          setTimeout(() => {
+            this.startProxy();
+          }, 1000);
+        }
+      } else {
+        this.addErrorLog(`修改端口失败: ${result.error}`);
+      }
+    } catch (error) {
+      this.addErrorLog(`修改端口失败: ${error.message}`);
+    }
+  }
+
+  // 修改答案服务器端口
+  async changeBucketPort(port) {
+    try {
+      const result = await window.electronAPI.setBucketPort(port);
+      if (result.success) {
+        // 保存端口到localStorage，供其他脚本使用
+        localStorage.setItem('bucket-port', port.toString());
+
+        // 更新设置页面的输入框
+        const bucketPortInput = document.getElementById('bucketPortInput');
+        if (bucketPortInput) {
+          bucketPortInput.value = port;
+        }
+
+        this.addSuccessLog(`答案服务器端口已修改为: ${port}`);
+
+        // 如果代理正在运行，重启代理服务器以应用新的答案服务器端口
+        if (this.isProxyRunning) {
+          this.addInfoLog('正在重启代理服务器以应用新的答案服务器端口...');
+          await this.stopProxy();
+          setTimeout(() => {
+            this.startProxy();
+          }, 1000);
+        }
+      } else {
+        this.addErrorLog(`修改答案服务器端口失败: ${result.error}`);
+      }
+    } catch (error) {
+      this.addErrorLog(`修改答案服务器端口失败: ${error.message}`);
+    }
+  }
+
   updateCertificateStatus(data) {
     const statusElement = document.getElementById('certificateStatus');
 
@@ -925,7 +1160,7 @@ class UniversalAnswerFeature {
 
     // 自动滚动到底部
     trafficLog.scrollTop = trafficLog.scrollHeight;
-    
+
     // 更新请求计数
     this.updateRequestCount();
   }
@@ -934,18 +1169,17 @@ class UniversalAnswerFeature {
   updateRequestCount() {
     const trafficLog = document.getElementById('trafficLog');
     const requestCountElement = document.getElementById('requestCount');
-    
+
     if (trafficLog && requestCountElement) {
-      // 计算实际的请求数量（排除"等待网络请求..."的初始项）
       const logItems = trafficLog.querySelectorAll('.log-item');
       let requestCount = 0;
-      
+
       logItems.forEach(item => {
         if (!item.textContent.includes('等待网络请求')) {
           requestCount++;
         }
       });
-      
+
       requestCountElement.textContent = requestCount;
     }
   }
@@ -1253,7 +1487,7 @@ class UniversalAnswerFeature {
     if (confirmDialog) {
       confirmDialog.remove();
     }
-    
+
     window.electronAPI.clearCache().then(result => {
       if (result) {
         this.addSuccessLog('临时文件清理成功');
@@ -1285,7 +1519,7 @@ class UniversalAnswerFeature {
     if (confirmDialog) {
       confirmDialog.remove();
     }
-    
+
     const result = window.electronAPI.removeCacheFile()
     if (result) {
       this.addSuccessLog('文件缓存清理成功');
@@ -2773,16 +3007,30 @@ class UniversalAnswerFeature {
     // 计算新文件的MD5
     const newFileMD5 = await this.calculateMD5(arrayBuffer);
 
-    // 生成一个有意义的文件名，而不是使用UUID
-    // 使用规则集名称 + .zip 作为文件名
-    const safeRulesetName = rulesetName.replace(/[<>:"/\\|?*]/g, '_');
-    const fileName = `${safeRulesetName}_injection.zip`;
+    let originalFileName;
+    try {
+      const contentDisposition = response.headers.get('content-disposition');
+      if (contentDisposition && contentDisposition.includes('filename=')) {
+        originalFileName = contentDisposition.split('filename=')[1].replace(/"/g, '').trim();
+      } else {
+        const urlPath = new URL(zipUrl).pathname;
+        originalFileName = urlPath.split('/').pop() || 'download.zip';
+      }
 
-    // 通过IPC发送数据到主进程处理，包含MD5信息用于重复检测
+      if (!originalFileName.toLowerCase().endsWith('.zip')) {
+        originalFileName += '.zip';
+      }
+    } catch (error) {
+      console.error('提取原始文件名失败，使用默认名称:', error);
+      originalFileName = `${safeRulesetName}.zip`;
+    }
+
+    const fileName = originalFileName;
+
     const result = await window.electronAPI.downloadAndSaveInjectionPackageWithMD5(
-      arrayBuffer, 
-      fileName, 
-      rulesetName, 
+      arrayBuffer,
+      fileName,
+      rulesetName,
       newFileMD5
     );
 
