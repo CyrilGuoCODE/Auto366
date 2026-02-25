@@ -3,10 +3,6 @@
 **/dist/
 **/dist-ssr/
 **/build/
-**/tessdata/
-**/tesseract/
-backend.exe
-backend.spec
 
 # 日志文件
 logs
@@ -17,7 +13,6 @@ yarn-error.log*
 lerna-debug.log*
 pnpm-debug.log*
 default
-auto-pk.zip
 
 # 环境变量文件
 **/.env.local
@@ -52,3 +47,7 @@ coverage/
 **/out/
 **/release/
 .env
+
+# 特殊忽略
+*.zip
+auto-fill/

@@ -238,10 +238,24 @@ class AnswerProxy {
     return regex.test(url);
   }
 
+  isRuleEffective(rule) {
+    if (!rule.enabled) return false;
+
+    if (rule.isGroup) return rule.enabled;
+
+    if (rule.groupId) {
+      const ruleGroup = this.responseRules.find(r => r.id === rule.groupId && r.isGroup);
+      if (ruleGroup && !ruleGroup.enabled) {
+        return false;
+      }
+    }
+
+    return true;
+  }
   // 检查是否有启用的zip注入规则
   hasEnabledZipImplantRules() {
     return this.responseRules.some(rule =>
-      rule.enabled &&
+      this.isRuleEffective(rule) &&
       !rule.isGroup &&
       rule.type === 'zip-implant' &&
       fs.existsSync(rule.zipImplant)
@@ -252,7 +266,7 @@ class AnswerProxy {
     let l = [];
     try {
       for (const rule of this.responseRules) {
-        if (!rule.enabled) continue;
+        if (!this.isRuleEffective(rule)) continue;
         if (rule.isGroup) continue;
         if (rule.type === 'content-change') {
           if (!url.includes(rule.urlPattern)) continue;
@@ -335,7 +349,7 @@ class AnswerProxy {
   applyZipImplantRules(url, responseBody) {
     try {
       for (const rule of this.responseRules) {
-        if (!rule.enabled) continue;
+        if (!this.isRuleEffective(rule)) continue;
         if (rule.isGroup) continue;
         if (rule.type === 'zip-implant') {
           if (!fs.existsSync(rule.zipImplant)) {
@@ -427,7 +441,7 @@ class AnswerProxy {
   applyAnswerUploadRules(url, responseBody, extracted_answers) {
     try {
       for (const rule of this.responseRules) {
-        if (!rule.enabled) continue;
+        if (!this.isRuleEffective(rule)) continue;
         if (rule.isGroup) continue;
         if (rule.type === 'answer-upload') {
           if (!url.includes(rule.urlUpload)) continue;
@@ -621,7 +635,7 @@ class AnswerProxy {
             if (isFileDownloadRequest) {
               // 获取匹配的规则并计算新文件的MD5
               for (const rule of this.responseRules) {
-                if (!rule.enabled || rule.isGroup || rule.type !== 'zip-implant') continue;
+                if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant') continue;
 
                 const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
                 if (urlMatches && fs.existsSync(rule.zipImplant)) {

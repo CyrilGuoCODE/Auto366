@@ -1960,7 +1960,7 @@ class UniversalAnswerFeature {
             </div>
           </div>
           <div class="rule-group-content">
-            ${this.generateGroupRulesHtml(groupRules)}
+            ${this.generateGroupRulesHtml(groupRules, group.enabled)}
           </div>
         </div>
       `;
@@ -1980,7 +1980,7 @@ class UniversalAnswerFeature {
             </div>
           </div>
           <div class="rule-group-content">
-            ${this.generateGroupRulesHtml(independentRules)}
+            ${this.generateGroupRulesHtml(independentRules, true)}
           </div>
         </div>
       `;
@@ -1990,7 +1990,7 @@ class UniversalAnswerFeature {
     rulesContent.innerHTML = html;
   }
 
-  generateGroupRulesHtml(rules) {
+  generateGroupRulesHtml(rules, parentGroupEnabled = true) {
     if (!rules || rules.length === 0) {
       return `
         <div class="no-group-rules">
@@ -2002,8 +2002,13 @@ class UniversalAnswerFeature {
 
     let html = '';
     rules.forEach(rule => {
-      const statusClass = rule.enabled ? 'enabled' : 'disabled';
+      // 规则的有效状态：规则本身启用 且 父规则集启用（如果有的话）
+      const isEffective = rule.enabled && parentGroupEnabled;
+      const statusClass = isEffective ? 'enabled' : 'disabled';
       const typeClass = rule.type ? rule.type.replace('-', '') : '';
+      
+      // 如果父规则集被禁用，子规则的开关应该显示为禁用状态
+      const isDisabledByParent = !parentGroupEnabled;
 
       html += `
         <div class="rule-item ${statusClass}" data-rule-id="${rule.id}">
@@ -2011,9 +2016,11 @@ class UniversalAnswerFeature {
             <div class="rule-info">
               <div class="rule-name">
                 ${rule.name || '未命名规则'}
-                <label class="rule-toggle">
+                <label class="rule-toggle ${isDisabledByParent ? 'disabled-by-parent' : ''}">
                   <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
-                         onchange="universalAnswerFeature.toggleRule('${rule.id}', this.checked)">
+                         ${isDisabledByParent ? 'disabled' : ''}
+                         onchange="universalAnswerFeature.toggleRule('${rule.id}', this.checked)"
+                         title="${isDisabledByParent ? '规则集已禁用，无法单独启用此规则' : ''}">
                   <span class="rule-toggle-slider"></span>
                 </label>
               </div>
@@ -2167,8 +2174,18 @@ class UniversalAnswerFeature {
       const result = await window.electronAPI.toggleRule(ruleId, enabled);
       if (result.success) {
         this.addSuccessLog(`规则已${enabled ? '启用' : '禁用'}`);
-        // 不需要重新加载整个列表，只更新状态显示
-        this.updateRuleStatus(ruleId, enabled);
+        
+        // 检查是否是规则集，如果是规则集则重新加载整个列表以更新子规则状态
+        const rules = await window.electronAPI.getRules();
+        const toggledRule = rules.find(r => r.id === ruleId);
+        
+        if (toggledRule && toggledRule.isGroup) {
+          // 如果是规则集，重新加载整个规则列表
+          this.loadRules();
+        } else {
+          // 如果是普通规则，只更新状态显示
+          this.updateRuleStatus(ruleId, enabled);
+        }
       } else {
         this.addErrorLog(`规则状态更新失败: ${result.error}`);
         // 恢复开关状态

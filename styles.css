@@ -3358,3 +3358,20 @@ select.form-input {
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
 }
+
+.rule-toggle.disabled-by-parent {
+    opacity: 0.5;
+}
+
+.rule-toggle.disabled-by-parent input {
+    cursor: not-allowed;
+}
+
+.rule-toggle.disabled-by-parent .rule-toggle-slider {
+    cursor: not-allowed;
+    background-color: #ccc !important;
+}
+
+.rule-toggle.disabled-by-parent .rule-toggle-slider:before {
+    background-color: #999 !important;
+}
