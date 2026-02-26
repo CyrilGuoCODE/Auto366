@@ -206,32 +206,22 @@ app.whenReady().then(async () => {
           localStorage.getItem('auto-check-updates') !== 'false'
         `).then(autoCheckEnabled => {
           if (autoCheckEnabled) {
+            console.log('应用启动，开始检查更新...');
             autoUpdater.checkForUpdates().catch(error => {
-              console.error('检查更新失败:', error)
+              console.error('启动时检查更新失败:', error)
             });
+          } else {
+            console.log('自动检查更新已禁用');
           }
         }).catch(error => {
           console.error('获取自动检查更新设置失败:', error);
+          console.log('获取设置失败，默认检查更新...');
+          autoUpdater.checkForUpdates().catch(error => {
+            console.error('默认检查更新失败:', error)
+          });
         });
       }
-    }, 3000)
-
-    setInterval(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.executeJavaScript(`
-          localStorage.getItem('auto-check-updates') !== 'false'
-        `).then(autoCheckEnabled => {
-          if (autoCheckEnabled) {
-            console.log('定期检查更新...');
-            autoUpdater.checkForUpdates().catch(error => {
-              console.error('定期检查更新失败:', error)
-            });
-          }
-        }).catch(error => {
-          console.error('获取自动检查更新设置失败:', error);
-        });
-      }
-    }, 24 * 60 * 60 * 1000) // 24小时 = 24 * 60 * 60 * 1000 毫秒
+    }, 1000)
   }
 })
 

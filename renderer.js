@@ -624,6 +624,12 @@ class UniversalAnswerFeature {
       });
     }
 
+    if (window.electronAPI.onUpdateAvailable) {
+      window.electronAPI.onUpdateAvailable((data) => {
+        this.handleUpdateAvailable(data);
+      });
+    }
+
     window.electronAPI.chooseImplantZip(async (filePath) => {
       if (!filePath) {
         this.addErrorLog('未选择文件');
@@ -1826,6 +1832,18 @@ class UniversalAnswerFeature {
       const transferredMB = (transferred / 1024 / 1024).toFixed(2);
 
       this.addInfoLog(`更新下载进度: ${roundedPercent}% (${transferredMB}MB/${totalMB}MB) - 速度: ${speedMB}MB/s`);
+    }
+  }
+
+  handleUpdateAvailable(updateInfo) {
+    this.addSuccessLog(`发现新版本 ${updateInfo.version}`);
+
+    this.showUpdatePanel(updateInfo);
+
+    const updateBtn = document.getElementById('update-notification-btn');
+    if (updateBtn) {
+      updateBtn.classList.add('has-update');
+      updateBtn.title = `发现新版本 ${updateInfo.version}`;
     }
   }
 
