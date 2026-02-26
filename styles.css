@@ -2181,6 +2181,11 @@ select.form-input {
     color: #007bff;
 }
 
+.rule-btn.reset-btn:hover {
+    background: #fff3cd;
+    color: #856404;
+}
+
 .rule-btn.delete-btn:hover {
     background: #ffebee;
     color: #dc3545;
@@ -2559,6 +2564,12 @@ select.form-input {
 .rule-btn.edit-btn:hover {
     background: #007bff;
     border-color: #007bff;
+    color: white;
+}
+
+.rule-btn.reset-btn:hover {
+    background: #ffc107;
+    border-color: #ffc107;
     color: white;
 }
 

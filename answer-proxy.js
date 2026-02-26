@@ -116,10 +116,25 @@ class AnswerProxy {
       fs.ensureDirSync(rulesDir);
       const rulesFile = path.join(rulesDir, 'rules.json');
 
+      console.log('加载规则文件:', rulesFile);
+
       if (fs.existsSync(rulesFile)) {
         const rulesData = fs.readFileSync(rulesFile, 'utf-8');
         this.responseRules = JSON.parse(rulesData);
+        
+        console.log('成功加载规则数量:', this.responseRules.length);
+
+        const rulesWithTriggers = this.responseRules.filter(rule => rule.maxTriggers !== undefined);
+        if (rulesWithTriggers.length > 0) {
+          console.log('包含触发次数限制的规则:', rulesWithTriggers.map(r => ({
+            id: r.id,
+            name: r.name,
+            maxTriggers: r.maxTriggers,
+            currentTriggers: r.currentTriggers
+          })));
+        }
       } else {
+        console.log('规则文件不存在，创建空规则数组');
         this.responseRules = [];
       }
     } catch (error) {
@@ -137,6 +152,19 @@ class AnswerProxy {
       // 如果传入了规则数组，则使用传入的规则；否则使用当前规则
       const rulesToSave = rules !== null ? rules : this.responseRules;
 
+      console.log('保存规则到文件:', rulesFile);
+      console.log('规则数量:', rulesToSave.length);
+
+      const rulesWithTriggers = rulesToSave.filter(rule => rule.maxTriggers !== undefined);
+      if (rulesWithTriggers.length > 0) {
+        console.log('包含触发次数限制的规则:', rulesWithTriggers.map(r => ({
+          id: r.id,
+          name: r.name,
+          maxTriggers: r.maxTriggers,
+          currentTriggers: r.currentTriggers
+        })));
+      }
+
       fs.writeFileSync(rulesFile, JSON.stringify(rulesToSave, null, 2), 'utf-8');
 
       // 如果传入了规则数组，则更新当前规则
@@ -144,6 +172,7 @@ class AnswerProxy {
         this.responseRules = rules;
       }
 
+      console.log('规则保存成功');
       return true;
     } catch (error) {
       console.error('保存响应体更改规则失败:', error);
@@ -217,11 +246,52 @@ class AnswerProxy {
       if (rule) {
         rule.enabled = enabled;
         rule.updatedAt = new Date().toISOString();
+        
+        if (rule.isGroup && enabled) {
+          const childRules = this.responseRules.filter(r => r.groupId === rule.id);
+          childRules.forEach(childRule => {
+            if (childRule.maxTriggers !== undefined) {
+              childRule.currentTriggers = 0;
+            }
+          });
+        }
+
+        if (!rule.isGroup && rule.maxTriggers !== undefined) {
+          rule.currentTriggers = 0;
+        }
+        
         return this.saveResponseRules();
       }
       return false;
     } catch (error) {
       console.error('切换规则状态失败:', error);
+      return false;
+    }
+  }
+
+  // 重置规则触发次数
+  resetRuleTriggers(ruleId) {
+    try {
+      const rule = this.responseRules.find(r => r.id === ruleId);
+      if (rule) {
+        rule.updatedAt = new Date().toISOString();
+
+        if (rule.isGroup) {
+          const childRules = this.responseRules.filter(r => r.groupId === rule.id);
+          childRules.forEach(childRule => {
+            if (childRule.maxTriggers !== undefined) {
+              childRule.currentTriggers = 0;
+            }
+          });
+        } else if (rule.maxTriggers !== undefined) {
+          rule.currentTriggers = 0;
+        }
+        
+        return this.saveResponseRules();
+      }
+      return false;
+    } catch (error) {
+      console.error('重置规则触发次数失败:', error);
       return false;
     }
   }
@@ -241,11 +311,21 @@ class AnswerProxy {
   isRuleEffective(rule) {
     if (!rule.enabled) return false;
 
-    if (rule.isGroup) return rule.enabled;
+    if (rule.isGroup) {
+      return rule.enabled;
+    }
 
     if (rule.groupId) {
       const ruleGroup = this.responseRules.find(r => r.id === rule.groupId && r.isGroup);
       if (ruleGroup && !ruleGroup.enabled) {
+        return false;
+      }
+    }
+
+    // 检查触发次数限制
+    if (rule.maxTriggers !== undefined && rule.maxTriggers > 0) {
+      const currentTriggers = rule.currentTriggers || 0;
+      if (currentTriggers >= rule.maxTriggers) {
         return false;
       }
     }
@@ -299,11 +379,17 @@ class AnswerProxy {
           // 对于文件下载请求，使用ZIP URL模式匹配
           if ((isFileInfoRequest && fileinfoUrlMatches) || (zipUrlMatches && isFileDownloadRequest)) {
             l.push(2)
+            
+            if (rule.maxTriggers !== undefined) {
+              rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+              this.saveResponseRules();
+            }
+            
             if (isFileInfoRequest) {
               // 发送规则匹配日志
               this.safeIpcSend('rule-log', {
                 type: 'success',
-                message: `规则 "${rule.name}" 匹配URL - 准备MD5校验绕过`,
+                message: `规则 "${rule.name}" 匹配URL - 准备MD5校验绕过 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
                 ruleId: rule.id,
                 ruleName: rule.name,
                 url: url
@@ -312,7 +398,7 @@ class AnswerProxy {
               // 发送规则匹配日志
               this.safeIpcSend('rule-log', {
                 type: 'success',
-                message: `规则 "${rule.name}" 匹配URL - 准备文件替换`,
+                message: `规则 "${rule.name}" 匹配URL - 准备文件替换 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
                 ruleId: rule.id,
                 ruleName: rule.name,
                 url: url
@@ -322,11 +408,17 @@ class AnswerProxy {
         }
         if (type === 'response-body' && rule.type === 'answer-upload') {
           if (!url.includes(rule.urlUpload)) continue;
+
+          if (rule.maxTriggers !== undefined) {
+            rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+            this.saveResponseRules();
+          }
+          
           l.push(3)
           // 发送规则匹配日志
           this.safeIpcSend('rule-log', {
             type: 'success',
-            message: `规则 "${rule.name}" 匹配URL - 准备答案上传`,
+            message: `规则 "${rule.name}" 匹配URL - 准备答案上传 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
             ruleId: rule.id,
             ruleName: rule.name,
             url: url

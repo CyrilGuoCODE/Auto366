@@ -1661,7 +1661,7 @@ class UniversalAnswerFeature {
     const confirmHtml = `
       <div class="log-item warning">
         <i class="bi bi-exclamation-triangle"></i>
-        <span>确定要清理天学网文件缓存吗？此操作将删除flipbooks和homework目录，不可撤销。</span>
+        <span>确定要清理天学网文件缓存吗？此操作将删除天学网缓存目录，不可撤销。</span>
         <div class="cache-buttons">
           <button onclick="this.parentElement.remove()" class="btn-small btn-cancel">取消</button>
           <button onclick="universalAnswerFeature.confirmDeleteFileTemp()" class="btn-small btn-danger">确认清理</button>
@@ -2040,6 +2040,8 @@ class UniversalAnswerFeature {
       document.getElementById('uploadType').value = rule.uploadType || 'original';
       document.getElementById('serverLocate').value = rule.serverLocate || '';
     }
+
+    document.getElementById('maxTriggers').value = rule.maxTriggers || '';
   }
 
   async saveRule() {
@@ -2109,9 +2111,24 @@ class UniversalAnswerFeature {
       }
     }
 
+    const maxTriggersValue = document.getElementById('maxTriggers').value.trim();
+    if (maxTriggersValue && parseInt(maxTriggersValue) > 0) {
+      rule.maxTriggers = parseInt(maxTriggersValue);
+      rule.currentTriggers = 0;
+      console.log('设置触发次数限制:', rule.maxTriggers);
+    } else {
+      delete rule.maxTriggers;
+      delete rule.currentTriggers;
+      console.log('移除触发次数限制');
+    }
+
+    console.log('准备保存规则:', rule);
+
     try {
       // 调用后端API保存规则
       const result = await window.electronAPI.saveRule(rule);
+
+      console.log('保存规则结果:', result);
 
       if (result && result.success) {
         this.addSuccessLog(this.currentEditingRule ? '规则更新成功' : '规则添加成功');
@@ -2185,6 +2202,11 @@ class UniversalAnswerFeature {
               <button class="rule-btn edit-btn" onclick="universalAnswerFeature.editRuleGroup('${group.id}')" title="编辑规则集">
                 <i class="bi bi-pencil"></i>
               </button>
+              ${this.hasTriggersInGroup(groupRules) ? `
+              <button class="rule-btn reset-btn" onclick="universalAnswerFeature.resetRuleTriggers('${group.id}')" title="重置触发次数">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              ` : ''}
               <button class="rule-btn delete-btn" onclick="universalAnswerFeature.deleteRule('${group.id}')" title="删除规则集">
                 <i class="bi bi-trash"></i>
               </button>
@@ -2219,6 +2241,10 @@ class UniversalAnswerFeature {
 
     html += '</div>';
     rulesContent.innerHTML = html;
+  }
+
+  hasTriggersInGroup(rules) {
+    return rules && rules.some(rule => rule.maxTriggers !== undefined && rule.maxTriggers > 0);
   }
 
   generateGroupRulesHtml(rules, parentGroupEnabled = true) {
@@ -2261,6 +2287,11 @@ class UniversalAnswerFeature {
               <button class="rule-btn edit-btn" onclick="universalAnswerFeature.editRule('${rule.id}')" title="编辑">
                 <i class="bi bi-pencil"></i>
               </button>
+              ${rule.maxTriggers ? `
+              <button class="rule-btn reset-btn" onclick="universalAnswerFeature.resetRuleTriggers('${rule.id}')" title="重置触发次数">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              ` : ''}
               <button class="rule-btn delete-btn" onclick="universalAnswerFeature.deleteRule('${rule.id}')" title="删除">
                 <i class="bi bi-trash"></i>
               </button>
@@ -2321,6 +2352,12 @@ class UniversalAnswerFeature {
           <span class="config-label">新内容:</span>
           <span class="config-value">${rule.newContent || '未设置'}</span>
         </div>
+        ${rule.maxTriggers ? `
+        <div class="config-item">
+          <span class="config-label">触发次数:</span>
+          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
       `;
     } else if (rule.type === 'zip-implant') {
       html += `
@@ -2336,6 +2373,12 @@ class UniversalAnswerFeature {
           <span class="config-label">注入文件:</span>
           <span class="config-value">${rule.zipImplant || '未设置'}</span>
         </div>
+        ${rule.maxTriggers ? `
+        <div class="config-item">
+          <span class="config-label">触发次数:</span>
+          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
       `;
     } else if (rule.type === 'answer-upload') {
       html += `
@@ -2351,6 +2394,12 @@ class UniversalAnswerFeature {
           <span class="config-label">服务器位置:</span>
           <span class="config-value">${rule.serverLocate || '未设置'}</span>
         </div>
+        ${rule.maxTriggers ? `
+        <div class="config-item">
+          <span class="config-label">触发次数:</span>
+          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
       `;
     }
 
@@ -2397,6 +2446,24 @@ class UniversalAnswerFeature {
       }
     } catch (error) {
       this.addErrorLog(`规则删除失败: ${error.message}`);
+    }
+  }
+
+  async resetRuleTriggers(ruleId) {
+    if (!confirm('确定要重置此规则的触发次数吗？')) {
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.resetRuleTriggers(ruleId);
+      if (result.success) {
+        this.addSuccessLog('触发次数重置成功');
+        this.loadRules();
+      } else {
+        this.addErrorLog(`触发次数重置失败: ${result.error}`);
+      }
+    } catch (error) {
+      this.addErrorLog(`触发次数重置失败: ${error.message}`);
     }
   }
 

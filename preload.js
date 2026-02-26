@@ -91,12 +91,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       
       const flipbooksPath = path.join(cachePath, 'flipbooks');
       const homeworkPath = path.join(cachePath, 'homework');
+      const resourcesPath = path.join(cachePath, 'resources');
       
       countAndDelete(flipbooksPath);
       countAndDelete(homeworkPath);
+      countAndDelete(resourcesPath);
       
       fs.rmSync(flipbooksPath, { recursive: true, force: true });
       fs.rmSync(homeworkPath, { recursive: true, force: true });
+      fs.rmSync(resourcesPath, { recursive: true, force: true });
       
       return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
@@ -120,6 +123,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveRule: (rule) => ipcRenderer.invoke('save-response-rule', rule),
   deleteRule: (ruleId) => ipcRenderer.invoke('delete-response-rule', ruleId),
   toggleRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
+  resetRuleTriggers: (ruleId) => ipcRenderer.invoke('reset-rule-triggers', ruleId),
 
   // 更新相关API
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

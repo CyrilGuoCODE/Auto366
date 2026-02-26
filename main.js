@@ -366,6 +366,16 @@ ipcMain.handle('toggle-response-rule', (event, ruleId, enabled) => {
   }
 });
 
+ipcMain.handle('reset-rule-triggers', (event, ruleId) => {
+  try {
+    const success = answerProxy.resetRuleTriggers(ruleId);
+    return { success };
+  } catch (error) {
+    console.error('重置规则触发次数失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('export-response-rules', async () => {
   const rules = answerProxy.getResponseRules();
   const result = await dialog.showSaveDialog({

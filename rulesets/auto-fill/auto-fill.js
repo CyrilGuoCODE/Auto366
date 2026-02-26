@@ -307,9 +307,9 @@ function createAutoFillPanel() {
         dialog.style.minWidth = '300px';
         dialog.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
 
-        const title = document.createElement('span');
+        const title = document.createElement('h4');
         title.textContent = '设置自定义答案库URL';
-        title.style.fontSize = '16px';
+        title.style.fontSize = '19px';
         title.style.fontWeight = 'bold';
         title.style.display = 'block';
         title.style.marginBottom = '15px';
