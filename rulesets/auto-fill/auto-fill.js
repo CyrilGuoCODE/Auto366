@@ -23,7 +23,21 @@ function loadBucketFromServer() {
                     if (i.sourceFile === 'correctAnswer.xml') {
                         const answerParts = i.answer.split('/');
                         const answerText = answerParts[0];
-                        const questionNum = i.questionNumber || answers.length + 1;
+                        
+                        // 从question字段提取题号，格式如"第1题"
+                        let questionNum = 1;
+                        if (i.question && typeof i.question === 'string') {
+                            const match = i.question.match(/第(\d+)题/);
+                            if (match) {
+                                questionNum = parseInt(match[1], 10);
+                            }
+                        }
+                        
+                        // 如果没有找到题号，使用answerIndex或当前数组长度+1
+                        if (!questionNum || questionNum <= 0) {
+                            questionNum = i.answerIndex || (answers.length + 1);
+                        }
+                        
                         answerMap.set(questionNum, answerText);
                     }
                 }
@@ -38,6 +52,7 @@ function loadBucketFromServer() {
                 updateAutoFillPanelStatus();
                 addLogMessage('填空答案库加载成功，共 ' + answers.length + ' 个答案', 'success');
                 console.log('填空答案库加载成功，共' + answers.length + '个答案');
+                console.log('答案列表预览:', answers.slice(0, 10)); // 显示前10个答案
             })
             .catch(err => {
                 bucketLoaded = false;
