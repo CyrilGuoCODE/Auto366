@@ -89,14 +89,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
       };
       
-      const resourcesPath = path.join(cachePath, 'resources');
       const flipbooksPath = path.join(cachePath, 'flipbooks');
+      const homeworkPath = path.join(cachePath, 'homework');
       
-      countAndDelete(resourcesPath);
       countAndDelete(flipbooksPath);
+      countAndDelete(homeworkPath);
       
-      fs.rmSync(resourcesPath, { recursive: true, force: true });
       fs.rmSync(flipbooksPath, { recursive: true, force: true });
+      fs.rmSync(homeworkPath, { recursive: true, force: true });
       
       return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
@@ -122,9 +122,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
 
   // 更新相关API
-  checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   updateConfirm: () => ipcRenderer.send('update-confirm'),
   updateInstall: () => ipcRenderer.send('update-install'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, data) => callback(data)),
   onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, data) => callback(data)),
   onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, data) => callback(data)),

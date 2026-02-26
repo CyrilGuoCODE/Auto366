@@ -86,6 +86,10 @@ autoUpdater.on('error', (error) => {
   console.error('更新检查失败:', error)
 })
 
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 ipcMain.on('update-confirm', async () => {
   if (updateInfo) {
     await autoUpdater.downloadUpdate()
@@ -96,19 +100,59 @@ ipcMain.on('update-install', () => {
   autoUpdater.quitAndInstall(false, true)
 })
 
-ipcMain.on('check-for-updates', () => {
+ipcMain.handle('check-for-updates', async () => {
   if (!app.isPackaged) {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-not-available', { isDev: true })
-    }
-    return
+    return { hasUpdate: false, isDev: true, message: '开发环境不支持自动更新' };
   }
-  autoUpdater.checkForUpdates().catch(error => {
-    console.error('检查更新失败:', error)
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-not-available', { error: error.message })
-    }
-  })
+
+  try {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ hasUpdate: false, message: '检查更新超时' });
+      }, 20000);
+
+      const onUpdateAvailable = (info) => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        autoUpdater.removeListener('error', onError);
+        resolve({
+          hasUpdate: true,
+          version: info.version,
+          releaseNotes: info.releaseNotes,
+          releaseDate: info.releaseDate
+        });
+      };
+
+      const onUpdateNotAvailable = () => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('error', onError);
+        resolve({ hasUpdate: false, message: '当前已是最新版本' });
+      };
+
+      const onError = (error) => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        resolve({ hasUpdate: false, error: error.message });
+      };
+
+      autoUpdater.once('update-available', onUpdateAvailable);
+      autoUpdater.once('update-not-available', onUpdateNotAvailable);
+      autoUpdater.once('error', onError);
+
+      autoUpdater.checkForUpdates().catch(error => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        autoUpdater.removeListener('error', onError);
+        resolve({ hasUpdate: false, error: error.message });
+      });
+    });
+  } catch (error) {
+    console.error('检查更新失败:', error);
+    return { hasUpdate: false, error: error.message };
+  }
 })
 
 autoUpdater.on('update-not-available', () => {
@@ -157,10 +201,37 @@ app.whenReady().then(async () => {
 
   if (app.isPackaged) {
     setTimeout(() => {
-      autoUpdater.checkForUpdates().catch(error => {
-        console.error('检查更新失败:', error)
-      })
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.executeJavaScript(`
+          localStorage.getItem('auto-check-updates') !== 'false'
+        `).then(autoCheckEnabled => {
+          if (autoCheckEnabled) {
+            autoUpdater.checkForUpdates().catch(error => {
+              console.error('检查更新失败:', error)
+            });
+          }
+        }).catch(error => {
+          console.error('获取自动检查更新设置失败:', error);
+        });
+      }
     }, 3000)
+
+    setInterval(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.executeJavaScript(`
+          localStorage.getItem('auto-check-updates') !== 'false'
+        `).then(autoCheckEnabled => {
+          if (autoCheckEnabled) {
+            console.log('定期检查更新...');
+            autoUpdater.checkForUpdates().catch(error => {
+              console.error('定期检查更新失败:', error)
+            });
+          }
+        }).catch(error => {
+          console.error('获取自动检查更新设置失败:', error);
+        });
+      }
+    }, 24 * 60 * 60 * 1000) // 24小时 = 24 * 60 * 60 * 1000 毫秒
   }
 })
 
@@ -392,33 +463,33 @@ ipcMain.handle('import-response-rules-from-data', async (event, rulesData) => {
     }
 
     const currentRules = answerProxy.getResponseRules();
-    
+
     // 如果有规则集信息，检查并处理规则集
     if (groupToImport) {
       // 检查是否已存在相同的规则集
-      const existingGroupIndex = currentRules.findIndex(rule => 
+      const existingGroupIndex = currentRules.findIndex(rule =>
         rule.isGroup && (
           rule.communityRulesetId === groupToImport.communityRulesetId ||
           (rule.name === groupToImport.name && rule.author === groupToImport.author)
         )
       );
-      
+
       if (existingGroupIndex !== -1) {
         // 如果规则集已存在，先删除旧的规则集和相关规则
         const existingGroup = currentRules[existingGroupIndex];
         const groupId = existingGroup.id;
-        
+
         console.log(`发现已存在的规则集: ${existingGroup.name}，正在替换...`);
-        
+
         // 删除旧的规则集和所有属于该规则集的规则
-        answerProxy.responseRules = answerProxy.responseRules.filter(rule => 
+        answerProxy.responseRules = answerProxy.responseRules.filter(rule =>
           rule.id !== groupId && rule.groupId !== groupId
         );
       }
-      
+
       // 添加新的规则集
       answerProxy.responseRules.push(groupToImport);
-      
+
       // 为规则添加groupId
       rulesToImport.forEach(rule => {
         rule.groupId = groupToImport.id;
@@ -429,7 +500,7 @@ ipcMain.handle('import-response-rules-from-data', async (event, rulesData) => {
       const existingRuleNames = currentRules
         .filter(rule => !rule.isGroup && rule.name)
         .map(rule => rule.name);
-        
+
       const originalCount = rulesToImport.length;
       rulesToImport = rulesToImport.filter(rule => {
         if (rule.name && existingRuleNames.includes(rule.name)) {
@@ -438,12 +509,12 @@ ipcMain.handle('import-response-rules-from-data', async (event, rulesData) => {
         }
         return true;
       });
-      
+
       if (originalCount > rulesToImport.length) {
         console.log(`过滤了 ${originalCount - rulesToImport.length} 个重复规则`);
       }
     }
-    
+
     // 添加规则
     answerProxy.responseRules = [...answerProxy.responseRules, ...rulesToImport];
     answerProxy.saveResponseRules();
@@ -479,20 +550,20 @@ ipcMain.handle('download-and-import-injection-package', async (event, arrayBuffe
   try {
     const buffer = Buffer.from(arrayBuffer);
     const tempPath = path.join(require('os').tmpdir(), `injection_${Date.now()}.zip`);
-    
+
     // 保存到临时文件
     fs.writeFileSync(tempPath, buffer);
-    
+
     // 导入注入包
     const result = await answerProxy.importZipToDir(tempPath);
-    
+
     // 清理临时文件
     try {
       fs.unlinkSync(tempPath);
     } catch (error) {
       console.warn('清理临时文件失败:', error);
     }
-    
+
     return result;
   } catch (error) {
     console.error('下载并导入注入包失败:', error);
@@ -506,28 +577,28 @@ ipcMain.handle('download-and-import-injection-package', async (event, arrayBuffe
 ipcMain.handle('download-and-save-injection-package', async (event, arrayBuffer, originalFileName, rulesetName) => {
   try {
     const buffer = Buffer.from(arrayBuffer);
-    
+
     // 确保文件名安全，但保持原始文件名
     const safeFileName = originalFileName.replace(/[<>:"/\\|?*]/g, '_');
-    
+
     // 创建保存目录（在应用运行目录下的file文件夹）
     const appDir = path.dirname(process.execPath);
     const fileDir = path.join(appDir, 'file');
-    
+
     // 如果是开发环境，使用当前工作目录
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
     const targetDir = isDev ? path.join(process.cwd(), 'file') : fileDir;
-    
+
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
-    
+
     // 保存文件
     const localPath = path.join(targetDir, safeFileName);
     fs.writeFileSync(localPath, buffer);
-    
+
     console.log(`注入包已保存到: ${localPath}`);
-    
+
     return {
       success: true,
       localPath: localPath,
@@ -552,11 +623,11 @@ ipcMain.handle('download-and-save-injection-package-with-md5', async (event, arr
 
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
     const targetDir = isDev ? path.join(process.cwd(), 'file') : fileDir;
-    
+
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
-    
+
     const targetPath = path.join(targetDir, fileName);
     let finalFileName = fileName;
     let finalPath = targetPath;
@@ -565,7 +636,7 @@ ipcMain.handle('download-and-save-injection-package-with-md5', async (event, arr
 
       const existingBuffer = fs.readFileSync(targetPath);
       const existingMD5 = crypto.createHash('sha256').update(existingBuffer).digest('hex');
-      
+
       if (existingMD5 === newFileMD5) {
         console.log(`文件已存在且内容相同，跳过下载: ${fileName}`);
         return {
@@ -580,15 +651,15 @@ ipcMain.handle('download-and-save-injection-package-with-md5', async (event, arr
         const timestamp = Date.now();
         finalFileName = `${nameWithoutExt}_${timestamp}${ext}`;
         finalPath = path.join(targetDir, finalFileName);
-        
+
         console.log(`检测到重名文件但内容不同，重命名为: ${finalFileName}`);
       }
     }
 
     fs.writeFileSync(finalPath, buffer);
-    
+
     console.log(`注入包已保存到: ${finalPath}`);
-    
+
     return {
       success: true,
       renamed: finalFileName !== fileName,
