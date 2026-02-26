@@ -2041,7 +2041,18 @@ class UniversalAnswerFeature {
       document.getElementById('serverLocate').value = rule.serverLocate || '';
     }
 
-    document.getElementById('maxTriggers').value = rule.maxTriggers || '';
+    let maxTriggersInput;
+    if (rule.type === 'content-change') {
+      maxTriggersInput = document.querySelector('#contentChangeMaxTriggers');
+    } else if (rule.type === 'zip-implant') {
+      maxTriggersInput = document.querySelector('#zipImplantMaxTriggers');
+    } else if (rule.type === 'answer-upload') {
+      maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
+    }
+    
+    if (maxTriggersInput) {
+      maxTriggersInput.value = rule.maxTriggers || '';
+    }
   }
 
   async saveRule() {
@@ -2111,7 +2122,19 @@ class UniversalAnswerFeature {
       }
     }
 
-    const maxTriggersValue = document.getElementById('maxTriggers').value.trim();
+    let maxTriggersInput;
+    const ruleType = document.getElementById('ruleType').value;
+    
+    if (ruleType === 'content-change') {
+      maxTriggersInput = document.querySelector('#contentChangeMaxTriggers');
+    } else if (ruleType === 'zip-implant') {
+      maxTriggersInput = document.querySelector('#zipImplantMaxTriggers');
+    } else if (ruleType === 'answer-upload') {
+      maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
+    }
+    
+    const maxTriggersValue = maxTriggersInput ? maxTriggersInput.value.trim() : '';
+    
     if (maxTriggersValue && parseInt(maxTriggersValue) > 0) {
       rule.maxTriggers = parseInt(maxTriggersValue);
       rule.currentTriggers = 0;

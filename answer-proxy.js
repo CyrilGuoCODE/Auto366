@@ -188,17 +188,31 @@ class AnswerProxy {
   // 添加或更新规则
   saveRule(rule) {
     try {
+      console.log('saveRule 接收到的规则:', rule);
+      
       if (rule.id) {
         // 更新现有规则
         const index = this.responseRules.findIndex(r => r.id === rule.id);
         if (index !== -1) {
-          this.responseRules[index] = { ...rule, updatedAt: new Date().toISOString() };
+          console.log('更新现有规则，索引:', index);
+          console.log('更新前的规则:', this.responseRules[index]);
+
+          const updatedRule = {
+            ...this.responseRules[index],
+            ...rule,
+            updatedAt: new Date().toISOString()
+          };
+          
+          console.log('更新后的规则:', updatedRule);
+          this.responseRules[index] = updatedRule;
         }
       } else {
         // 添加新规则
+        console.log('添加新规则');
         rule.id = uuidv4();
         rule.createdAt = new Date().toISOString();
         rule.updatedAt = new Date().toISOString();
+        console.log('新规则:', rule);
         this.responseRules.push(rule);
       }
 
@@ -389,7 +403,7 @@ class AnswerProxy {
               // 发送规则匹配日志
               this.safeIpcSend('rule-log', {
                 type: 'success',
-                message: `规则 "${rule.name}" 匹配URL - 准备MD5校验绕过 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
+                message: `规则 "${rule.name}" 匹配URL - 准备MD5校验绕过 (${rule.currentTriggers || 1}/${rule.maxTriggers !== undefined ? rule.maxTriggers : '∞'})`,
                 ruleId: rule.id,
                 ruleName: rule.name,
                 url: url
@@ -398,7 +412,7 @@ class AnswerProxy {
               // 发送规则匹配日志
               this.safeIpcSend('rule-log', {
                 type: 'success',
-                message: `规则 "${rule.name}" 匹配URL - 准备文件替换 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
+                message: `规则 "${rule.name}" 匹配URL - 准备文件替换 (${rule.currentTriggers || 1}/${rule.maxTriggers !== undefined ? rule.maxTriggers : '∞'})`,
                 ruleId: rule.id,
                 ruleName: rule.name,
                 url: url
@@ -491,10 +505,15 @@ class AnswerProxy {
             responseBody = responseBody.replace(/"objectSize":\s*\d+/g, `"objectSize":${fileSize}`);
             responseBody = responseBody.replace(/"objectSize":\s*"\d+"/g, `"objectSize":"${fileSize}"`);
 
+            if (rule.maxTriggers !== undefined) {
+              rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+              this.saveResponseRules();
+            }
+
             // 发送规则触发日志
             this.safeIpcSend('rule-log', {
               type: 'success',
-              message: `规则 "${rule.name}" 已触发 - MD5校验绕过`,
+              message: `规则 "${rule.name}" 已触发 - MD5校验绕过 (${rule.currentTriggers || 1}/${rule.maxTriggers !== undefined ? rule.maxTriggers : '∞'})`,
               ruleId: rule.id,
               ruleName: rule.name,
               url: url,
@@ -504,10 +523,15 @@ class AnswerProxy {
             return Buffer.from(responseBody);
           }
           else if (zipUrlMatches && isFileDownloadRequest) {
+            if (rule.maxTriggers !== undefined) {
+              rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+              this.saveResponseRules();
+            }
+
             // 发送规则触发日志
             this.safeIpcSend('rule-log', {
               type: 'success',
-              message: `规则 "${rule.name}" 已触发 - 文件替换`,
+              message: `规则 "${rule.name}" 已触发 - 文件替换 (${rule.currentTriggers || 1}/${rule.maxTriggers !== undefined ? rule.maxTriggers : '∞'})`,
               ruleId: rule.id,
               ruleName: rule.name,
               url: url,
@@ -740,10 +764,15 @@ class AnswerProxy {
                   ctx.serverToProxyResponse.headers['content-md5'] = md5Base64;
                   ctx.serverToProxyResponse.headers['content-length'] = buffer.length.toString();
 
+                  if (rule.maxTriggers !== undefined) {
+                    rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+                    this.saveResponseRules();
+                  }
+
                   // 发送响应头修改日志
                   this.safeIpcSend('rule-log', {
                     type: 'success',
-                    message: `规则 "${rule.name}" 修改响应头`,
+                    message: `规则 "${rule.name}" 修改响应头 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
                     ruleId: rule.id,
                     ruleName: rule.name,
                     url: fullUrl,
