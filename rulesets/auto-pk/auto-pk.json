@@ -34,7 +34,7 @@
     "groupId": "b81fd583-b319-4ab8-845e-e730f52b766d",
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
     "urlZip": "http://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
-    "zipImplant": "https://objectstorageapi.us-west-1.clawcloudrun.com/d9k8xp0t-auto366-ruleset/files/925b31fb-be82-4e20-a464-ac201aa32a43.zip",
+    "zipImplant": "auto-pk.zip",
     "createdAt": "2026-02-25T10:12:43.688Z",
     "updatedAt": "2026-02-25T10:12:43.688Z"
   }

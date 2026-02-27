@@ -19,10 +19,9 @@
     "enabled": true,
     "groupId": "044d1e89-f0a8-4600-b464-f5268710dc3e",
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
-    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
-    "zipImplant": "https://objectstorageapi.us-west-1.clawcloudrun.com/d9k8xp0t-auto366-ruleset/files/17207c1e-ac82-496a-81da-26f04a85431c.zip",
+    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/jc*.zip",
+    "zipImplant": "auto-fill.zip",
     "updatedAt": "2026-02-27T05:09:22.139Z",
-    "maxTriggers": 5,
     "currentTriggers": 0
   }
 ]
