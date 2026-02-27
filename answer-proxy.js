@@ -451,6 +451,54 @@ class AnswerProxy {
     return l;
   }
 
+  fileNameMatchesPattern(fileName, pattern) {
+    if (!pattern) return true;
+
+    const regexPattern = pattern
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\\\*/g, '.*');
+    
+    const regex = new RegExp('^' + regexPattern + '$', 'i');
+    return regex.test(fileName);
+  }
+
+  extractFileNameFromResponse(responseBody, url) {
+    try {
+      if (typeof responseBody === 'string' || Buffer.isBuffer(responseBody)) {
+        const bodyStr = responseBody.toString();
+
+        try {
+          const jsonData = JSON.parse(bodyStr);
+          
+          const objectName = jsonData.objectName || jsonData.object_name;
+          const fileName = jsonData.fileName || jsonData.filename || jsonData.file_name;
+
+          if (objectName && fileName) {
+            if (objectName === fileName) {
+              return fileName;
+            } else {
+              console.log(`objectName (${objectName}) 和 fileName (${fileName}) 不匹配，跳过`);
+              return null;
+            }
+          }
+
+          if (objectName) {
+            return objectName;
+          }
+          if (fileName) {
+            return fileName;
+          }
+        } catch (e) {
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('提取文件名失败:', error);
+      return null;
+    }
+  }
+
   // 应用zip注入规则
   applyZipImplantRules(url, responseBody) {
     try {
@@ -489,6 +537,19 @@ class AnswerProxy {
           // 对于文件信息请求，优先使用fileinfo URL模式匹配，如果没有设置则使用通用匹配
           // 对于文件下载请求，使用ZIP URL模式匹配
           if (isFileInfoRequest && fileinfoUrlMatches) {
+            // 检查目标文件名匹配
+            if (rule.targetFileName) {
+              const extractedFileName = this.extractFileNameFromResponse(responseBody, url);
+              console.log(`规则 "${rule.name}" 检查文件名: 期望匹配 "${rule.targetFileName}", 实际提取到 "${extractedFileName}"`);
+              
+              if (!extractedFileName || !this.fileNameMatchesPattern(extractedFileName, rule.targetFileName)) {
+                console.log(`文件名不匹配，跳过规则 "${rule.name}": 期望匹配 "${rule.targetFileName}", 实际 "${extractedFileName}"`);
+                continue;
+              }
+              
+              console.log(`文件名匹配成功，规则 "${rule.name}" 将被应用`);
+            }
+
             const buffer = fs.readFileSync(rule.zipImplant);
             const md5 = crypto.createHash('md5').update(buffer).digest('hex');
             const fileSize = buffer.length;
@@ -549,8 +610,9 @@ class AnswerProxy {
         message: `应用zip注入规则失败: ${error.message}`,
         url: url
       });
-      return {};
     }
+
+    return responseBody;
   }
 
   // 应用答案上传规则

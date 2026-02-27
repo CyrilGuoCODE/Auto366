@@ -19,7 +19,8 @@
     "enabled": true,
     "groupId": "044d1e89-f0a8-4600-b464-f5268710dc3e",
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
-    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/jc*.zip",
+    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
+    "targetFileName": "jc*.zip",
     "zipImplant": "auto-fill.zip",
     "updatedAt": "2026-02-27T05:09:22.139Z",
     "currentTriggers": 0

@@ -2034,6 +2034,7 @@ class UniversalAnswerFeature {
     } else if (rule.type === 'zip-implant') {
       document.getElementById('urlFileinfo').value = rule.urlFileinfo || '';
       document.getElementById('urlZip').value = rule.urlZip || '';
+      document.getElementById('targetFileName').value = rule.targetFileName || '';
       document.getElementById('zipImplant').value = rule.zipImplant || '';
     } else if (rule.type === 'answer-upload') {
       document.getElementById('urlUpload').value = rule.urlUpload || '';
@@ -2100,6 +2101,7 @@ class UniversalAnswerFeature {
     } else if (rule.type === 'zip-implant') {
       rule.urlFileinfo = document.getElementById('urlFileinfo').value.trim();
       rule.urlZip = document.getElementById('urlZip').value.trim();
+      rule.targetFileName = document.getElementById('targetFileName').value.trim();
       rule.zipImplant = document.getElementById('zipImplant').value.trim();
 
       if (!rule.urlZip) {
@@ -2391,6 +2393,10 @@ class UniversalAnswerFeature {
         <div class="config-item">
           <span class="config-label">ZIP URL匹配:</span>
           <span class="config-value">${rule.urlZip || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">目标文件名:</span>
+          <span class="config-value">${rule.targetFileName || '未设置（匹配所有文件）'}</span>
         </div>
         <div class="config-item">
           <span class="config-label">注入文件:</span>

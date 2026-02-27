@@ -236,11 +236,13 @@
                             <h4>代理设置</h4>
                             <div class="setting-item">
                                 <label for="proxyPortInput">代理端口:</label>
-                                <input type="number" id="proxyPortInput" class="form-input" value="5291" min="1024" max="65535" placeholder="5291">
+                                <input type="number" id="proxyPortInput" class="form-input" value="5291" min="1024"
+                                    max="65535" placeholder="5291">
                             </div>
                             <div class="setting-item">
                                 <label for="bucketPortInput">答案服务器端口:</label>
-                                <input type="number" id="bucketPortInput" class="form-input" value="5290" min="1024" max="65535" placeholder="5290">
+                                <input type="number" id="bucketPortInput" class="form-input" value="5290" min="1024"
+                                    max="65535" placeholder="5290">
                             </div>
                             <div class="setting-item">
                                 <label>
@@ -434,7 +436,8 @@
                         </div>
                         <div class="form-group">
                             <label for="contentChangeMaxTriggers">最大触发次数</label>
-                            <input type="number" id="contentChangeMaxTriggers" class="form-input" placeholder="留空表示无限制" min="0">
+                            <input type="number" id="contentChangeMaxTriggers" class="form-input" placeholder="留空表示无限制"
+                                min="0">
                             <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
                             <small class="form-help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
                         </div>
@@ -444,11 +447,18 @@
                     <div id="zipimplantFields" class="rule-fields" style="display: none;">
                         <div class="form-group">
                             <label for="urlFileinfo">文件信息URL匹配</label>
-                            <input type="text" id="urlFileinfo" class="form-input" placeholder="输入文件信息URL匹配模式（可选，留空则匹配所有fileinfo请求）">
+                            <input type="text" id="urlFileinfo" class="form-input"
+                                placeholder="输入文件信息URL匹配模式（可选，留空则匹配所有fileinfo请求）">
                         </div>
                         <div class="form-group">
                             <label for="urlZip">ZIP文件URL匹配</label>
                             <input type="text" id="urlZip" class="form-input" placeholder="输入ZIP文件URL匹配模式">
+                        </div>
+                        <div class="form-group">
+                            <label for="targetFileName">目标注入文件名</label>
+                            <input type="text" id="targetFileName" class="form-input"
+                                placeholder="输入目标文件名（如：jc*.zip）">
+                            <small class="form-help">只有当文件信息响应体中的文件名匹配此字段时才会进行注入</small>
                         </div>
                         <div class="form-group">
                             <label for="zipImplant">注入ZIP文件路径</label>
@@ -462,7 +472,8 @@
                         </div>
                         <div class="form-group">
                             <label for="zipImplantMaxTriggers">最大触发次数</label>
-                            <input type="number" id="zipImplantMaxTriggers" class="form-input" placeholder="留空表示无限制" min="0">
+                            <input type="number" id="zipImplantMaxTriggers" class="form-input" placeholder="留空表示无限制"
+                                min="0">
                             <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
                             <small class="form-help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
                         </div>
@@ -487,7 +498,8 @@
                         </div>
                         <div class="form-group">
                             <label for="answerUploadMaxTriggers">最大触发次数</label>
-                            <input type="number" id="answerUploadMaxTriggers" class="form-input" placeholder="留空表示无限制" min="0">
+                            <input type="number" id="answerUploadMaxTriggers" class="form-input" placeholder="留空表示无限制"
+                                min="0">
                             <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
                             <small class="form-help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
                         </div>
