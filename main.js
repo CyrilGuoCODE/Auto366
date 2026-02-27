@@ -3,6 +3,7 @@ const path = require('path')
 const { autoUpdater } = require('electron-updater')
 const fs = require('fs-extra')
 const { createClient } = require('@supabase/supabase-js')
+const { v4: uuidv4 } = require('uuid')
 
 // 引入抓包代理类
 const AnswerProxy = require('./answer-proxy');
@@ -192,8 +193,95 @@ function createWindow() {
   });
 }
 
+// 导入内置规则集
+async function loadBuiltinRulesets() {
+  try {
+    const rulesetsDir = path.join(__dirname, 'rulesets');
+    if (!fs.existsSync(rulesetsDir)) {
+      console.log('内置规则集目录不存在');
+      return;
+    }
+
+    const folders = fs.readdirSync(rulesetsDir).filter(item => {
+      const itemPath = path.join(rulesetsDir, item);
+      return fs.statSync(itemPath).isDirectory();
+    });
+
+    for (const folderName of folders) {
+      const folderPath = path.join(rulesetsDir, folderName);
+      const rulesetJsonPath = path.join(folderPath, 'ruleset.json');
+      const rulesJsonPath = path.join(folderPath, `${folderName}.json`);
+
+      if (!fs.existsSync(rulesetJsonPath) || !fs.existsSync(rulesJsonPath)) {
+        console.log(`跳过不完整的规则集: ${folderName}`);
+        continue;
+      }
+
+      try {
+        const rulesetInfo = JSON.parse(fs.readFileSync(rulesetJsonPath, 'utf-8'));
+
+        let rulesData = JSON.parse(fs.readFileSync(rulesJsonPath, 'utf-8'));
+
+        rulesData = rulesData.map(rule => {
+          if (rule.type === 'zip-implant' && rule.zipImplant && !rule.zipImplant.startsWith('http')) {
+            const zipPath = path.join(folderPath, rule.zipImplant);
+            if (fs.existsSync(zipPath)) {
+              rule.zipImplant = zipPath;
+            }
+          }
+          return rule;
+        });
+
+        const groupId = uuidv4();
+        const rulesetGroup = {
+          id: groupId,
+          name: rulesetInfo.name,
+          description: rulesetInfo.description,
+          isGroup: true,
+          isBuiltin: true, // 标记为内置规则集
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        const rules = rulesData.map(rule => ({
+          ...rule,
+          groupId: groupId,
+          isBuiltin: true, // 标记为内置规则
+          createdAt: rule.createdAt || new Date().toISOString(),
+          updatedAt: rule.updatedAt || new Date().toISOString()
+        }));
+
+        const existingRules = answerProxy.getResponseRules();
+        const existingBuiltinGroup = existingRules.find(rule => 
+          rule.isGroup && rule.isBuiltin && rule.name === rulesetInfo.name
+        );
+
+        if (existingBuiltinGroup) {
+          console.log(`内置规则集已存在，跳过: ${rulesetInfo.name}`);
+          continue;
+        }
+
+        answerProxy.responseRules = [...answerProxy.responseRules, rulesetGroup, ...rules];
+        
+        console.log(`成功导入内置规则集: ${rulesetInfo.name} (${rules.length} 个规则)`);
+      } catch (error) {
+        console.error(`导入规则集 ${folderName} 失败:`, error);
+      }
+    }
+
+    answerProxy.saveResponseRules();
+    console.log('内置规则集导入完成');
+  } catch (error) {
+    console.error('导入内置规则集失败:', error);
+  }
+}
+
 app.whenReady().then(async () => {
   createWindow()
+
+  // 导入内置规则集
+  await loadBuiltinRulesets();
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -414,7 +502,7 @@ ipcMain.handle('import-response-rules', async () => {
         // 为导入的规则生成新的ID
         const importedRules = rules.map(rule => ({
           ...rule,
-          id: require('uuid').v4(),
+          id: uuidv4(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }));
@@ -716,7 +804,7 @@ ipcMain.handle('share-answer-file', async (event, filePath) => {
     const fileName = path.basename(filePath);
     const fileExtension = path.extname(fileName);
     const timestamp = Date.now();
-    const randomId = require('uuid').v4().substring(0, 8);
+    const randomId = uuidv4().substring(0, 8);
     const uniqueFileName = `${timestamp}_${randomId}${fileExtension}`;
 
     const fileBuffer = fs.readFileSync(filePath);

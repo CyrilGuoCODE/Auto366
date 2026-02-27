@@ -1,0 +1,41 @@
+[
+  {
+    "id": "542955cd-d73c-46e5-9921-2887e042eeed",
+    "name": "答案接口1",
+    "type": "answer-upload",
+    "description": "答案接口1",
+    "enabled": true,
+    "groupId": "b81fd583-b319-4ab8-845e-e730f52b766d",
+    "urlUpload": "http://words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info",
+    "uploadType": "original",
+    "serverLocate": "/word-pk-answer",
+    "createdAt": "2026-02-25T10:11:02.606Z",
+    "updatedAt": "2026-02-25T10:11:02.606Z"
+  },
+  {
+    "id": "730e093d-f81f-4b7c-8e8a-dcb1718f272c",
+    "name": "答案接口2",
+    "type": "answer-upload",
+    "description": "",
+    "enabled": true,
+    "groupId": "b81fd583-b319-4ab8-845e-e730f52b766d",
+    "urlUpload": "http://wordsbtl-api.up366.cn/client/wordsbtl/student/start",
+    "uploadType": "original",
+    "serverLocate": "/word-pk-answer",
+    "createdAt": "2026-02-25T10:11:35.884Z",
+    "updatedAt": "2026-02-25T10:11:35.884Z"
+  },
+  {
+    "id": "b51264d2-246f-4be6-ab40-1b3bd96b994e",
+    "name": "注入ZIP",
+    "type": "zip-implant",
+    "description": "注入ZIP",
+    "enabled": true,
+    "groupId": "b81fd583-b319-4ab8-845e-e730f52b766d",
+    "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
+    "urlZip": "http://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
+    "zipImplant": "auto-fill.zip",
+    "createdAt": "2026-02-25T10:12:43.688Z",
+    "updatedAt": "2026-02-25T10:12:43.688Z"
+  }
+]

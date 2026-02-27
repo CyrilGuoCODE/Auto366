@@ -1,0 +1,28 @@
+[
+  {
+    "id": "fcd78363-6b8c-4e34-b1aa-9007bbae35ab",
+    "name": "答案接口",
+    "type": "answer-upload",
+    "description": "答案接口",
+    "enabled": true,
+    "groupId": "044d1e89-f0a8-4600-b464-f5268710dc3e",
+    "urlUpload": "http://cdn-ws.up366.cn/cn/files/xot",
+    "uploadType": "extracted",
+    "serverLocate": "/fill-answer",
+    "updatedAt": "2026-02-25T10:22:26.601Z"
+  },
+  {
+    "id": "b69921ec-0552-45b3-add9-3ccc7c220e2e",
+    "name": "注入ZIP",
+    "type": "zip-implant",
+    "description": "注入ZIP",
+    "enabled": true,
+    "groupId": "044d1e89-f0a8-4600-b464-f5268710dc3e",
+    "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
+    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
+    "zipImplant": "auto-pk.zip",
+    "updatedAt": "2026-02-27T05:09:22.139Z",
+    "maxTriggers": 5,
+    "currentTriggers": 0
+  }
+]
