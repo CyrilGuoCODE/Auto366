@@ -1,28 +1,41 @@
 [
   {
-    "id": "fcd78363-6b8c-4e34-b1aa-9007bbae35ab",
-    "name": "答案接口",
+    "id": "542955cd-d73c-46e5-9921-2887e042eeed",
+    "name": "答案接口1",
     "type": "answer-upload",
-    "description": "答案接口",
+    "description": "答案接口1",
     "enabled": true,
-    "groupId": "044d1e89-f0a8-4600-b464-f5268710dc3e",
-    "urlUpload": "http://cdn-ws.up366.cn/cn/files/xot",
-    "uploadType": "extracted",
-    "serverLocate": "/fill-answer",
-    "updatedAt": "2026-02-25T10:22:26.601Z"
+    "groupId": "b81fd583-b319-4ab8-845e-e730f52b766d",
+    "urlUpload": "http://words-v2-api.up366.cn/client/sync/teaching/bucket/detail-info",
+    "uploadType": "original",
+    "serverLocate": "/word-pk-answer",
+    "createdAt": "2026-02-25T10:11:02.606Z",
+    "updatedAt": "2026-02-25T10:11:02.606Z"
   },
   {
-    "id": "b69921ec-0552-45b3-add9-3ccc7c220e2e",
+    "id": "730e093d-f81f-4b7c-8e8a-dcb1718f272c",
+    "name": "答案接口2",
+    "type": "answer-upload",
+    "description": "",
+    "enabled": true,
+    "groupId": "b81fd583-b319-4ab8-845e-e730f52b766d",
+    "urlUpload": "http://wordsbtl-api.up366.cn/client/wordsbtl/student/start",
+    "uploadType": "original",
+    "serverLocate": "/word-pk-answer",
+    "createdAt": "2026-02-25T10:11:35.884Z",
+    "updatedAt": "2026-02-25T10:11:35.884Z"
+  },
+  {
+    "id": "b51264d2-246f-4be6-ab40-1b3bd96b994e",
     "name": "注入ZIP",
     "type": "zip-implant",
     "description": "注入ZIP",
     "enabled": true,
-    "groupId": "044d1e89-f0a8-4600-b464-f5268710dc3e",
+    "groupId": "b81fd583-b319-4ab8-845e-e730f52b766d",
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
-    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
-    "zipImplant": "auto-pk.zip",
-    "updatedAt": "2026-02-27T05:09:22.139Z",
-    "maxTriggers": 5,
-    "currentTriggers": 0
+    "urlZip": "http://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
+    "zipImplant": "https://objectstorageapi.us-west-1.clawcloudrun.com/d9k8xp0t-auto366-ruleset/files/925b31fb-be82-4e20-a464-ac201aa32a43.zip",
+    "createdAt": "2026-02-25T10:12:43.688Z",
+    "updatedAt": "2026-02-25T10:12:43.688Z"
   }
 ]
