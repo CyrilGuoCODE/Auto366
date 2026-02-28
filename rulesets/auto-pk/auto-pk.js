@@ -22,21 +22,46 @@ function loadBucketFromServer() {
                 // 解析JSON数据
                 try {
                     const fullData = JSON.parse(text);
+                    let entryList = [];
+                    let dataSource = '';
 
                     if (fullData && fullData.data && fullData.data.contentList && fullData.data.contentList[0] && fullData.data.contentList[0].entryList) {
-                        const entryList = fullData.data.contentList[0].entryList;
+                        entryList = fullData.data.contentList[0].entryList;
+                        dataSource = '格式1 (contentList.entryList)';
+                        addLogMessage('使用格式1加载词库: contentList.entryList', 'info');
+                    }
+                    else if (fullData && fullData.data && fullData.data.words && Array.isArray(fullData.data.words)) {
+                        entryList = fullData.data.words.map(word => ({
+                            entry: word.en,           // en -> entry
+                            paraphrase: word.cn,     // cn -> paraphrase
+                            entryId: word.entryId    // 保留 entryId
+                        }));
+                        dataSource = '格式2 (words)';
+                        addLogMessage('使用格式2加载词库: words (已转换字段名)', 'info');
+                    }
+                    else {
+                        throw new Error('数据结构不正确，无法找到 entryList 或 words 数组');
+                    }
 
-                        addLogMessage('词库加载成功，共 ' + entryList.length + ' 个单词', 'success');
+                    if (entryList.length > 0) {
+                        addLogMessage('词库加载成功，共 ' + entryList.length + ' 个单词 (' + dataSource + ')', 'success');
 
-                        jsonData = fullData;
+                        jsonData = {
+                            data: {
+                                contentList: [{
+                                    entryList: entryList
+                                }],
+                                words: entryList
+                            }
+                        };
 
                         bucketLoaded = true;
                         bucketError = null;
                         updateAutoPkPanelStatus();
-                        addLogMessage('词库加载成功，共 ' + entryList.length + ' 个单词', 'success');
-                        console.log('单词PK词库加载成功，共' + entryList.length + '个单词');
+                        addLogMessage('词库数据结构标准化完成', 'success');
+                        addLogMessage('单词PK词库加载成功，共' + entryList.length + '个单词，数据源：' + dataSource, 'success');
                     } else {
-                        throw new Error('数据结构不正确，无法找到entryList');
+                        throw new Error('词库数据为空');
                     }
                 } catch (parseError) {
                     addLogMessage('词库解析失败: ' + parseError.message, 'error');
@@ -47,9 +72,10 @@ function loadBucketFromServer() {
                 bucketLoaded = false;
                 bucketError = err.message || String(err);
                 updateAutoPkPanelStatus();
-                console.error('单词PK词库加载失败:', err);
+                addLogMessage('词库加载失败: ' + err.message, 'error');
+                addLogMessage('单词PK词库加载失败: ' + err.message, 'error');
                 setTimeout(() => {
-                    console.log('自动重试加载词库...');
+                    addLogMessage('自动重试加载词库...', 'info');
                     loadBucketFromServer();
                 }, 1000);
             });
@@ -57,9 +83,10 @@ function loadBucketFromServer() {
         bucketLoaded = false;
         bucketError = e.message || String(e);
         updateAutoPkPanelStatus();
-        console.error('单词PK词库加载异常:', e);
+        addLogMessage('词库加载异常: ' + e.message, 'error');
+        addLogMessage('单词PK词库加载异常: ' + e.message, 'error');
         setTimeout(() => {
-            console.log('自动重试加载词库...');
+            addLogMessage('自动重试加载词库...', 'info');
             loadBucketFromServer();
         }, 1000);
     }
@@ -325,9 +352,8 @@ function stopAutoPk() {
 function addLogMessage(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
     logMessages.unshift({ timestamp, message, type });
-    // 保留最近50条日志
-    if (logMessages.length > 50) {
-        logMessages = logMessages.slice(0, 50);
+    if (logMessages.length > 150) {
+        logMessages = logMessages.slice(0, 150);
     }
     updateLogPanel();
 }
