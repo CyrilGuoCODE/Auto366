@@ -121,7 +121,7 @@ class AnswerProxy {
       if (fs.existsSync(rulesFile)) {
         const rulesData = fs.readFileSync(rulesFile, 'utf-8');
         this.responseRules = JSON.parse(rulesData);
-        
+
         console.log('成功加载规则数量:', this.responseRules.length);
 
         const rulesWithTriggers = this.responseRules.filter(rule => rule.maxTriggers !== undefined);
@@ -189,7 +189,7 @@ class AnswerProxy {
   saveRule(rule) {
     try {
       console.log('saveRule 接收到的规则:', rule);
-      
+
       if (rule.id) {
         // 更新现有规则
         const index = this.responseRules.findIndex(r => r.id === rule.id);
@@ -202,7 +202,7 @@ class AnswerProxy {
             ...rule,
             updatedAt: new Date().toISOString()
           };
-          
+
           console.log('更新后的规则:', updatedRule);
           this.responseRules[index] = updatedRule;
         }
@@ -260,7 +260,7 @@ class AnswerProxy {
       if (rule) {
         rule.enabled = enabled;
         rule.updatedAt = new Date().toISOString();
-        
+
         if (rule.isGroup && enabled) {
           const childRules = this.responseRules.filter(r => r.groupId === rule.id);
           childRules.forEach(childRule => {
@@ -273,7 +273,7 @@ class AnswerProxy {
         if (!rule.isGroup && rule.maxTriggers !== undefined) {
           rule.currentTriggers = 0;
         }
-        
+
         return this.saveResponseRules();
       }
       return false;
@@ -300,7 +300,7 @@ class AnswerProxy {
         } else if (rule.maxTriggers !== undefined) {
           rule.currentTriggers = 0;
         }
-        
+
         return this.saveResponseRules();
       }
       return false;
@@ -393,12 +393,12 @@ class AnswerProxy {
           // 对于文件下载请求，使用ZIP URL模式匹配
           if ((isFileInfoRequest && fileinfoUrlMatches) || (zipUrlMatches && isFileDownloadRequest)) {
             l.push(2)
-            
+
             if (rule.maxTriggers !== undefined) {
               rule.currentTriggers = (rule.currentTriggers || 0) + 1;
               this.saveResponseRules();
             }
-            
+
             if (isFileInfoRequest) {
               // 发送规则匹配日志
               this.safeIpcSend('rule-log', {
@@ -427,7 +427,7 @@ class AnswerProxy {
             rule.currentTriggers = (rule.currentTriggers || 0) + 1;
             this.saveResponseRules();
           }
-          
+
           l.push(3)
           // 发送规则匹配日志
           this.safeIpcSend('rule-log', {
@@ -457,7 +457,7 @@ class AnswerProxy {
     const regexPattern = pattern
       .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       .replace(/\\\*/g, '.*');
-    
+
     const regex = new RegExp('^' + regexPattern + '$', 'i');
     return regex.test(fileName);
   }
@@ -469,9 +469,14 @@ class AnswerProxy {
 
         try {
           const jsonData = JSON.parse(bodyStr);
-          
-          const objectName = jsonData.objectName || jsonData.object_name;
-          const fileName = jsonData.fileName || jsonData.filename || jsonData.file_name;
+
+          let objectName = jsonData.objectName || jsonData.object_name;
+          let fileName = jsonData.fileName || jsonData.filename || jsonData.file_name;
+
+          if (!objectName && !fileName && jsonData.data) {
+            objectName = jsonData.data.objectName || jsonData.data.object_name;
+            fileName = jsonData.data.fileName || jsonData.data.filename || jsonData.data.file_name;
+          }
 
           if (objectName && fileName) {
             if (objectName === fileName) {
@@ -489,6 +494,7 @@ class AnswerProxy {
             return fileName;
           }
         } catch (e) {
+          console.error('解析JSON响应体失败:', e);
         }
       }
 
@@ -541,12 +547,20 @@ class AnswerProxy {
             if (rule.targetFileName) {
               const extractedFileName = this.extractFileNameFromResponse(responseBody, url);
               console.log(`规则 "${rule.name}" 检查文件名: 期望匹配 "${rule.targetFileName}", 实际提取到 "${extractedFileName}"`);
-              
+
               if (!extractedFileName || !this.fileNameMatchesPattern(extractedFileName, rule.targetFileName)) {
                 console.log(`文件名不匹配，跳过规则 "${rule.name}": 期望匹配 "${rule.targetFileName}", 实际 "${extractedFileName}"`);
+                this.safeIpcSend('rule-log', {
+                  type: 'warning',
+                  message: `规则 "${rule.name}" 文件名不匹配 - 跳过处理`,
+                  ruleId: rule.id,
+                  ruleName: rule.name,
+                  url: url,
+                  details: `期望匹配: "${rule.targetFileName}", 实际: "${extractedFileName}"`
+                });
                 continue;
               }
-              
+
               console.log(`文件名匹配成功，规则 "${rule.name}" 将被应用`);
             }
 
@@ -2106,7 +2120,7 @@ class AnswerProxy {
     this.trafficCache.clear()
     let filesDeleted = 0;
     let dirsDeleted = 0;
-    
+
     try {
       const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
         localStorage.getItem('keep-cache-files') === 'true'
@@ -2133,11 +2147,11 @@ class AnswerProxy {
             }
           }
         };
-        
+
         countItems(tempDir);
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
-      
+
       return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
       try {
@@ -2161,7 +2175,7 @@ class AnswerProxy {
             }
           }
         };
-        
+
         countItems(tempDir);
         fs.rmSync(tempDir, { recursive: true, force: true });
         return { success: true, filesDeleted, dirsDeleted };
