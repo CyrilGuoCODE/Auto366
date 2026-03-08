@@ -23,7 +23,7 @@ function loadBucketFromServer() {
                     if (i.sourceFile === 'correctAnswer.xml') {
                         const answerParts = i.answer.split('/');
                         const answerText = answerParts[0];
-                        
+
                         // 从question字段提取题号，格式如"第1题"
                         let questionNum = 1;
                         if (i.question && typeof i.question === 'string') {
@@ -32,12 +32,12 @@ function loadBucketFromServer() {
                                 questionNum = parseInt(match[1], 10);
                             }
                         }
-                        
+
                         // 如果没有找到题号，使用answerIndex或当前数组长度+1
                         if (!questionNum || questionNum <= 0) {
                             questionNum = i.answerIndex || (answers.length + 1);
                         }
-                        
+
                         answerMap.set(questionNum, answerText);
                     }
                 }
@@ -405,7 +405,7 @@ function createAutoFillPanel() {
     const logBtn = document.createElement('button');
     logBtn.textContent = 'Logs';
     logBtn.title = '查看日志';
-    logBtn.style.fontSize = '14px';
+    logBtn.style.fontSize = '12px';
     logBtn.style.padding = '2px 6px';
     logBtn.style.cursor = 'pointer';
     logBtn.style.background = 'rgba(255,255,255,0.2)';
@@ -420,6 +420,27 @@ function createAutoFillPanel() {
         logPanel.style.display = logPanel.style.display === 'none' ? 'block' : 'none';
     });
     header.appendChild(logBtn);
+
+    const consoleBtn = document.createElement('button');
+    consoleBtn.textContent = 'Console';
+    consoleBtn.title = '打开内部控制台';
+    consoleBtn.style.fontSize = '12px';
+    consoleBtn.style.padding = '2px 6px';
+    consoleBtn.style.cursor = 'pointer';
+    consoleBtn.style.background = 'rgba(0,122,204,0.8)';
+    consoleBtn.style.border = 'none';
+    consoleBtn.style.color = '#fff';
+    consoleBtn.style.borderRadius = '3px';
+    consoleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof openDevConsole === 'function') {
+            openDevConsole();
+            addLogMessage('已打开内部控制台', 'info');
+        } else {
+            addLogMessage('内部控制台未加载', 'error');
+        }
+    });
+    header.appendChild(consoleBtn);
     autoFillPanel.appendChild(header);
 
     const delayRow = document.createElement('div');
