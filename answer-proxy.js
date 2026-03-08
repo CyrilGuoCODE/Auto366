@@ -1434,6 +1434,7 @@ class AnswerProxy {
               question: `第${index + 1}题`,
               answer: sentence.text,
               content: `请朗读: ${sentence.text}`,
+              questionText: `请朗读: ${sentence.text}`,
               pattern: 'JSON句子跟读模式'
             });
           }
@@ -1448,6 +1449,7 @@ class AnswerProxy {
               question: `第${index + 1}题`,
               answer: word,
               content: `请朗读单词: ${word}`,
+              questionText: `请朗读单词: ${word}`,
               pattern: 'JSON单词发音模式'
             });
           }
@@ -1462,10 +1464,12 @@ class AnswerProxy {
       if (Array.isArray(jsonData.answers)) {
         jsonData.answers.forEach((answer, index) => {
           if (answer && (typeof answer === 'string' || (typeof answer === 'object' && answer.content))) {
+            const answerText = typeof answer === 'string' ? answer : (answer.content || answer.answer || '');
             answers.push({
               question: `第${index + 1}题`,
-              answer: typeof answer === 'string' ? answer : (answer.content || answer.answer || ''),
-              content: typeof answer === 'string' ? answer : (answer.content || answer.answer || ''),
+              answer: answerText,
+              content: answerText,
+              questionText: answerText,
               pattern: 'JSON答案数组模式'
             });
           }
@@ -1475,10 +1479,12 @@ class AnswerProxy {
       if (jsonData.questions) {
         jsonData.questions.forEach((question, index) => {
           if (question && question.answer) {
+            const questionText = question.question || '未知题目';
             answers.push({
               question: `第${index + 1}题`,
               answer: question.answer,
-              content: `题目: ${question.question || '未知题目'}\n答案: ${question.answer}`,
+              content: `题目: ${questionText}\n答案: ${question.answer}`,
+              questionText: questionText,
               pattern: 'JSON题目模式'
             });
           }
@@ -1587,10 +1593,12 @@ class AnswerProxy {
             opt => opt.id === question.answer_text
           );
           if (correctOption) {
+            const questionText = question.question_text || '未知问题';
             results.push({
-              question: `第${index + 1}题: ${question.question_text || '未知问题'}`,
+              question: `第${index + 1}题: ${questionText}`,
               answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
               content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
+              questionText: questionText,
               pattern: '听后选择'
             });
           }
@@ -1613,6 +1621,7 @@ class AnswerProxy {
           question: `第1题: ${cleanQuestionText}`,
           answer: `${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
           content: `请回答: ${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
+          questionText: cleanQuestionText,
           pattern: '听后选择'
         });
       }
@@ -1698,6 +1707,7 @@ class AnswerProxy {
               question: `第${itemIndex + 1}题-${pIndex === 0 ? '原文' : `参考答案${pIndex}`}`,
               answer: paragraph,
               content: `请回答: ${paragraph}`,
+              questionText: paragraph,
               pattern: '听后转述'
             });
           });
@@ -1730,6 +1740,7 @@ class AnswerProxy {
             question: `第${index + 1}题`,
             answer: sentence,
             content: `请回答: ${sentence}`,
+            questionText: sentence,
             pattern: '朗读短文'
           });
         });
@@ -1743,10 +1754,12 @@ class AnswerProxy {
         if (paragraph.sentences) {
           paragraph.sentences.forEach((sentence) => {
             if (sentence.content_en) {
+              const content = sentence.content_en.trim();
               results.push({
                 question: `第${sentenceCount}题`,
-                answer: sentence.content_en.trim(),
-                content: `请回答: ${sentence.content_en.trim()}`,
+                answer: content,
+                content: `请回答: ${content}`,
+                questionText: content,
                 pattern: '朗读短文'
               });
               sentenceCount++;
@@ -1771,6 +1784,7 @@ class AnswerProxy {
           question: '第1题',
           answer: text,
           content: `请回答: ${text}`,
+          questionText: text,
           pattern: '分析内容'
         });
       }
@@ -1830,6 +1844,7 @@ class AnswerProxy {
                   question: `文本-${lineNum}-${index + 1}`,
                   answer: match[1].trim(),
                   content: `答案: ${match[1].trim()} (行: ${lineNum})`,
+                  questionText: match[1].trim(),
                   pattern: '文本答案模式'
                 });
               }
@@ -1844,6 +1859,7 @@ class AnswerProxy {
             question: `选项-${lineNum}`,
             answer: optionMatches.map(m => m[1]).join(''),
             content: `选项: ${optionMatches.map(m => m[1]).join('')} (行: ${lineNum})`,
+            questionText: optionMatches.map(m => m[1]).join(''),
             pattern: '文本选项模式'
           });
         }
@@ -1910,6 +1926,7 @@ class AnswerProxy {
                   question: `第${index + 1}题`,
                   answer: correctAns.answer,
                   content: correctAns.content,
+                  questionText: correctAns.questionText || correctAns.answer,
                   pattern: correctAns.pattern
                 });
               }
@@ -1934,6 +1951,7 @@ class AnswerProxy {
               question: `第${index + 1}题`,
               answer: correctAns.answer,
               content: correctAns.content,
+              questionText: correctAns.questionText || correctAns.answer,
               pattern: correctAns.pattern
             });
           }
@@ -1991,6 +2009,7 @@ class AnswerProxy {
               question: `第${answers.length + 1}题`,
               answer: answerText,
               content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
+              questionText: answerText,
               pattern: 'XML正确答案模式',
               elementId: elementId
             });
@@ -2005,6 +2024,7 @@ class AnswerProxy {
                     question: `第${answers.length + 1}题`,
                     answer: answerText,
                     content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
+                    questionText: answerText,
                     pattern: 'XML正确答案模式',
                     elementId: elementId,
                     answerIndex: answerIndex + 1
@@ -2044,6 +2064,7 @@ class AnswerProxy {
               question: `第${questionNo}题`,
               answer: knowledgeMatch ? knowledgeMatch[1].trim() : '未找到答案',
               content: `题目: ${questionText}`,
+              questionText: questionText,
               pattern: 'XML题目模式',
               elementId: elementId,
               questionNo: questionNo

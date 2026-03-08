@@ -999,62 +999,11 @@ window.focusElement = function () {
 
 window.copyElementInfo = function () {
     if (selectedElement) {
-        // 只复制选中元素的HTML代码，不包括子元素
-        const tempDiv = document.createElement('div');
-        const clonedElement = selectedElement.cloneNode(false); // false表示不复制子节点
-
-        // 如果元素有文本内容，添加文本内容
-        if (selectedElement.childNodes.length > 0) {
-            let textContent = '';
-            selectedElement.childNodes.forEach(node => {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    textContent += node.textContent;
-                }
-            });
-            if (textContent.trim()) {
-                clonedElement.textContent = textContent.trim();
-            }
-        }
-
-        tempDiv.appendChild(clonedElement);
-        const htmlCode = tempDiv.innerHTML;
+        // 复制完整的HTML代码，包括所有子元素
+        const htmlCode = selectedElement.outerHTML;
 
         navigator.clipboard.writeText(htmlCode).then(() => {
-            addConsoleLog('选中元素的HTML代码已复制到剪贴板', 'info');
-        }).catch(() => {
-            addConsoleLog('复制失败', 'error');
-        });
-    }
-};
-
-window.copySelector = function () {
-    if (selectedElement) {
-        const el = selectedElement;
-        let selector = el.tagName.toLowerCase();
-        if (el.id) {
-            selector += `#${el.id}`;
-        } else if (el.className) {
-            selector += `.${el.className.split(' ').join('.')}`;
-        }
-        navigator.clipboard.writeText(selector).then(() => {
-            addConsoleLog(`选择器已复制: ${selector}`, 'info');
-        }).catch(() => {
-            addConsoleLog('复制失败', 'error');
-        });
-    }
-};
-
-window.copySelector = function () {
-    if (selectedElement) {
-        const el = selectedElement;
-        let selector = el.tagName.toLowerCase();
-        if (el.id) {
-            selector += `#${el.id}`;
-        } else if (el.className) {
-            selector += `.${el.className.split(' ').join('.')}`;
-        }
-        navigator.clipboard.writeText(selector).then(() => {
-            addConsoleLog(`选择器已复制: ${selector}`, 'info');
+            addConsoleLog('完整HTML代码已复制到剪贴板', 'info');
         }).catch(() => {
             addConsoleLog('复制失败', 'error');
         });

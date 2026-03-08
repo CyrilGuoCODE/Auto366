@@ -7,6 +7,8 @@ let autoFillPanel = null;
 let customBucketUrl = localStorage.getItem('customFillBucketUrl') || '';  // 自定义词库URL
 let logPanel = null;  // 日志面板
 let logMessages = [];  // 日志消息数组
+let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || false;
+let rawAnswerData = [];
 
 function loadBucketFromServer() {
     try {
@@ -18,13 +20,21 @@ function loadBucketFromServer() {
             })
             .then(data => {
                 answers = [];
+                rawAnswerData = [];
                 const answerMap = new Map();
+
                 for (let i of data) {
                     if (i.sourceFile === 'correctAnswer.xml') {
                         const answerParts = i.answer.split('/');
                         const answerText = answerParts[0];
 
-                        // 从question字段提取题号，格式如"第1题"
+                        rawAnswerData.push({
+                            question: i.question || '',
+                            answer: answerText,
+                            answerIndex: i.answerIndex,
+                            index: i.index
+                        });
+
                         let questionNum = 1;
                         if (i.question && typeof i.question === 'string') {
                             const match = i.question.match(/第(\d+)题/);
@@ -33,7 +43,6 @@ function loadBucketFromServer() {
                             }
                         }
 
-                        // 如果没有找到题号，使用answerIndex或当前数组长度+1
                         if (!questionNum || questionNum <= 0) {
                             questionNum = i.answerIndex || (answers.length + 1);
                         }
@@ -51,6 +60,7 @@ function loadBucketFromServer() {
                 bucketError = null;
                 updateAutoFillPanelStatus();
                 addLogMessage('填空答案库加载成功，共 ' + answers.length + ' 个答案', 'success');
+                addLogMessage('内容匹配模式: ' + (contentMatchMode ? '已启用' : '已禁用'), 'info');
                 console.log('填空答案库加载成功，共' + answers.length + '个答案');
                 console.log('答案列表预览:', answers.slice(0, 10)); // 显示前10个答案
             })
@@ -82,23 +92,154 @@ async function wait1(x) {
     return new Promise(resolve => setTimeout(resolve, x));
 }
 
+function calculateTextSimilarity(text1, text2) {
+    if (!text1 || !text2) return 0;
+
+    const clean1 = text1.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toLowerCase();
+    const clean2 = text2.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toLowerCase();
+
+    if (clean1 === clean2) return 100;
+    if (clean1.includes(clean2) || clean2.includes(clean1)) return 80;
+
+    let commonChars = 0;
+    const minLen = Math.min(clean1.length, clean2.length);
+    const maxLen = Math.max(clean1.length, clean2.length);
+
+    for (let i = 0; i < minLen; i++) {
+        if (clean1[i] === clean2[i]) {
+            commonChars++;
+        }
+    }
+
+    const words1 = clean1.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || [];
+    const words2 = clean2.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || [];
+
+    let commonWords = 0;
+    words1.forEach(word1 => {
+        words2.forEach(word2 => {
+            if (word1 === word2 || word1.includes(word2) || word2.includes(word1)) {
+                commonWords++;
+            }
+        });
+    });
+
+    const charSimilarity = (commonChars / maxLen) * 50;
+    const wordSimilarity = (commonWords / Math.max(words1.length, words2.length, 1)) * 50;
+
+    return charSimilarity + wordSimilarity;
+}
+
+function findAnswerByContent(questionText) {
+    if (!rawAnswerData || rawAnswerData.length === 0) {
+        return null;
+    }
+
+    let bestMatch = null;
+    let bestScore = 0;
+
+    rawAnswerData.forEach((item, index) => {
+        // 优先使用questionText字段进行匹配，如果没有则使用question字段
+        const matchText = item.questionText || item.question;
+        const similarity = calculateTextSimilarity(questionText, matchText);
+        if (similarity > bestScore && similarity > 30) { // 最低相似度阈值
+            bestScore = similarity;
+            bestMatch = {
+                answer: item.answer,
+                similarity: similarity,
+                originalQuestion: matchText,
+                index: index
+            };
+        }
+    });
+
+    return bestMatch;
+}
+
 async function work() {
-    const preparedElements = document.getElementsByClassName('u3-input__prepared');
+    const questionContainers = document.getElementsByClassName('u3-question-container');
     const inputElements = document.getElementsByClassName('u3-input__content--input');
 
     let filledCount = 0;
-    for (let i = 0; i < inputElements.length; i++) {
-        const index = parseInt(preparedElements[i].innerHTML) - 1;
-        if (index >= 0 && index < answers.length) {
-            inputElements[i].value = answers[index];
-            inputElements[i].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-            filledCount++;
-            await wait1(100);
+
+    if (contentMatchMode) {
+        addLogMessage('使用内容匹配模式', 'info');
+
+        for (let i = 0; i < questionContainers.length; i++) {
+            const container = questionContainers[i];
+            const containerInputs = container.getElementsByClassName('u3-input__content--input');
+
+            if (containerInputs.length > 0) {
+                const questionText = container.textContent || container.innerText || '';
+                const cleanQuestionText = questionText.replace(/^\d+[\s\.\)]*/, '').trim();
+
+                if (cleanQuestionText.length > 5) {
+                    const match = findAnswerByContent(cleanQuestionText);
+
+                    if (match) {
+                        containerInputs[0].value = match.answer;
+                        containerInputs[0].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                        containerInputs[0].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                        filledCount++;
+                        addLogMessage(`题目 ${i + 1} 内容匹配成功 (相似度: ${Math.round(match.similarity)}%): ${match.answer}`, 'success');
+                        await wait1(100);
+                    } else {
+                        addLogMessage(`题目 ${i + 1} 未找到匹配答案: ${cleanQuestionText.substring(0, 50)}...`, 'warning');
+                    }
+                }
+            }
+        }
+    } else {
+
+        addLogMessage('使用题号匹配模式', 'info');
+
+        const questionInputMap = new Map();
+
+        for (let i = 0; i < questionContainers.length; i++) {
+            const container = questionContainers[i];
+
+            const preparedElements = container.getElementsByClassName('u3-input__prepared');
+            const containerInputs = container.getElementsByClassName('u3-input__content--input');
+
+            if (preparedElements.length > 0 && containerInputs.length > 0) {
+                const questionNum = parseInt(preparedElements[0].innerHTML);
+                if (!isNaN(questionNum) && questionNum > 0) {
+                    questionInputMap.set(questionNum, containerInputs[0]);
+                    addLogMessage(`找到题目 ${questionNum}，在容器 ${i}`, 'info');
+                }
+            }
+        }
+
+        if (questionInputMap.size === 0) {
+            const preparedElements = document.getElementsByClassName('u3-input__prepared');
+
+            for (let i = 0; i < Math.min(preparedElements.length, inputElements.length); i++) {
+                const questionNum = parseInt(preparedElements[i].innerHTML);
+                if (!isNaN(questionNum) && questionNum > 0 && i < inputElements.length) {
+                    questionInputMap.set(questionNum, inputElements[i]);
+                    addLogMessage(`备用方法：找到题目 ${questionNum}，对应输入框索引 ${i}`, 'warning');
+                }
+            }
+        }
+
+        // 按题号顺序填入答案
+        for (let questionNum = 1; questionNum <= answers.length; questionNum++) {
+            const inputElement = questionInputMap.get(questionNum);
+            if (inputElement && questionNum <= answers.length) {
+                const answerIndex = questionNum - 1;
+                inputElement.value = answers[answerIndex];
+                inputElement.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                inputElement.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                filledCount++;
+                addLogMessage(`题目 ${questionNum} 填入答案: ${answers[answerIndex]}`, 'success');
+                await wait1(100);
+            }
         }
     }
 
     if (filledCount > 0) {
         addLogMessage('已填入 ' + filledCount + ' 个答案', 'success');
+    } else {
+        addLogMessage('未找到可填入的题目', 'warning');
     }
 
     const buttons = document.getElementsByClassName('btn');
@@ -520,6 +661,54 @@ function createAutoFillPanel() {
     presetRow.appendChild(preset2);
     presetRow.appendChild(preset3);
     autoFillPanel.appendChild(presetRow);
+
+    // 内容匹配模式复选框
+    const matchModeRow = document.createElement('div');
+    matchModeRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 4px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+    `;
+
+    const matchModeCheckbox = document.createElement('input');
+    matchModeCheckbox.type = 'checkbox';
+    matchModeCheckbox.id = 'content-match-mode';
+    matchModeCheckbox.checked = contentMatchMode;
+    matchModeCheckbox.style.cssText = `
+        margin-right: 8px;
+        cursor: pointer;
+    `;
+    matchModeCheckbox.addEventListener('change', (e) => {
+        contentMatchMode = e.target.checked;
+        localStorage.setItem('contentMatchMode', contentMatchMode.toString());
+        addLogMessage('内容匹配模式: ' + (contentMatchMode ? '已启用' : '已禁用'), 'info');
+        updateMatchModeLabel();
+    });
+
+    const matchModeLabel = document.createElement('label');
+    matchModeLabel.htmlFor = 'content-match-mode';
+    matchModeLabel.style.cssText = `
+        font-size: 11px;
+        cursor: pointer;
+        flex: 1;
+    `;
+
+    function updateMatchModeLabel() {
+        matchModeLabel.innerHTML = `
+            <span style="color: ${contentMatchMode ? '#4caf50' : '#888'};">
+                题面匹配模式 ${contentMatchMode ? '(开启)' : '(关闭)'}
+            </span>
+        `;
+    }
+
+    updateMatchModeLabel();
+
+    matchModeRow.appendChild(matchModeCheckbox);
+    matchModeRow.appendChild(matchModeLabel);
+    autoFillPanel.appendChild(matchModeRow);
 
     const statusRow = document.createElement('div');
     statusRow.style.fontSize = '12px';
