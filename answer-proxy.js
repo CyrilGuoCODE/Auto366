@@ -1884,27 +1884,28 @@ class AnswerProxy {
         const mergedAnswers = [];
         let successfulMerges = 0;
 
-        // 为每个正确答案找到对应的题目
         correctAnswers.forEach((correctAns) => {
-          // 优先通过elementId匹配（最准确）
           let matchingQuestion = paperQuestions.find(q => q.elementId === correctAns.elementId);
 
+          console.log(`尝试匹配答案: elementId=${correctAns.elementId}, 找到匹配题目: ${!!matchingQuestion}`);
           if (matchingQuestion) {
-            // 成功匹配，只更新questionText字段
+            console.log(`匹配成功 - 题目文本: "${matchingQuestion.questionText}"`);
+          }
+
+          if (matchingQuestion) {
             mergedAnswers.push({
-              ...correctAns, // 保持所有原有字段
+              ...correctAns,
               questionText: matchingQuestion.questionText // 只添加题面文本
             });
             successfulMerges++;
           } else {
-            // 没有找到匹配的题目，保持原样
+            console.log(`未找到匹配题目，保持原样: ${correctAns.elementId}`);
             mergedAnswers.push(correctAns);
           }
         });
 
         console.log(`合并完成: 成功合并 ${successfulMerges}/${correctAnswers.length} 个答案`);
 
-        // 如果成功合并的数量达到一定比例，返回合并结果
         if (successfulMerges > 0) {
           return mergedAnswers;
         }
@@ -1982,7 +1983,9 @@ class AnswerProxy {
 
       // 处理paper.xml文件
       if (filePath.includes('paper')) {
+        console.log('开始解析paper.xml文件');
         const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
+        console.log(`找到 ${elementMatches.length} 个element元素`);
 
         elementMatches.forEach((elementMatch) => {
           const elementId = elementMatch[1];
@@ -1994,14 +1997,22 @@ class AnswerProxy {
           // 提取题目文本
           const questionTextMatch = elementContent.match(/<question_text>\s*<!\[CDATA\[(.*?)]]>\s*<\/question_text>/s);
 
+          console.log(`处理element ${elementId}, 题目编号: ${questionNoMatch ? questionNoMatch[1] : '未找到'}, 题目文本匹配: ${!!questionTextMatch}`);
+
           const knowledgeMatch = elementContent.match(/<knowledge>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/knowledge>/);
 
           if (questionNoMatch && questionTextMatch) {
             const questionNo = parseInt(questionNoMatch[1]);
             let questionText = questionTextMatch[1];
 
-            // 清理题目文本，保留题目内容但移除HTML标签
-            questionText = questionText.replace(/<img[^>]*>/g, '[音频]').replace(/<[^>]*>/g, '').trim();
+            console.log(`原始题目文本: "${questionText}"`);
+
+            questionText = questionText
+              .replace(/<[^>]*>/g, '')
+              .replace(/\{\{\d+\}\}/g, ' ') 
+              .trim();
+
+            console.log(`清理后题目文本: "${questionText}"`);
 
             const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*[^>]*>\s*<!\[CDATA\[(.*?)]]>\s*<\/option>/gs)];
 
@@ -2029,6 +2040,9 @@ class AnswerProxy {
             }
 
             answers.push(answerInfo);
+            console.log(`添加题目信息: ${JSON.stringify(answerInfo, null, 2)}`);
+          } else {
+            console.log(`跳过element ${elementId}: 缺少题目编号或题目文本`);
           }
         });
       }
