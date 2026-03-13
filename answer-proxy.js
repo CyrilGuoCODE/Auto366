@@ -1884,65 +1884,21 @@ class AnswerProxy {
         const mergedAnswers = [];
         let successfulMerges = 0;
 
-        console.log(`开始合并答案数据: correctAnswer.xml(${correctAnswers.length}题) + paper.xml(${paperQuestions.length}题)`);
-
         // 为每个正确答案找到对应的题目
-        correctAnswers.forEach((correctAns, index) => {
+        correctAnswers.forEach((correctAns) => {
           // 优先通过elementId匹配（最准确）
           let matchingQuestion = paperQuestions.find(q => q.elementId === correctAns.elementId);
 
           if (matchingQuestion) {
-            console.log(`通过elementId匹配成功: ${correctAns.elementId}`);
-
-            // 保持原有结构，只新增字段
-            const mergedAnswer = {
-              // 保持原有字段不变
-              question: correctAns.question,
-              answer: correctAns.answer,
-              content: correctAns.content,
-              questionText: correctAns.questionText,
-              pattern: correctAns.pattern,
-              elementId: correctAns.elementId,
-              
-              // 新增字段 - 来自paper.xml的完整题目信息
-              paperQuestionText: matchingQuestion.questionText, // 完整题目文本
-              paperQuestionNo: matchingQuestion.questionNo,     // 题目编号
-              sourceFiles: ['correctAnswer.xml', 'paper.xml']   // 来源文件
-            };
-
-            // 如果有解析，保持原有格式并新增独立字段
-            if (correctAns.content.includes('解析:')) {
-              const analysisText = correctAns.content.split('解析: ')[1].split('\n答案:')[0];
-              if (analysisText) {
-                mergedAnswer.analysis = analysisText; // 新增：独立的解析字段
-              }
-            }
-
-            // 如果有选项，新增选项相关字段
-            if (matchingQuestion.options && matchingQuestion.options.length > 0) {
-              mergedAnswer.options = matchingQuestion.options; // 新增：选项数组
-              
-              // 如果答案是选项ID，尝试找到对应的选项文本
-              const correctOption = matchingQuestion.options.find(opt => opt.id === correctAns.answer);
-              if (correctOption) {
-                mergedAnswer.answerText = correctOption.text;                    // 新增：答案文本
-                mergedAnswer.fullAnswer = `${correctAns.answer}. ${correctOption.text}`; // 新增：完整答案
-              }
-            }
-
-            mergedAnswers.push(mergedAnswer);
+            // 成功匹配，只更新questionText字段
+            mergedAnswers.push({
+              ...correctAns, // 保持所有原有字段
+              questionText: matchingQuestion.questionText // 只添加题面文本
+            });
             successfulMerges++;
           } else {
-            console.log(`未找到匹配的题目，elementId: ${correctAns.elementId}`);
-            // 没有找到匹配的题目，使用原始答案格式
-            mergedAnswers.push({
-              question: `第${index + 1}题`,
-              answer: correctAns.answer,
-              content: correctAns.content,
-              questionText: correctAns.answer, // 回退到使用答案作为题目文本
-              pattern: correctAns.pattern,
-              elementId: correctAns.elementId
-            });
+            // 没有找到匹配的题目，保持原样
+            mergedAnswers.push(correctAns);
           }
         });
 
@@ -1958,15 +1914,12 @@ class AnswerProxy {
       }
 
       // 如果只有一个文件或无法合并，返回原始数据
-      console.log('未找到可合并的XML文件对，返回原始数据');
       return allAnswers;
     } catch (error) {
       console.error('合并答案数据失败:', error);
       return allAnswers;
     }
   }
-
-
 
   // 从XML文件提取答案
   extractFromXML(content, filePath) {
