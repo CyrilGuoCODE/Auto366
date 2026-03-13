@@ -30,9 +30,11 @@ function loadBucketFromServer() {
 
                         rawAnswerData.push({
                             question: i.question || '',
+                            questionText: i.questionText || '', // 来自 paper.xml 的题面文本
                             answer: answerText,
                             answerIndex: i.answerIndex,
-                            index: i.index
+                            index: i.index,
+                            elementId: i.elementId
                         });
 
                         let questionNum = 1;
@@ -138,7 +140,7 @@ function findAnswerByContent(questionText) {
     let bestScore = 0;
 
     rawAnswerData.forEach((item, index) => {
-        const matchText = item.questionText;
+        const matchText = item.questionText || item.question || '';
         const similarity = calculateTextSimilarity(questionText, matchText);
         if (similarity > bestScore && similarity > 30) { // 最低相似度阈值
             bestScore = similarity;
@@ -155,7 +157,7 @@ function findAnswerByContent(questionText) {
 }
 
 async function work() {
-    const questionContainers = document.getElementsByClassName('u3-question-container');
+    const questionTexts = document.getElementsByClassName('u3-question-text');
     const inputElements = document.getElementsByClassName('u3-input__content--input');
 
     let filledCount = 0;
@@ -163,12 +165,13 @@ async function work() {
     if (contentMatchMode) {
         addLogMessage('使用内容匹配模式', 'info');
 
-        for (let i = 0; i < questionContainers.length; i++) {
-            const container = questionContainers[i];
-            const containerInputs = container.getElementsByClassName('u3-input__content--input');
+        for (let i = 0; i < questionTexts.length; i++) {
+            const questionTextElement = questionTexts[i];
+            const containerInputs = questionTextElement.getElementsByClassName('u3-input__content--input');
 
             if (containerInputs.length > 0) {
-                const questionText = container.textContent || container.innerText || '';
+                // 获取纯文本内容，去除HTML标签和题号
+                const questionText = questionTextElement.textContent || questionTextElement.innerText || '';
                 const cleanQuestionText = questionText.replace(/^\d+[\s\.\)]*/, '').trim();
 
                 if (cleanQuestionText.length > 5) {
@@ -193,17 +196,16 @@ async function work() {
 
         const questionInputMap = new Map();
 
-        for (let i = 0; i < questionContainers.length; i++) {
-            const container = questionContainers[i];
-
-            const preparedElements = container.getElementsByClassName('u3-input__prepared');
-            const containerInputs = container.getElementsByClassName('u3-input__content--input');
+        for (let i = 0; i < questionTexts.length; i++) {
+            const questionTextElement = questionTexts[i];
+            const preparedElements = questionTextElement.getElementsByClassName('u3-input__prepared');
+            const containerInputs = questionTextElement.getElementsByClassName('u3-input__content--input');
 
             if (preparedElements.length > 0 && containerInputs.length > 0) {
                 const questionNum = parseInt(preparedElements[0].innerHTML);
                 if (!isNaN(questionNum) && questionNum > 0) {
                     questionInputMap.set(questionNum, containerInputs[0]);
-                    addLogMessage(`找到题目 ${questionNum}，在容器 ${i}`, 'info');
+                    addLogMessage(`找到题目 ${questionNum}，在题目文本元素 ${i}`, 'info');
                 }
             }
         }
@@ -615,42 +617,42 @@ function createAutoFillPanel() {
     presetRow.style.marginBottom = '6px';
 
     const preset1 = document.createElement('button');
-    preset1.textContent = '500ms';
-    preset1.title = '快速';
+    preset1.textContent = '50ms';
+    preset1.title = '极速';
     preset1.style.flex = '1';
     preset1.style.fontSize = '11px';
     preset1.style.padding = '4px';
     preset1.addEventListener('click', () => {
-        autoFillDelay = 500;
-        delayInput.value = '500';
+        autoFillDelay = 50;
+        delayInput.value = '50';
         if (autoFillIntervalId) {
             startAutoFill();
         }
     });
 
     const preset2 = document.createElement('button');
-    preset2.textContent = '1000ms';
-    preset2.title = '均衡';
+    preset2.textContent = '200ms';
+    preset2.title = '快速';
     preset2.style.flex = '1';
     preset2.style.fontSize = '11px';
     preset2.style.padding = '4px';
     preset2.addEventListener('click', () => {
-        autoFillDelay = 1000;
-        delayInput.value = '1000';
+        autoFillDelay = 200;
+        delayInput.value = '200';
         if (autoFillIntervalId) {
             startAutoFill();
         }
     });
 
     const preset3 = document.createElement('button');
-    preset3.textContent = '3000ms';
+    preset3.textContent = '1000ms';
     preset3.title = '稳定';
     preset3.style.flex = '1';
     preset3.style.fontSize = '11px';
     preset3.style.padding = '4px';
     preset3.addEventListener('click', () => {
-        autoFillDelay = 3000;
-        delayInput.value = '3000';
+        autoFillDelay = 1000;
+        delayInput.value = '1000';
         if (autoFillIntervalId) {
             startAutoFill();
         }
