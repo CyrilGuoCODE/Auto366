@@ -138,8 +138,7 @@ function findAnswerByContent(questionText) {
     let bestScore = 0;
 
     rawAnswerData.forEach((item, index) => {
-        // 优先使用questionText字段进行匹配，如果没有则使用question字段
-        const matchText = item.questionText || item.question;
+        const matchText = item.questionText;
         const similarity = calculateTextSimilarity(questionText, matchText);
         if (similarity > bestScore && similarity > 30) { // 最低相似度阈值
             bestScore = similarity;
