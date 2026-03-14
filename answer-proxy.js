@@ -1884,22 +1884,37 @@ class AnswerProxy {
         const mergedAnswers = [];
         let successfulMerges = 0;
 
-        correctAnswers.forEach((correctAns) => {
+        correctAnswers.forEach((correctAns, index) => {
+          // 首先尝试通过elementId匹配
           let matchingQuestion = paperQuestions.find(q => q.elementId === correctAns.elementId);
 
-          console.log(`尝试匹配答案: elementId=${correctAns.elementId}, 找到匹配题目: ${!!matchingQuestion}`);
-          if (matchingQuestion) {
-            console.log(`匹配成功 - 题目文本: "${matchingQuestion.questionText}"`);
+          console.log(`尝试匹配答案: elementId="${correctAns.elementId}", 找到匹配题目: ${!!matchingQuestion}`);
+          
+          // 如果elementId匹配失败，尝试按题目编号匹配
+          if (!matchingQuestion) {
+            const questionNumber = index + 1; // 题目编号从1开始
+            matchingQuestion = paperQuestions.find(q => q.questionNo === questionNumber);
+            console.log(`elementId匹配失败，尝试按题目编号匹配: 第${questionNumber}题, 找到匹配: ${!!matchingQuestion}`);
+            
+            // 如果使用备用匹配成功，发送提示信息
+            if (matchingQuestion) {
+              this.safeIpcSend('rule-log', {
+                type: 'warning',
+                message: `第${questionNumber}题使用备用匹配策略 - elementId不匹配，按题目编号匹配成功`,
+                details: `correctAnswer elementId: "${correctAns.elementId}", paper elementId: "${matchingQuestion.elementId}"`
+              });
+            }
           }
 
           if (matchingQuestion) {
+            console.log(`匹配成功 - 题目文本: "${matchingQuestion.questionText}"`);
             mergedAnswers.push({
               ...correctAns,
               questionText: matchingQuestion.questionText // 只添加题面文本
             });
             successfulMerges++;
           } else {
-            console.log(`未找到匹配题目，保持原样: ${correctAns.elementId}`);
+            console.log(`未找到匹配题目，保持原样: elementId="${correctAns.elementId}", 题目编号: 第${index + 1}题`);
             mergedAnswers.push(correctAns);
           }
         });
@@ -1929,14 +1944,19 @@ class AnswerProxy {
     try {
       // 处理correctAnswer.xml文件
       if (filePath.includes('correctAnswer')) {
+        console.log('开始解析correctAnswer.xml文件');
         // 提取所有element元素，包含id、analysis和answers
         const elementMatches = [...content.matchAll(/<element\s+id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
+        console.log(`找到 ${elementMatches.length} 个element元素`);
 
         elementMatches.forEach((elementMatch, index) => {
           const elementId = elementMatch[1];
           const elementContent = elementMatch[2];
 
+          console.log(`处理correctAnswer element ${index + 1}, ID: "${elementId}" (长度: ${elementId.length})`);
+
           if (!elementContent.trim()) {
+            console.log(`element ${elementId} 内容为空，跳过`);
             return;
           }
 
@@ -1950,14 +1970,16 @@ class AnswerProxy {
           const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answers>/);
           if (answersMatch && answersMatch[1]) {
             const answerText = answersMatch[1].trim();
-            answers.push({
-              question: `第${answers.length + 1}题`,
+            const answerItem = {
+              question: `第${index + 1}题`, // 使用index+1确保题目编号正确
               answer: answerText,
               content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
               questionText: answerText,
               pattern: 'XML正确答案模式',
               elementId: elementId
-            });
+            };
+            answers.push(answerItem);
+            console.log(`添加答案项:`, answerItem);
           } else {
             const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answer>/g)];
 
@@ -1965,17 +1987,21 @@ class AnswerProxy {
               answerMatches.forEach((answerMatch, answerIndex) => {
                 const answerText = answerMatch[1].trim();
                 if (answerText) {
-                  answers.push({
-                    question: `第${answers.length + 1}题`,
+                  const answerItem = {
+                    question: `第${index + 1}题`, // 使用index+1确保题目编号正确
                     answer: answerText,
                     content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
                     questionText: answerText,
                     pattern: 'XML正确答案模式',
                     elementId: elementId,
                     answerIndex: answerIndex + 1
-                  });
+                  };
+                  answers.push(answerItem);
+                  console.log(`添加答案项 (多答案):`, answerItem);
                 }
               });
+            } else {
+              console.log(`element ${elementId} 没有找到有效的答案数据`);
             }
           }
         });
@@ -1990,6 +2016,8 @@ class AnswerProxy {
         elementMatches.forEach((elementMatch) => {
           const elementId = elementMatch[1];
           const elementContent = elementMatch[2];
+
+          console.log(`处理paper element, ID: "${elementId}" (长度: ${elementId.length})`);
 
           // 提取题目编号
           const questionNoMatch = elementContent.match(/<question_no>(\d+)<\/question_no>/);
@@ -2040,7 +2068,7 @@ class AnswerProxy {
             }
 
             answers.push(answerInfo);
-            console.log(`添加题目信息: ${JSON.stringify(answerInfo, null, 2)}`);
+            console.log(`添加题目信息: elementId="${elementId}", questionNo=${questionNo}, questionText="${questionText}"`);
           } else {
             console.log(`跳过element ${elementId}: 缺少题目编号或题目文本`);
           }
