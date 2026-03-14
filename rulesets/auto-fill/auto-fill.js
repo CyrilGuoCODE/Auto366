@@ -95,41 +95,30 @@ async function wait1(x) {
     return new Promise(resolve => setTimeout(resolve, x));
 }
 
+function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+            dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1]
+                : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    return dp[m][n];
+}
+
 function calculateTextSimilarity(text1, text2) {
     if (!text1 || !text2) return 0;
-
-    const clean1 = text1.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toLowerCase();
-    const clean2 = text2.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toLowerCase();
-
-    if (clean1 === clean2) return 100;
-    if (clean1.includes(clean2) || clean2.includes(clean1)) return 80;
-
-    let commonChars = 0;
-    const minLen = Math.min(clean1.length, clean2.length);
-    const maxLen = Math.max(clean1.length, clean2.length);
-
-    for (let i = 0; i < minLen; i++) {
-        if (clean1[i] === clean2[i]) {
-            commonChars++;
-        }
-    }
-
-    const words1 = clean1.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || [];
-    const words2 = clean2.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || [];
-
-    let commonWords = 0;
-    words1.forEach(word1 => {
-        words2.forEach(word2 => {
-            if (word1 === word2 || word1.includes(word2) || word2.includes(word1)) {
-                commonWords++;
-            }
-        });
-    });
-
-    const charSimilarity = (commonChars / maxLen) * 50;
-    const wordSimilarity = (commonWords / Math.max(words1.length, words2.length, 1)) * 50;
-
-    return charSimilarity + wordSimilarity;
+    const clean = s => s.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toLowerCase();
+    const c1 = clean(text1), c2 = clean(text2);
+    if (c1 === c2) return 100;
+    if (!c1 || !c2) return 0;
+    const maxLen = Math.max(c1.length, c2.length);
+    const editSim = (1 - levenshtein(c1, c2) / maxLen) * 60;
+    const words1 = c1.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || [];
+    const words2 = new Set(c2.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || []);
+    const overlap = words1.filter(w => words2.has(w)).length;
+    const wordSim = (overlap / Math.max(words1.length, words2.size, 1)) * 40;
+    return editSim + wordSim;
 }
 
 function findAnswerByContent(questionText) {
@@ -143,7 +132,7 @@ function findAnswerByContent(questionText) {
     rawAnswerData.forEach((item, index) => {
         const matchText = item.questionText || item.question || '';
         const similarity = calculateTextSimilarity(questionText, matchText);
-        if (similarity > bestScore && similarity > 30) { // 最低相似度阈值
+        if (similarity > bestScore && similarity > 60) { // 提高最低相似度阈值到60%
             bestScore = similarity;
             bestMatch = {
                 answer: item.answer,
@@ -625,14 +614,14 @@ function createAutoFillPanel() {
     presetRow.style.marginBottom = '6px';
 
     const preset1 = document.createElement('button');
-    preset1.textContent = '50ms';
+    preset1.textContent = '80ms';
     preset1.title = '极速';
     preset1.style.flex = '1';
     preset1.style.fontSize = '11px';
     preset1.style.padding = '4px';
     preset1.addEventListener('click', () => {
-        autoFillDelay = 50;
-        delayInput.value = '50';
+        autoFillDelay = 80;
+        delayInput.value = '80';
         if (autoFillIntervalId) {
             startAutoFill();
         }
