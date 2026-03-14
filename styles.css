@@ -907,6 +907,32 @@ body {
     font-weight: 500;
 }
 
+.expand-answer-btn {
+    background: #e3f2fd;
+    color: #1976d2;
+    border: 1px solid #bbdefb;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    margin: 8px 0;
+    width: 100%;
+    font-weight: 500;
+}
+
+.expand-answer-btn:hover {
+    background: #bbdefb;
+    border-color: #90caf9;
+    color: #1565c0;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(25, 118, 210, 0.2);
+}
+
 .copy-answer-btn {
     background: #17a2b8;
     color: white;
@@ -961,6 +987,87 @@ body {
 .answer-content .answer {
     color: #007bff;
     font-weight: 500;
+}
+
+.answer-content .main-answer {
+    color: #495057;
+    font-weight: 500;
+    margin-bottom: 4px;
+    padding: 4px 0;
+}
+
+.children-answers {
+    margin-top: 12px;
+    padding-left: 16px;
+    border-left: 2px solid #e9ecef;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        max-height: 500px;
+        transform: translateY(0);
+    }
+}
+
+.child-answer-item {
+    background: #f8f9fa;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+}
+
+.child-answer-item:hover {
+    background: #e9ecef;
+    border-color: #17a2b8;
+}
+
+.child-answer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.child-answer-index {
+    font-weight: 600;
+    color: #17a2b8;
+    font-size: 11px;
+}
+
+.copy-child-answer-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    opacity: 0.8;
+}
+
+.copy-child-answer-btn:hover {
+    background: #218838;
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.child-answer-content {
+    color: #495057;
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 .clickable-answer {

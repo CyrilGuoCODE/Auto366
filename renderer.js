@@ -1457,8 +1457,10 @@ class UniversalAnswerFeature {
         const safeAnswerText = answerText.replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const safeQuestionText = questionText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+        const hasChildren = answer.children && Array.isArray(answer.children) && answer.children.length > 0;
+
         html += `
-          <div class="answer-item">
+          <div class="answer-item ${hasChildren ? 'has-children' : ''}">
             <div class="answer-header">
               <span class="answer-index">#${index + 1}</span>
               <span class="answer-type">${answer.pattern || '未知题型'}</span>
@@ -1468,7 +1470,32 @@ class UniversalAnswerFeature {
             </div>
             <div class="answer-content">
               <div class="question">${safeQuestionText}</div>
-              <div class="answer clickable-answer" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="点击复制答案">${safeAnswerText}</div>
+              ${hasChildren ? `
+                <div class="answer main-answer">${safeAnswerText}</div>
+                <button class="expand-answer-btn" onclick="universalAnswerFeature.toggleAnswerExpansion(this)" title="展开/收起答案">
+                  <i class="bi bi-chevron-down"></i>
+                  <span>展开全部答案</span>
+                </button>
+                <div class="children-answers" style="display: none;">
+                  ${answer.children.map((child, childIndex) => {
+          const safeChildAnswer = (child.answer || '无答案').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const childAnswerForJs = (child.answer || '').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+          return `
+                      <div class="child-answer-item">
+                        <div class="child-answer-header">
+                          <span class="child-answer-index">${child.question || `答案${childIndex + 1}`}</span>
+                          <button class="copy-child-answer-btn" onclick="universalAnswerFeature.copyAnswer('${childAnswerForJs}', this)" title="复制此答案">
+                            <i class="bi bi-copy"></i>
+                          </button>
+                        </div>
+                        <div class="child-answer-content clickable-answer" onclick="universalAnswerFeature.copyAnswer('${childAnswerForJs}', this)" title="点击复制答案">${safeChildAnswer}</div>
+                      </div>
+                    `;
+        }).join('')}
+                </div>
+              ` : `
+                <div class="answer clickable-answer" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="点击复制答案">${safeAnswerText}</div>
+              `}
             </div>
           </div>
         `;
@@ -1512,12 +1539,47 @@ class UniversalAnswerFeature {
         return;
       }
 
-      const answerText = targetAnswer.answer || '无答案';
+      let answerText = '';
+      if (targetAnswer.children && Array.isArray(targetAnswer.children) && targetAnswer.children.length > 0) {
+        answerText = targetAnswer.children.map((child, index) =>
+          `${child.question || `答案${index + 1}`}: ${child.answer || '无答案'}`
+        ).join('\n');
+      } else {
+        answerText = targetAnswer.answer || '无答案';
+      }
+
       this.copyAnswer(answerText, element);
 
     } catch (error) {
       console.error('复制答案失败:', error);
       this.showCopyToast('复制失败', 'error');
+    }
+  }
+
+  toggleAnswerExpansion(button) {
+    try {
+      const answerItem = button.closest('.answer-item');
+      const childrenAnswers = answerItem.querySelector('.children-answers');
+      const icon = button.querySelector('i');
+      const buttonText = button.querySelector('span');
+
+      if (!childrenAnswers) return;
+
+      const isExpanded = childrenAnswers.style.display !== 'none';
+
+      if (isExpanded) {
+        childrenAnswers.style.display = 'none';
+        icon.className = 'bi bi-chevron-down';
+        if (buttonText) buttonText.textContent = '展开全部答案';
+        button.title = '展开答案';
+      } else {
+        childrenAnswers.style.display = 'block';
+        icon.className = 'bi bi-chevron-up';
+        if (buttonText) buttonText.textContent = '收起答案';
+        button.title = '收起答案';
+      }
+    } catch (error) {
+      console.error('切换答案展开状态失败:', error);
     }
   }
 
@@ -2050,7 +2112,7 @@ class UniversalAnswerFeature {
     } else if (rule.type === 'answer-upload') {
       maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
     }
-    
+
     if (maxTriggersInput) {
       maxTriggersInput.value = rule.maxTriggers || '';
     }
@@ -2126,7 +2188,7 @@ class UniversalAnswerFeature {
 
     let maxTriggersInput;
     const ruleType = document.getElementById('ruleType').value;
-    
+
     if (ruleType === 'content-change') {
       maxTriggersInput = document.querySelector('#contentChangeMaxTriggers');
     } else if (ruleType === 'zip-implant') {
@@ -2134,9 +2196,9 @@ class UniversalAnswerFeature {
     } else if (ruleType === 'answer-upload') {
       maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
     }
-    
+
     const maxTriggersValue = maxTriggersInput ? maxTriggersInput.value.trim() : '';
-    
+
     if (maxTriggersValue && parseInt(maxTriggersValue) > 0) {
       rule.maxTriggers = parseInt(maxTriggersValue);
       rule.currentTriggers = 0;
