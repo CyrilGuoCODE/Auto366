@@ -1885,14 +1885,12 @@ class AnswerProxy {
         let successfulMerges = 0;
 
         correctAnswers.forEach((correctAns, index) => {
-          // 首先尝试通过elementId匹配
           let matchingQuestion = paperQuestions.find(q => q.elementId === correctAns.elementId);
 
           console.log(`尝试匹配答案: elementId="${correctAns.elementId}", 找到匹配题目: ${!!matchingQuestion}`);
-          
-          // 如果elementId匹配失败，尝试按题目编号匹配
+
           if (!matchingQuestion) {
-            const questionNumber = index + 1; // 题目编号从1开始
+            const questionNumber = index + 1;
             matchingQuestion = paperQuestions.find(q => q.questionNo === questionNumber);
             console.log(`elementId匹配失败，尝试按题目编号匹配: 第${questionNumber}题, 找到匹配: ${!!matchingQuestion}`);
             
@@ -1929,7 +1927,6 @@ class AnswerProxy {
         return allAnswers;
       }
 
-      // 如果只有一个文件或无法合并，返回原始数据
       return allAnswers;
     } catch (error) {
       console.error('合并答案数据失败:', error);

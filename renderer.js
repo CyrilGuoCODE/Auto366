@@ -1296,9 +1296,9 @@ class UniversalAnswerFeature {
 
     trafficLog.appendChild(logItem);
 
-    // 限制日志数量，保持最新的100条
+    // 限制日志数量，保持最新的200条
     const logItems = trafficLog.querySelectorAll('.log-item');
-    if (logItems.length > 100) {
+    if (logItems.length > 200) {
       const removedItem = logItems[0];
       // 如果删除的是请求项，也要清理对应的数据
       if (removedItem.dataset.requestId) {
