@@ -9,6 +9,7 @@ let logPanel = null;  // 日志面板
 let logMessages = [];  // 日志消息数组
 let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || false;
 let rawAnswerData = [];
+const MAX_LOG_MESSAGES = 200;  // 最大日志数量
 
 function loadBucketFromServer() {
     try {
@@ -174,19 +175,17 @@ async function work() {
                 const questionText = questionTextElement.textContent || questionTextElement.innerText || '';
                 const cleanQuestionText = questionText.replace(/^\d+[\s\.\)]*/, '').trim();
 
-                if (cleanQuestionText.length > 5) {
-                    const match = findAnswerByContent(cleanQuestionText);
+                const match = findAnswerByContent(cleanQuestionText);
 
-                    if (match) {
-                        containerInputs[0].value = match.answer;
-                        containerInputs[0].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                        containerInputs[0].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                        filledCount++;
-                        addLogMessage(`题目 ${i + 1} 内容匹配成功 (相似度: ${Math.round(match.similarity)}%): ${match.answer}`, 'success');
-                        await wait1(100);
-                    } else {
-                        addLogMessage(`题目 ${i + 1} 未找到匹配答案: ${cleanQuestionText.substring(0, 50)}...`, 'warning');
-                    }
+                if (match) {
+                    containerInputs[0].value = match.answer;
+                    containerInputs[0].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                    containerInputs[0].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                    filledCount++;
+                    addLogMessage(`题目 ${i + 1} 内容匹配成功 (相似度: ${Math.round(match.similarity)}%): ${match.answer}`, 'success');
+                    await wait1(100);
+                } else {
+                    addLogMessage(`题目 ${i + 1} 未找到匹配答案: ${cleanQuestionText.substring(0, 50)}...`, 'warning');
                 }
             }
         }
@@ -301,10 +300,19 @@ const showSuccessMessage = () => {
 function addLogMessage(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
     logMessages.unshift({ timestamp, message, type });
-    // 保留最近50条日志
-    if (logMessages.length > 50) {
-        logMessages = logMessages.slice(0, 50);
+
+    if (logMessages.length > MAX_LOG_MESSAGES) {
+        const importantLogs = logMessages.filter(log => log.type === 'error' || log.type === 'warning');
+        const normalLogs = logMessages.filter(log => log.type !== 'error' && log.type !== 'warning');
+
+        const maxNormalLogs = MAX_LOG_MESSAGES - importantLogs.length;
+        const keptNormalLogs = normalLogs.slice(0, Math.max(0, maxNormalLogs));
+
+        logMessages = [...importantLogs, ...keptNormalLogs].sort((a, b) => {
+            return new Date('1970-01-01 ' + b.timestamp) - new Date('1970-01-01 ' + a.timestamp);
+        });
     }
+
     updateLogPanel();
 }
 
