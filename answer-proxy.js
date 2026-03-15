@@ -33,6 +33,28 @@ class AnswerProxy {
     this.loadResponseRules();
   }
 
+  // 清理HTML标签和转义符号的通用函数
+  cleanHtmlText(text) {
+    if (!text) return '';
+    return text
+      .replace(/<[^>]*>/g, '') // 移除HTML标签
+      .replace(/&nbsp;/g, ' ') // 非断行空格
+      .replace(/&amp;/g, '&') // &符号
+      .replace(/&lt;/g, '<') // 小于号
+      .replace(/&gt;/g, '>') // 大于号
+      .replace(/&quot;/g, '"') // 双引号
+      .replace(/&#39;/g, "'") // 单引号
+      .replace(/&apos;/g, "'") // 单引号（另一种形式）
+      .replace(/&hellip;/g, '...') // 省略号
+      .replace(/&mdash;/g, '—') // 长破折号
+      .replace(/&ndash;/g, '–') // 短破折号
+      .replace(/&ldquo;/g, '"') // 左双引号
+      .replace(/&rdquo;/g, '"') // 右双引号
+      .replace(/&lsquo;/g, "'") // 左单引号
+      .replace(/&rsquo;/g, "'") // 右单引号
+      .trim();
+  }
+
   isAnswerCaptureEnabled() {
     return this.answerCaptureEnabled;
   }
@@ -1612,9 +1634,9 @@ class AnswerProxy {
         opt => opt.id === questionObj.answer_text
       );
       if (correctOption) {
-        // 清理问题文本中的HTML标签
+        // 清理问题文本中的HTML标签和转义符号
         const cleanQuestionText = questionObj.question_text
-          ? questionObj.question_text.replace(/<[^>]*>/g, '').trim()
+          ? this.cleanHtmlText(questionObj.question_text)
           : '未知问题';
 
         results.push({
@@ -1724,10 +1746,8 @@ class AnswerProxy {
 
     // 优先从analysis中提取带停顿的文本
     if (questionObj.analysis) {
-      const cleanAnalysis = questionObj.analysis
-        .replace(/<[^>]*>/g, '') // 移除HTML标签
-        .replace(/参考答案[一二]：/g, '') // 移除参考答案标记
-        .trim();
+      const cleanAnalysis = this.cleanHtmlText(questionObj.analysis)
+        .replace(/参考答案[一二]：/g, ''); // 移除参考答案标记
 
       if (cleanAnalysis) {
         // 按句号分割但保留原文格式
@@ -1778,7 +1798,7 @@ class AnswerProxy {
 
     // 尝试从各种可能的位置提取答案
     if (questionObj.analysis) {
-      const text = questionObj.analysis.replace(/<[^>]*>/g, '').trim();
+      const text = this.cleanHtmlText(questionObj.analysis);
       if (text) {
         results.push({
           question: '第1题',
@@ -1893,7 +1913,7 @@ class AnswerProxy {
             const questionNumber = index + 1;
             matchingQuestion = paperQuestions.find(q => q.questionNo === questionNumber);
             console.log(`elementId匹配失败，尝试按题目编号匹配: 第${questionNumber}题, 找到匹配: ${!!matchingQuestion}`);
-            
+
             // 如果使用备用匹配成功，发送提示信息
             if (matchingQuestion) {
               this.safeIpcSend('rule-log', {
@@ -1961,7 +1981,7 @@ class AnswerProxy {
 
           const analysisMatch = elementContent.match(/<analysis>\s*<!\[CDATA\[(.*?)]]>\s*<\/analysis>/s);
           if (analysisMatch && analysisMatch[1]) {
-            analysisText = analysisMatch[1].replace(/<[^>]*>/g, '').trim();
+            analysisText = this.cleanHtmlText(analysisMatch[1]);
           }
 
           const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answers>/);
@@ -2032,10 +2052,8 @@ class AnswerProxy {
 
             console.log(`原始题目文本: "${questionText}"`);
 
-            questionText = questionText
-              .replace(/<[^>]*>/g, '')
-              .replace(/\{\{\d+\}\}/g, ' ') 
-              .trim();
+            questionText = this.cleanHtmlText(questionText)
+              .replace(/\{\{\d+\}\}/g, ' '); // 保留这个特殊的占位符处理
 
             console.log(`清理后题目文本: "${questionText}"`);
 
