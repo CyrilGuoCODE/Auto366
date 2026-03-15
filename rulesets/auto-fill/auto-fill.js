@@ -23,6 +23,7 @@ function loadBucketFromServer() {
                 answers = [];
                 rawAnswerData = [];
                 const answerMap = new Map();
+                const multiAnswerMap = new Map(); // 用于存储多空题答案
 
                 for (let i of data) {
                     if (i.sourceFile === 'correctAnswer.xml') {
@@ -50,8 +51,27 @@ function loadBucketFromServer() {
                             questionNum = i.answerIndex || (answers.length + 1);
                         }
 
-                        answerMap.set(questionNum, answerText);
+                        // 处理多空题 - 收集同一题目的多个答案
+                        if (!multiAnswerMap.has(questionNum)) {
+                            multiAnswerMap.set(questionNum, []);
+                        }
+                        multiAnswerMap.get(questionNum).push({
+                            answer: answerText,
+                            answerIndex: i.answerIndex || 1,
+                            elementId: i.elementId
+                        });
+
+                        // 保持原有的单答案逻辑（取第一个答案）
+                        if (!answerMap.has(questionNum)) {
+                            answerMap.set(questionNum, answerText);
+                        }
                     }
+                }
+
+                // 对多空题答案按answerIndex排序
+                for (let [questionNum, answerList] of multiAnswerMap) {
+                    answerList.sort((a, b) => (a.answerIndex || 1) - (b.answerIndex || 1));
+                    multiAnswerMap.set(questionNum, answerList);
                 }
 
                 const sortedKeys = Array.from(answerMap.keys()).sort((a, b) => a - b);
@@ -59,13 +79,23 @@ function loadBucketFromServer() {
                     answers.push(answerMap.get(key));
                 }
 
+                // 将多空题数据存储到全局变量
+                window.multiAnswerMap = multiAnswerMap;
+
                 bucketLoaded = true;
                 bucketError = null;
                 updateAutoFillPanelStatus();
-                addLogMessage('填空答案库加载成功，共 ' + answers.length + ' 个答案', 'success');
+                addLogMessage('填空答案库加载成功，共 ' + answers.length + ' 个题目', 'success');
+                
+                // 统计多空题数量
+                const multiBlankCount = Array.from(multiAnswerMap.values()).filter(list => list.length > 1).length;
+                if (multiBlankCount > 0) {
+                    addLogMessage(`检测到 ${multiBlankCount} 个多空题`, 'info');
+                }
+                
                 addLogMessage('内容匹配模式: ' + (contentMatchMode ? '已启用' : '已禁用'), 'info');
-                console.log('填空答案库加载成功，共' + answers.length + '个答案');
-                console.log('答案列表预览:', answers.slice(0, 10)); // 显示前10个答案
+                console.log('填空答案库加载成功，共' + answers.length + '个题目');
+                console.log('多空题数据:', multiAnswerMap);
             })
             .catch(err => {
                 bucketLoaded = false;
@@ -147,14 +177,17 @@ function findAnswerByContent(questionText) {
 }
 
 async function work() {
-    const questionTexts = document.getElementsByClassName('u3-question-text');
+    const preparedElements = document.getElementsByClassName('u3-input__prepared');
     const inputElements = document.getElementsByClassName('u3-input__content--input');
 
     let filledCount = 0;
 
     if (contentMatchMode) {
         addLogMessage('使用内容匹配模式', 'info');
-
+        
+        // 内容匹配模式：遍历所有题目文本元素
+        const questionTexts = document.getElementsByClassName('u3-question-text');
+        
         for (let i = 0; i < questionTexts.length; i++) {
             const questionTextElement = questionTexts[i];
             const containerInputs = questionTextElement.getElementsByClassName('u3-input__content--input');
@@ -167,6 +200,7 @@ async function work() {
                 const match = findAnswerByContent(cleanQuestionText);
 
                 if (match) {
+                    // 只填第一个输入框（保持简单）
                     containerInputs[0].value = match.answer;
                     containerInputs[0].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
                     containerInputs[0].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
@@ -179,49 +213,56 @@ async function work() {
             }
         }
     } else {
-
         addLogMessage('使用题号匹配模式', 'info');
-
-        const questionInputMap = new Map();
-
-        for (let i = 0; i < questionTexts.length; i++) {
-            const questionTextElement = questionTexts[i];
-            const preparedElements = questionTextElement.getElementsByClassName('u3-input__prepared');
-            const containerInputs = questionTextElement.getElementsByClassName('u3-input__content--input');
-
-            if (preparedElements.length > 0 && containerInputs.length > 0) {
-                const questionNum = parseInt(preparedElements[0].innerHTML);
-                if (!isNaN(questionNum) && questionNum > 0) {
-                    questionInputMap.set(questionNum, containerInputs[0]);
-                    addLogMessage(`找到题目 ${questionNum}，在题目文本元素 ${i}`, 'info');
+        
+        // 题号匹配模式：基于旧版逻辑，直接遍历输入框
+        for (let i = 0; i < inputElements.length; i++) {
+            if (i >= preparedElements.length) break;
+            
+            const questionNum = parseInt(preparedElements[i].innerHTML);
+            if (isNaN(questionNum) || questionNum <= 0) continue;
+            
+            const multiAnswers = window.multiAnswerMap ? window.multiAnswerMap.get(questionNum) : null;
+            
+            if (multiAnswers && multiAnswers.length > 1) {
+                // 多空题处理：找到同一题目的所有输入框
+                const answersToFill = multiAnswers.map(item => item.answer);
+                let currentInputIndex = i;
+                let filledBlanks = 0;
+                
+                for (let j = 0; j < answersToFill.length && currentInputIndex < inputElements.length; j++) {
+                    // 确保当前输入框属于同一题目
+                    const currentQuestionNum = parseInt(preparedElements[currentInputIndex].innerHTML);
+                    if (currentQuestionNum === questionNum) {
+                        inputElements[currentInputIndex].value = answersToFill[j];
+                        inputElements[currentInputIndex].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                        inputElements[currentInputIndex].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                        filledBlanks++;
+                        currentInputIndex++;
+                        await wait1(50);
+                    } else {
+                        break;
+                    }
                 }
-            }
-        }
-
-        if (questionInputMap.size === 0) {
-            const preparedElements = document.getElementsByClassName('u3-input__prepared');
-
-            for (let i = 0; i < Math.min(preparedElements.length, inputElements.length); i++) {
-                const questionNum = parseInt(preparedElements[i].innerHTML);
-                if (!isNaN(questionNum) && questionNum > 0 && i < inputElements.length) {
-                    questionInputMap.set(questionNum, inputElements[i]);
-                    addLogMessage(`备用方法：找到题目 ${questionNum}，对应输入框索引 ${i}`, 'warning');
-                }
-            }
-        }
-
-        // 按题号顺序填入答案
-        for (let questionNum = 1; questionNum <= answers.length; questionNum++) {
-            const inputElement = questionInputMap.get(questionNum);
-            if (inputElement && questionNum <= answers.length) {
+                
+                filledCount += filledBlanks;
+                addLogMessage(`题目 ${questionNum} 多空填入 (${filledBlanks}个空): ${answersToFill.slice(0, filledBlanks).join(' / ')}`, 'success');
+                
+                // 跳过已处理的输入框
+                i = currentInputIndex - 1;
+            } else {
+                // 单空题处理：使用原有逻辑
                 const answerIndex = questionNum - 1;
-                inputElement.value = answers[answerIndex];
-                inputElement.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                inputElement.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                filledCount++;
-                addLogMessage(`题目 ${questionNum} 填入答案: ${answers[answerIndex]}`, 'success');
-                await wait1(100);
+                if (answerIndex >= 0 && answerIndex < answers.length) {
+                    inputElements[i].value = answers[answerIndex];
+                    inputElements[i].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                    inputElements[i].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                    filledCount++;
+                    addLogMessage(`题目 ${questionNum} 填入答案: ${answers[answerIndex]}`, 'success');
+                }
             }
+            
+            await wait1(100);
         }
     }
 
