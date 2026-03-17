@@ -2,13 +2,14 @@ let answers = [];
 let bucketLoaded = false;
 let bucketError = null;
 let autoFillIntervalId = null;
-let autoFillDelay = 1000;
+let autoFillDelay = 200;
 let autoFillPanel = null;
 let customBucketUrl = localStorage.getItem('customFillBucketUrl') || '';  // 自定义词库URL
 let logPanel = null;  // 日志面板
 let logMessages = [];  // 日志消息数组
 let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || false;
 let rawAnswerData = [];
+let elementAnswerMap = new Map();
 const MAX_LOG_MESSAGES = 200;  // 最大日志数量
 
 function loadBucketFromServer() {
@@ -22,22 +23,24 @@ function loadBucketFromServer() {
             .then(data => {
                 answers = [];
                 rawAnswerData = [];
+                elementAnswerMap = new Map();
                 const answerMap = new Map();
                 const multiAnswerMap = new Map(); 
 
                 for (let i of data) {
                     if (i.sourceFile === 'correctAnswer.xml') {
-                        const answerParts = i.answer.split('/');
-                        const answerText = answerParts[0];
-
-                        rawAnswerData.push({
-                            question: i.question || '',
-                            questionText: i.questionText || '', // 来自 paper.xml 的题面文本
-                            answer: answerText,
-                            answerIndex: i.answerIndex,
-                            index: i.index,
-                            elementId: i.elementId
-                        });
+                        let parts = [];
+                        if (Array.isArray(i.multipleAnswers) && i.multipleAnswers.length > 0) {
+                            parts = i.multipleAnswers.map(x => String(x).trim()).filter(Boolean);
+                        } else if (typeof i.answer === 'string') {
+                            const raw = i.answer.replace(/\s+/g, ' ').trim();
+                            if (raw.includes('/')) {
+                                parts = raw.split('/').map(s => s.trim()).filter(Boolean);
+                            } else if (raw) {
+                                parts = [raw];
+                            }
+                        }
+                        if (parts.length === 0) continue;
 
                         let questionNum = 1;
                         if (i.question && typeof i.question === 'string') {
@@ -54,14 +57,42 @@ function loadBucketFromServer() {
                         if (!multiAnswerMap.has(questionNum)) {
                             multiAnswerMap.set(questionNum, []);
                         }
-                        multiAnswerMap.get(questionNum).push({
-                            answer: answerText,
-                            answerIndex: i.answerIndex || 1,
-                            elementId: i.elementId
-                        });
 
-                        if (!answerMap.has(questionNum)) {
-                            answerMap.set(questionNum, answerText);
+                        const baseAnswerIndex = Number.isFinite(i.answerIndex) && i.answerIndex > 0 ? i.answerIndex : 1;
+                        for (let p = 0; p < parts.length; p++) {
+                            const answerText = parts[p];
+                            const answerIndex = baseAnswerIndex + p;
+
+                            rawAnswerData.push({
+                                question: i.question || '',
+                                questionText: i.questionText || '',
+                                answer: answerText,
+                                answerIndex: answerIndex,
+                                index: i.index,
+                                elementId: i.elementId
+                            });
+
+                            multiAnswerMap.get(questionNum).push({
+                                answer: answerText,
+                                answerIndex: answerIndex,
+                                elementId: i.elementId
+                            });
+
+                            if (i.elementId) {
+                                if (!elementAnswerMap.has(i.elementId)) {
+                                    elementAnswerMap.set(i.elementId, []);
+                                }
+                                elementAnswerMap.get(i.elementId).push({
+                                    answer: answerText,
+                                    answerIndex: answerIndex,
+                                    elementId: i.elementId,
+                                    questionNum: questionNum
+                                });
+                            }
+
+                            if (!answerMap.has(questionNum)) {
+                                answerMap.set(questionNum, answerText);
+                            }
                         }
                     }
                 }
@@ -71,6 +102,11 @@ function loadBucketFromServer() {
                     multiAnswerMap.set(questionNum, answerList);
                 }
 
+                for (let [eid, answerList] of elementAnswerMap) {
+                    answerList.sort((a, b) => (a.answerIndex || 1) - (b.answerIndex || 1));
+                    elementAnswerMap.set(eid, answerList);
+                }
+
                 const sortedKeys = Array.from(answerMap.keys()).sort((a, b) => a - b);
                 for (let key of sortedKeys) {
                     answers.push(answerMap.get(key));
@@ -78,6 +114,7 @@ function loadBucketFromServer() {
 
                 // 将多空题数据存储到全局变量
                 window.multiAnswerMap = multiAnswerMap;
+                window.elementAnswerMap = elementAnswerMap;
 
                 bucketLoaded = true;
                 bucketError = null;
@@ -160,11 +197,18 @@ function findAnswerByContent(questionText) {
         const similarity = calculateTextSimilarity(questionText, matchText);
         if (similarity > bestScore && similarity > 60) { // 提高最低相似度阈值到60%
             bestScore = similarity;
+            let questionNum = 0;
+            if (item.question && typeof item.question === 'string') {
+                const m = item.question.match(/第(\d+)题/);
+                if (m) questionNum = parseInt(m[1], 10);
+            }
             bestMatch = {
                 answer: item.answer,
                 similarity: similarity,
                 originalQuestion: matchText,
-                index: index
+                index: index,
+                elementId: item.elementId,
+                questionNum: questionNum
             };
         }
     });
@@ -173,8 +217,38 @@ function findAnswerByContent(questionText) {
 }
 
 async function work() {
+    const getInputs = (root) => {
+        const a = root.getElementsByClassName('u3-input__content--input');
+        if (a && a.length) return a;
+        return root.getElementsByClassName('u3-input__content');
+    };
+
+    const setElValue = (el, v) => {
+        if (!el) return false;
+        const tag = (el.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea') {
+            el.value = v;
+        } else {
+            el.textContent = v;
+        }
+        el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        return true;
+    };
+
+    const fillByAnswers = async (inputs, answersToFill) => {
+        let filledBlanks = 0;
+        for (let j = 0; j < inputs.length && j < answersToFill.length; j++) {
+            if (setElValue(inputs[j], answersToFill[j])) {
+                filledBlanks++;
+            }
+            await wait1(50);
+        }
+        return filledBlanks;
+    };
+
     const preparedElements = document.getElementsByClassName('u3-input__prepared');
-    const inputElements = document.getElementsByClassName('u3-input__content--input');
+    const inputElements = getInputs(document);
 
     let filledCount = 0;
 
@@ -185,7 +259,12 @@ async function work() {
         
         for (let i = 0; i < questionTexts.length; i++) {
             const questionTextElement = questionTexts[i];
-            const containerInputs = questionTextElement.getElementsByClassName('u3-input__content--input');
+            let scopeEl = questionTextElement;
+            let containerInputs = getInputs(scopeEl);
+            for (let up = 0; up < 6 && containerInputs.length <= 1 && scopeEl && scopeEl.parentElement; up++) {
+                scopeEl = scopeEl.parentElement;
+                containerInputs = getInputs(scopeEl);
+            }
 
             if (containerInputs.length > 0) {
                 // 获取纯文本内容，去除HTML标签和题号
@@ -195,7 +274,7 @@ async function work() {
                 const match = findAnswerByContent(cleanQuestionText);
 
                 if (match) {
-                    const preparedElements = questionTextElement.getElementsByClassName('u3-input__prepared');
+                    const preparedElements = scopeEl.getElementsByClassName('u3-input__prepared');
                     let questionNum = i + 1;
                     
                     if (preparedElements.length > 0) {
@@ -204,29 +283,37 @@ async function work() {
                             questionNum = parsedNum;
                         }
                     }
-                    
-                    const multiAnswers = window.multiAnswerMap ? window.multiAnswerMap.get(questionNum) : null;
-                    
-                    if (multiAnswers && multiAnswers.length > 1) {
-                        const answersToFill = multiAnswers.map(item => item.answer);
-                        let filledBlanks = 0;
-                        
-                        for (let j = 0; j < containerInputs.length && j < answersToFill.length; j++) {
-                            containerInputs[j].value = answersToFill[j];
-                            containerInputs[j].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                            containerInputs[j].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                            filledBlanks++;
-                            await wait1(50);
+
+                    let answersToFill = null;
+                    if (match.elementId && window.elementAnswerMap) {
+                        const list = window.elementAnswerMap.get(match.elementId);
+                        if (list && list.length > 0) {
+                            answersToFill = list.map(item => item.answer);
+                            if (!preparedElements.length && list[0].questionNum) {
+                                questionNum = list[0].questionNum;
+                            }
                         }
-                        
-                        filledCount += filledBlanks;
+                    }
+
+                    if (!answersToFill && window.multiAnswerMap) {
+                        const multiAnswers = window.multiAnswerMap.get(questionNum) || (match.questionNum ? window.multiAnswerMap.get(match.questionNum) : null);
+                        if (multiAnswers && multiAnswers.length > 0) {
+                            answersToFill = multiAnswers.map(item => item.answer);
+                            if (match.questionNum) questionNum = match.questionNum;
+                        }
+                    }
+
+                    if (!answersToFill) {
+                        answersToFill = [match.answer];
+                    }
+
+                    const filledBlanks = await fillByAnswers(containerInputs, answersToFill);
+
+                    filledCount += filledBlanks;
+                    if (filledBlanks > 1) {
                         addLogMessage(`题目 ${questionNum} 内容多空匹配成功 (相似度: ${Math.round(match.similarity)}%, ${filledBlanks}个空): ${answersToFill.slice(0, filledBlanks).join(' / ')}`, 'success');
                     } else {
-                        containerInputs[0].value = match.answer;
-                        containerInputs[0].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                        containerInputs[0].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                        filledCount++;
-                        addLogMessage(`题目 ${questionNum} 内容匹配成功 (相似度: ${Math.round(match.similarity)}%): ${match.answer}`, 'success');
+                        addLogMessage(`题目 ${questionNum} 内容匹配成功 (相似度: ${Math.round(match.similarity)}%): ${answersToFill[0]}`, 'success');
                     }
                     await wait1(100);
                 } else {
@@ -246,43 +333,29 @@ async function work() {
             
             const multiAnswers = window.multiAnswerMap ? window.multiAnswerMap.get(questionNum) : null;
             
-            if (multiAnswers && multiAnswers.length > 1) {
-                // 多空题处理：找到同一题目的所有输入框
-                const answersToFill = multiAnswers.map(item => item.answer);
-                let currentInputIndex = i;
-                let filledBlanks = 0;
-                
-                for (let j = 0; j < answersToFill.length && currentInputIndex < inputElements.length; j++) {
-                    // 确保当前输入框属于同一题目
-                    const currentQuestionNum = parseInt(preparedElements[currentInputIndex].innerHTML);
-                    if (currentQuestionNum === questionNum) {
-                        inputElements[currentInputIndex].value = answersToFill[j];
-                        inputElements[currentInputIndex].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                        inputElements[currentInputIndex].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                        filledBlanks++;
-                        currentInputIndex++;
-                        await wait1(50);
-                    } else {
-                        break;
-                    }
-                }
-                
-                filledCount += filledBlanks;
-                addLogMessage(`题目 ${questionNum} 多空填入 (${filledBlanks}个空): ${answersToFill.slice(0, filledBlanks).join(' / ')}`, 'success');
-                
-                // 跳过已处理的输入框
-                i = currentInputIndex - 1;
-            } else {
-                // 单空题处理：使用原有逻辑
-                const answerIndex = questionNum - 1;
-                if (answerIndex >= 0 && answerIndex < answers.length) {
-                    inputElements[i].value = answers[answerIndex];
-                    inputElements[i].dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                    inputElements[i].dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                    filledCount++;
-                    addLogMessage(`题目 ${questionNum} 填入答案: ${answers[answerIndex]}`, 'success');
-                }
+            let currentInputIndex = i;
+            while (currentInputIndex < preparedElements.length && parseInt(preparedElements[currentInputIndex].innerHTML) === questionNum) {
+                currentInputIndex++;
             }
+            const inputsSlice = Array.from(inputElements).slice(i, currentInputIndex);
+
+            let answersToFill;
+            if (multiAnswers && multiAnswers.length > 0) {
+                answersToFill = multiAnswers.map(item => item.answer);
+            } else {
+                const answerIndex = questionNum - 1;
+                answersToFill = (answerIndex >= 0 && answerIndex < answers.length) ? [answers[answerIndex]] : [];
+            }
+
+            const filledBlanks = await fillByAnswers(inputsSlice, answersToFill);
+            filledCount += filledBlanks;
+            if (filledBlanks > 1) {
+                addLogMessage(`题目 ${questionNum} 多空填入 (${filledBlanks}个空): ${answersToFill.slice(0, filledBlanks).join(' / ')}`, 'success');
+            } else if (filledBlanks === 1) {
+                addLogMessage(`题目 ${questionNum} 填入答案: ${answersToFill[0]}`, 'success');
+            }
+
+            i = currentInputIndex - 1;
             
             await wait1(100);
         }
