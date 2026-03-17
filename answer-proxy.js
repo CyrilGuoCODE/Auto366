@@ -2001,22 +2001,35 @@ class AnswerProxy {
             const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answer>/g)];
 
             if (answerMatches.length > 0) {
-              answerMatches.forEach((answerMatch, answerIndex) => {
-                const answerText = answerMatch[1].trim();
-                if (answerText) {
-                  const answerItem = {
-                    question: `第${index + 1}题`, // 使用index+1确保题目编号正确
-                    answer: answerText,
-                    content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
-                    questionText: answerText,
-                    pattern: 'XML正确答案模式',
-                    elementId: elementId,
-                    answerIndex: answerIndex + 1
-                  };
-                  answers.push(answerItem);
-                  console.log(`添加答案项 (多答案):`, answerItem);
-                }
-              });
+              const allAnswers = answerMatches.map(match => match[1].trim()).filter(text => text);
+
+              if (allAnswers.length === 1) {
+                const answerItem = {
+                  question: `第${index + 1}题`,
+                  answer: allAnswers[0],
+                  content: analysisText ? `解析: ${analysisText}\n答案: ${allAnswers[0]}` : `答案: ${allAnswers[0]}`,
+                  questionText: allAnswers[0],
+                  pattern: 'XML正确答案模式',
+                  elementId: elementId,
+                  answerIndex: 1
+                };
+                answers.push(answerItem);
+                console.log(`添加单答案项:`, answerItem);
+              } else {
+                const combinedAnswer = allAnswers.join(' / ');
+                const answerItem = {
+                  question: `第${index + 1}题`,
+                  answer: combinedAnswer,
+                  content: analysisText ? `解析: ${analysisText}\n答案: ${combinedAnswer}` : `答案: ${combinedAnswer}`,
+                  questionText: combinedAnswer,
+                  pattern: 'XML正确答案模式',
+                  elementId: elementId,
+                  answerIndex: 1,
+                  multipleAnswers: allAnswers // 保存原始的多个答案
+                };
+                answers.push(answerItem);
+                console.log(`添加多空题答案项:`, answerItem);
+              }
             } else {
               console.log(`element ${elementId} 没有找到有效的答案数据`);
             }
