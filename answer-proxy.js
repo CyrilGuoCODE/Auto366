@@ -1982,6 +1982,7 @@ class AnswerProxy {
           const analysisMatch = elementContent.match(/<analysis>\s*<!\[CDATA\[(.*?)]]>\s*<\/analysis>/s);
           if (analysisMatch && analysisMatch[1]) {
             analysisText = this.cleanHtmlText(analysisMatch[1]);
+            analysisText = analysisText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
           }
 
           const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answers>/);
@@ -1997,6 +1998,17 @@ class AnswerProxy {
             };
             answers.push(answerItem);
             console.log(`添加答案项:`, answerItem);
+          } else if (analysisText) {
+            const answerItem = {
+              question: `第${index + 1}题`,
+              answer: analysisText,
+              content: `解析: ${analysisText}`,
+              questionText: analysisText,
+              pattern: 'XML正确答案模式',
+              elementId: elementId
+            };
+            answers.push(answerItem);
+            console.log(`添加答案项（使用analysis）:`, answerItem);
           } else {
             const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answer>/g)];
 
@@ -2059,6 +2071,21 @@ class AnswerProxy {
 
           const knowledgeMatch = elementContent.match(/<knowledge>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/knowledge>/);
 
+          const attachmentMatch = elementContent.match(/<attachment>\s*<!\[CDATA\[(.*?)]]>\s*<\/attachment>/s);
+          let attachmentAnswers = [];
+          if (attachmentMatch && attachmentMatch[1]) {
+            try {
+              const decodedAttachment = decodeURIComponent(attachmentMatch[1]);
+              const answersInAttachment = decodedAttachment.match(/<answers>([\s\S]*?)<\/answers>/);
+              if (answersInAttachment) {
+                const itemMatches = [...answersInAttachment[0].matchAll(/<item[^>]*>\s*<!\[CDATA\[([\s\S]*?)]]>\s*<\/item>/g)];
+                attachmentAnswers = itemMatches.map(match => this.cleanHtmlText(match[1].trim())).filter(text => text);
+              }
+            } catch (e) {
+              console.log('解析attachment失败:', e);
+            }
+          }
+
           if (questionNoMatch && questionTextMatch) {
             const questionNo = parseInt(questionNoMatch[1]);
             let questionText = questionTextMatch[1];
@@ -2074,13 +2101,18 @@ class AnswerProxy {
 
             let answerInfo = {
               question: `第${questionNo}题`,
-              answer: knowledgeMatch ? knowledgeMatch[1].trim() : '未找到答案',
+              answer: attachmentAnswers.length > 0 ? attachmentAnswers.join('\n') : (knowledgeMatch ? knowledgeMatch[1].trim() : '未找到答案'),
               content: `题目: ${questionText}`,
               questionText: questionText,
               pattern: 'XML题目模式',
               elementId: elementId,
               questionNo: questionNo
             };
+
+            if (attachmentAnswers.length > 0) {
+              answerInfo.pattern = 'XML题目附件模式';
+              answerInfo.attachmentAnswers = attachmentAnswers;
+            }
 
             if (optionsMatches.length > 0) {
               const optionsText = optionsMatches.map(optionMatch =>
