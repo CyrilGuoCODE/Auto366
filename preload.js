@@ -8,6 +8,13 @@ const https = require('https');
 let cachePath = 'D:\\Up366StudentFiles'
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  getUiMode: () => ipcRenderer.invoke('get-ui-mode'),
+  switchUiMode: (mode) => ipcRenderer.invoke('switch-ui-mode', mode),
+  getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
+  setGlobalScale: (n) => ipcRenderer.send('set-global-scale', n),
+  startCapturing: () => {},
+  getActionTypes: (ruleType) => ipcRenderer.invoke('get-action-types', ruleType),
+
   //答案获取相关API
   startAnswerProxy: () => ipcRenderer.send('start-answer-proxy'),
   stopAnswerProxy: () => ipcRenderer.send('stop-answer-proxy'),

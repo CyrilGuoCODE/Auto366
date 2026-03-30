@@ -1,5 +1,15 @@
 let cachePath = ''
 
+async function syncUiModeFromMain() {
+  const mode = await window.electronAPI.getUiMode()
+  document.documentElement.setAttribute('data-ui', mode)
+  if (mode === 'simple') {
+    document.documentElement.setAttribute('data-simple-page', 'menu')
+  } else {
+    document.documentElement.removeAttribute('data-simple-page')
+  }
+}
+
 class Global {
   constructor() {
     console.log('Global构造函数开始执行');
@@ -93,6 +103,20 @@ class UniversalAnswerFeature {
       console.error('initCommunityRulesets执行失败:', error);
     }
 
+    try {
+      this.initSwitchToSimple();
+      console.log('initSwitchToSimple执行成功');
+    } catch (error) {
+      console.error('initSwitchToSimple执行失败:', error);
+    }
+
+    try {
+      this.initSimpleModeChrome();
+      console.log('initSimpleModeChrome执行成功');
+    } catch (error) {
+      console.error('initSimpleModeChrome执行失败:', error);
+    }
+
     // 自动启动代理
     setTimeout(() => {
       this.startProxy();
@@ -167,13 +191,11 @@ class UniversalAnswerFeature {
       });
     }
 
-    // 更新通知按钮
-    const updateNotificationBtn = document.getElementById('update-notification-btn');
-    if (updateNotificationBtn) {
-      updateNotificationBtn.addEventListener('click', () => {
+    document.querySelectorAll('#update-notification-btn, #update-notification-btn-simple').forEach((btn) => {
+      btn.addEventListener('click', () => {
         this.handleUpdateNotification();
       });
-    }
+    });
 
     // 规则管理相关事件监听器
     this.initRuleEventListeners();
@@ -482,7 +504,154 @@ class UniversalAnswerFeature {
     });
   }
 
+  initSwitchToSimple() {
+    const btn = document.getElementById('switch-to-simple')
+    if (btn && window.electronAPI && window.electronAPI.switchUiMode) {
+      btn.addEventListener('click', async () => {
+        await window.electronAPI.switchUiMode('simple')
+        document.documentElement.setAttribute('data-ui', 'simple')
+        document.documentElement.setAttribute('data-simple-page', 'menu')
+        await this.renderSimpleHomeRulesets()
+      })
+    }
+  }
+
+  initSimpleModeChrome() {
+    const pro = document.getElementById('switch-to-professional')
+    if (pro && window.electronAPI && window.electronAPI.switchUiMode) {
+      pro.addEventListener('click', async () => {
+        await window.electronAPI.switchUiMode('professional')
+        document.documentElement.setAttribute('data-ui', 'professional')
+        document.documentElement.removeAttribute('data-simple-page')
+      })
+    }
+    const back = document.getElementById('simple-back-home')
+    if (back) {
+      back.addEventListener('click', () => {
+        this.setSimplePage('menu')
+      })
+    }
+    const openSet = document.getElementById('simple-open-settings')
+    if (openSet) {
+      openSet.addEventListener('click', () => {
+        this.setSimplePage('app')
+        this.switchView('settings')
+      })
+    }
+    const openSetHome = document.getElementById('simple-open-settings-from-home')
+    if (openSetHome) {
+      openSetHome.addEventListener('click', () => {
+        this.setSimplePage('app')
+        this.switchView('settings')
+      })
+    }
+    this.renderSimpleHomeRulesets().catch(() => {})
+  }
+
+  setSimplePage(page) {
+    if (page === 'menu') {
+      document.documentElement.setAttribute('data-simple-page', 'menu')
+      this.renderSimpleHomeRulesets().catch(() => {})
+    } else if (page === 'app') {
+      document.documentElement.setAttribute('data-simple-page', 'app')
+    }
+  }
+
+  async renderSimpleHomeRulesets() {
+    if (document.documentElement.getAttribute('data-ui') !== 'simple') {
+      return
+    }
+    const grid = document.getElementById('simple-ruleset-grid')
+    const emptyEl = document.getElementById('simple-ruleset-empty')
+    if (!grid) {
+      return
+    }
+    let rules
+    try {
+      rules = await window.electronAPI.getRules()
+    } catch (e) {
+      grid.innerHTML = ''
+      if (emptyEl) {
+        emptyEl.hidden = false
+        emptyEl.textContent = '无法加载规则集列表'
+      }
+      return
+    }
+    const groups = rules.filter((r) => r.isGroup)
+    if (groups.length === 0) {
+      grid.innerHTML = ''
+      if (emptyEl) {
+        emptyEl.hidden = false
+        emptyEl.textContent = '暂无已安装的规则集，请在专业模式下从社区安装或导入。'
+      }
+      return
+    }
+    if (emptyEl) {
+      emptyEl.hidden = true
+    }
+    grid.innerHTML = groups.map((g) => {
+      const name = this.escapeHtml(g.name || '未命名规则集')
+      const desc = this.escapeHtml(g.description || '无描述')
+      const gid = g.id
+      return `<div class="feature-card" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`
+    }).join('')
+    grid.querySelectorAll('.feature-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const gid = card.getAttribute('data-group-id')
+        if (gid) {
+          this.enterSimpleRuleset(gid)
+        }
+      })
+    })
+  }
+
+  async enterSimpleRuleset(groupId) {
+    await this.applyExclusiveRuleset(groupId)
+    document.documentElement.setAttribute('data-ui', 'simple')
+    document.documentElement.setAttribute('data-simple-page', 'app')
+    this.switchView('answers')
+  }
+
+  async applyExclusiveRuleset(groupId) {
+    let rules
+    try {
+      rules = await window.electronAPI.getRules()
+    } catch (e) {
+      this.addErrorLog(`读取规则失败: ${e.message}`)
+      return
+    }
+    const target = rules.find((r) => r.isGroup && r.id === groupId)
+    if (!target) {
+      this.addErrorLog('未找到该规则集')
+      return
+    }
+    let changed = false
+    const updated = rules.map((r) => {
+      if (!r.isGroup) {
+        return r
+      }
+      const enabled = r.id === groupId
+      if (r.enabled !== enabled) {
+        changed = true
+        return { ...r, enabled }
+      }
+      return r
+    })
+    if (changed) {
+      const res = await window.electronAPI.saveResponseRules(updated)
+      if (!res || !res.success) {
+        this.addErrorLog('保存规则集开关失败')
+        return
+      }
+    }
+    this.addSuccessLog(`已启用规则集：${target.name || groupId}`)
+  }
+
   switchView(viewName) {
+    const ui = document.documentElement.getAttribute('data-ui')
+    if (ui === 'simple' && (viewName === 'rules' || viewName === 'community')) {
+      viewName = 'answers'
+    }
     // 更新菜单项状态
     const menuItems = document.querySelectorAll('.menu-item');
     menuItems.forEach(item => {
@@ -1758,8 +1927,7 @@ class UniversalAnswerFeature {
   }
 
   async handleUpdateNotification() {
-    // 检查更新功能
-    const updateBtn = document.getElementById('update-notification-btn');
+    const updateBtns = [document.getElementById('update-notification-btn'), document.getElementById('update-notification-btn-simple')].filter(Boolean);
     this.addInfoLog('正在检查更新...');
 
     if (window.electronAPI && window.electronAPI.checkForUpdates) {
@@ -1767,35 +1935,35 @@ class UniversalAnswerFeature {
         if (result.hasUpdate) {
           this.addSuccessLog(`发现新版本 ${result.version}`);
           await this.showUpdatePanel(result);
-          if (updateBtn) {
+          updateBtns.forEach((updateBtn) => {
             updateBtn.classList.add('has-update');
             updateBtn.title = `发现新版本 ${result.version}`;
-          }
+          });
         } else if (result.isDev) {
           this.addInfoLog('开发环境不支持自动更新');
-          if (updateBtn) {
+          updateBtns.forEach((updateBtn) => {
             updateBtn.classList.remove('has-update');
             updateBtn.title = '开发环境';
-          }
+          });
         } else if (result.error) {
           this.addErrorLog('检查更新失败: ' + result.error);
-          if (updateBtn) {
+          updateBtns.forEach((updateBtn) => {
             updateBtn.classList.remove('has-update');
             updateBtn.title = '检查更新失败';
-          }
+          });
         } else {
           this.addInfoLog(result.message || '当前已是最新版本');
-          if (updateBtn) {
+          updateBtns.forEach((updateBtn) => {
             updateBtn.classList.remove('has-update');
             updateBtn.title = '当前已是最新版本';
-          }
+          });
         }
       }).catch(error => {
         this.addErrorLog('检查更新失败: ' + error.message);
-        if (updateBtn) {
+        updateBtns.forEach((updateBtn) => {
           updateBtn.classList.remove('has-update');
           updateBtn.title = '检查更新失败';
-        }
+        });
       });
     } else {
       this.addInfoLog('请访问官网下载最新版本');
@@ -1902,11 +2070,11 @@ class UniversalAnswerFeature {
 
     this.showUpdatePanel(updateInfo);
 
-    const updateBtn = document.getElementById('update-notification-btn');
-    if (updateBtn) {
+    const updateBtns = [document.getElementById('update-notification-btn'), document.getElementById('update-notification-btn-simple')].filter(Boolean);
+    updateBtns.forEach((updateBtn) => {
       updateBtn.classList.add('has-update');
       updateBtn.title = `发现新版本 ${updateInfo.version}`;
-    }
+    });
   }
 
   handleUpdateDownloaded(data) {
@@ -3860,9 +4028,13 @@ class UniversalAnswerFeature {
 let global;
 let universalAnswerFeature;
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM内容加载完成，开始初始化');
+  try {
+    await syncUiModeFromMain();
+  } catch (error) {
+    console.error('syncUiModeFromMain失败:', error);
+  }
   try {
     global = new Global();
     console.log('Global实例创建成功');

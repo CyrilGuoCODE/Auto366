@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, dialog, screen } = require('electron')
 const path = require('path')
 const { autoUpdater } = require('electron-updater')
 const fs = require('fs-extra')
@@ -87,6 +87,68 @@ autoUpdater.on('error', (error) => {
   console.error('更新检查失败:', error)
 })
 
+const uiModePath = () => path.join(app.getPath('userData'), 'ui-mode')
+
+function readUiMode() {
+  try {
+    const v = fs.readFileSync(uiModePath(), 'utf8').trim()
+    if (v === 'simple' || v === 'professional') return v
+  } catch (e) {}
+  return 'professional'
+}
+
+ipcMain.handle('get-ui-mode', () => readUiMode())
+
+ipcMain.handle('switch-ui-mode', async (e, mode) => {
+  if (mode !== 'simple' && mode !== 'professional') return { ok: false }
+  try {
+    fs.writeFileSync(uiModePath(), mode, 'utf8')
+  } catch (err) {
+    console.error('写入 ui-mode 失败:', err)
+    return { ok: false }
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mode === 'simple') {
+      mainWindow.setSize(900, 1010)
+    } else {
+      mainWindow.setSize(1400, 900)
+    }
+    mainWindow.center()
+  }
+  return { ok: true }
+})
+
+ipcMain.handle('get-scale-factor', () => {
+  try {
+    return Math.round(screen.getPrimaryDisplay().scaleFactor * 100)
+  } catch (e) {
+    return 100
+  }
+})
+
+ipcMain.on('set-global-scale', () => {})
+
+ipcMain.handle('get-action-types', (e, ruleType) => {
+  if (ruleType === 'request') {
+    return [
+      { value: 'replace', label: '替换请求体', description: '' },
+      { value: 'modify', label: '修改请求体', description: '' },
+      { value: 'redirect', label: '重定向URL', description: '' }
+    ]
+  }
+  if (ruleType === 'response-headers') {
+    return [
+      { value: 'modify', label: '修改响应头', description: '' },
+      { value: 'remove', label: '删除响应头', description: '' }
+    ]
+  }
+  return [
+    { value: 'replace', label: '替换响应体', description: '' },
+    { value: 'modify', label: '修改响应体', description: '' },
+    { value: 'inject', label: '注入内容', description: '' }
+  ]
+})
+
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
@@ -163,9 +225,12 @@ autoUpdater.on('update-not-available', () => {
 })
 
 function createWindow() {
+  const mode = readUiMode()
+  const winW = mode === 'simple' ? 900 : 1400
+  const winH = mode === 'simple' ? 1010 : 900
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: winW,
+    height: winH,
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
