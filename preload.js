@@ -10,6 +10,8 @@ let cachePath = 'D:\\Up366StudentFiles'
 contextBridge.exposeInMainWorld('electronAPI', {
   getUiMode: () => ipcRenderer.invoke('get-ui-mode'),
   switchUiMode: (mode) => ipcRenderer.invoke('switch-ui-mode', mode),
+  toggleAlwaysOnTop: () => ipcRenderer.invoke('toggle-always-on-top'),
+  getAlwaysOnTop: () => ipcRenderer.invoke('get-always-on-top'),
   getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
   setGlobalScale: (n) => ipcRenderer.send('set-global-scale', n),
   startCapturing: () => {},

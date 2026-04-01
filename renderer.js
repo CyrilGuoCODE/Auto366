@@ -60,6 +60,7 @@ class UniversalAnswerFeature {
     this.hasMorePages = false;
     this.isLoadingRulesets = false;
     this.currentRulesetDetail = null;
+    this.simpleViewHistory = ['answers'];
 
     try {
       this.initEventListeners();
@@ -115,6 +116,13 @@ class UniversalAnswerFeature {
       console.log('initSimpleModeChrome执行成功');
     } catch (error) {
       console.error('initSimpleModeChrome执行失败:', error);
+    }
+
+    try {
+      this.initWindowTitlebar();
+      console.log('initWindowTitlebar执行成功');
+    } catch (error) {
+      console.error('initWindowTitlebar执行失败:', error);
     }
 
     // 自动启动代理
@@ -528,7 +536,7 @@ class UniversalAnswerFeature {
     const back = document.getElementById('simple-back-home')
     if (back) {
       back.addEventListener('click', () => {
-        this.setSimplePage('menu')
+        this.goSimpleBack()
       })
     }
     const openSet = document.getElementById('simple-open-settings')
@@ -545,16 +553,67 @@ class UniversalAnswerFeature {
         this.switchView('settings')
       })
     }
+    const openRules = document.getElementById('simple-open-rules')
+    if (openRules) {
+      openRules.addEventListener('click', () => {
+        this.setSimplePage('app')
+        this.switchView('rules')
+      })
+    }
+    const openCommunity = document.getElementById('simple-open-community')
+    if (openCommunity) {
+      openCommunity.addEventListener('click', () => {
+        this.setSimplePage('app')
+        this.switchView('community')
+      })
+    }
     this.renderSimpleHomeRulesets().catch(() => {})
   }
 
   setSimplePage(page) {
     if (page === 'menu') {
       document.documentElement.setAttribute('data-simple-page', 'menu')
+      this.simpleViewHistory = ['answers']
       this.renderSimpleHomeRulesets().catch(() => {})
     } else if (page === 'app') {
       document.documentElement.setAttribute('data-simple-page', 'app')
+      if (!this.simpleViewHistory.length) {
+        this.simpleViewHistory = ['answers']
+      }
     }
+  }
+
+  async initWindowTitlebar() {
+    const btns = [document.getElementById('toggle-always-on-top-btn')].filter(Boolean)
+    if (!btns.length || !window.electronAPI) return
+    const applyState = (enabled) => {
+      btns.forEach((btn) => {
+        const icon = btn.querySelector('i')
+        const label = btn.querySelector('span')
+        btn.classList.toggle('active', !!enabled)
+        if (icon) {
+          icon.className = enabled ? 'bi bi-pin-angle-fill' : 'bi bi-pin-angle'
+        }
+        if (label) {
+          label.textContent = enabled ? '取消置顶' : '置顶'
+        }
+        btn.title = enabled ? '窗口已置顶，点击取消' : '窗口置顶'
+      })
+    }
+    try {
+      const enabled = await window.electronAPI.getAlwaysOnTop()
+      applyState(enabled)
+    } catch (_) {}
+    btns.forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          const result = await window.electronAPI.toggleAlwaysOnTop()
+          if (result && result.success) {
+            applyState(result.isAlwaysOnTop)
+          }
+        } catch (_) {}
+      })
+    })
   }
 
   async renderSimpleHomeRulesets() {
@@ -645,13 +704,43 @@ class UniversalAnswerFeature {
       }
     }
     this.addSuccessLog(`已启用规则集：${target.name || groupId}`)
+    await this.renderSimpleHomeRulesets()
   }
 
-  switchView(viewName) {
+  goSimpleBack() {
     const ui = document.documentElement.getAttribute('data-ui')
-    if (ui === 'simple' && (viewName === 'rules' || viewName === 'community')) {
-      viewName = 'answers'
+    if (ui !== 'simple') return
+    if (this.simpleViewHistory.length > 1) {
+      this.simpleViewHistory.pop()
+      const prev = this.simpleViewHistory[this.simpleViewHistory.length - 1]
+      this.switchView(prev, false)
+      return
     }
+    this.setSimplePage('menu')
+  }
+
+  async deleteSimpleRuleset(groupId) {
+    if (!confirm('确定删除这个规则集吗？这会同时删除规则集中的规则。')) {
+      return
+    }
+    try {
+      const result = await window.electronAPI.deleteRule(groupId)
+      if (result && result.success) {
+        this.addSuccessLog('规则集删除成功')
+        await this.renderSimpleHomeRulesets()
+        if (this.currentView === 'rules') {
+          await this.loadRules()
+        }
+      } else {
+        this.addErrorLog(`规则集删除失败: ${result ? result.error : '未知错误'}`)
+      }
+    } catch (error) {
+      this.addErrorLog(`规则集删除失败: ${error.message}`)
+    }
+  }
+
+  switchView(viewName, pushSimpleHistory = true) {
+    const ui = document.documentElement.getAttribute('data-ui')
     // 更新菜单项状态
     const menuItems = document.querySelectorAll('.menu-item');
     menuItems.forEach(item => {
@@ -673,6 +762,12 @@ class UniversalAnswerFeature {
     }
 
     this.currentView = viewName;
+    if (ui === 'simple' && pushSimpleHistory) {
+      const last = this.simpleViewHistory[this.simpleViewHistory.length - 1]
+      if (last !== viewName) {
+        this.simpleViewHistory.push(viewName)
+      }
+    }
 
     // 如果切换到规则管理视图，加载规则列表
     if (viewName === 'rules') {
@@ -2410,6 +2505,7 @@ class UniversalAnswerFeature {
 
   displayRules(rules) {
     const rulesContent = document.querySelector('#rules-view .rules-content');
+    const isSimple = document.documentElement.getAttribute('data-ui') === 'simple';
 
     if (!rules || rules.length === 0) {
       rulesContent.innerHTML = `
@@ -2419,6 +2515,41 @@ class UniversalAnswerFeature {
           <p class="text-muted">点击上方按钮添加新规则集</p>
         </div>
       `;
+      return;
+    }
+
+    if (isSimple) {
+      const ruleGroups = rules.filter(rule => rule.isGroup);
+      if (ruleGroups.length === 0) {
+        rulesContent.innerHTML = `
+          <div class="no-rules">
+            <i class="bi bi-collection"></i>
+            <p>暂无规则集</p>
+            <p class="text-muted">请到社区规则集安装</p>
+          </div>
+        `;
+        return;
+      }
+      const html = ruleGroups.map(group => `
+        <div class="rule-group simple-clickable-group" data-group-id="${group.id}" onclick="universalAnswerFeature.enterSimpleRuleset('${group.id}')">
+          <div class="rule-group-header">
+            <div class="rule-group-info">
+              <div class="rule-group-name">
+                <i class="bi bi-collection"></i>
+                ${group.name || '未命名规则集'}
+                ${group.enabled ? '<span class="installed-badge"><i class="bi bi-check-circle"></i> 已启用</span>' : ''}
+              </div>
+              ${group.description ? `<div class="rule-group-description">${group.description}</div>` : ''}
+            </div>
+            <div class="rule-group-actions">
+              <button class="rule-btn delete-btn" onclick="event.stopPropagation();universalAnswerFeature.deleteSimpleRuleset('${group.id}')" title="删除规则集">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      rulesContent.innerHTML = `<div class="rules-list">${html}</div>`;
       return;
     }
 
@@ -2700,6 +2831,7 @@ class UniversalAnswerFeature {
       if (result.success) {
         this.addSuccessLog('规则删除成功');
         this.loadRules(); // 重新加载规则列表
+        this.renderSimpleHomeRulesets().catch(() => {})
       } else {
         this.addErrorLog(`规则删除失败: ${result.error}`);
       }
@@ -3439,6 +3571,31 @@ class UniversalAnswerFeature {
     const createdDate = new Date(ruleset.created_at).toLocaleDateString('zh-CN');
     const hasInjection = ruleset.has_injection_package;
     const isInstalled = ruleset.isInstalled;
+    const isSimple = document.documentElement.getAttribute('data-ui') === 'simple';
+
+    if (isSimple) {
+      return `
+        <div class="ruleset-item ${isInstalled ? 'installed' : ''}">
+          <div class="ruleset-header">
+            <div class="ruleset-info">
+              <div class="ruleset-name">
+                ${this.escapeHtml(ruleset.name)}
+                ${isInstalled ? '<span class="installed-badge"><i class="bi bi-check-circle"></i> 已安装</span>' : ''}
+              </div>
+              <div class="ruleset-description">${this.escapeHtml(ruleset.description || '暂无描述')}</div>
+            </div>
+            <div class="ruleset-actions">
+              <button class="install-btn ${isInstalled ? 'installed' : ''}" 
+                      onclick="universalAnswerFeature.installRuleset('${ruleset.id}')"
+                      ${isInstalled ? 'disabled' : ''}>
+                <i class="bi bi-${isInstalled ? 'check-circle' : 'download'}"></i>
+                <span>${isInstalled ? '已安装' : '安装'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
     return `
       <div class="ruleset-item ${isInstalled ? 'installed' : ''}" onclick="universalAnswerFeature.showRulesetDetail('${ruleset.id}')">
@@ -3672,6 +3829,7 @@ class UniversalAnswerFeature {
         if (this.currentView === 'rules') {
           this.loadRules();
         }
+        this.renderSimpleHomeRulesets().catch(() => {})
       } else {
         throw new Error(result.error || '导入规则失败');
       }

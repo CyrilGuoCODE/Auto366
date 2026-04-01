@@ -118,6 +118,22 @@ ipcMain.handle('switch-ui-mode', async (e, mode) => {
   return { ok: true }
 })
 
+ipcMain.handle('toggle-always-on-top', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { success: false, isAlwaysOnTop: false }
+  }
+  const next = !mainWindow.isAlwaysOnTop()
+  mainWindow.setAlwaysOnTop(next)
+  return { success: true, isAlwaysOnTop: next }
+})
+
+ipcMain.handle('get-always-on-top', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false
+  }
+  return mainWindow.isAlwaysOnTop()
+})
+
 ipcMain.handle('get-scale-factor', () => {
   try {
     return Math.round(screen.getPrimaryDisplay().scaleFactor * 100)
