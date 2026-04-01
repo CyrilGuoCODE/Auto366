@@ -15,8 +15,8 @@ Auto366 是一个专为天学网设计的自动化答题工具，支持多种题
 
 B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.com/video/BV195xLzEESR/)
 
-在线答案查看器：[366.cyril.qzz.io/](https://366.cyril.qzz.io/)
-备用地址：[a366.netlify.app/](https://a366.netlify.app/)
+官方网站/在线答案查看器：[366.cyril.qzz.io/](https://366.cyril.qzz.io/)
+备用地址(暂时弃用)：[a366.netlify.app/](https://a366.netlify.app/)
 
 ## TODOS
 
