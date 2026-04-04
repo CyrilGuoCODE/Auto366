@@ -32,7 +32,6 @@
     </header>
 
     <div id="simple-home" class="simple-home">
-        <button type="button" id="switch-to-professional" class="simple-pro-btn" title="切换到专业模式">专业模式</button>
         <button type="button" id="update-notification-btn-simple" class="update-notification-btn"
             title="发现新版本">
             <svg class="update-notification-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -41,7 +40,6 @@
             </svg>
             <span class="update-notification-text">发现新版本</span>
         </button>
-        <button type="button" id="simple-open-settings-from-home" class="settings-btn">设置</button>
 
         <div class="container">
             <div id="simple-main-menu">
@@ -54,6 +52,7 @@
                 <div id="simple-ruleset-grid" class="feature-grid"></div>
                 <p id="simple-ruleset-empty" class="simple-ruleset-empty" hidden></p>
             </div>
+            <div class="simple-home-bottom">
             <div class="appreciation-wrapper">
                 <div class="appreciation-section">
                     <div class="appreciation-icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
@@ -96,9 +95,11 @@
             <div class="simple-home-footer">
                 <h4>使用 <strong>Ctrl+F12</strong> 打开开发者工具</h4>
                 <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
+                <p><strong>版权声明</strong>：此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等！</p>
                 <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" rel="noopener noreferrer"
                         class="simple-link">https://github.com/cyrilguocode/Auto366</a></p>
                 <p>许可证：GNU General Public License v3.0</p>
+            </div>
             </div>
         </div>
     </div>
@@ -131,10 +132,7 @@
         </div>
 
         <div class="sidebar-footer">
-            <button type="button" id="switch-to-simple" class="btn btn--ghost sidebar-mode-btn" title="切换到简易模式">
-                <i class="bi bi-grid-1x2"></i>
-            </button>
-            <button id="update-notification-btn" class="update-btn" title="发现新版本">
+            <button type="button" id="update-notification-btn" class="update-btn" title="发现新版本">
                 <i class="bi bi-arrow-up-circle"></i>
             </button>
         </div>
@@ -144,7 +142,7 @@
     <div class="main-container">
         <!-- 控制面板 -->
         <div class="control-panel">
-            <div class="control-group">
+            <div class="control-group cp-cluster cp-status">
                 <div class="status-group">
                     <div class="status-item">
                         <i class="bi bi-router"></i>
@@ -158,9 +156,10 @@
                 </div>
             </div>
 
-            <div class="control-group simple-app-only">
+            <div class="control-group simple-app-only cp-cluster cp-simple-nav">
                 <div class="control-buttons">
-                    <button type="button" id="simple-back-home" class="secondary-btn" aria-label="主页">
+                    <button type="button" id="simple-back-home"
+                        class="secondary-btn simple-cp-btn--always-label" aria-label="主页">
                         <i class="bi bi-house-door"></i>
                         <span>主页</span>
                     </button>
@@ -178,7 +177,7 @@
                     </button>
                 </div>
             </div>
-            <div class="control-group">
+            <div class="control-group cp-cluster cp-actions">
                 <div class="control-buttons">
                     <button type="button" id="toggleProxyBtn" class="primary-btn" aria-label="启动或停止代理">
                         <i class="bi bi-play-circle"></i>
@@ -334,6 +333,26 @@
                         <h3>设置</h3>
                     </div>
                     <div class="settings-content">
+                        <div class="setting-group settings-ui-mode settings-ui-mode--professional">
+                            <h4>UI模式</h4>
+                            <div class="setting-item">
+                                <button type="button" id="settings-switch-to-simple" class="secondary-btn">
+                                    <i class="bi bi-grid-1x2"></i>
+                                    <span>切换到简易模式</span>
+                                </button>
+                            </div>
+                            <div class="setting-description">简化UI，适合普通人使用。</div>
+                        </div>
+                        <div class="setting-group settings-ui-mode settings-ui-mode--simple">
+                            <h4>UI模式</h4>
+                            <div class="setting-item">
+                                <button type="button" id="settings-switch-to-professional" class="secondary-btn">
+                                    <i class="bi bi-sliders"></i>
+                                    <span>切换到专业模式</span>
+                                </button>
+                            </div>
+                            <div class="setting-description">显示侧边栏与完整多视图界面，适合技术人员。</div>
+                        </div>
                         <div class="setting-group">
                             <h4>缓存路径</h4>
                             <div class="setting-item">
@@ -387,6 +406,56 @@
                                     </label>
                                     <div class="setting-description">
                                         启用后，应用启动时会自动检查是否有新版本可用
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-group">
+                            <h4>关于与支持</h4>
+                            <h5>关于</h5>
+                            <h6>免责声明：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</h6>
+                            <h6>版权声明：此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等！</h6>
+                            <h6>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" rel="noopener noreferrer"
+                                class="simple-link">https://github.com/cyrilguocode/Auto366</a></h6>
+                            <h6>许可证：GNU General Public License v3.0</h6>
+                            <h5>支持</h5>
+                            <p class="settings-about-lead">若本工具对您有帮助，欢迎赞赏或加入 QQ 群交流。</p>
+                            <div class="appreciation-wrapper">
+                                <div class="appreciation-section">
+                                    <div class="appreciation-icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
+                                        <svg viewBox="0 0 1024 1024" class="heart-icon">
+                                            <path
+                                                d="M512 896c-12.8 0-25.6-4.8-35.2-14.4L89.6 494.4c-76.8-76.8-76.8-201.6 0-278.4 38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6L512 356.8l140.8-140.8c38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6c76.8 76.8 76.8 201.6 0 278.4L547.2 881.6c-9.6 9.6-22.4 14.4-35.2 14.4z" />
+                                        </svg>
+                                        <span class="appreciation-text">赞赏</span>
+                                        <div class="appreciation-popup">
+                                            <div class="appreciation-content">
+                                                <h4>感谢您的支持！</h4>
+                                                <div class="appreciation-qr-container">
+                                                    <img src="prize/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
+                                                    <img src="prize/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="appreciation-section">
+                                    <div class="appreciation-icon" title="加入QQ群，获取更多帮助与支持">
+                                        <svg class="heart-icon heart-icon--qq" xmlns="http://www.w3.org/2000/svg" width="32"
+                                            height="32" viewBox="0 0 32 32">
+                                            <path
+                                                d="M29.11 26.278c-0.72 0.087-2.804-3.296-2.804-3.296 0 1.959-1.009 4.515-3.191 6.362 1.052 0.325 3.428 1.198 2.863 2.151-0.457 0.772-7.844 0.493-9.977 0.252-2.133 0.24-9.52 0.519-9.977-0.252-0.565-0.953 1.807-1.826 2.861-2.151-2.182-1.846-3.191-4.403-3.191-6.362 0 0-2.083 3.384-2.804 3.296-0.335-0.041-0.776-1.853 0.584-6.231 0.641-2.064 1.375-3.78 2.509-6.611-0.191-7.306 2.828-13.435 10.016-13.435 7.109 0.001 10.197 6.008 10.017 13.435 1.132 2.826 1.869 4.553 2.509 6.611 1.361 4.379 0.92 6.191 0.584 6.231z" />
+                                        </svg>
+                                        <span class="appreciation-text">QQ群</span>
+                                        <div class="appreciation-popup">
+                                            <div class="appreciation-content">
+                                                <h4>加入QQ群，获取更多帮助与支持</h4>
+                                                <h5 class="qq-group-line">群号：1003718088</h5>
+                                                <div class="appreciation-qr-container">
+                                                    <img src="prize/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

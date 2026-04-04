@@ -66,7 +66,7 @@ windows默认资源路径：`D:/Up366StudentFiles/resources/`
 
 本项目采用 GNU General Public License v3.0 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
-但此项目严格禁止用于商业用途，包括但不限于转卖、推广以及各类牟利行为等。
+但此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等。
 
 ---
 

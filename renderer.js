@@ -513,7 +513,7 @@ class UniversalAnswerFeature {
   }
 
   initSwitchToSimple() {
-    const btn = document.getElementById('switch-to-simple')
+    const btn = document.getElementById('settings-switch-to-simple')
     if (btn && window.electronAPI && window.electronAPI.switchUiMode) {
       btn.addEventListener('click', async () => {
         await window.electronAPI.switchUiMode('simple')
@@ -525,7 +525,7 @@ class UniversalAnswerFeature {
   }
 
   initSimpleModeChrome() {
-    const pro = document.getElementById('switch-to-professional')
+    const pro = document.getElementById('settings-switch-to-professional')
     if (pro && window.electronAPI && window.electronAPI.switchUiMode) {
       pro.addEventListener('click', async () => {
         await window.electronAPI.switchUiMode('professional')
@@ -550,13 +550,6 @@ class UniversalAnswerFeature {
     const openSet = document.getElementById('simple-open-settings')
     if (openSet) {
       openSet.addEventListener('click', () => {
-        this.setSimplePage('app')
-        this.switchView('settings')
-      })
-    }
-    const openSetHome = document.getElementById('simple-open-settings-from-home')
-    if (openSetHome) {
-      openSetHome.addEventListener('click', () => {
         this.setSimplePage('app')
         this.switchView('settings')
       })
@@ -624,7 +617,7 @@ class UniversalAnswerFeature {
         const maximized = await window.electronAPI.windowIsMaximized()
         const icon = maxBtn.querySelector('i')
         if (icon) {
-          icon.className = maximized ? 'bi bi-fullscreen-exit' : 'bi bi-square'
+          icon.className = maximized ? 'bi bi-fullscreen-exit' : 'bi bi-fullscreen'
         }
         maxBtn.title = maximized ? '还原' : '最大化'
       } catch (_) {}
