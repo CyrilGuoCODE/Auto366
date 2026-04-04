@@ -453,18 +453,52 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel .control-buttons {
     gap: 8px;
 }
 
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex-direction: row;
+    overflow: hidden;
+    max-width: 2.75rem;
+    transition: max-width 0.22s ease;
+    box-sizing: border-box;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:hover,
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:focus-visible {
+    max-width: min(15rem, 72vw);
+    z-index: 2;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button > span {
+    display: inline-block;
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 0.22s ease, opacity 0.12s ease;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:hover > span,
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:focus-visible > span {
+    max-width: 11rem;
+    opacity: 1;
+    padding-left: 6px;
+}
+
 html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn,
 html[data-ui="simple"][data-simple-page="app"] .control-panel .primary-btn,
 html[data-ui="simple"][data-simple-page="app"] .control-panel .danger-btn {
     padding: 8px 10px;
-    min-width: 36px;
-    justify-content: center;
+    min-width: 0;
+    justify-content: flex-start;
     box-sizing: border-box;
 }
 
-html[data-ui="simple"][data-simple-page="app"] .control-panel .primary-btn span,
-html[data-ui="simple"][data-simple-page="app"] .control-panel .danger-btn span {
-    display: none;
+html[data-ui="simple"][data-simple-page="app"] .control-panel .port-change-btn {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 4px;
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel .status-label {
@@ -474,6 +508,10 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel .status-label {
 html[data-ui="simple"][data-simple-page="app"] .control-panel .status-item {
     gap: 6px;
     white-space: nowrap;
+}
+
+.simple-cp-caption {
+    display: none;
 }
 
 @media (max-width: 768px) {

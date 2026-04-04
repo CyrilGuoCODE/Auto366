@@ -25,6 +25,7 @@ body {
     align-items: stretch;
     background: #f3f4f6;
     border-bottom: 1px solid #e5e7eb;
+    -webkit-user-select: none;
     user-select: none;
 }
 

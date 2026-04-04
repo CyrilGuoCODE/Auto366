@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-ui="professional">
-
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Auto366</title>
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="stylesheet" href="node_modules/bootstrap-icons/font/bootstrap-icons.css">
@@ -94,7 +94,7 @@
             <div class="simple-home-footer">
                 <h4>使用 <strong>Ctrl+F12</strong> 打开开发者工具</h4>
                 <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
-                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank"
+                <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" rel="noopener noreferrer"
                         class="simple-link">https://github.com/cyrilguocode/Auto366</a></p>
                 <p>许可证：GNU General Public License v3.0</p>
             </div>
@@ -142,43 +142,51 @@
     <div class="main-container">
         <!-- 控制面板 -->
         <div class="control-panel">
-            <div class="control-group simple-app-only">
-                <div class="control-buttons">
-                    <button type="button" id="simple-back-home" class="secondary-btn" title="主页">
-                        <i class="bi bi-house-door"></i>
-                    </button>
-                    <button type="button" id="simple-open-rules" class="secondary-btn" title="规则集">
-                        <i class="bi bi-collection"></i>
-                    </button>
-                    <button type="button" id="simple-open-settings" class="secondary-btn" title="设置">
-                        <i class="bi bi-gear"></i>
-                    </button>
-                </div>
-            </div>
             <div class="control-group">
                 <div class="status-group">
                     <div class="status-item">
                         <i class="bi bi-router"></i>
                         <span class="status-label">代理状态:</span>
                         <span id="proxyStatus" class="status-value stopped">未启动</span>
-                        <button id="changePortBtn" class="port-change-btn" title="修改端口">
+                        <button type="button" id="changePortBtn" class="port-change-btn" aria-label="修改端口">
                             <i class="bi bi-pencil-square"></i>
+                            <span class="simple-cp-caption">修改端口</span>
                         </button>
                     </div>
                 </div>
             </div>
 
+            <div class="control-group simple-app-only">
+                <div class="control-buttons">
+                    <button type="button" id="simple-back-home" class="secondary-btn" aria-label="主页">
+                        <i class="bi bi-house-door"></i>
+                        <span>主页</span>
+                    </button>
+                    <button type="button" id="simple-open-answers" class="secondary-btn" aria-label="答案获取">
+                        <i class="bi bi-file-earmark-arrow-down"></i>
+                        <span>答案获取</span>
+                    </button>
+                    <button type="button" id="simple-open-rules" class="secondary-btn" aria-label="规则集">
+                        <i class="bi bi-collection"></i>
+                        <span>规则集</span>
+                    </button>
+                    <button type="button" id="simple-open-settings" class="secondary-btn" aria-label="设置">
+                        <i class="bi bi-gear"></i>
+                        <span>设置</span>
+                    </button>
+                </div>
+            </div>
             <div class="control-group">
                 <div class="control-buttons">
-                    <button type="button" id="toggleProxyBtn" class="primary-btn" title="启动/停止代理">
+                    <button type="button" id="toggleProxyBtn" class="primary-btn" aria-label="启动或停止代理">
                         <i class="bi bi-play-circle"></i>
                         <span>启动代理</span>
                     </button>
-                    <button type="button" id="deleteTempBtn" class="danger-btn" title="清理 Auto366 缓存">
+                    <button type="button" id="deleteTempBtn" class="danger-btn" aria-label="清理 Auto366 缓存">
                         <i class="bi bi-trash"></i>
                         <span>清理Auto366缓存</span>
                     </button>
-                    <button type="button" id="deleteFileTempBtn" class="danger-btn" title="清理天学网缓存">
+                    <button type="button" id="deleteFileTempBtn" class="danger-btn" aria-label="清理天学网缓存">
                         <i class="bi bi-file-earmark-x"></i>
                         <span>清理天学网缓存</span>
                     </button>
@@ -197,7 +205,7 @@
                         <div class="header-controls">
                             <div class="answer-capture-toggle">
                                 <label class="toggle-switch">
-                                    <input type="checkbox" id="answerCaptureEnabled" checked>
+                                    <input type="checkbox" id="answerCaptureEnabled" checked aria-label="答案获取开关">
                                     <span class="toggle-slider"></span>
                                 </label>
                                 <span class="toggle-label"></span>
@@ -282,17 +290,17 @@
                         <div class="search-section">
                             <div class="search-box">
                                 <input type="text" id="rulesetSearchInput" class="form-input" placeholder="搜索规则集...">
-                                <button id="searchRulesetsBtn" class="primary-btn">
+                                <button id="searchRulesetsBtn" class="primary-btn" aria-label="搜索规则集">
                                     <i class="bi bi-search"></i>
                                 </button>
                             </div>
                             <div class="search-filters">
-                                <select id="sortBySelect" class="form-input">
+                                <select id="sortBySelect" class="form-input" aria-label="排序方式">
                                     <option value="created_at">按创建时间</option>
                                     <option value="downloads">按下载量</option>
                                     <option value="name">按名称</option>
                                 </select>
-                                <select id="sortOrderSelect" class="form-input">
+                                <select id="sortOrderSelect" class="form-input" aria-label="排序顺序">
                                     <option value="desc">降序</option>
                                     <option value="asc">升序</option>
                                 </select>

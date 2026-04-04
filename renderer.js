@@ -536,7 +536,14 @@ class UniversalAnswerFeature {
     const back = document.getElementById('simple-back-home')
     if (back) {
       back.addEventListener('click', () => {
-        this.goSimpleBack()
+        this.setSimplePage('menu')
+      })
+    }
+    const openAnswers = document.getElementById('simple-open-answers')
+    if (openAnswers) {
+      openAnswers.addEventListener('click', () => {
+        this.setSimplePage('app')
+        this.switchView('answers')
       })
     }
     const openSet = document.getElementById('simple-open-settings')
