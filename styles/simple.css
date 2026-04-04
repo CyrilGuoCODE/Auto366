@@ -454,36 +454,60 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel .control-buttons {
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button {
+    --simple-cp-ease: cubic-bezier(0.22, 1, 0.36, 1);
     display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     flex-direction: row;
+    gap: 0;
     overflow: hidden;
     max-width: 2.75rem;
-    transition: max-width 0.22s ease;
+    transition: max-width 0.52s var(--simple-cp-ease);
     box-sizing: border-box;
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:hover,
 html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:focus-visible {
     max-width: min(15rem, 72vw);
+    justify-content: flex-start;
+    transition: max-width 0.52s var(--simple-cp-ease);
     z-index: 2;
 }
 
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button > i {
+    flex: 0 0 auto;
+    width: 1.125rem;
+    min-width: 1.125rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
 html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button > span {
-    display: inline-block;
+    display: block;
+    flex: 0 0 auto;
+    min-width: 0;
     max-width: 0;
     opacity: 0;
     overflow: hidden;
     white-space: nowrap;
-    transition: max-width 0.22s ease, opacity 0.12s ease;
+    padding-left: 0;
+    transition:
+        max-width 0.52s var(--simple-cp-ease),
+        opacity 0.38s ease,
+        padding-left 0.36s ease;
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:hover > span,
 html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group button:focus-visible > span {
     max-width: 11rem;
     opacity: 1;
-    padding-left: 6px;
+    padding-left: 8px;
+    transition:
+        max-width 0.52s var(--simple-cp-ease),
+        opacity 0.42s ease 0.1s,
+        padding-left 0.44s var(--simple-cp-ease) 0.08s;
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn,
@@ -491,14 +515,40 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel .primary-btn,
 html[data-ui="simple"][data-simple-page="app"] .control-panel .danger-btn {
     padding: 8px 10px;
     min-width: 0;
-    justify-content: flex-start;
     box-sizing: border-box;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group .secondary-btn:hover,
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group .primary-btn:hover,
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-group .danger-btn:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn.simple-cp-active {
+    color: #2563eb;
+    border-color: #93c5fd;
+    background: #eff6ff;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn.simple-cp-active:hover {
+    color: #1d4ed8;
+    border-color: #60a5fa;
+    background: #dbeafe;
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel .port-change-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     margin-left: 4px;
+    gap: 0;
+    padding: 4px 6px;
+    min-width: 1.75rem;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .port-change-btn:hover {
+    justify-content: flex-start;
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel .status-label {

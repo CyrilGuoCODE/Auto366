@@ -531,6 +531,7 @@ class UniversalAnswerFeature {
         await window.electronAPI.switchUiMode('professional')
         document.documentElement.setAttribute('data-ui', 'professional')
         document.documentElement.removeAttribute('data-simple-page')
+        this.syncSimpleControlPanelActive(this.currentView)
       })
     }
     const back = document.getElementById('simple-back-home')
@@ -588,6 +589,7 @@ class UniversalAnswerFeature {
         this.simpleViewHistory = ['answers']
       }
     }
+    this.syncSimpleControlPanelActive(this.currentView)
   }
 
   async initWindowTitlebar() {
@@ -824,6 +826,31 @@ class UniversalAnswerFeature {
     // 如果切换到社区规则集视图，加载规则集列表
     if (viewName === 'community') {
       this.loadCommunityRulesets();
+    }
+
+    this.syncSimpleControlPanelActive(viewName)
+  }
+
+  syncSimpleControlPanelActive(viewName) {
+    const ids = ['simple-open-answers', 'simple-open-rules', 'simple-open-settings']
+    const ui = document.documentElement.getAttribute('data-ui')
+    const page = document.documentElement.getAttribute('data-simple-page')
+    ids.forEach((id) => {
+      document.getElementById(id)?.classList.remove('simple-cp-active')
+    })
+    if (ui !== 'simple' || page !== 'app') {
+      return
+    }
+    let activeId = null
+    if (viewName === 'answers') {
+      activeId = 'simple-open-answers'
+    } else if (viewName === 'rules' || viewName === 'community') {
+      activeId = 'simple-open-rules'
+    } else if (viewName === 'settings') {
+      activeId = 'simple-open-settings'
+    }
+    if (activeId) {
+      document.getElementById(activeId)?.classList.add('simple-cp-active')
     }
   }
 
@@ -4191,6 +4218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     universalAnswerFeature = new UniversalAnswerFeature();
     console.log('UniversalAnswerFeature实例创建成功');
+    universalAnswerFeature.syncSimpleControlPanelActive(universalAnswerFeature.currentView)
   } catch (error) {
     console.error('UniversalAnswerFeature实例创建失败:', error);
   }

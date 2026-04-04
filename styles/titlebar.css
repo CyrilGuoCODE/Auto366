@@ -22,7 +22,7 @@ body {
     height: var(--titlebar-height);
     z-index: 100000;
     display: flex;
-    align-items: stretch;
+    align-items: center;
     background: #f3f4f6;
     border-bottom: 1px solid #e5e7eb;
     -webkit-user-select: none;
@@ -33,33 +33,45 @@ body {
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding-left: 10px;
+    gap: 6px;
+    padding-left: 8px;
     min-width: 0;
+    height: var(--titlebar-height);
     -webkit-app-region: drag;
+}
+
+.titlebar-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: var(--titlebar-height);
+    flex-shrink: 0;
 }
 
 .titlebar-icon {
     width: 18px;
     height: 18px;
     object-fit: contain;
-    flex-shrink: 0;
     display: block;
+    margin: 0;
 }
 
 .titlebar-title {
     font-size: 13px;
     font-weight: 600;
-    line-height: 18px;
     color: #374151;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .titlebar-btn {
     -webkit-app-region: no-drag;
     width: 40px;
+    height: var(--titlebar-height);
+    min-height: var(--titlebar-height);
     border: none;
     background: transparent;
     cursor: pointer;
@@ -67,8 +79,19 @@ body {
     align-items: center;
     justify-content: center;
     color: #374151;
-    font-size: 14px;
+    font-size: 15px;
+    line-height: 1;
     flex-shrink: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.titlebar-btn i {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
 }
 
 .titlebar-btn:hover {
