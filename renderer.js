@@ -600,6 +600,18 @@ class UniversalAnswerFeature {
     try {
       applyPin(await window.electronAPI.getAlwaysOnTop())
     } catch (_) {}
+
+    // 获取并显示应用版本号
+    try {
+      const version = await window.electronAPI.getAppVersion();
+      const versionElement = document.getElementById('titlebar-version');
+      if (versionElement && version) {
+        versionElement.textContent = `(v${version})`;
+      }
+    } catch (error) {
+      console.error('获取应用版本失败:', error);
+    }
+
     if (pinBtn) {
       pinBtn.addEventListener('click', async () => {
         try {

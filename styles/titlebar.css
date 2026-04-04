@@ -67,6 +67,14 @@ body {
     min-width: 0;
 }
 
+.titlebar-version {
+    font-size: 12px;
+    font-weight: 400;
+    color: #6b7280;
+    margin-left: 4px;
+    white-space: nowrap;
+}
+
 .titlebar-btn {
     -webkit-app-region: no-drag;
     width: 40px;
