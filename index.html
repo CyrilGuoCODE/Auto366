@@ -144,10 +144,15 @@
         <div class="control-panel">
             <div class="control-group simple-app-only">
                 <div class="control-buttons">
-                    <button type="button" id="simple-back-home" class="secondary-btn">返回</button>
-                    <button type="button" id="simple-open-rules" class="secondary-btn">规则集</button>
-                    <button type="button" id="simple-open-community" class="secondary-btn">社区</button>
-                    <button type="button" id="simple-open-settings" class="secondary-btn">设置</button>
+                    <button type="button" id="simple-back-home" class="secondary-btn" title="主页">
+                        <i class="bi bi-house-door"></i>
+                    </button>
+                    <button type="button" id="simple-open-rules" class="secondary-btn" title="规则集">
+                        <i class="bi bi-collection"></i>
+                    </button>
+                    <button type="button" id="simple-open-settings" class="secondary-btn" title="设置">
+                        <i class="bi bi-gear"></i>
+                    </button>
                 </div>
             </div>
             <div class="control-group">
@@ -165,15 +170,15 @@
 
             <div class="control-group">
                 <div class="control-buttons">
-                    <button id="toggleProxyBtn" class="primary-btn">
+                    <button type="button" id="toggleProxyBtn" class="primary-btn" title="启动/停止代理">
                         <i class="bi bi-play-circle"></i>
                         <span>启动代理</span>
                     </button>
-                    <button id="deleteTempBtn" class="danger-btn">
+                    <button type="button" id="deleteTempBtn" class="danger-btn" title="清理 Auto366 缓存">
                         <i class="bi bi-trash"></i>
                         <span>清理Auto366缓存</span>
                     </button>
-                    <button id="deleteFileTempBtn" class="danger-btn">
+                    <button type="button" id="deleteFileTempBtn" class="danger-btn" title="清理天学网缓存">
                         <i class="bi bi-file-earmark-x"></i>
                         <span>清理天学网缓存</span>
                     </button>
@@ -239,6 +244,10 @@
                     <div class="panel-header">
                         <h3>规则管理</h3>
                         <div class="header-controls">
+                            <button type="button" id="simple-open-community-from-rules" class="secondary-btn"
+                                title="社区规则集">
+                                <i class="bi bi-cloud-download"></i>
+                            </button>
                             <button id="addRuleGroupBtn" class="primary-btn">
                                 <i class="bi bi-plus"></i>
                                 <span>添加规则集</span>

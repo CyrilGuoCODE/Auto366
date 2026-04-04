@@ -426,6 +426,56 @@ html[data-ui="simple"] .request-details {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+#simple-open-community-from-rules {
+    display: none !important;
+}
+
+html[data-ui="simple"] #simple-open-community-from-rules {
+    display: inline-flex !important;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel {
+    flex-wrap: nowrap;
+    gap: 8px 10px;
+    padding: 10px 12px;
+    min-height: auto;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .control-group {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .control-buttons {
+    flex-wrap: nowrap;
+    gap: 8px;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn,
+html[data-ui="simple"][data-simple-page="app"] .control-panel .primary-btn,
+html[data-ui="simple"][data-simple-page="app"] .control-panel .danger-btn {
+    padding: 8px 10px;
+    min-width: 36px;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .primary-btn span,
+html[data-ui="simple"][data-simple-page="app"] .control-panel .danger-btn span {
+    display: none;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .status-label {
+    display: none;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .status-item {
+    gap: 6px;
+    white-space: nowrap;
+}
+
 @media (max-width: 768px) {
     #simple-home .container {
         padding: 16px;

@@ -39,15 +39,17 @@ body {
 }
 
 .titlebar-icon {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     object-fit: contain;
     flex-shrink: 0;
+    display: block;
 }
 
 .titlebar-title {
     font-size: 13px;
     font-weight: 600;
+    line-height: 18px;
     color: #374151;
     white-space: nowrap;
     overflow: hidden;

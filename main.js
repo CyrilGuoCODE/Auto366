@@ -109,7 +109,7 @@ ipcMain.handle('switch-ui-mode', async (e, mode) => {
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mode === 'simple') {
-      mainWindow.setSize(900, 1010)
+      mainWindow.setSize(875, 1010)
     } else {
       mainWindow.setSize(1400, 900)
     }

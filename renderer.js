@@ -560,9 +560,9 @@ class UniversalAnswerFeature {
         this.switchView('rules')
       })
     }
-    const openCommunity = document.getElementById('simple-open-community')
-    if (openCommunity) {
-      openCommunity.addEventListener('click', () => {
+    const openCommunityFromRules = document.getElementById('simple-open-community-from-rules')
+    if (openCommunityFromRules) {
+      openCommunityFromRules.addEventListener('click', () => {
         this.setSimplePage('app')
         this.switchView('community')
       })
@@ -738,11 +738,9 @@ class UniversalAnswerFeature {
         this.addErrorLog('保存规则集开关失败')
         return
       }
-    }
-    const ui = document.documentElement.getAttribute('data-ui')
-    if (ui !== 'simple') {
       this.addSuccessLog(`已启用规则集：${target.name || groupId}`)
     }
+    const ui = document.documentElement.getAttribute('data-ui')
     await this.renderSimpleHomeRulesets()
     if (ui === 'simple' && this.currentView === 'rules') {
       await this.loadRules()
