@@ -10,6 +10,25 @@
 </head>
 
 <body>
+    <header id="app-custom-titlebar" class="app-custom-titlebar">
+        <div id="titlebar-drag-region" class="titlebar-drag-region">
+            <img src="icon_black.png" alt="" class="titlebar-icon">
+            <span class="titlebar-title">Auto366</span>
+        </div>
+        <button type="button" id="toggle-always-on-top-btn" class="titlebar-btn titlebar-pin-btn" title="窗口置顶">
+            <i class="bi bi-pin-angle"></i>
+        </button>
+        <button type="button" id="titlebar-minimize-btn" class="titlebar-btn" title="最小化">
+            <i class="bi bi-dash-lg"></i>
+        </button>
+        <button type="button" id="titlebar-maximize-btn" class="titlebar-btn" title="最大化">
+            <i class="bi bi-square"></i>
+        </button>
+        <button type="button" id="titlebar-close-btn" class="titlebar-btn titlebar-close" title="关闭">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </header>
+
     <div id="simple-home" class="simple-home">
         <button type="button" id="switch-to-professional" class="simple-pro-btn" title="切换到专业模式">专业模式</button>
         <button type="button" id="update-notification-btn-simple" class="update-notification-btn"
@@ -129,10 +148,6 @@
                     <button type="button" id="simple-open-rules" class="secondary-btn">规则集</button>
                     <button type="button" id="simple-open-community" class="secondary-btn">社区</button>
                     <button type="button" id="simple-open-settings" class="secondary-btn">设置</button>
-                    <button type="button" id="toggle-always-on-top-btn" class="secondary-btn" title="窗口置顶">
-                        <i class="bi bi-pin-angle"></i>
-                        <span>置顶</span>
-                    </button>
                 </div>
             </div>
             <div class="control-group">
@@ -144,16 +159,6 @@
                         <button id="changePortBtn" class="port-change-btn" title="修改端口">
                             <i class="bi bi-pencil-square"></i>
                         </button>
-                    </div>
-                    <div class="status-item">
-                        <i class="bi bi-shield-lock"></i>
-                        <span class="status-label">证书:</span>
-                        <span id="certificateStatus" class="status-value stopped">未检查</span>
-                    </div>
-                    <div class="status-item">
-                        <i class="bi bi-cpu"></i>
-                        <span class="status-label">处理:</span>
-                        <span id="processStatus" class="status-value stopped">等待中</span>
                     </div>
                 </div>
             </div>

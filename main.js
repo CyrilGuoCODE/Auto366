@@ -134,6 +134,29 @@ ipcMain.handle('get-always-on-top', () => {
   return mainWindow.isAlwaysOnTop()
 })
 
+ipcMain.on('window-minimize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize()
+})
+
+ipcMain.on('window-close', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+})
+
+ipcMain.handle('window-toggle-maximize', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return { maximized: false }
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize()
+    return { maximized: false }
+  }
+  mainWindow.maximize()
+  return { maximized: true }
+})
+
+ipcMain.handle('window-is-maximized', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  return mainWindow.isMaximized()
+})
+
 ipcMain.handle('get-scale-factor', () => {
   try {
     return Math.round(screen.getPrimaryDisplay().scaleFactor * 100)
@@ -242,12 +265,13 @@ autoUpdater.on('update-not-available', () => {
 
 function createWindow() {
   const mode = readUiMode()
-  const winW = mode === 'simple' ? 900 : 1400
+  const winW = mode === 'simple' ? 875 : 1400
   const winH = mode === 'simple' ? 1010 : 900
   mainWindow = new BrowserWindow({
     width: winW,
     height: winH,
     icon: path.join(__dirname, 'icon.png'),
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -257,6 +281,17 @@ function createWindow() {
   })
 
   mainWindow.setMenu(null);
+
+  mainWindow.on('maximize', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-maximized', true)
+    }
+  })
+  mainWindow.on('unmaximize', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-maximized', false)
+    }
+  })
 
   mainWindow.loadFile('index.html')
 

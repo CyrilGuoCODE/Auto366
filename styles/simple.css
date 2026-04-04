@@ -10,10 +10,6 @@ html[data-ui="professional"] #app-shell {
     overflow: hidden;
 }
 
-html[data-ui="simple"][data-simple-page="menu"] #simple-home {
-    display: block;
-}
-
 html[data-ui="simple"][data-simple-page="menu"] #app-shell {
     display: none !important;
 }
@@ -32,15 +28,13 @@ html[data-ui="simple"][data-simple-page="app"] #app-shell {
 
 html[data-ui="simple"][data-simple-page="menu"] body {
     background: #f5f5f5;
-    overflow: auto;
-    display: block;
+    overflow: hidden;
     min-width: 0;
 }
 
 .app-shell {
     flex: 1;
     display: flex;
-    height: 100vh;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
@@ -59,10 +53,28 @@ html[data-ui="simple"][data-simple-page="app"] .simple-app-only {
     align-items: center;
 }
 
+html[data-ui="simple"][data-simple-page="menu"] #simple-home {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+html[data-ui="simple"][data-simple-page="menu"] #simple-home .container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+html[data-ui="simple"][data-simple-page="app"] #switch-to-professional {
+    display: none !important;
+}
+
 #simple-home {
     position: relative;
     box-sizing: border-box;
-    min-height: calc(100vh - 36px);
+    min-height: calc(100vh - var(--titlebar-height, 36px));
     width: 100%;
     padding: 20px;
     font-family: Arial, sans-serif;
@@ -248,6 +260,14 @@ html[data-ui="simple"][data-simple-page="app"] .simple-app-only {
     color: #666;
     font-size: 14px;
     line-height: 1.45;
+}
+
+#simple-home .feature-card--active {
+    border-color: #007bff;
+}
+
+html[data-ui="simple"] .rule-group.simple-group-enabled {
+    border-color: #007bff;
 }
 
 #simple-home .simple-ruleset-empty {

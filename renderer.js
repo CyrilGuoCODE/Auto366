@@ -584,35 +584,70 @@ class UniversalAnswerFeature {
   }
 
   async initWindowTitlebar() {
-    const btns = [document.getElementById('toggle-always-on-top-btn')].filter(Boolean)
-    if (!btns.length || !window.electronAPI) return
-    const applyState = (enabled) => {
-      btns.forEach((btn) => {
-        const icon = btn.querySelector('i')
-        const label = btn.querySelector('span')
-        btn.classList.toggle('active', !!enabled)
-        if (icon) {
-          icon.className = enabled ? 'bi bi-pin-angle-fill' : 'bi bi-pin-angle'
-        }
-        if (label) {
-          label.textContent = enabled ? '取消置顶' : '置顶'
-        }
-        btn.title = enabled ? '窗口已置顶，点击取消' : '窗口置顶'
-      })
+    if (!window.electronAPI) return
+    const pinBtn = document.getElementById('toggle-always-on-top-btn')
+    const applyPin = (enabled) => {
+      if (!pinBtn) return
+      const icon = pinBtn.querySelector('i')
+      pinBtn.classList.toggle('active', !!enabled)
+      if (icon) {
+        icon.className = enabled ? 'bi bi-pin-angle-fill' : 'bi bi-pin-angle'
+      }
+      pinBtn.title = enabled ? '窗口已置顶，点击取消' : '窗口置顶'
     }
     try {
-      const enabled = await window.electronAPI.getAlwaysOnTop()
-      applyState(enabled)
+      applyPin(await window.electronAPI.getAlwaysOnTop())
     } catch (_) {}
-    btns.forEach((btn) => {
-      btn.addEventListener('click', async () => {
+    if (pinBtn) {
+      pinBtn.addEventListener('click', async () => {
         try {
           const result = await window.electronAPI.toggleAlwaysOnTop()
           if (result && result.success) {
-            applyState(result.isAlwaysOnTop)
+            applyPin(result.isAlwaysOnTop)
           }
         } catch (_) {}
       })
+    }
+    const maxBtn = document.getElementById('titlebar-maximize-btn')
+    const applyMaxIcon = async () => {
+      if (!maxBtn || !window.electronAPI.windowIsMaximized) return
+      try {
+        const maximized = await window.electronAPI.windowIsMaximized()
+        const icon = maxBtn.querySelector('i')
+        if (icon) {
+          icon.className = maximized ? 'bi bi-fullscreen-exit' : 'bi bi-square'
+        }
+        maxBtn.title = maximized ? '还原' : '最大化'
+      } catch (_) {}
+    }
+    await applyMaxIcon()
+    if (window.electronAPI.onWindowMaximized) {
+      window.electronAPI.onWindowMaximized(() => {
+        applyMaxIcon()
+      })
+    }
+    const drag = document.getElementById('titlebar-drag-region')
+    if (drag) {
+      drag.addEventListener('dblclick', async () => {
+        try {
+          if (window.electronAPI.windowToggleMaximize) {
+            await window.electronAPI.windowToggleMaximize()
+            await applyMaxIcon()
+          }
+        } catch (_) {}
+      })
+    }
+    document.getElementById('titlebar-minimize-btn')?.addEventListener('click', () => {
+      window.electronAPI.windowMinimize?.()
+    })
+    maxBtn?.addEventListener('click', async () => {
+      try {
+        await window.electronAPI.windowToggleMaximize?.()
+        await applyMaxIcon()
+      } catch (_) {}
+    })
+    document.getElementById('titlebar-close-btn')?.addEventListener('click', () => {
+      window.electronAPI.windowClose?.()
     })
   }
 
@@ -652,7 +687,8 @@ class UniversalAnswerFeature {
       const name = this.escapeHtml(g.name || '未命名规则集')
       const desc = this.escapeHtml(g.description || '无描述')
       const gid = g.id
-      return `<div class="feature-card" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`
+      const active = g.enabled ? ' feature-card--active' : ''
+      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`
     }).join('')
     grid.querySelectorAll('.feature-card').forEach((card) => {
       card.addEventListener('click', () => {
@@ -703,8 +739,14 @@ class UniversalAnswerFeature {
         return
       }
     }
-    this.addSuccessLog(`已启用规则集：${target.name || groupId}`)
+    const ui = document.documentElement.getAttribute('data-ui')
+    if (ui !== 'simple') {
+      this.addSuccessLog(`已启用规则集：${target.name || groupId}`)
+    }
     await this.renderSimpleHomeRulesets()
+    if (ui === 'simple' && this.currentView === 'rules') {
+      await this.loadRules()
+    }
   }
 
   goSimpleBack() {
@@ -786,11 +828,6 @@ class UniversalAnswerFeature {
       this.updateProxyStatus(data);
     });
 
-    // 监听证书状态
-    window.electronAPI.onCertificateStatus((event, data) => {
-      this.updateCertificateStatus(data);
-    });
-
     // 监听流量日志
     window.electronAPI.onTrafficLog((event, data) => {
       this.addTrafficLog(data);
@@ -814,11 +851,6 @@ class UniversalAnswerFeature {
     // 监听下载发现
     window.electronAPI.onDownloadFound((event, data) => {
       this.addSuccessLog(`发现下载链接: ${data.url}`);
-    });
-
-    // 监听处理状态
-    window.electronAPI.onProcessStatus((event, data) => {
-      this.updateProcessStatus(data);
     });
 
     // 监听处理错误
@@ -1318,32 +1350,6 @@ class UniversalAnswerFeature {
     }
   }
 
-  updateCertificateStatus(data) {
-    const statusElement = document.getElementById('certificateStatus');
-
-    if (data.status === 'importing') {
-      statusElement.textContent = '导入中';
-      statusElement.className = 'status-value processing';
-      this.addInfoLog(data.message);
-    } else if (data.status === 'success') {
-      statusElement.textContent = '已导入';
-      statusElement.className = 'status-value success';
-      this.addSuccessLog(data.message);
-    } else if (data.status === 'error') {
-      statusElement.textContent = '导入失败';
-      statusElement.className = 'status-value error';
-      this.addErrorLog(data.message);
-    } else if (data.status === 'exists') {
-      statusElement.textContent = '已存在';
-      statusElement.className = 'status-value success';
-      this.addSuccessLog(data.message);
-    } else if (data.status === 'not_found') {
-      statusElement.textContent = '未找到';
-      statusElement.className = 'status-value error';
-      this.addErrorLog(data.message);
-    }
-  }
-
   updateCaptureStatus(data) {
     const statusElement = document.getElementById('captureStatus');
     const startBtn = document.getElementById('startCaptureBtn');
@@ -1361,28 +1367,6 @@ class UniversalAnswerFeature {
       if (startBtn) startBtn.disabled = false;
       if (stopBtn) stopBtn.disabled = true;
       this.addInfoLog('网络监听已停止');
-    }
-  }
-
-  updateProcessStatus(data) {
-    const statusElement = document.getElementById('processStatus');
-
-    if (data.status === 'processing') {
-      statusElement.textContent = '处理中';
-      statusElement.className = 'status-value processing';
-      this.addInfoLog(data.message);
-    } else if (data.status === 'completed') {
-      statusElement.textContent = '已完成';
-      statusElement.className = 'status-value success';
-      this.addSuccessLog(data.message);
-    } else if (data.status === 'error') {
-      statusElement.textContent = '处理失败';
-      statusElement.className = 'status-value error';
-      this.addErrorLog(data.message);
-    } else if (data.status === 'idle') {
-      statusElement.textContent = '等待中';
-      statusElement.className = 'status-value stopped';
-      this.addInfoLog(data.message);
     }
   }
 
@@ -2531,13 +2515,12 @@ class UniversalAnswerFeature {
         return;
       }
       const html = ruleGroups.map(group => `
-        <div class="rule-group simple-clickable-group" data-group-id="${group.id}" onclick="universalAnswerFeature.enterSimpleRuleset('${group.id}')">
+        <div class="rule-group simple-clickable-group${group.enabled ? ' simple-group-enabled' : ''}" data-group-id="${group.id}" onclick="universalAnswerFeature.enterSimpleRuleset('${group.id}')">
           <div class="rule-group-header">
             <div class="rule-group-info">
               <div class="rule-group-name">
                 <i class="bi bi-collection"></i>
                 ${group.name || '未命名规则集'}
-                ${group.enabled ? '<span class="installed-badge"><i class="bi bi-check-circle"></i> 已启用</span>' : ''}
               </div>
               ${group.description ? `<div class="rule-group-description">${group.description}</div>` : ''}
             </div>
