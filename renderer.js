@@ -4227,4 +4227,97 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (error) {
     console.error('UniversalAnswerFeature实例创建失败:', error);
   }
+  
+  // 检查是否需要显示赞赏弹窗
+  try {
+    checkAndShowDonationModal();
+  } catch (error) {
+    console.error('检查赞赏弹窗失败:', error);
+  }
 });
+
+// 检查并显示赞赏弹窗
+function checkAndShowDonationModal() {
+  let launchCount = parseInt(localStorage.getItem('launchCount')) || 0;
+  launchCount++;
+  localStorage.setItem('launchCount', launchCount);
+  
+  // 检查是否是第10次启动
+  if (launchCount % 10 === 0) {
+    // 显示赞赏弹窗
+    showDonationModal();
+  }
+}
+
+// 显示赞赏弹窗
+function showDonationModal() {
+  if (document.getElementById('donation-modal')) {
+    return;
+  }
+  
+  // 获取启动次数
+  const launchCount = parseInt(localStorage.getItem('launchCount')) || 0;
+
+  const modal = document.createElement('div');
+  modal.id = 'donation-modal';
+  modal.className = 'donation-modal';
+  modal.innerHTML = `
+    <div class="donation-modal-overlay"></div>
+    <div class="donation-modal-content">
+      <div class="donation-modal-header">
+        <h3>感谢使用</h3>
+        <button class="donation-modal-close" onclick="closeDonationModal()">×</button>
+      </div>
+      <div class="donation-modal-body">
+        <div class="appreciation-wrapper">
+          <div class="appreciation-section">
+            <div class="appreciation-icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
+              <svg viewBox="0 0 1024 1024" class="heart-icon">
+                <path d="M512 896c-12.8 0-25.6-4.8-35.2-14.4L89.6 494.4c-76.8-76.8-76.8-201.6 0-278.4 38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6L512 356.8l140.8-140.8c38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6c76.8 76.8 76.8 201.6 0 278.4L547.2 881.6c-9.6 9.6-22.4 14.4-35.2 14.4z" />
+              </svg>
+              <span class="appreciation-text">赞赏</span>
+              <div class="appreciation-popup">
+                <div class="appreciation-content">
+                  <div class="appreciation-qr-container">
+                    <img src="prize/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
+                    <img src="prize/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="appreciation-section">
+            <div class="appreciation-icon" title="加入QQ群，获取更多帮助与支持">
+              <svg class="heart-icon heart-icon--qq" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                <path d="M29.11 26.278c-0.72 0.087-2.804-3.296-2.804-3.296 0 1.959-1.009 4.515-3.191 6.362 1.052 0.325 3.428 1.198 2.863 2.151-0.457 0.772-7.844 0.493-9.977 0.252-2.133 0.24-9.52 0.519-9.977-0.252-0.565-0.953 1.807-1.826 2.861-2.151-2.182-1.846-3.191-4.403-3.191-6.362 0 0-2.083 3.384-2.804 3.296-0.335-0.041-0.776-1.853 0.584-6.231 0.641-2.064 1.375-3.78 2.509-6.611-0.191-7.306 2.828-13.435 10.016-13.435 7.109 0.001 10.197 6.008 10.017 13.435 1.132 2.826 1.869 4.553 2.509 6.611 1.361 4.379 0.92 6.191 0.584 6.231z" />
+              </svg>
+              <span class="appreciation-text">QQ群</span>
+              <div class="appreciation-popup">
+                <div class="appreciation-content">
+                  <div class="appreciation-qr-container">
+                    <img src="prize/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="donation-message">你已经启动 Auto366 ${launchCount} 次了，不考虑赞助一下吗？</p>
+        <p class="donation-message">如果工具对你有用，随时欢迎赞赏支持或加入QQ群交流哦~</p>
+      </div>
+      <div class="donation-modal-footer">
+        <button class="donation-btn-later" onclick="closeDonationModal()">稍后再说</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+}
+
+// 关闭赞赏弹窗
+function closeDonationModal() {
+  const modal = document.getElementById('donation-modal');
+  if (modal) {
+    modal.remove();
+  }
+}
