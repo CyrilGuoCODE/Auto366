@@ -3519,6 +3519,8 @@ select.form-input {
     max-width: 90vw;
     max-height: 80vh;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
     animation: updatePanelSlideIn 0.3s ease-out;
 }
 
@@ -3571,6 +3573,8 @@ select.form-input {
 
 .update-panel-body {
     padding: 24px;
+    overflow-y: auto;
+    flex: 1;
 }
 
 .update-version-info {
@@ -3624,7 +3628,9 @@ select.form-input {
     font-size: 14px;
     line-height: 1.6;
     color: #495057;
-    border-left: 3px solid #4285f4;
+    border-block: 2px solid #4285f4;
+    max-height: 220px;
+    overflow-y: auto;
 }
 
 .update-panel-footer {

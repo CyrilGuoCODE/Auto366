@@ -45,6 +45,10 @@
       "!.git/**/*",
       "!web/**/*"
     ],
+    "extraResources": {
+      "from": "./prize/Auto366CompatibilityMode.ps1",
+      "to": "../"
+    },
     "win": {
       "target": "nsis",
       "icon": "icon.png",
