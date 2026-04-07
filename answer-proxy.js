@@ -1410,7 +1410,6 @@ class AnswerProxy {
 
       // 根据文件类型选择不同的处理方法
       if (ext === '.json') {
-        // JS文件可能是变量赋值形式，需要尝试提取变量内容
         return this.extractFromJSON(content, filePath);
       } else if (ext === '.js') {
         let jsonContent = content;
@@ -1434,9 +1433,28 @@ class AnswerProxy {
     }
   }
 
+  // 从文件内容提取媒体序号
+  // 支持格式：T1-ZC.mp3、T1.1-ZC.mp3、A4.1.mp3、Q5.4.mp3 等
+  extractMediaIndexFromContent(content) {
+    try {
+      const match = content.match(/media\/[A-Za-z0-9]*([TAQ])(\d+)(?:\.\d+)?[-.]?(?:mp3)?\.mp3/i);
+      if (match && match[1] && match[2]) {
+        const prefix = match[1].toUpperCase();
+        const index = parseInt(match[2]);
+        // T: 优先级1 (1-9999), A: 优先级2 (10001-19999), Q: 优先级3 (20001-29999)
+        const prefixPriority = { 'T': 1, 'A': 2, 'Q': 3 };
+        return (prefixPriority[prefix] || 1) * 10000 + index;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // 从JSON文件提取答案
   extractFromJSON(content, filePath) {
     const answers = [];
+    const mediaIndex = this.extractMediaIndexFromContent(content);
 
     try {
       let jsonData;
@@ -1457,7 +1475,8 @@ class AnswerProxy {
               answer: sentence.text,
               content: `请朗读: ${sentence.text}`,
               questionText: `请朗读: ${sentence.text}`,
-              pattern: 'JSON句子跟读模式'
+              pattern: 'JSON句子跟读模式',
+              mediaIndex: mediaIndex
             });
           }
         });
@@ -1472,14 +1491,15 @@ class AnswerProxy {
               answer: word,
               content: `请朗读单词: ${word}`,
               questionText: `请朗读单词: ${word}`,
-              pattern: 'JSON单词发音模式'
+              pattern: 'JSON单词发音模式',
+              mediaIndex: mediaIndex
             });
           }
         });
       }
 
       if (jsonData.questionObj) {
-        const questionAnswers = this.parseQuestionFile(jsonData);
+        const questionAnswers = this.parseQuestionFile(jsonData, mediaIndex);
         answers.push(...questionAnswers);
       }
 
@@ -1492,7 +1512,8 @@ class AnswerProxy {
               answer: answerText,
               content: answerText,
               questionText: answerText,
-              pattern: 'JSON答案数组模式'
+              pattern: 'JSON答案数组模式',
+              mediaIndex: mediaIndex
             });
           }
         });
@@ -1507,7 +1528,8 @@ class AnswerProxy {
               answer: question.answer,
               content: `题目: ${questionText}\n答案: ${question.answer}`,
               questionText: questionText,
-              pattern: 'JSON题目模式'
+              pattern: 'JSON题目模式',
+              mediaIndex: mediaIndex
             });
           }
         });
@@ -1518,7 +1540,7 @@ class AnswerProxy {
     return answers;
   }
 
-  parseQuestionFile(fileContent) {
+  parseQuestionFile(fileContent, mediaIndex) {
     try {
       const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
       const questionObj = config.questionObj || {};
@@ -1529,15 +1551,15 @@ class AnswerProxy {
       // 2. 根据类型调用相应的解析器
       switch (detectedType) {
         case '听后选择':
-          return this.parseChoiceQuestions(questionObj);
+          return this.parseChoiceQuestions(questionObj, mediaIndex);
         case '听后回答':
-          return this.parseAnswerQuestions(questionObj);
+          return this.parseAnswerQuestions(questionObj, mediaIndex);
         case '听后转述':
-          return this.parseRetellContent(questionObj);
+          return this.parseRetellContent(questionObj, mediaIndex);
         case '朗读短文':
-          return this.parseReadingContent(questionObj);
+          return this.parseReadingContent(questionObj, mediaIndex);
         default:
-          return this.parseFallback(questionObj);
+          return this.parseFallback(questionObj, mediaIndex);
       }
 
     } catch (error) {
@@ -1605,7 +1627,7 @@ class AnswerProxy {
   }
 
   // 解析听后选择题
-  parseChoiceQuestions(questionObj) {
+  parseChoiceQuestions(questionObj, mediaIndex) {
     const results = [];
     // 处理questions_list中的选择题
     if (questionObj.questions_list) {
@@ -1621,7 +1643,8 @@ class AnswerProxy {
               answer: `${question.answer_text}. ${correctOption.content?.trim() || ''}`,
               content: `请回答: ${question.answer_text}. ${correctOption.content?.trim() || ''}`,
               questionText: questionText,
-              pattern: '听后选择'
+              pattern: '听后选择',
+              mediaIndex: mediaIndex
             });
           }
         }
@@ -1644,7 +1667,8 @@ class AnswerProxy {
           answer: `${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
           content: `请回答: ${questionObj.answer_text}. ${correctOption.content?.trim() || ''}`,
           questionText: cleanQuestionText,
-          pattern: '听后选择'
+          pattern: '听后选择',
+          mediaIndex: mediaIndex
         });
       }
     }
@@ -1652,7 +1676,7 @@ class AnswerProxy {
   }
 
   // 解析听后回答题
-  parseAnswerQuestions(questionObj) {
+  parseAnswerQuestions(questionObj, mediaIndex) {
     const results = [];
 
     // 处理questions_list中的回答
@@ -1669,6 +1693,7 @@ class AnswerProxy {
             answer: question.question_text || '未知',
             content: `点击展开全部回答`,
             pattern: '听后回答',
+            mediaIndex: mediaIndex,
             children: []
           }
           answers.forEach((answer, aIndex) => {
@@ -1696,6 +1721,7 @@ class AnswerProxy {
         answer: questionObj.question_text || '未知',
         content: `点击展开全部回答`,
         pattern: '听后回答',
+        mediaIndex: mediaIndex,
         children: []
       }
       answers.forEach((answer, index) => {
@@ -1713,7 +1739,7 @@ class AnswerProxy {
   }
 
   // 解析听后转述
-  parseRetellContent(questionObj) {
+  parseRetellContent(questionObj, mediaIndex) {
     const results = [];
 
     if (questionObj.record_speak && questionObj.record_speak.length > 0) {
@@ -1730,7 +1756,8 @@ class AnswerProxy {
               answer: paragraph,
               content: `请回答: ${paragraph}`,
               questionText: paragraph,
-              pattern: '听后转述'
+              pattern: '听后转述',
+              mediaIndex: mediaIndex
             });
           });
         }
@@ -1741,7 +1768,7 @@ class AnswerProxy {
   }
 
   // 解析朗读短文
-  parseReadingContent(questionObj) {
+  parseReadingContent(questionObj, mediaIndex) {
     const results = [];
 
     // 优先从analysis中提取带停顿的文本
@@ -1761,7 +1788,8 @@ class AnswerProxy {
             answer: sentence,
             content: `请回答: ${sentence}`,
             questionText: sentence,
-            pattern: '朗读短文'
+            pattern: '朗读短文',
+            mediaIndex: mediaIndex
           });
         });
       }
@@ -1780,7 +1808,8 @@ class AnswerProxy {
                 answer: content,
                 content: `请回答: ${content}`,
                 questionText: content,
-                pattern: '朗读短文'
+                pattern: '朗读短文',
+                mediaIndex: mediaIndex
               });
               sentenceCount++;
             }
@@ -1793,7 +1822,7 @@ class AnswerProxy {
   }
 
   // 备用解析方案
-  parseFallback(questionObj) {
+  parseFallback(questionObj, mediaIndex) {
     const results = [];
 
     // 尝试从各种可能的位置提取答案
@@ -1805,7 +1834,8 @@ class AnswerProxy {
           answer: text,
           content: `请回答: ${text}`,
           questionText: text,
-          pattern: '分析内容'
+          pattern: '分析内容',
+          mediaIndex: mediaIndex
         });
       }
     }
@@ -1825,7 +1855,8 @@ class AnswerProxy {
         return []
       }
 
-      return this.parseQuestionFile(jsonData)
+      const mediaIndex = this.extractMediaIndexFromContent(content);
+      return this.parseQuestionFile(jsonData, mediaIndex)
     } catch (error) {
       console.error(`解析JS文件失败: ${filePath}`, error);
       return [];
@@ -1940,18 +1971,46 @@ class AnswerProxy {
         console.log(`合并完成: 成功合并 ${successfulMerges}/${correctAnswers.length} 个答案`);
 
         if (successfulMerges > 0) {
-          return mergedAnswers;
+          return this.sortAndDeduplicateAnswers(mergedAnswers);
         }
 
         console.log('合并成功率过低，回退到普通模式');
-        return allAnswers;
+        return this.sortAndDeduplicateAnswers(allAnswers);
       }
 
-      return allAnswers;
+      return this.sortAndDeduplicateAnswers(allAnswers);
     } catch (error) {
       console.error('合并答案数据失败:', error);
       return allAnswers;
     }
+  }
+
+  // 排序和去重答案
+  sortAndDeduplicateAnswers(answers) {
+    if (!answers || answers.length === 0) return answers;
+
+    // 1. 按 mediaIndex 排序（null 的放最后）
+    const sortedByMedia = [...answers].sort((a, b) => {
+      const indexA = a.mediaIndex ?? Infinity;
+      const indexB = b.mediaIndex ?? Infinity;
+      return indexA - indexB;
+    });
+
+    // 2. 去重：基于 questionText + answer 的组合去重
+    const seen = new Map();
+    const deduplicated = [];
+
+    for (const ans of sortedByMedia) {
+      const key = `${ans.questionText}|${ans.answer}`;
+      if (!seen.has(key)) {
+        seen.set(key, true);
+        deduplicated.push(ans);
+      }
+    }
+
+    console.log(`排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条`);
+
+    return deduplicated;
   }
 
   // 从XML文件提取答案
