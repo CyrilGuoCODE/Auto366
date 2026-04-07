@@ -1434,12 +1434,12 @@ class AnswerProxy {
   }
 
   // 从文件内容提取媒体序号
-  // 支持格式：T1-ZC.mp3、T1.1-ZC.mp3、A4.1.mp3、Q5.4.mp3 等
+  // 支持格式：1-ZC.mp3、T1-ZC.mp3、T1.1-ZC.mp3、M3-T1-ZC.mp3、A4.1.mp3、Q5.4.mp3 等
   extractMediaIndexFromContent(content) {
     try {
-      const match = content.match(/media\/[A-Za-z0-9]*([TAQ])(\d+)(?:\.\d+)?[-.]?(?:mp3)?\.mp3/i);
-      if (match && match[1] && match[2]) {
-        const prefix = match[1].toUpperCase();
+      const match = content.match(/media\/(?:[A-Za-z0-9]+-)?([TAQ])?(\d+)(?:\.\d+)?[^.]*\.mp3/i);
+      if (match && match[2]) {
+        const prefix = match[1] ? match[1].toUpperCase() : 'T';
         const index = parseInt(match[2]);
         // T: 优先级1 (1-9999), A: 优先级2 (10001-19999), Q: 优先级3 (20001-29999)
         const prefixPriority = { 'T': 1, 'A': 2, 'Q': 3 };
