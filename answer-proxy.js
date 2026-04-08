@@ -1435,15 +1435,20 @@ class AnswerProxy {
 
   // 从文件内容提取媒体序号
   // 支持格式：1-ZC.mp3、T1-ZC.mp3、T1.1-ZC.mp3、M3-T1-ZC.mp3、A4.1.mp3、Q5.4.mp3 等
+  // 也支持 A1.1.mp3、A1.2.mp3 这种带后缀子题目的格式
   extractMediaIndexFromContent(content) {
     try {
-      const match = content.match(/media\/(?:[A-Za-z0-9]+-)?([TAQ])?(\d+)(?:\.\d+)?[^.]*\.mp3/i);
+      // 匹配 media/ 路径下的 mp3 文件
+      // 格式: media/(可选前缀-)?(T/A/Q)?数字(.数字)?(.mp3之前的其他内容).mp3
+      const match = content.match(/media\/(?:[A-Za-z0-9]+-)?([TAQ])?(\d+)(?:\.(\d+))?(?:-[^.]*)?\.mp3/i);
       if (match && match[2]) {
         const prefix = match[1] ? match[1].toUpperCase() : 'T';
-        const index = parseInt(match[2]);
+        const mainIndex = parseInt(match[2]);
+        const subIndex = match[3] ? parseInt(match[3]) : 0;
         // T: 优先级1 (1-9999), A: 优先级2 (10001-19999), Q: 优先级3 (20001-29999)
+        // 子序号放在十位，如 A1.2 -> 20000 + 1*10 + 2 = 20012
         const prefixPriority = { 'T': 1, 'A': 2, 'Q': 3 };
-        return (prefixPriority[prefix] || 1) * 10000 + index;
+        return (prefixPriority[prefix] || 1) * 10000 + mainIndex * 10 + subIndex;
       }
       return null;
     } catch (e) {
