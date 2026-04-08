@@ -7,7 +7,7 @@
 
 ## 警告
 
-### 本工具仅供学习和研究使用，**严禁商用**！
+### 本工具仅供学习和研究使用，**严禁商用**
 
 ## 项目简介
 
@@ -18,7 +18,31 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 官方网站/在线答案查看器：[366.cyril.qzz.io/](https://366.cyril.qzz.io/)
 备用地址(暂时弃用)：[a366.netlify.app/](https://a366.netlify.app/)
 
-## TODOS
+## Todo List待办清单
+
+### 已完成
+
+- 修复自动更新按钮被遮挡
+- 加入安装目录内置兼容性ps脚本(Auto366CompatibilityMode.ps1)
+
+### BUG问题
+
+- 答案乱序解决(由SubmergeDQ)
+
+### TODO新功能
+
+#### 短期更新
+
+- 注入后将自动化程序运行日志上传到5290/logs端口
+- 加入导出AUTO366运行日志功能
+- 启动代理时自动检查端口占用情况
+- 首次使用时step by step教程
+
+#### 长期更新
+
+- 加入天学网进程加速(基于OpenSpeedy)
+- 加入听力自动化
+- 加入官网捐赠名单
 
 ## 安装说明
 
