@@ -36,7 +36,6 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 #### 短期更新
 
 - 注入后将自动化程序运行日志上传到5290/logs端口
-- 加入导出AUTO366运行日志功能
 - 首次使用时step by step教程
 
 #### 长期更新
