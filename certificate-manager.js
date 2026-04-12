@@ -110,7 +110,7 @@ class CertificateManager {
       
       exec(command, { timeout: 30000 }, (error, stdout, stderr) => {
         console.log('PowerShell证书导入输出:', stdout);
-        console.log('PowerShell证书导入错误:', stderr);
+        console.log('PowerShell证书导入:', stderr);
         
         if (error) {
           resolve({ success: false, error: `PowerShell命令执行失败: ${error.message}` });
@@ -189,7 +189,7 @@ class CertificateManager {
       
       exec(command, { timeout: 30000 }, (error, stdout, stderr) => {
         console.log('简单PowerShell证书导入输出:', stdout);
-        console.log('简单PowerShell证书导入错误:', stderr);
+        console.log('简单PowerShell证书导入:', stderr);
         
         if (error) {
           resolve({ success: false, error: `简单PowerShell命令执行失败: ${error.message}` });

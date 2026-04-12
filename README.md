@@ -20,14 +20,16 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 ## Todo List待办清单
 
-### 已完成
+### 新版本已完成
 
 - 修复自动更新按钮被遮挡
 - 加入安装目录内置兼容性ps脚本(Auto366CompatibilityMode.ps1)
+- 答案乱序解决(由SubmergeDQ)
+- 启动代理时自动检查端口占用情况
 
 ### BUG问题
 
-- 答案乱序解决(由SubmergeDQ)
+- 无
 
 ### TODO新功能
 
@@ -35,7 +37,6 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 - 注入后将自动化程序运行日志上传到5290/logs端口
 - 加入导出AUTO366运行日志功能
-- 启动代理时自动检查端口占用情况
 - 首次使用时step by step教程
 
 #### 长期更新

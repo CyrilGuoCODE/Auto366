@@ -8,6 +8,7 @@ const zlib = require('zlib')
 const path = require('path')
 const { app } = require('electron')
 const { v4: uuidv4 } = require('uuid')
+const { exec } = require('child_process')
 const CertificateManager = require('./certificate-manager')
 const appPath = app.isPackaged ? process.resourcesPath : __dirname;
 const tempDir = path.join(appPath, 'temp');
@@ -330,6 +331,99 @@ class AnswerProxy {
       console.error('重置规则触发次数失败:', error);
       return false;
     }
+  }
+
+  // 检查端口是否被占用
+  async checkPortInUse(port) {
+    return new Promise((resolve) => {
+      const server = http.createServer();
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.log(`端口 ${port} 已被占用`);
+          resolve(true); // 端口被占用
+        } else {
+          console.log(`端口 ${port} 检查出错:`, err);
+          resolve(false);
+        }
+      });
+      server.once('listening', () => {
+        server.close();
+        console.log(`端口 ${port} 未被占用`);
+        resolve(false); // 端口未被占用
+      });
+      server.listen(port, '127.0.0.1');
+    });
+  }
+
+  // 查找占用端口的进程
+  async findProcessByPort(port) {
+    return new Promise((resolve) => {
+      if (process.platform === 'win32') {
+        exec(`netstat -ano | findstr :${port}`, (error, stdout) => {
+          if (error || !stdout) {
+            console.log(`未找到占用端口 ${port} 的进程`);
+            resolve(null);
+            return;
+          }
+          const lines = stdout.split('\n');
+          for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 5) {
+              const localAddress = parts[1];
+              if (localAddress.includes(`:${port}`)) {
+            const pid = parseInt(parts[4]);
+            if (!isNaN(pid)) {
+              console.log(`找到占用端口 ${port} 的进程 PID: ${pid}`);
+              resolve(pid);
+              return;
+            }
+          }
+        }
+      }
+      console.log(`未找到占用端口 ${port} 的进程`);
+      resolve(null);
+    });
+  } else {
+    // Linux/Mac
+    exec(`lsof -i :${port} -t`, (error, stdout) => {
+      if (error || !stdout) {
+        console.log(`未找到占用端口 ${port} 的进程`);
+        resolve(null);
+        return;
+      }
+      const pid = parseInt(stdout.trim());
+      if (!isNaN(pid)) {
+        console.log(`找到占用端口 ${port} 的进程 PID: ${pid}`);
+        resolve(pid);
+      } else {
+        console.log(`未找到占用端口 ${port} 的进程`);
+        resolve(null);
+      }
+    });
+  }
+    });
+  }
+
+  // 结束指定进程
+  async killProcess(pid) {
+    return new Promise((resolve) => {
+      if (!pid) {
+        console.log(`无效的PID: ${pid}`);
+        resolve(false);
+        return;
+      }
+      const command = process.platform === 'win32' ? `taskkill /F /PID ${pid}` : `kill -9 ${pid}`;
+      console.log(`尝试结束进程 PID: ${pid}, 命令: ${command}`);
+      exec(command, (error) => {
+        if (error) {
+          console.log(`结束进程 PID: ${pid} 失败:`, error);
+          resolve(false);
+        } else {
+          console.log(`成功结束进程 PID: ${pid}`);
+          resolve(true);
+        }
+      });
+    });
   }
 
   // 检查URL是否匹配规则模式（支持通配符）
@@ -969,13 +1063,58 @@ class AnswerProxy {
 
   // 启动抓包代理
   async startProxy(mainWindow) {
+    console.log('开始启动抓包代理...');
     this.mainWindow = mainWindow;
 
     // 如果代理已经存在，先停止它
     if (this.proxy) {
+      console.log('代理已存在，先停止它...');
       await this.stopProxy();
     }
 
+    // 检查端口是否被占用
+    console.log(`开始检查端口 ${this.proxyPort} 是否被占用...`);
+    const portInUse = await this.checkPortInUse(this.proxyPort);
+    if (portInUse) {
+      console.log(`端口 ${this.proxyPort} 被占用，准备查找占用进程...`);
+      // 端口被占用，发送日志到UI
+      this.safeIpcSend('rule-log', {
+        type: 'error',
+        message: `端口 ${this.proxyPort} 已被占用，正在尝试结束占用进程...`
+      });
+
+      // 查找占用端口的进程
+      const pid = await this.findProcessByPort(this.proxyPort);
+      if (pid) {
+        console.log(`找到占用进程 PID: ${pid}，准备结束进程...`);
+        // 尝试结束进程
+        const killed = await this.killProcess(pid);
+        if (killed) {
+          this.safeIpcSend('rule-log', {
+            type: 'success',
+            message: `已成功结束占用端口 ${this.proxyPort} 的进程 (PID: ${pid})`
+          });
+          // 等待一小段时间确保端口释放
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+          // 结束进程失败，发送错误日志
+          this.safeIpcSend('rule-log', {
+            type: 'error',
+            message: `无法结束占用端口 ${this.proxyPort} 的进程 (PID: ${pid})，请手动结束该进程后重试`
+          });
+          return;
+        }
+      } else {
+        // 无法找到占用端口的进程
+        this.safeIpcSend('rule-log', {
+          type: 'error',
+          message: `端口 ${this.proxyPort} 已被占用，但无法找到占用进程，请手动检查后重试`
+        });
+        return;
+      }
+    }
+
+    console.log(`端口 ${this.proxyPort} 可用，准备启动代理服务器...`);
     // 创建MITM代理实例
     await this.startProxyPromise();
 
