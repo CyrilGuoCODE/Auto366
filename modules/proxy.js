@@ -8,24 +8,23 @@ const os = require('os');
 const StreamZip = require('node-stream-zip');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
+const Proxy = require('http-mitm-proxy').Proxy;
 
 class ProxyServer {
   constructor(certManager) {
     this.certManager = certManager;
-    this.httpServer = null;
-    this.httpsServer = null;
     this.bucketServer = null;
     this.proxyPort = 5291;
     this.bucketPort = 5290;
     this.isRunning = false;
     this.isCapturing = false;
-    this.requestMap = new Map();
     this.answerCaptureEnabled = true;
     this.mainWindow = null;
     this.trafficCache = new Map();
     this.responseRules = [];
     this.serverDatas = {};
     this.isStopping = false;
+    this.proxy = null;
     
     // 初始化目录
     this.appPath = process.cwd();
@@ -39,47 +38,218 @@ class ProxyServer {
   }
 
   // 启动代理服务器
+  startProxyPromise() {
+    return new Promise((resolve) => {
+      // 创建新的代理实例
+      this.proxy = new Proxy();
+
+      this.proxy.onError(function (ctx, err) {
+        console.error('代理出错:', err);
+      });
+
+      this.proxy.onRequest((ctx, callback) => {
+        const protocol = "http"; // 不知道怎么检测http还是https
+        const fullUrl = `${protocol}://${ctx.clientToProxyRequest.headers.host}${ctx.clientToProxyRequest.url}`;
+
+        const isAnswerCaptureEnabled = this.isAnswerCaptureEnabled();
+
+        let requestInfo = {
+          method: ctx.clientToProxyRequest.method,
+          url: fullUrl,
+          host: ctx.clientToProxyRequest.headers.host,
+          timestamp: new Date().toISOString(),
+          isHttps: false,
+          requestHeaders: ctx.clientToProxyRequest.headers,
+          uuid: uuidv4(),
+        }
+
+        if (!isAnswerCaptureEnabled) {
+          return callback();
+        }
+
+        let requestBody = [], responseBody = [];
+        ctx.onRequestData((ctx, chunk, callback) => {
+          requestBody.push(chunk)
+          return callback(null, chunk);
+        })
+        ctx.onRequestEnd((ctx, callback) => {
+          let body = Buffer.concat(requestBody).toString()
+          if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/json')) {
+            try {
+              body = JSON.stringify(JSON.parse(body), null, 2);
+            } catch (error) {
+              console.error('解析请求体失败:', error)
+            }
+          }
+          else if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/x-www-form-urlencoded')) {
+            try {
+              const params = new URLSearchParams(body);
+              const result = Object.fromEntries(params.entries());
+              body = JSON.stringify(result, null, 2);
+            } catch (error) {
+              console.error('解析请求体失败:', error)
+            }
+          }
+          else if (ctx.clientToProxyRequest.headers['content-type']) {
+            console.log('未知请求体类型', ctx.clientToProxyRequest.headers['content-type'])
+          }
+          requestInfo.requestBody = body
+          return callback();
+        })
+        let responseBodyRules = this.haveRules(fullUrl, 'response-body');
+        ctx.onResponse((ctx, callback) => {
+          if (responseBodyRules.includes(2) && ctx.serverToProxyResponse.statusCode !== 200) {
+            ctx.serverToProxyResponse.statusCode = 200;
+            ctx.serverToProxyResponse.headers['content-type'] = 'application/octet-stream'
+            delete ctx.serverToProxyResponse.headers['content-range'];
+            delete ctx.serverToProxyResponse.headers['accept-ranges'];
+          }
+
+          // 如果是文件下载请求且需要应用规则，修改响应头
+          if (responseBodyRules.includes(2)) {
+            // 检查是否是文件下载请求
+            const isFileDownloadRequest = fullUrl.endsWith('.zip') ||
+              fullUrl.includes('/download/') ||
+              fullUrl.includes('/cn/files/');
+
+            if (isFileDownloadRequest) {
+              // 获取匹配的规则并计算新文件的MD5
+              for (const rule of this.responseRules) {
+                if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant') continue;
+
+                const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
+                if (urlMatches && fs.existsSync(rule.zipImplant)) {
+                  const buffer = fs.readFileSync(rule.zipImplant);
+                  const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+                  const md5Base64 = Buffer.from(md5, 'hex').toString('base64');
+
+                  // 修改响应头
+                  ctx.serverToProxyResponse.headers['etag'] = md5;
+                  ctx.serverToProxyResponse.headers['content-md5'] = md5Base64;
+                  ctx.serverToProxyResponse.headers['content-length'] = buffer.length.toString();
+
+                  if (rule.maxTriggers !== undefined) {
+                    rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+                    this.saveResponseRules();
+                  }
+
+                  // 发送响应头修改日志
+                  this.safeIpcSend('rule-log', {
+                    type: 'success',
+                    message: `规则 "${rule.name}" 修改响应头 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
+                    ruleId: rule.id,
+                    ruleName: rule.name,
+                    url: fullUrl,
+                    details: `ETag: ${md5}, Content-MD5: ${md5Base64}`
+                  });
+
+                  break;
+                }
+              }
+            }
+          }
+
+          requestInfo.statusCode = ctx.serverToProxyResponse.statusCode;
+          requestInfo.statusMessage = ctx.serverToProxyResponse.statusMessage;
+          requestInfo.responseHeaders = ctx.serverToProxyResponse.headers;
+          requestInfo.contentType = ctx.serverToProxyResponse.headers['content-type'];
+          requestInfo.contentEncoding = ctx.serverToProxyResponse.headers['content-encoding'];
+          requestInfo.isCompressed = !!requestInfo.contentEncoding;
+          return callback();
+        })
+        ctx.onResponseData((ctx, chunk, callback) => {
+          responseBody.push(chunk)
+          if (responseBodyRules.includes(2)) return callback(null, Buffer.from(''));
+          else return callback(null, chunk);
+        })
+        ctx.onResponseEnd(async (ctx, callback) => {
+          let { buffer, text } = await this.decompressResponse(Buffer.concat(responseBody), ctx.serverToProxyResponse.headers['content-encoding']);
+          if (responseBodyRules.includes(2)) {
+            buffer = this.applyZipImplantRules(fullUrl, buffer);
+            ctx.proxyToClientResponse.write(buffer);
+          }
+          const isJson = /application\/json/.test(requestInfo.contentType);
+          const isFile = /application\/octet-stream|image/.test(requestInfo.contentType);
+          if (isJson) {
+            try {
+              requestInfo.responseBody = JSON.stringify(JSON.parse(text), null, 2);
+            } catch (e) {
+              requestInfo.responseBody = text;
+            }
+          }
+          else if (isFile) {
+            if (requestInfo.responseHeaders["Content-Disposition"]) {
+              requestInfo.responseBody = requestInfo.responseHeaders["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
+            } else {
+              requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
+            }
+          }
+          else {
+            requestInfo.responseBody = text;
+          }
+          requestInfo.bodySize = requestInfo.responseBody.length;
+          this.safeIpcSend('traffic-log', requestInfo);
+          requestInfo.originalResponse = buffer
+          this.trafficCache.set(requestInfo.uuid, requestInfo);
+
+          let extracted_answers;
+
+          // 答案提取
+          if (isFile && requestInfo.responseBody.includes('zip')) {
+            fs.mkdirSync(this.tempDir, { recursive: true });
+            fs.mkdirSync(this.ansDir, { recursive: true });
+            const filePath = path.join(this.tempDir, requestInfo.responseBody)
+            await this.downloadFileByUuid(requestInfo.uuid, filePath)
+            extracted_answers = await this.extractZipFile(filePath, this.ansDir)
+
+            try {
+              const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
+                    localStorage.getItem('keep-cache-files') === 'true'
+                  `);
+
+              if (!shouldKeepCache) {
+                await fs.unlink(filePath)
+                await fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
+              }
+            } catch (error) {
+              await fs.unlink(filePath)
+              await fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
+            }
+          }
+          else {
+            extracted_answers = {};
+          }
+
+          if (responseBodyRules.includes(3)) {
+            this.applyAnswerUploadRules(fullUrl, buffer, extracted_answers)
+          }
+
+          return callback()
+        })
+        return callback();
+      });
+
+      this.proxy.listen({ host: '127.0.0.1', port: this.proxyPort }, resolve);
+    });
+  }
+
+  // 启动代理服务器
   start() {
     return new Promise((resolve, reject) => {
       try {
-        // 检查证书
-        if (!this.certManager.checkCertificate()) {
-          if (!this.certManager.generateCertificate()) {
-            reject(new Error('生成证书失败'));
-            return;
-          }
-        }
-
         // 启动HTTP代理服务器
-        this.httpServer = http.createServer((req, res) => {
-          this.handleHttpRequest(req, res);
-        });
+        this.startProxyPromise()
+          .then(() => {
+            // 启动本地答案服务器
+            this.startBucketServer();
 
-        // 启动HTTPS代理服务器
-        const certPaths = this.certManager.getCertificatePaths();
-        const httpsOptions = {
-          key: fs.readFileSync(certPaths.keyPath),
-          cert: fs.readFileSync(certPaths.certPath)
-        };
-
-        this.httpsServer = https.createServer(httpsOptions, (req, res) => {
-          this.handleHttpsRequest(req, res);
-        });
-
-        // 启动本地答案服务器
-        this.startBucketServer();
-
-        // 监听端口
-        this.httpServer.listen(this.proxyPort, () => {
-          console.log(`HTTP代理服务器已启动，监听端口: ${this.proxyPort}`);
-        });
-
-        this.httpsServer.listen(this.proxyPort + 1, () => {
-          console.log(`HTTPS代理服务器已启动，监听端口: ${this.proxyPort + 1}`);
-        });
-
-        this.isRunning = true;
-        resolve({ running: true, host: '127.0.0.1', port: this.proxyPort });
+            this.isRunning = true;
+            resolve({ running: true, host: '127.0.0.1', port: this.proxyPort });
+          })
+          .catch((error) => {
+            console.error('启动代理服务器失败:', error);
+            reject(error);
+          });
 
       } catch (error) {
         console.error('启动代理服务器失败:', error);
@@ -92,31 +262,87 @@ class ProxyServer {
   stop() {
     return new Promise((resolve) => {
       try {
-        if (this.httpServer) {
-          this.httpServer.close();
-          this.httpServer = null;
+        this.isStopping = true;
+        console.log('开始停止代理服务器...');
+
+        // 关闭代理服务器
+        if (this.proxy) {
+          console.log('代理对象存在，检查close方法...');
+          console.log('代理对象类型:', typeof this.proxy);
+          console.log('代理对象close方法:', typeof this.proxy.close);
+
+          if (typeof this.proxy.close === 'function') {
+            try {
+              // 不使用回调，直接关闭
+              this.proxy.close();
+              console.log('代理服务器关闭命令已发送');
+
+              // 清理代理对象引用
+              this.proxy = null;
+
+              this.handleProxyStop();
+              resolve({ success: true });
+            } catch (closeError) {
+              console.error('调用proxy.close时出错:', closeError);
+              this.proxy = null;
+              this.handleProxyStop();
+              resolve({ success: true });
+            }
+          } else {
+            console.log('代理对象没有close方法，直接处理停止');
+            this.handleProxyStop();
+            resolve({ success: true });
+          }
+        } else {
+          console.log('代理服务器未运行或已关闭');
+          this.handleProxyStop();
+          resolve({ success: true });
         }
 
-        if (this.httpsServer) {
-          this.httpsServer.close();
-          this.httpsServer = null;
-        }
+        setTimeout(() => {
+          if (this.isStopping) {
+            console.log('代理服务器停止超时，强制完成');
+            this.proxy = null;
+            this.handleProxyStop();
+            resolve({ success: true });
+          }
+        }, 3000);
 
-        if (this.bucketServer) {
-          this.bucketServer.close();
-          this.bucketServer = null;
-        }
-
-        this.isRunning = false;
-        this.isCapturing = false;
-        this.requestMap.clear();
-
-        resolve({ success: true });
       } catch (error) {
-        console.error('停止代理服务器失败:', error);
+        console.error('停止代理服务器时出错:', error);
+        this.proxy = null;
+        this.handleProxyStop();
         resolve({ success: false, error: error.message });
       }
     });
+  }
+
+  handleProxyStop() {
+    this.isStopping = false;
+    console.log('处理代理服务器停止...');
+
+    if (this.bucketServer) {
+      try {
+        this.bucketServer.close(() => {
+          console.log('答案服务器已关闭');
+        });
+      } catch (e) {
+        console.error('关闭答案服务器失败:', e);
+      }
+      this.bucketServer = null;
+    }
+
+    this.isRunning = false;
+    this.isCapturing = false;
+
+    this.safeIpcSend('proxy-status', {
+      running: false,
+      host: null,
+      port: null,
+      message: '代理服务器已停止'
+    });
+
+    console.log('代理服务器停止处理完成');
   }
 
   // 处理HTTP请求
@@ -1243,20 +1469,41 @@ class ProxyServer {
 
   // 启动代理服务器
   async start(mainWindow) {
+    console.log('开始启动抓包代理...');
     this.mainWindow = mainWindow;
-    
+
+    // 如果代理已经存在，先停止它
+    if (this.proxy) {
+      console.log('代理已存在，先停止它...');
+      await this.stop();
+    }
+
     // 检查端口是否被占用
+    console.log(`开始检查端口 ${this.proxyPort} 是否被占用...`);
     const portInUse = await this.checkPortInUse(this.proxyPort);
     if (portInUse) {
+      console.log(`端口 ${this.proxyPort} 被占用，准备查找占用进程...`);
+      // 端口被占用，发送日志到UI
+      this.safeIpcSend('rule-log', {
+        type: 'error',
+        message: `端口 ${this.proxyPort} 已被占用，正在尝试结束占用进程...`
+      });
+
       // 查找占用端口的进程
       const pid = await this.findProcessByPort(this.proxyPort);
       if (pid) {
+        console.log(`找到占用进程 PID: ${pid}，准备结束进程...`);
         // 尝试结束进程
         const killed = await this.killProcess(pid);
         if (killed) {
+          this.safeIpcSend('rule-log', {
+            type: 'success',
+            message: `已成功结束占用端口 ${this.proxyPort} 的进程 (PID: ${pid})`
+          });
           // 等待一小段时间确保端口释放
           await new Promise(resolve => setTimeout(resolve, 500));
         } else {
+          // 结束进程失败，发送错误日志
           this.safeIpcSend('rule-log', {
             type: 'error',
             message: `无法结束占用端口 ${this.proxyPort} 的进程 (PID: ${pid})，请手动结束该进程后重试`
@@ -1264,6 +1511,7 @@ class ProxyServer {
           return { running: false, error: '端口被占用' };
         }
       } else {
+        // 无法找到占用端口的进程
         this.safeIpcSend('rule-log', {
           type: 'error',
           message: `端口 ${this.proxyPort} 已被占用，但无法找到占用进程，请手动检查后重试`
@@ -1272,80 +1520,49 @@ class ProxyServer {
       }
     }
 
-    return new Promise(async (resolve, reject) => {
-      try {
-        // 检查证书
-        if (!this.certManager.checkCertificate()) {
-          if (!this.certManager.generateCertificate()) {
-            reject(new Error('生成证书失败'));
-            return;
-          }
-        }
+    console.log(`端口 ${this.proxyPort} 可用，准备启动代理服务器...`);
+    // 创建MITM代理实例
+    await this.startProxyPromise();
 
-        // 启动HTTP代理服务器
-        this.httpServer = http.createServer((req, res) => {
-          this.handleHttpRequest(req, res);
-        });
+    // 自动导入证书
+    try {
+      this.safeIpcSend('certificate-status', {
+        status: 'importing',
+        message: '正在检查并导入证书到受信任的根证书颁发机构...'
+      });
 
-        // 启动HTTPS代理服务器
-        const certPaths = this.certManager.getCertificatePaths();
-        const httpsOptions = {
-          key: fs.readFileSync(certPaths.keyPath),
-          cert: fs.readFileSync(certPaths.certPath)
-        };
+      // 先尝试正常导入
+      let certResult = await this.certManager.importCertificate();
 
-        this.httpsServer = https.createServer(httpsOptions, (req, res) => {
-          this.handleHttpsRequest(req, res);
-        });
+      // 发送证书导入结果状态
+      this.safeIpcSend('certificate-status', {
+        status: certResult.status || (certResult.success ? 'success' : 'error'),
+        message: certResult.message || certResult.error || '证书处理完成'
+      });
 
-        // 启动本地答案服务器
-        this.startBucketServer();
-
-        // 监听端口
-        this.httpServer.listen(this.proxyPort, () => {
-          console.log(`HTTP代理服务器已启动，监听端口: ${this.proxyPort}`);
-        });
-
-        this.httpsServer.listen(this.proxyPort + 1, () => {
-          console.log(`HTTPS代理服务器已启动，监听端口: ${this.proxyPort + 1}`);
-        });
-
-        this.isRunning = true;
-        
-        // 自动导入证书
-        try {
-          this.safeIpcSend('certificate-status', {
-            status: 'importing',
-            message: '正在检查并导入证书到受信任的根证书颁发机构...'
-          });
-
-          // 先尝试正常导入
-          let certResult = await this.certManager.importCertificate();
-
-          // 发送证书导入结果状态
-          this.safeIpcSend('certificate-status', {
-            status: certResult.status || (certResult.success ? 'success' : 'error'),
-            message: certResult.message || certResult.error || '证书处理完成'
-          });
-
-          if (!certResult.success) {
-            console.warn('证书导入失败，但代理将继续启动:', certResult.error);
-          }
-        } catch (error) {
-          this.safeIpcSend('certificate-status', {
-            status: 'error',
-            message: '证书导入过程中发生错误: ' + error.message
-          });
-          console.warn('证书导入过程中发生错误，但代理将继续启动:', error);
-        }
-
-        resolve({ running: true, host: '127.0.0.1', port: this.proxyPort });
-
-      } catch (error) {
-        console.error('启动代理服务器失败:', error);
-        reject(error);
+      if (!certResult.success) {
+        console.warn('证书导入失败，但代理将继续启动:', certResult.error);
       }
+    } catch (error) {
+      this.safeIpcSend('certificate-status', {
+        status: 'error',
+        message: '证书导入过程中发生错误: ' + error.message
+      });
+      console.warn('证书导入过程中发生错误，但代理将继续启动:', error);
+    }
+
+    // 启动本地词库HTTP服务器
+    this.startBucketServer();
+
+    console.log(`万能答案获取代理服务器已启动: 127.0.0.1:${this.proxyPort}`);
+    this.safeIpcSend('proxy-status', {
+      running: true,
+      host: '127.0.0.1',
+      port: this.proxyPort.toString(),
+      message: `代理服务器已启动，请设置天学网客户端代理为 127.0.0.1:${this.proxyPort}`
     });
+
+    return { running: true, host: '127.0.0.1', port: this.proxyPort };
   }
 
   // 停止代理服务器
