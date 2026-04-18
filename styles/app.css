@@ -1,5 +1,4 @@
 @import "./tokens.css";
+@import "./base.css";
 @import "./ui.css";
-@import "./components.css";
 @import "./titlebar.css";
-@import "./simple.css";
