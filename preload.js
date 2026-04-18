@@ -12,19 +12,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   switchUiMode: (mode) => ipcRenderer.invoke('switch-ui-mode', mode),
   toggleAlwaysOnTop: () => ipcRenderer.invoke('toggle-always-on-top'),
   getAlwaysOnTop: () => ipcRenderer.invoke('get-always-on-top'),
-  windowMinimize: () => ipcRenderer.send('window-minimize'),
-  windowClose: () => ipcRenderer.send('window-close'),
+  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+  windowClose: () => ipcRenderer.invoke('window-close'),
   windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize'),
   windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   onWindowMaximized: (callback) => ipcRenderer.on('window-maximized', (event, value) => callback(value)),
-  getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
-  setGlobalScale: (n) => ipcRenderer.send('set-global-scale', n),
-  startCapturing: () => {},
-  getActionTypes: (ruleType) => ipcRenderer.invoke('get-action-types', ruleType),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
-  //答案获取相关API
-  startAnswerProxy: () => ipcRenderer.send('start-answer-proxy'),
-  stopAnswerProxy: () => ipcRenderer.send('stop-answer-proxy'),
+  // 答案获取相关API
+  startAnswerProxy: () => ipcRenderer.invoke('start-answer-proxy'),
+  stopAnswerProxy: () => ipcRenderer.invoke('stop-answer-proxy'),
   setProxyPort: (port) => ipcRenderer.invoke('set-proxy-port', port),
   getProxyPort: () => ipcRenderer.invoke('get-proxy-port'),
   setBucketPort: (port) => ipcRenderer.invoke('set-bucket-port', port),
@@ -49,21 +46,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCertificateStatus: (callback) => ipcRenderer.on('certificate-status', callback),
   onRuleLog: (callback) => ipcRenderer.on('rule-log', callback),
 
+  // 文件操作
   clearCache: () => ipcRenderer.invoke('clear-cache'),
   downloadFile: (uuid) => ipcRenderer.invoke('download-file', uuid),
   shareAnswerFile: (filePath) => ipcRenderer.invoke('share-answer-file', filePath),
+  saveInjectionPackage: (data) => ipcRenderer.invoke('save-injection-package', data),
 
-  openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
-  chooseDirectory: (callback) => ipcRenderer.on('choose-directory', callback),
-  
-  openFileChoosing: () => ipcRenderer.send('open-file-choosing'),
-  chooseFile: (callback) => ipcRenderer.on('choose-file', callback),
-  openImplantZipChoosing: () => ipcRenderer.send('open-implant-zip-choosing'),
+  // 目录选择
+  openDirectoryChoosing: () => ipcRenderer.invoke('open-directory-choosing'),
+  openImplantZipChoosing: () => ipcRenderer.invoke('open-implant-zip-choosing'),
   chooseImplantZip: (callback) => ipcRenderer.on('choose-implant-zip', (event, filePath) => callback(filePath)),
-  importImplantZip: (sourcePath) => ipcRenderer.invoke('import-implant-zip', sourcePath),
-  downloadAndImportInjectionPackage: (arrayBuffer, rulesetName) => ipcRenderer.invoke('download-and-import-injection-package', arrayBuffer, rulesetName),
-  downloadAndSaveInjectionPackage: (arrayBuffer, originalFileName, rulesetName) => ipcRenderer.invoke('download-and-save-injection-package', arrayBuffer, originalFileName, rulesetName),
-  downloadAndSaveInjectionPackageWithMD5: (arrayBuffer, fileName, rulesetName, md5Hash) => ipcRenderer.invoke('download-and-save-injection-package-with-md5', arrayBuffer, fileName, rulesetName, md5Hash),
+
+  // 缓存路径管理
   setCachePath: (newPath) => {
     try {
       const normalizedPath = path.resolve(newPath);
@@ -77,78 +71,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return 0;
     }
   },
-  removeCacheFile: () => {
-    try {
-      let filesDeleted = 0;
-      let dirsDeleted = 0;
-      
-      const countAndDelete = (dirPath) => {
-        if (fs.existsSync(dirPath)) {
-          const stats = fs.statSync(dirPath);
-          if (stats.isDirectory()) {
-            const items = fs.readdirSync(dirPath);
-            for (const item of items) {
-              const itemPath = path.join(dirPath, item);
-              const itemStats = fs.statSync(itemPath);
-              if (itemStats.isDirectory()) {
-                countAndDelete(itemPath);
-              } else {
-                filesDeleted++;
-              }
-            }
-            dirsDeleted++;
-          } else {
-            filesDeleted++;
-          }
-        }
-      };
-      
-      const flipbooksPath = path.join(cachePath, 'flipbooks');
-      const homeworkPath = path.join(cachePath, 'homework');
-      const resourcesPath = path.join(cachePath, 'resources');
-      
-      countAndDelete(flipbooksPath);
-      countAndDelete(homeworkPath);
-      countAndDelete(resourcesPath);
-      
-      fs.rmSync(flipbooksPath, { recursive: true, force: true });
-      fs.rmSync(homeworkPath, { recursive: true, force: true });
-      fs.rmSync(resourcesPath, { recursive: true, force: true });
-      
-      return { success: true, filesDeleted, dirsDeleted };
-    } catch (error) {
-      console.error('删除缓存文件失败:', error);
-      return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
-    }
-  },
+  removeCacheFile: () => ipcRenderer.invoke('remove-cache-file'),
 
-  // 响应体更改规则相关API
-  getResponseRules: () => ipcRenderer.invoke('get-response-rules'),
-  saveResponseRule: (rule) => ipcRenderer.invoke('save-response-rule', rule),
-  saveResponseRules: (rules) => ipcRenderer.invoke('save-response-rules', rules),
-  deleteResponseRule: (ruleId) => ipcRenderer.invoke('delete-response-rule', ruleId),
-  toggleResponseRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
-  exportResponseRules: () => ipcRenderer.invoke('export-response-rules'),
-  importResponseRules: () => ipcRenderer.invoke('import-response-rules'),
-  importResponseRulesFromData: (rulesData) => ipcRenderer.invoke('import-response-rules-from-data', rulesData),
-
-  // 规则管理API（为了兼容渲染进程中的调用）
-  getRules: () => ipcRenderer.invoke('get-response-rules'),
-  saveRule: (rule) => ipcRenderer.invoke('save-response-rule', rule),
-  deleteRule: (ruleId) => ipcRenderer.invoke('delete-response-rule', ruleId),
-  toggleRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
+  // 规则管理API
+  getRules: () => ipcRenderer.invoke('get-rules'),
+  saveRule: (rule) => ipcRenderer.invoke('save-rule', rule),
+  deleteRule: (ruleId) => ipcRenderer.invoke('delete-rule', ruleId),
+  toggleRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-rule', ruleId, enabled),
   resetRuleTriggers: (ruleId) => ipcRenderer.invoke('reset-rule-triggers', ruleId),
+  saveResponseRules: (rules) => ipcRenderer.invoke('save-response-rules', rules),
 
   // 更新相关API
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-  updateConfirm: () => ipcRenderer.send('update-confirm'),
-  updateInstall: () => ipcRenderer.send('update-install'),
-  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  updateConfirm: () => ipcRenderer.invoke('update-confirm'),
+  updateInstall: () => ipcRenderer.invoke('update-install'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, data) => callback(data)),
-  onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, data) => callback(data)),
   onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, data) => callback(data)),
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
 
+  // 上传规则集
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
     const formData = new FormData();
     formData.append('name', name);
