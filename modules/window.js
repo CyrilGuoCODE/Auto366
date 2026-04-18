@@ -29,9 +29,6 @@ class WindowManager {
       }
     });
 
-    // 打开开发者工具
-    this.mainWindow.webContents.openDevTools();
-
     // 加载HTML文件
     this.mainWindow.loadFile('index.html');
 

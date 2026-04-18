@@ -51,7 +51,7 @@ class ProxyServer {
         const protocol = "http"; // 不知道怎么检测http还是https
         const fullUrl = `${protocol}://${ctx.clientToProxyRequest.headers.host}${ctx.clientToProxyRequest.url}`;
 
-        const isAnswerCaptureEnabled = this.isAnswerCaptureEnabled();
+        const isAnswerCaptureEnabled = this.answerCaptureEnabled;
 
         let requestInfo = {
           method: ctx.clientToProxyRequest.method,
@@ -1573,37 +1573,43 @@ class ProxyServer {
         console.log('开始停止代理服务器...');
 
         // 关闭代理服务器
-        if (this.httpServer) {
-          this.httpServer.close();
-          this.httpServer = null;
-        }
+        if (this.proxy) {
+          console.log('代理对象存在，检查close方法...');
+          console.log('代理对象类型:', typeof this.proxy);
+          console.log('代理对象close方法:', typeof this.proxy.close);
 
-        if (this.httpsServer) {
-          this.httpsServer.close();
-          this.httpsServer = null;
-        }
+          if (typeof this.proxy.close === 'function') {
+            try {
+              // 不使用回调，直接关闭
+              this.proxy.close();
+              console.log('代理服务器关闭命令已发送');
 
-        if (this.bucketServer) {
-          try {
-            this.bucketServer.close(() => {
-              console.log('答案服务器已关闭');
-            });
-          } catch (e) {
-            console.error('关闭答案服务器失败:', e);
+              // 清理代理对象引用
+              this.proxy = null;
+
+              this.handleProxyStop();
+              resolve({ success: true });
+            } catch (closeError) {
+              console.error('调用proxy.close时出错:', closeError);
+              this.proxy = null;
+              this.handleProxyStop();
+              resolve({ success: true });
+            }
+          } else {
+            console.log('代理对象没有close方法，直接处理停止');
+            this.handleProxyStop();
+            resolve({ success: true });
           }
-          this.bucketServer = null;
+        } else {
+          console.log('代理服务器未运行或已关闭');
+          this.handleProxyStop();
+          resolve({ success: true });
         }
-
-        this.isRunning = false;
-        this.isCapturing = false;
-        this.requestMap.clear();
-
-        this.handleProxyStop();
-        resolve({ success: true });
 
         setTimeout(() => {
           if (this.isStopping) {
             console.log('代理服务器停止超时，强制完成');
+            this.proxy = null;
             this.handleProxyStop();
             resolve({ success: true });
           }
@@ -1611,6 +1617,7 @@ class ProxyServer {
 
       } catch (error) {
         console.error('停止代理服务器时出错:', error);
+        this.proxy = null;
         this.handleProxyStop();
         resolve({ success: false, error: error.message });
       }

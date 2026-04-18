@@ -345,12 +345,12 @@ class Auto366App {
 }
 
 // 关闭赞赏弹窗
-function closeDonationModal() {
+window.closeDonationModal = function() {
   const modal = document.getElementById('donation-modal');
   if (modal) {
     modal.remove();
   }
-}
+};
 
 // 初始化应用
 window.addEventListener('DOMContentLoaded', async () => {
