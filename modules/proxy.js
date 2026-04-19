@@ -9,7 +9,7 @@ const StreamZip = require('node-stream-zip');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
 const Proxy = require('http-mitm-proxy').Proxy;
-const { ipcMain } = require('electron');
+const { ipcMain, app } = require('electron');
 
 class ProxyServer {
   constructor(certManager) {
@@ -1982,7 +1982,7 @@ class ProxyServer {
     }
   }
 
-  registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, uuidv4, fs, path, os, require) {
+  registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET) {
     // 代理控制 IPC
     ipcMain.on('start-answer-proxy', async () => {
       await this.start(mainWindow);
@@ -2080,7 +2080,7 @@ class ProxyServer {
         const safeFileName = originalFileName.replace(/[<>:"/\\|?*]/g, '_');
         const appDir = path.dirname(process.execPath);
         const fileDir = path.join(appDir, 'file');
-        const isDev = process.env.NODE_ENV === 'development' || !require('electron').app.isPackaged;
+        const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
         const targetDir = isDev ? path.join(process.cwd(), 'file') : fileDir;
         if (!fs.existsSync(targetDir)) {
           fs.mkdirSync(targetDir, { recursive: true });
