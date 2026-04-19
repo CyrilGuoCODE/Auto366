@@ -14,6 +14,19 @@ class FileManager {
     this.ensureDirectories();
   }
 
+  // 获取天学网缓存路径（从 mainWindow 的 localStorage 读取）
+  async getCachePath(mainWindow) {
+    try {
+      const cachePath = await mainWindow.webContents.executeJavaScript(`
+        localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles'
+      `);
+      return cachePath;
+    } catch (error) {
+      console.error('获取缓存路径失败，使用默认值:', error);
+      return null;
+    }
+  }
+
   // 确保目录存在
   ensureDirectories() {
     if (!fs.existsSync(this.cacheDir)) {
@@ -242,13 +255,18 @@ class FileManager {
     let dirsDeleted = 0;
 
     try {
+      console.log('开始清理Auto366缓存，tempDir:', this.tempDir);
+      
       if (!fs.existsSync(this.tempDir)) {
+        console.log('temp目录不存在');
         return { success: true, filesDeleted: 0, dirsDeleted: 0 };
       }
 
       const shouldKeepCache = await mainWindow.webContents.executeJavaScript(`
         localStorage.getItem('keep-cache-files') === 'true'
       `);
+
+      console.log('shouldKeepCache:', shouldKeepCache);
 
       if (!shouldKeepCache) {
         const countItems = (dirPath) => {
@@ -273,23 +291,36 @@ class FileManager {
         };
 
         countItems(this.tempDir);
-        await fs.remove(this.tempDir);
+        console.log('统计完成 - filesDeleted:', filesDeleted, 'dirsDeleted:', dirsDeleted);
+        
+        // 使用 fs-extra 的 removeSync 同步删除，更可靠
+        fs.removeSync(this.tempDir);
+        console.log('temp目录已删除');
+        
+        // 重新创建目录
         await fs.mkdirp(this.tempDir);
+        console.log('temp目录已重新创建');
       }
 
       return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
+      console.error('清理缓存失败:', error);
       return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
     }
   }
 
-  // 清理天学网缓存（file目录）
-  async removeCacheFile() {
+  // 清理天学网缓存（用户指定的file目录）
+  async removeCacheFile(mainWindow) {
     let filesDeleted = 0;
     let dirsDeleted = 0;
 
     try {
-      if (!fs.existsSync(this.fileDir)) {
+      // 从 localStorage 获取用户设置的缓存路径
+      const cachePath = await this.getCachePath(mainWindow);
+      console.log('开始清理天学网缓存，cachePath:', cachePath);
+      
+      if (!fs.existsSync(cachePath)) {
+        console.log('天学网缓存目录不存在:', cachePath);
         return { success: true, filesDeleted: 0, dirsDeleted: 0 };
       }
 
@@ -314,12 +345,16 @@ class FileManager {
         }
       };
 
-      countItems(this.fileDir);
-      await fs.remove(this.fileDir);
-      await fs.mkdirp(this.fileDir);
+      countItems(cachePath);
+      console.log('统计完成 - filesDeleted:', filesDeleted, 'dirsDeleted:', dirsDeleted);
+      
+      // 使用 fs-extra 的 removeSync 同步删除
+      fs.removeSync(cachePath);
+      console.log('天学网缓存目录已删除:', cachePath);
 
       return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
+      console.error('清理天学网缓存失败:', error);
       return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
     }
   }
@@ -334,9 +369,15 @@ class FileManager {
       }
     });
 
-    ipcMain.handle('remove-cache-file', async () => {
+    ipcMain.handle('remove-cache-file', async (event, args) => {
       try {
-        return await this.removeCacheFile();
+        // 获取 mainWindow（从 event.sender 获取）
+        const { BrowserWindow } = require('electron');
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win) {
+          return { success: false, error: '无法获取主窗口', filesDeleted: 0, dirsDeleted: 0 };
+        }
+        return await this.removeCacheFile(win);
       } catch (error) {
         return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
       }

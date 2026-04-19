@@ -25,6 +25,47 @@ class SettingsUI {
           }
         });
       }
+
+      // 初始化缓存路径输入框
+      const cachePathInput = document.getElementById('cachePathInput');
+      if (cachePathInput) {
+        const cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
+        cachePathInput.value = cachePath;
+        
+        // 保存缓存路径变化
+        cachePathInput.addEventListener('change', () => {
+          const newPath = cachePathInput.value.trim();
+          if (newPath) {
+            localStorage.setItem('cache-path', newPath);
+            if (window.electronAPI && window.electronAPI.setCachePath) {
+              window.electronAPI.setCachePath(newPath);
+            }
+            this.logManager.addSuccessLog(`缓存路径已更新为: ${newPath}`);
+          }
+        });
+      }
+
+      // 初始化浏览按钮
+      const browseCacheBtn = document.getElementById('browseCacheBtn');
+      if (browseCacheBtn) {
+        browseCacheBtn.addEventListener('click', async () => {
+          if (window.electronAPI && window.electronAPI.chooseDirectory) {
+            const dirPath = await window.electronAPI.chooseDirectory();
+            if (dirPath) {
+              localStorage.setItem('cache-path', dirPath);
+              if (window.electronAPI.setCachePath) {
+                window.electronAPI.setCachePath(dirPath);
+              }
+              // 更新输入框
+              const cachePathInput = document.getElementById('cachePathInput');
+              if (cachePathInput) {
+                cachePathInput.value = dirPath;
+              }
+              this.logManager.addSuccessLog(`缓存路径已更新为: ${dirPath}`);
+            }
+          }
+        });
+      }
     } catch (error) {
       console.error('初始化缓存设置失败:', error);
     }

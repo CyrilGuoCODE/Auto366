@@ -41,9 +41,12 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error(reason);
 });
 
-ipcMain.on('open-directory-choosing', async () => {
+ipcMain.handle('open-directory-choosing', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-  if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0]);
+  if (!result.canceled) {
+    return result.filePaths[0];
+  }
+  return null;
 });
 
 ipcMain.on('open-file-choosing', async () => {

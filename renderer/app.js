@@ -98,24 +98,6 @@ class Auto366App {
     if (window.electronAPI && window.electronAPI.setCachePath) {
       window.electronAPI.setCachePath(cachePath);
     }
-
-    // 监听目录选择事件
-    if (window.electronAPI && window.electronAPI.chooseDirectory) {
-      window.electronAPI.chooseDirectory((event, path) => {
-        if (path) {
-          localStorage.setItem('cache-path', path);
-          if (window.electronAPI.setCachePath) {
-            window.electronAPI.setCachePath(path);
-          }
-
-          // 更新设置页面的输入框
-          const cachePathInput = document.getElementById('cachePathInput');
-          if (cachePathInput) {
-            cachePathInput.value = path;
-          }
-        }
-      });
-    }
   }
 
   // 绑定更新按钮点击事件

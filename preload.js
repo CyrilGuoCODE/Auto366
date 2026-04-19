@@ -58,7 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
   openFileChoosing: () => ipcRenderer.send('open-file-choosing'),
   openImplantZipChoosing: () => ipcRenderer.send('open-implant-zip-choosing'),
-  chooseDirectory: (callback) => ipcRenderer.on('choose-directory', (event, dirPath) => callback(dirPath)),
+  chooseDirectory: () => ipcRenderer.invoke('open-directory-choosing'),
   chooseFile: (callback) => ipcRenderer.on('choose-file', (event, filePath) => callback(filePath)),
   chooseImplantZip: (callback) => ipcRenderer.on('choose-implant-zip', (event, filePath) => callback(filePath)),
 
