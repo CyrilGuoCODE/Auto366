@@ -23,6 +23,9 @@ default
 # 编辑器文件
 **/.vscode/
 .idea/
+.trae/
+.vscode/
+.kilo/
 *.suo
 *.ntvs*
 *.njsproj
