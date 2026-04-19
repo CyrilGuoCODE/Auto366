@@ -262,6 +262,9 @@ class EventManager {
         if (window.app && window.app.communityUI) {
           await window.app.communityUI.renderSimpleHomeRulesets();
         }
+        if (window.app && window.app.rulesUI) {
+          await window.app.rulesUI.loadRules();
+        }
       });
     }
   }
