@@ -69,7 +69,7 @@ class SettingsUI {
   }
 
   // 确认清理临时文件
-  confirmDeleteTemp() {
+  async confirmDeleteTemp() {
     // 移除确认对话框
     const confirmDialog = document.querySelector('.log-item.warning');
     if (confirmDialog) {
@@ -79,17 +79,16 @@ class SettingsUI {
     // 显示清理进度
     this.logManager.addInfoLog('正在清理Auto366缓存...');
 
-    window.electronAPI.clearCache().then(result => {
-      if (result && result.success) {
-        this.logManager.addSuccessLog(`Auto366缓存清理成功 - 已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
-      } else if (result && !result.success) {
-        this.logManager.addErrorLog(`Auto366缓存清理失败: ${result.error || '未知错误'}`);
-      } else {
-        this.logManager.addSuccessLog('Auto366缓存清理完成');
-      }
-    }).catch(error => {
-      this.logManager.addErrorLog(`Auto366缓存清理失败: ${error.message || error}`);
-    });
+    const result = await window.electronAPI.clearCache();
+    if (result && result.success) {
+      this.logManager.addSuccessLog(`Auto366缓存清理成功 - 已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
+    } else if (result && !result.success) {
+      this.logManager.addErrorLog(`Auto366缓存清理失败: ${result.error || '未知错误'}`);
+    } else if (result) {
+      this.logManager.addSuccessLog('Auto366缓存清理完成');
+    } else {
+      this.logManager.addErrorLog('Auto366缓存清理失败');
+    }
   }
 
   // 处理清理天学网文件缓存
@@ -112,7 +111,7 @@ class SettingsUI {
   }
 
   // 确认清理天学网文件缓存
-  confirmDeleteFileTemp() {
+  async confirmDeleteFileTemp() {
     // 移除确认对话框
     const confirmDialog = document.querySelector('.log-item.warning');
     if (confirmDialog) {
@@ -122,7 +121,7 @@ class SettingsUI {
     // 显示清理进度
     this.logManager.addInfoLog('正在清理天学网缓存...');
 
-    const result = window.electronAPI.removeCacheFile();
+    const result = await window.electronAPI.removeCacheFile();
     if (result && result.success) {
       this.logManager.addSuccessLog(`天学网缓存清理成功 - 已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
     } else if (result && !result.success) {

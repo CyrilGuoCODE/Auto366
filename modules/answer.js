@@ -1,8 +1,8 @@
 const fs = require('fs-extra');
 const path = require('path');
+const os = require('os');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
-const os = require('os');
 const StreamZip = require('node-stream-zip');
 
 class AnswerExtractor {
@@ -15,7 +15,6 @@ class AnswerExtractor {
     this.fileDir = path.join(this.appPath, 'file');
   }
 
-  // 确保目录存在
   ensureDirectories() {
     if (!fs.existsSync(this.cacheDir)) {
       fs.mkdirSync(this.cacheDir, { recursive: true });
@@ -25,7 +24,6 @@ class AnswerExtractor {
     }
   }
 
-  // 解压ZIP文件
   async extractZip(zipPath) {
     try {
       this.ensureDirectories();
@@ -46,7 +44,6 @@ class AnswerExtractor {
     }
   }
 
-  // 提取答案
   async extractAnswers(extractPath) {
     try {
       const answers = [];
@@ -63,7 +60,6 @@ class AnswerExtractor {
     }
   }
 
-  // 扫描目录
   async scanDirectory(dir, answers, processedFiles) {
     const files = fs.readdirSync(dir);
     for (const file of files) {
@@ -82,7 +78,6 @@ class AnswerExtractor {
     }
   }
 
-  // 处理文件
   async processFile(file, content, answers, processedFiles) {
     try {
       let fileAnswers = [];
@@ -104,7 +99,6 @@ class AnswerExtractor {
     }
   }
 
-  // 从JSON提取答案
   extractFromJson(data, file) {
     const answers = [];
     if (Array.isArray(data)) {
@@ -144,7 +138,6 @@ class AnswerExtractor {
     return answers;
   }
 
-  // 从TXT提取答案
   extractFromTxt(content, file) {
     const answers = [];
     const lines = content.split('\n');
@@ -186,7 +179,6 @@ class AnswerExtractor {
     return answers;
   }
 
-  // 保存答案到文件
   saveAnswers(answers) {
     try {
       this.ensureDirectories();
@@ -204,7 +196,6 @@ class AnswerExtractor {
     }
   }
 
-  // 清理临时文件
   cleanup() {
     try {
       if (fs.existsSync(this.extractDir)) {
@@ -215,7 +206,6 @@ class AnswerExtractor {
     }
   }
 
-  // 删除目录
   deleteDirectory(dir) {
     const files = fs.readdirSync(dir);
     for (const file of files) {
@@ -230,9 +220,6 @@ class AnswerExtractor {
     fs.rmdirSync(dir);
   }
 
-  // === 以下为从旧代码中恢复的答案提取方法 ===
-
-  // 检查是否为JSON
   isJsonString(str) {
     try {
       JSON.parse(str);
@@ -242,59 +229,16 @@ class AnswerExtractor {
     }
   }
 
-  // 检查是否为XML
   isXmlString(str) {
     return str.trim().startsWith('<') && str.includes('</') && !str.trim().startsWith('{') && !str.trim().startsWith('[');
   }
 
-  // 检查是否为JS代码
   isJsString(str) {
     const hasJSKeywords = ['function', 'const', 'let', 'var', 'import', 'export', 'class', '=>', 'new ', 'return ', 'if ', 'else ', 'for ', 'while '];
     return str.includes('(') && str.includes(')') && str.includes('{') && str.includes('}') && hasJSKeywords.some(keyword => str.includes(keyword));
   }
 
-  // 从JSON中提取答案
-  extractFromJSON(jsonStr, fileName, questionFile = null) {
-    try {
-      const parsed = JSON.parse(jsonStr);
-      if (Array.isArray(parsed)) {
-        const answers = [];
-        parsed.forEach((item, index) => {
-          if (typeof item === 'object' && item !== null) {
-            const extracted = this.extractFromObject(item, null, index, questionFile);
-            if (extracted && extracted.length > 0) {
-              answers.push(...extracted);
-            }
-          } else if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
-            answers.push({
-              title: fileName || `条目 ${index + 1}`,
-              content: String(item),
-              type: 'text',
-              index: index,
-              file: fileName
-            });
-          }
-        });
-        return answers;
-      } else if (typeof parsed === 'object' && parsed !== null) {
-        return this.extractFromObject(parsed, null, null, questionFile);
-      } else {
-        return [{
-          title: fileName || '内容',
-          content: String(parsed),
-          type: 'text',
-          index: 0,
-          file: fileName
-        }];
-      }
-    } catch (error) {
-      console.error('JSON解析失败:', error);
-      return [];
-    }
-  }
-
-  // 从对象中提取答案
-  extractFromObject(obj, parentKey = null, index = null, questionFile = null) {
+  extractFromObjectJson(obj, parentKey = null, index = null, questionFile = null) {
     const answers = [];
     const answerFields = ['答案', 'answer', 'answers', 'solution', 'solutions', '正确答案', 'correct_answer', 'correctAnswer', '参考答案', 'reference_answer', 'referenceAnswer', '标准答案', 'standard_answer', 'standardAnswer', '解析', 'explanation', 'analysis', '详解', 'content', 'text', 'value', 'result'];
     const skipFields = ['question', '题目', 'stem', '题干', 'id', 'name', 'type', 'index', 'options', 'choices', '选项'];
@@ -302,7 +246,7 @@ class AnswerExtractor {
     if (Array.isArray(obj)) {
       obj.forEach((item, i) => {
         if (typeof item === 'object' && item !== null) {
-          const extracted = this.extractFromObject(item, parentKey, i, questionFile);
+          const extracted = this.extractFromObjectJson(item, parentKey, i, questionFile);
           if (extracted && extracted.length > 0) {
             answers.push(...extracted);
           }
@@ -323,7 +267,7 @@ class AnswerExtractor {
           if (Array.isArray(value)) {
             value.forEach((item, i) => {
               if (typeof item === 'object' && item !== null) {
-                const extracted = this.extractFromObject(item, key, i, questionFile);
+                const extracted = this.extractFromObjectJson(item, key, i, questionFile);
                 if (extracted && extracted.length > 0) {
                   answers.push(...extracted);
                 }
@@ -338,7 +282,7 @@ class AnswerExtractor {
               }
             });
           } else if (typeof value === 'object' && value !== null) {
-            const extracted = this.extractFromObject(value, key, null, questionFile);
+            const extracted = this.extractFromObjectJson(value, key, null, questionFile);
             if (extracted && extracted.length > 0) {
               answers.push(...extracted);
             }
@@ -353,7 +297,7 @@ class AnswerExtractor {
           }
         } else if (!skipFields.some(field => normalizedKey.includes(field.toLowerCase()))) {
           if (typeof value === 'object' && value !== null) {
-            const extracted = this.extractFromObject(value, key, null, questionFile);
+            const extracted = this.extractFromObjectJson(value, key, null, questionFile);
             if (extracted && extracted.length > 0) {
               answers.push(...extracted);
             }
@@ -364,8 +308,46 @@ class AnswerExtractor {
     return answers;
   }
 
-  // 从XML中提取答案
-  extractFromXML(xmlStr, fileName, questionFile = null) {
+  extractFromXMLJson(jsonStr, fileName, questionFile = null) {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (Array.isArray(parsed)) {
+        const answers = [];
+        parsed.forEach((item, index) => {
+          if (typeof item === 'object' && item !== null) {
+            const extracted = this.extractFromObjectJson(item, null, index, questionFile);
+            if (extracted && extracted.length > 0) {
+              answers.push(...extracted);
+            }
+          } else if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+            answers.push({
+              title: fileName || `条目 ${index + 1}`,
+              content: String(item),
+              type: 'text',
+              index: index,
+              file: fileName
+            });
+          }
+        });
+        return answers;
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        return this.extractFromObjectJson(parsed, null, null, questionFile);
+      } else {
+        return [{
+          title: fileName || '内容',
+          content: String(parsed),
+          type: 'text',
+          index: 0,
+          file: fileName
+        }];
+      }
+    } catch (error) {
+      console.error('JSON解析失败:', error);
+      return [];
+    }
+  }
+
+  extractFromXMLRaw(xmlStr, fileName, questionFile = null) {
     const answers = [];
     const answerRegex = /<(answer|answers|solution|solutions|explanation|analysis)[^>]*>(.*?)<\/\1>/gs;
     let match;
@@ -383,8 +365,7 @@ class AnswerExtractor {
     return answers;
   }
 
-  // 从JS中提取答案
-  extractFromJS(jsStr, fileName, questionFile = null) {
+  extractFromJSRaw(jsStr, fileName, questionFile = null) {
     const answers = [];
     const answerPatterns = [
       /(?:答案|answer|solution|explanation)[\s:：=]+["']([^"']+)["']/gi,
@@ -411,8 +392,7 @@ class AnswerExtractor {
     return answers;
   }
 
-  // 从文本中提取答案
-  extractFromText(textStr, fileName, questionFile = null) {
+  extractFromTextRaw(textStr, fileName, questionFile = null) {
     const answers = [];
     const answerPatterns = [
       /答案[：:\s]*([^\n\r]+)/g,
@@ -439,8 +419,7 @@ class AnswerExtractor {
     return answers;
   }
 
-  // 解析问题文件
-  async parseQuestionFile(filePath) {
+  async parseQuestionFileRaw(filePath) {
     try {
       const content = await fs.promises.readFile(filePath, 'utf8');
       return content;
@@ -450,8 +429,7 @@ class AnswerExtractor {
     }
   }
 
-  // 从内容中提取媒体索引
-  extractMediaIndexFromContent(content) {
+  extractMediaIndexFromContentRaw(content) {
     const mediaIndices = [];
     const imgRegex = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
     let match;
@@ -473,8 +451,7 @@ class AnswerExtractor {
     return mediaIndices;
   }
 
-  // 合并答案数据
-  mergeAnswerData(allAnswers) {
+  mergeAnswerDataRaw(allAnswers) {
     const mergedAnswers = [];
     const answerMap = new Map();
     for (const answerGroup of allAnswers) {
@@ -498,8 +475,7 @@ class AnswerExtractor {
     return Array.from(answerMap.values());
   }
 
-  // 对答案进行排序和去重
-  sortAndDeduplicateAnswers(answers) {
+  sortAndDeduplicateAnswersRaw(answers) {
     if (!answers || answers.length === 0) return [];
     const uniqueAnswers = [];
     const seenContent = new Set();
@@ -518,7 +494,6 @@ class AnswerExtractor {
     });
   }
 
-  // 查找本地文件
   async findLocalFile(fileDir, fileName) {
     try {
       const searchInDir = async (dirPath) => {
@@ -541,7 +516,6 @@ class AnswerExtractor {
     }
   }
 
-  // 导入ZIP到目录
   async importZipToDir(zipPath, targetDir) {
     try {
       await fs.ensureDir(targetDir);
@@ -571,8 +545,7 @@ class AnswerExtractor {
     }
   }
 
-  // 从ZIP文件中提取答案
-  async extractZipFile(zipPath, answersDir) {
+  async extractZipFileRaw(zipPath, answersDir) {
     try {
       await fs.ensureDir(answersDir);
       const zipFileName = path.basename(zipPath, '.zip');
@@ -607,20 +580,20 @@ class AnswerExtractor {
                 const content = await fs.promises.readFile(filePath, 'utf8');
                 let extracted = [];
                 if (this.isJsonString(content)) {
-                  extracted = this.extractFromJSON(content, path.basename(filePath), filePath);
+                  extracted = this.extractFromXMLJson(content, path.basename(filePath), filePath);
                 } else if (this.isXmlString(content)) {
-                  extracted = this.extractFromXML(content, path.basename(filePath), filePath);
+                  extracted = this.extractFromXMLRaw(content, path.basename(filePath), filePath);
                 } else if (this.isJsString(content)) {
-                  extracted = this.extractFromJS(content, path.basename(filePath), filePath);
+                  extracted = this.extractFromJSRaw(content, path.basename(filePath), filePath);
                 } else {
-                  extracted = this.extractFromText(content, path.basename(filePath), filePath);
+                  extracted = this.extractFromTextRaw(content, path.basename(filePath), filePath);
                 }
                 answers.push(...extracted);
               } catch (error) {
                 console.error(`处理文件 ${filePath} 失败:`, error);
               }
             }
-            const sortedAnswers = this.sortAndDeduplicateAnswers(answers);
+            const sortedAnswers = this.sortAndDeduplicateAnswersRaw(answers);
             resolve({
               success: true,
               answers: sortedAnswers,
@@ -641,7 +614,6 @@ class AnswerExtractor {
     }
   }
 
-  // 保存答案为ZIP格式
   async saveAnswersAsZip(answers, outputDir) {
     try {
       await fs.ensureDir(outputDir);
@@ -659,7 +631,6 @@ class AnswerExtractor {
     }
   }
 
-  // 保存答案为JSON格式
   async saveAnswersAsJson(answers, outputDir) {
     try {
       await fs.ensureDir(outputDir);
@@ -680,7 +651,6 @@ class AnswerExtractor {
     }
   }
 
-  // 清理HTML文本
   cleanHtmlText(text) {
     return text
       .replace(/&amp;/g, '&')
@@ -694,7 +664,6 @@ class AnswerExtractor {
       .trim();
   }
 
-  // 检测精确类型
   detectExactType(questionObj) {
     if ((questionObj.questions_list && questionObj.questions_list.length > 0 &&
       questionObj.questions_list[0].options && questionObj.questions_list[0].options.length > 0) ||
@@ -722,7 +691,6 @@ class AnswerExtractor {
     return '未知';
   }
 
-  // 检查是否有回答属性
   hasAnswerAttributes(questionObj) {
     if (questionObj.record_speak && questionObj.record_speak.length > 0) {
       const firstItem = questionObj.record_speak[0];
@@ -747,7 +715,6 @@ class AnswerExtractor {
     return false;
   }
 
-  // 解析听后选择题
   parseChoiceQuestions(questionObj, mediaIndex) {
     const results = [];
     if (questionObj.questions_list) {
@@ -786,7 +753,6 @@ class AnswerExtractor {
     return results;
   }
 
-  // 解析听后回答题
   parseAnswerQuestions(questionObj, mediaIndex) {
     const results = [];
 
@@ -847,7 +813,6 @@ class AnswerExtractor {
     return results;
   }
 
-  // 解析听后转述
   parseRetellContent(questionObj, mediaIndex) {
     const results = [];
     if (questionObj.record_speak && questionObj.record_speak.length > 0) {
@@ -870,7 +835,6 @@ class AnswerExtractor {
     return results;
   }
 
-  // 解析朗读短文
   parseReadingContent(questionObj, mediaIndex) {
     const results = [];
     if (questionObj.record_follow_read) {
@@ -903,7 +867,6 @@ class AnswerExtractor {
     return results;
   }
 
-  // 备用解析方法
   parseFallback(questionObj, mediaIndex) {
     const results = [];
 
@@ -935,7 +898,6 @@ class AnswerExtractor {
     return results;
   }
 
-  // 解析问题文件
   parseQuestionFile(fileContent, mediaIndex) {
     try {
       const config = typeof fileContent === 'string' ? JSON.parse(fileContent) : fileContent;
@@ -960,6 +922,462 @@ class AnswerExtractor {
       console.error(error)
       return [];
     }
+  }
+
+  extractAnswersFromFile(filePath) {
+    try {
+      const ext = path.extname(filePath).toLowerCase();
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      if (ext === '.json') {
+        return this.extractFromJSON(content, filePath);
+      } else if (ext === '.js') {
+        let jsonContent = content;
+        const varMatch = content.match(/var\s+pageConfig\s*=\s*({.+?});?$/s);
+        if (varMatch && varMatch[1]) {
+          jsonContent = varMatch[1];
+        }
+        return this.extractFromJS(jsonContent, filePath);
+      } else if (ext === '.xml') {
+        return this.extractFromXML(content, filePath);
+      } else if (ext === '.txt') {
+        return this.extractFromText(content, filePath);
+      }
+
+      return [];
+    } catch (error) {
+      console.error(`读取文件失败: ${filePath}`, error);
+      return [];
+    }
+  }
+
+  extractMediaIndexFromContent(content) {
+    try {
+      const match = content.match(/media\/(?:[A-Za-z0-9]+-)?([TAQ])?(\d+)(?:\.(\d+))?(?:-[^.]*)?\.mp3/i);
+      if (match && match[2]) {
+        const prefix = match[1] ? match[1].toUpperCase() : 'T';
+        const mainIndex = parseInt(match[2]);
+        const subIndex = match[3] ? parseInt(match[3]) : 0;
+        const prefixPriority = { 'T': 1, 'A': 2, 'Q': 3 };
+        return (prefixPriority[prefix] || 1) * 10000 + mainIndex * 10 + subIndex;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  extractFromJSON(content, filePath) {
+    const answers = [];
+    const mediaIndex = this.extractMediaIndexFromContent(content);
+
+    try {
+      let jsonData;
+      try {
+        jsonData = JSON.parse(content);
+      } catch (e) {
+        return [];
+      }
+
+      if (jsonData.Data && jsonData.Data.sentences) {
+        jsonData.Data.sentences.forEach((sentence, index) => {
+          if (sentence.text && sentence.text.length > 2) {
+            answers.push({
+              question: `第${index + 1}题`,
+              answer: sentence.text,
+              content: `请朗读: ${sentence.text}`,
+              questionText: `请朗读: ${sentence.text}`,
+              pattern: 'JSON句子跟读模式',
+              mediaIndex: mediaIndex
+            });
+          }
+        });
+      }
+
+      if (jsonData.Data && jsonData.Data.words) {
+        jsonData.Data.words.forEach((word, index) => {
+          if (word && word.length > 1) {
+            answers.push({
+              question: `第${index + 1}题`,
+              answer: word,
+              content: `请朗读单词: ${word}`,
+              questionText: `请朗读单词: ${word}`,
+              pattern: 'JSON单词发音模式',
+              mediaIndex: mediaIndex
+            });
+          }
+        });
+      }
+
+      if (jsonData.questionObj) {
+        const questionAnswers = this.parseQuestionFile(jsonData, mediaIndex);
+        answers.push(...questionAnswers);
+      }
+
+      if (Array.isArray(jsonData.answers)) {
+        jsonData.answers.forEach((answer, index) => {
+          if (answer && (typeof answer === 'string' || (typeof answer === 'object' && answer.content))) {
+            const answerText = typeof answer === 'string' ? answer : (answer.content || answer.answer || '');
+            answers.push({
+              question: `第${index + 1}题`,
+              answer: answerText,
+              content: answerText,
+              questionText: answerText,
+              pattern: 'JSON答案数组模式',
+              mediaIndex: mediaIndex
+            });
+          }
+        });
+      }
+
+      if (jsonData.questions) {
+        jsonData.questions.forEach((question, index) => {
+          if (question && question.answer) {
+            const questionText = question.question || '未知题目';
+            answers.push({
+              question: `第${index + 1}题`,
+              answer: question.answer,
+              content: `题目: ${questionText}\n答案: ${question.answer}`,
+              questionText: questionText,
+              pattern: 'JSON题目模式',
+              mediaIndex: mediaIndex
+            });
+          }
+        });
+      }
+    } catch (e) {
+      return [];
+    }
+    return answers;
+  }
+
+  extractFromJS(content, filePath) {
+    try {
+      let jsonData;
+      try {
+        jsonData = JSON.parse(content);
+      } catch (e) {
+        console.log('无法解析JS文件，可能该文件为不支持的格式');
+        return [];
+      }
+
+      const mediaIndex = this.extractMediaIndexFromContent(content);
+      return this.parseQuestionFile(jsonData, mediaIndex);
+    } catch (error) {
+      console.error(`解析JS文件失败: ${filePath}`, error);
+      return [];
+    }
+  }
+
+  extractFromXML(content, filePath) {
+    const answers = [];
+
+    try {
+      if (filePath.includes('correctAnswer')) {
+        console.log('开始解析correctAnswer.xml文件');
+        const elementMatches = [...content.matchAll(/<element\s+id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
+        console.log(`找到 ${elementMatches.length} 个element元素`);
+
+        elementMatches.forEach((elementMatch, index) => {
+          const elementId = elementMatch[1];
+          const elementContent = elementMatch[2];
+
+          console.log(`处理correctAnswer element ${index + 1}, ID: "${elementId}" (长度: ${elementId.length})`);
+
+          if (!elementContent.trim()) {
+            console.log(`element ${elementId} 内容为空，跳过`);
+            return;
+          }
+
+          let analysisText = '';
+
+          const analysisMatch = elementContent.match(/<analysis>\s*<!\[CDATA\[(.*?)]]>\s*<\/analysis>/s);
+          if (analysisMatch && analysisMatch[1]) {
+            analysisText = this.cleanHtmlText(analysisMatch[1]);
+            analysisText = analysisText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+          }
+
+          const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answers>/);
+          if (answersMatch && answersMatch[1]) {
+            const answerText = answersMatch[1].trim();
+            const answerItem = {
+              question: `第${index + 1}题`,
+              answer: answerText,
+              content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
+              questionText: answerText,
+              pattern: 'XML正确答案模式',
+              elementId: elementId
+            };
+            answers.push(answerItem);
+            console.log(`添加答案项:`, answerItem);
+          } else if (analysisText) {
+            const answerItem = {
+              question: `第${index + 1}题`,
+              answer: analysisText,
+              content: `解析: ${analysisText}`,
+              questionText: analysisText,
+              pattern: 'XML正确答案模式',
+              elementId: elementId
+            };
+            answers.push(answerItem);
+            console.log(`添加答案项（使用analysis）:`, answerItem);
+          } else {
+            const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answer>/g)];
+
+            if (answerMatches.length > 0) {
+              const allAnswers = answerMatches.map(match => match[1].trim()).filter(text => text);
+
+              if (allAnswers.length === 1) {
+                const answerItem = {
+                  question: `第${index + 1}题`,
+                  answer: allAnswers[0],
+                  content: analysisText ? `解析: ${analysisText}\n答案: ${allAnswers[0]}` : `答案: ${allAnswers[0]}`,
+                  questionText: allAnswers[0],
+                  pattern: 'XML正确答案模式',
+                  elementId: elementId,
+                  answerIndex: 1
+                };
+                answers.push(answerItem);
+                console.log(`添加单答案项:`, answerItem);
+              } else {
+                const combinedAnswer = allAnswers.join(' / ');
+                const answerItem = {
+                  question: `第${index + 1}题`,
+                  answer: combinedAnswer,
+                  content: analysisText ? `解析: ${analysisText}\n答案: ${combinedAnswer}` : `答案: ${combinedAnswer}`,
+                  questionText: combinedAnswer,
+                  pattern: 'XML正确答案模式',
+                  elementId: elementId,
+                  answerIndex: 1,
+                  multipleAnswers: allAnswers
+                };
+                answers.push(answerItem);
+                console.log(`添加多空题答案项:`, answerItem);
+              }
+            } else {
+              console.log(`element ${elementId} 没有找到有效的答案数据`);
+            }
+          }
+        });
+      }
+
+      if (filePath.includes('paper')) {
+        console.log('开始解析paper.xml文件');
+        const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
+        console.log(`找到 ${elementMatches.length} 个element元素`);
+
+        elementMatches.forEach((elementMatch) => {
+          const elementId = elementMatch[1];
+          const elementContent = elementMatch[2];
+
+          console.log(`处理paper element, ID: "${elementId}" (长度: ${elementId.length})`);
+
+          const questionNoMatch = elementContent.match(/<question_no>(\d+)<\/question_no>/);
+          const questionTextMatch = elementContent.match(/<question_text>\s*<!\[CDATA\[(.*?)]]>\s*<\/question_text>/s);
+
+          console.log(`处理element ${elementId}, 题目编号: ${questionNoMatch ? questionNoMatch[1] : '未找到'}, 题目文本匹配: ${!!questionTextMatch}`);
+
+          const knowledgeMatch = elementContent.match(/<knowledge>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/knowledge>/);
+
+          const attachmentMatch = elementContent.match(/<attachment>\s*<!\[CDATA\[(.*?)]]>\s*<\/attachment>/s);
+          let attachmentAnswers = [];
+          if (attachmentMatch && attachmentMatch[1]) {
+            try {
+              const decodedAttachment = decodeURIComponent(attachmentMatch[1]);
+              const answersInAttachment = decodedAttachment.match(/<answers>([\s\S]*?)<\/answers>/);
+              if (answersInAttachment) {
+                const itemMatches = [...answersInAttachment[0].matchAll(/<item[^>]*>\s*<!\[CDATA\[([\s\S]*?)]]>\s*<\/item>/g)];
+                attachmentAnswers = itemMatches.map(match => this.cleanHtmlText(match[1].trim())).filter(text => text);
+              }
+            } catch (e) {
+              console.log('解析attachment失败:', e);
+            }
+          }
+
+          if (questionNoMatch && questionTextMatch) {
+            const questionNo = parseInt(questionNoMatch[1]);
+            let questionText = questionTextMatch[1];
+
+            console.log(`原始题目文本: "${questionText}"`);
+
+            questionText = this.cleanHtmlText(questionText)
+              .replace(/\{\{\d+\}\}/g, ' ');
+
+            console.log(`清理后题目文本: "${questionText}"`);
+
+            const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*[^>]*>\s*<!\[CDATA\[(.*?)]]>\s*<\/option>/gs)];
+
+            let answerInfo = {
+              question: `第${questionNo}题`,
+              answer: attachmentAnswers.length > 0 ? attachmentAnswers.join('\n') : (knowledgeMatch ? knowledgeMatch[1].trim() : '未找到答案'),
+              content: `题目: ${questionText}`,
+              questionText: questionText,
+              pattern: 'XML题目模式',
+              elementId: elementId,
+              questionNo: questionNo
+            };
+
+            if (attachmentAnswers.length > 0) {
+              answerInfo.pattern = 'XML题目附件模式';
+              answerInfo.attachmentAnswers = attachmentAnswers;
+            }
+
+            if (optionsMatches.length > 0) {
+              const optionsText = optionsMatches.map(optionMatch =>
+                `${optionMatch[1]}. ${optionMatch[2].trim()}`
+              ).join('\n');
+
+              answerInfo.content = `题目: ${questionText}\n\n选项:\n${optionsText}`;
+              answerInfo.pattern = 'XML题目选项模式';
+              answerInfo.options = optionsMatches.map(optionMatch => ({
+                id: optionMatch[1],
+                text: optionMatch[2].trim()
+              }));
+            }
+
+            answers.push(answerInfo);
+            console.log(`添加题目信息: elementId="${elementId}", questionNo=${questionNo}, questionText="${questionText}"`);
+          } else {
+            console.log(`跳过element ${elementId}: 缺少题目编号或题目文本`);
+          }
+        });
+      }
+
+      return answers;
+    } catch (error) {
+      console.error(`解析XML文件失败: ${filePath}`, error);
+      return [];
+    }
+  }
+
+  extractFromText(content, filePath) {
+    const answers = [];
+
+    try {
+      const answerPatterns = [
+        /答案\s*[:：]\s*([^\n]+)/g,
+        /标准答案\s*[:：]\s*([^\n]+)/g,
+        /正确答案\s*[:：]\s*([^\n]+)/g,
+        /参考答案\s*[:：]\s*([^\n]+)/g,
+        /\b[A-D]\b/g
+      ];
+
+      const lines = content.split('\n');
+      let lineNum = 0;
+
+      for (const line of lines) {
+        lineNum++;
+
+        for (const pattern of answerPatterns) {
+          const matches = [...line.matchAll(pattern)];
+
+          if (matches.length > 0) {
+            matches.forEach((match, index) => {
+              if (match[1]) {
+                answers.push({
+                  question: `文本-${lineNum}-${index + 1}`,
+                  answer: match[1].trim(),
+                  content: `答案: ${match[1].trim()} (行: ${lineNum})`,
+                  questionText: match[1].trim(),
+                  pattern: '文本答案模式'
+                });
+              }
+            });
+          }
+        }
+
+        const optionMatches = [...line.matchAll(/\b([A-D])\b/g)];
+        if (optionMatches.length > 0) {
+          answers.push({
+            question: `选项-${lineNum}`,
+            answer: optionMatches.map(m => m[1]).join(''),
+            content: `选项: ${optionMatches.map(m => m[1]).join('')} (行: ${lineNum})`,
+            questionText: optionMatches.map(m => m[1]).join(''),
+            pattern: '文本选项模式'
+          });
+        }
+      }
+
+      return answers;
+    } catch (error) {
+      console.error(`解析文本文件失败: ${filePath}`, error);
+      return [];
+    }
+  }
+
+  mergeAnswerData(allAnswers) {
+    try {
+      const correctAnswers = allAnswers.filter(ans => ans.sourceFile === 'correctAnswer.xml');
+      const paperQuestions = allAnswers.filter(ans => ans.sourceFile === 'paper.xml');
+
+      if (correctAnswers.length > 0 && paperQuestions.length > 0) {
+        const mergedAnswers = [];
+        let successfulMerges = 0;
+
+        correctAnswers.forEach((correctAns, index) => {
+          let matchingQuestion = paperQuestions.find(q => q.elementId === correctAns.elementId);
+
+          console.log(`尝试匹配答案: elementId="${correctAns.elementId}", 找到匹配题目: ${!!matchingQuestion}`);
+
+          if (!matchingQuestion) {
+            const questionNumber = index + 1;
+            matchingQuestion = paperQuestions.find(q => q.questionNo === questionNumber);
+            console.log(`elementId匹配失败，尝试按题目编号匹配: 第${questionNumber}题, 找到匹配: ${!!matchingQuestion}`);
+          }
+
+          if (matchingQuestion) {
+            console.log(`匹配成功 - 题目文本: "${matchingQuestion.questionText}"`);
+            mergedAnswers.push({
+              ...correctAns,
+              questionText: matchingQuestion.questionText
+            });
+            successfulMerges++;
+          } else {
+            console.log(`未找到匹配题目，保持原样: elementId="${correctAns.elementId}", 题目编号: 第${index + 1}题`);
+            mergedAnswers.push(correctAns);
+          }
+        });
+
+        console.log(`合并完成: 成功合并 ${successfulMerges}/${correctAnswers.length} 个答案`);
+
+        if (successfulMerges > 0) {
+          return this.sortAndDeduplicateAnswers(mergedAnswers);
+        }
+
+        console.log('合并成功率过低，回退到普通模式');
+        return this.sortAndDeduplicateAnswers(allAnswers);
+      }
+
+      return this.sortAndDeduplicateAnswers(allAnswers);
+    } catch (error) {
+      console.error('合并答案数据失败:', error);
+      return allAnswers;
+    }
+  }
+
+  sortAndDeduplicateAnswers(answers) {
+    if (!answers || answers.length === 0) return answers;
+
+    const sortedByMedia = [...answers].sort((a, b) => {
+      const indexA = a.mediaIndex ?? Infinity;
+      const indexB = b.mediaIndex ?? Infinity;
+      return indexA - indexB;
+    });
+
+    const seen = new Map();
+    const deduplicated = [];
+
+    for (const ans of sortedByMedia) {
+      const key = `${ans.questionText}|${ans.answer}`;
+      if (!seen.has(key)) {
+        seen.set(key, true);
+        deduplicated.push(ans);
+      }
+    }
+
+    console.log(`排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条`);
+
+    return deduplicated;
   }
 }
 

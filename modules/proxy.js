@@ -10,6 +10,7 @@ const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
 const Proxy = require('http-mitm-proxy').Proxy;
 const { ipcMain, app } = require('electron');
+const AnswerExtractor = require('./answer');
 
 class ProxyServer {
   constructor(certManager) {
@@ -26,6 +27,7 @@ class ProxyServer {
     this.serverDatas = {};
     this.isStopping = false;
     this.proxy = null;
+    this.answerExtractor = new AnswerExtractor();
     
     // 初始化目录
     this.appPath = process.cwd();
@@ -1271,26 +1273,6 @@ class ProxyServer {
     return answerFiles;
   }
 
-  // 从文件中提取答案
-  extractAnswersFromFile(filePath) {
-    const answers = [];
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      // 这里可以添加具体的答案提取逻辑
-      // 暂时返回空数组，需要根据实际情况实现
-    } catch (error) {
-      console.error('提取答案失败:', error);
-    }
-    return answers;
-  }
-
-  // 合并答案数据
-  mergeAnswerData(allAnswers) {
-    // 这里可以添加具体的答案合并逻辑
-    // 暂时返回原始数据，需要根据实际情况实现
-    return allAnswers;
-  }
-
   // 解压ZIP文件
   async extractZipFile(zipPath, ansDir) {
     let mergedAnswers = {};
@@ -1370,7 +1352,7 @@ class ProxyServer {
               content: content
             });
 
-            const answers = this.extractAnswersFromFile(filePath);
+            const answers = this.answerExtractor.extractAnswersFromFile(filePath);
             if (answers.length > 0) {
               allAnswers = allAnswers.concat(answers.map(ans => ({
                 ...ans,
@@ -1407,7 +1389,7 @@ class ProxyServer {
 
         if (allAnswers.length > 0) {
           // 尝试合并correctAnswer.xml和paper.xml的数据
-          mergedAnswers = this.mergeAnswerData(allAnswers);
+          mergedAnswers = this.answerExtractor.mergeAnswerData(allAnswers);
 
           // 保存所有答案到文件
           const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
@@ -2029,16 +2011,6 @@ class ProxyServer {
 
     ipcMain.handle('get-answer-capture-enabled', () => {
       return this.getAnswerCaptureEnabled();
-    });
-
-    // 文件操作 IPC
-    ipcMain.handle('clear-cache', async () => {
-      try {
-        const result = await this.clearCache();
-        return result;
-      } catch (error) {
-        return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
-      }
     });
 
     ipcMain.handle('import-implant-zip', async (event, sourcePath) => {

@@ -1,13 +1,16 @@
-const { dialog, app } = require('electron');
-const fs = require('fs');
+const { dialog, app, ipcMain } = require('electron');
+const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
 const https = require('https');
 const http = require('http');
 
 class FileManager {
-  constructor() {
+  constructor(appPath) {
+    this.appPath = appPath || process.cwd();
     this.cacheDir = path.join(os.homedir(), '.Auto366', 'cache');
+    this.tempDir = path.join(this.appPath, 'temp');
+    this.fileDir = path.join(this.appPath, 'file');
     this.ensureDirectories();
   }
 
@@ -233,35 +236,104 @@ class FileManager {
     }
   }
 
-  // 清理缓存
-  clearCache() {
+  // 清理Auto366缓存（temp目录）
+  async clearCache(mainWindow) {
+    let filesDeleted = 0;
+    let dirsDeleted = 0;
+
     try {
-      if (fs.existsSync(this.cacheDir)) {
-        const files = fs.readdirSync(this.cacheDir);
-        let filesDeleted = 0;
-        let dirsDeleted = 0;
+      const shouldKeepCache = await mainWindow.webContents.executeJavaScript(`
+        localStorage.getItem('keep-cache-files') === 'true'
+      `);
 
-        files.forEach(file => {
-          const filePath = path.join(this.cacheDir, file);
-          const stat = fs.statSync(filePath);
-
-          if (stat.isFile()) {
-            fs.unlinkSync(filePath);
-            filesDeleted++;
-          } else if (stat.isDirectory()) {
-            this.deleteDirectory(filePath);
-            dirsDeleted++;
+      if (!shouldKeepCache && fs.existsSync(this.tempDir)) {
+        const countItems = (dirPath) => {
+          if (fs.existsSync(dirPath)) {
+            const stats = fs.statSync(dirPath);
+            if (stats.isDirectory()) {
+              const items = fs.readdirSync(dirPath);
+              for (const item of items) {
+                const itemPath = path.join(dirPath, item);
+                const itemStats = fs.statSync(itemPath);
+                if (itemStats.isDirectory()) {
+                  countItems(itemPath);
+                } else {
+                  filesDeleted++;
+                }
+              }
+              dirsDeleted++;
+            } else {
+              filesDeleted++;
+            }
           }
-        });
+        };
 
-        return { success: true, filesDeleted, dirsDeleted };
+        countItems(this.tempDir);
+        await fs.rm(this.tempDir, { recursive: true, force: true });
       }
 
-      return { success: true, filesDeleted: 0, dirsDeleted: 0 };
+      return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
-      console.error('清理缓存失败:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
     }
+  }
+
+  // 清理天学网缓存（file目录）
+  async removeCacheFile() {
+    let filesDeleted = 0;
+    let dirsDeleted = 0;
+
+    try {
+      if (fs.existsSync(this.fileDir)) {
+        const countItems = (dirPath) => {
+          if (fs.existsSync(dirPath)) {
+            const stats = fs.statSync(dirPath);
+            if (stats.isDirectory()) {
+              const items = fs.readdirSync(dirPath);
+              for (const item of items) {
+                const itemPath = path.join(dirPath, item);
+                const itemStats = fs.statSync(itemPath);
+                if (itemStats.isDirectory()) {
+                  countItems(itemPath);
+                } else {
+                  filesDeleted++;
+                }
+              }
+              dirsDeleted++;
+            } else {
+              filesDeleted++;
+            }
+          }
+        };
+
+        countItems(this.fileDir);
+        await fs.rm(this.fileDir, { recursive: true, force: true });
+        await fs.mkdir(this.fileDir, { recursive: true });
+      }
+
+      return { success: true, filesDeleted, dirsDeleted };
+    } catch (error) {
+      return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
+    }
+  }
+
+  // 注册 IPC 处理器
+  registerIpcHandlers(mainWindow) {
+    ipcMain.handle('clear-cache', async () => {
+      try {
+        return await this.clearCache(mainWindow);
+      } catch (error) {
+        return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
+      }
+    });
+
+    ipcMain.handle('remove-cache-file', async () => {
+      try {
+        return await this.removeCacheFile();
+      } catch (error) {
+        return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
+      }
+    });
   }
 
   // 删除目录

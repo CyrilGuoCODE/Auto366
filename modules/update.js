@@ -1,233 +1,164 @@
-const { app, dialog, shell } = require('electron');
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { execSync } = require('child_process');
+const { app, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 
 class UpdateManager {
-  constructor() {
-    this.currentVersion = app.getVersion();
-    this.updateUrl = 'https://366.cyril.qzz.io/api/update';
-    this.downloadUrl = 'https://366.cyril.qzz.io/download';
+  constructor(mainWindow) {
+    this.mainWindow = mainWindow;
+    this.updateInfo = null;
+
+    this.setupAutoUpdater();
+    this.registerIpcHandlers();
   }
 
-  // 检查更新
-  checkForUpdates() {
-    return new Promise((resolve) => {
-      try {
-        // 开发环境不检查更新
-        if (app.isDev) {
-          resolve({ hasUpdate: false, isDev: true });
-          return;
-        }
+  setupAutoUpdater() {
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'cyrilguocode',
+      repo: 'Auto366'
+    });
 
-        const options = {
-          hostname: '366.cyril.qzz.io',
-          port: 443,
-          path: '/api/update?version=' + this.currentVersion,
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
+    autoUpdater.autoDownload = false;
+
+    autoUpdater.on('update-available', (info) => {
+      this.updateInfo = info;
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        let releaseNotes = '新版本已发布，请更新以获得最新功能。';
+        if (info.releaseNotes) {
+          if (typeof info.releaseNotes === 'string') {
+            releaseNotes = info.releaseNotes;
+          } else if (info.releaseNotes.body) {
+            releaseNotes = info.releaseNotes.body;
+          } else if (Array.isArray(info.releaseNotes)) {
+            releaseNotes = info.releaseNotes.join('\n');
           }
-        };
+        }
+        this.mainWindow.webContents.send('update-available', {
+          version: info.version,
+          releaseDate: info.releaseDate,
+          releaseNotes: releaseNotes
+        });
+      }
+    });
 
-        const req = https.request(options, (res) => {
-          let data = '';
+    autoUpdater.on('download-progress', (progressObj) => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('update-download-progress', {
+          percent: progressObj.percent,
+          transferred: progressObj.transferred,
+          total: progressObj.total,
+          bytesPerSecond: progressObj.bytesPerSecond
+        });
+      }
+    });
 
-          res.on('data', (chunk) => {
-            data += chunk;
-          });
+    autoUpdater.on('update-downloaded', () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('update-downloaded');
+      }
+    });
 
-          res.on('end', () => {
-            try {
-              // 检查响应是否为有效的JSON
-              if (!data || typeof data !== 'string') {
-                throw new Error('无效的响应数据');
-              }
-              
-              // 尝试解析JSON
-              const result = JSON.parse(data);
-              
-              if (result.success && result.hasUpdate) {
-                resolve({
-                  hasUpdate: true,
-                  version: result.version,
-                  releaseNotes: result.releaseNotes,
-                  downloadUrl: result.downloadUrl
-                });
-              } else {
-                resolve({ hasUpdate: false, message: result.message || '当前已是最新版本' });
-              }
-            } catch (error) {
-              // 静默处理非 JSON 响应，避免控制台错误信息干扰用户
-              // 服务器可能返回 "API endpoint not found" 等非 JSON 数据
-              resolve({ hasUpdate: false, error: '解析更新信息失败' });
-            }
+    autoUpdater.on('error', (error) => {
+      console.error('更新检查失败:', error);
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('update-not-available', {});
+      }
+    });
+  }
+
+  registerIpcHandlers() {
+    ipcMain.on('update-confirm', async () => {
+      if (this.updateInfo) {
+        await autoUpdater.downloadUpdate();
+      }
+    });
+
+    ipcMain.on('update-install', () => {
+      autoUpdater.quitAndInstall(false, true);
+    });
+
+    ipcMain.handle('check-for-updates', async () => {
+      if (!app.isPackaged) {
+        return { hasUpdate: false, isDev: true, message: '开发环境不支持自动更新' };
+      }
+
+      try {
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            resolve({ hasUpdate: false, message: '检查更新超时' });
+          }, 20000);
+
+          const onUpdateAvailable = (info) => {
+            clearTimeout(timeout);
+            autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+            autoUpdater.removeListener('error', onError);
+            resolve({
+              hasUpdate: true,
+              version: info.version,
+              releaseNotes: info.releaseNotes,
+              releaseDate: info.releaseDate
+            });
+          };
+
+          const onUpdateNotAvailable = () => {
+            clearTimeout(timeout);
+            autoUpdater.removeListener('update-available', onUpdateAvailable);
+            autoUpdater.removeListener('error', onError);
+            resolve({ hasUpdate: false, message: '当前已是最新版本' });
+          };
+
+          const onError = (error) => {
+            clearTimeout(timeout);
+            autoUpdater.removeListener('update-available', onUpdateAvailable);
+            autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+            resolve({ hasUpdate: false, error: error.message });
+          };
+
+          autoUpdater.once('update-available', onUpdateAvailable);
+          autoUpdater.once('update-not-available', onUpdateNotAvailable);
+          autoUpdater.once('error', onError);
+
+          autoUpdater.checkForUpdates().catch(error => {
+            clearTimeout(timeout);
+            autoUpdater.removeListener('update-available', onUpdateAvailable);
+            autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+            autoUpdater.removeListener('error', onError);
+            resolve({ hasUpdate: false, error: error.message });
           });
         });
-
-        req.on('error', (error) => {
-          console.error('检查更新失败:', error);
-          resolve({ hasUpdate: false, error: '检查更新失败' });
-        });
-
-        req.end();
-
       } catch (error) {
         console.error('检查更新失败:', error);
-        resolve({ hasUpdate: false, error: '检查更新失败' });
+        return { hasUpdate: false, error: error.message };
       }
     });
   }
 
-  // 下载更新
-  downloadUpdate(version) {
-    return new Promise((resolve, reject) => {
-      try {
-        const platform = os.platform();
-        let filename = '';
-
-        switch (platform) {
-          case 'win32':
-            filename = `Auto366-${version}-win.exe`;
-            break;
-          case 'darwin':
-            filename = `Auto366-${version}-mac.dmg`;
-            break;
-          case 'linux':
-            filename = `Auto366-${version}-linux.AppImage`;
-            break;
-          default:
-            reject(new Error('不支持的平台'));
-            return;
-        }
-
-        const downloadUrl = `${this.downloadUrl}/${filename}`;
-        const downloadPath = path.join(os.tmpdir(), filename);
-
-        console.log(`开始下载更新: ${downloadUrl}`);
-
-        const file = fs.createWriteStream(downloadPath);
-        https.get(downloadUrl, (response) => {
-          const totalSize = parseInt(response.headers['content-length'], 10);
-          let downloadedSize = 0;
-
-          response.pipe(file);
-
-          response.on('data', (chunk) => {
-            downloadedSize += chunk.length;
-            const progress = Math.floor((downloadedSize / totalSize) * 100);
-            
-            // 发送下载进度
-            if (this.onDownloadProgress) {
-              this.onDownloadProgress({
-                percent: progress,
-                bytesPerSecond: 0, // 简化处理
-                total: totalSize,
-                transferred: downloadedSize
+  checkForUpdatesOnStartup() {
+    if (app.isPackaged) {
+      setTimeout(() => {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.executeJavaScript(`
+            localStorage.getItem('auto-check-updates') !== 'false'
+          `).then(autoCheckEnabled => {
+            if (autoCheckEnabled) {
+              console.log('应用启动，开始检查更新...');
+              autoUpdater.checkForUpdates().catch(error => {
+                console.error('启动时检查更新失败:', error);
               });
+            } else {
+              console.log('自动检查更新已禁用');
             }
+          }).catch(error => {
+            console.error('获取自动检查更新设置失败:', error);
+            console.log('获取设置失败，默认检查更新...');
+            autoUpdater.checkForUpdates().catch(error => {
+              console.error('默认检查更新失败:', error);
+            });
           });
-
-          file.on('finish', () => {
-            file.close();
-            console.log(`更新下载完成: ${downloadPath}`);
-            resolve(downloadPath);
-          });
-
-        }).on('error', (error) => {
-          fs.unlinkSync(downloadPath);
-          console.error('下载更新失败:', error);
-          reject(new Error('下载更新失败'));
-        });
-
-      } catch (error) {
-        console.error('下载更新失败:', error);
-        reject(new Error('下载更新失败'));
-      }
-    });
-  }
-
-  // 安装更新
-  installUpdate(downloadPath) {
-    try {
-      const platform = os.platform();
-
-      switch (platform) {
-        case 'win32':
-          // Windows系统
-          execSync(`"${downloadPath}" /S`, { detached: true, stdio: 'ignore' });
-          break;
-        case 'darwin':
-          // macOS系统
-          execSync(`open "${downloadPath}"`, { detached: true, stdio: 'ignore' });
-          break;
-        case 'linux':
-          // Linux系统
-          execSync(`chmod +x "${downloadPath}" && "${downloadPath}"`, { detached: true, stdio: 'ignore' });
-          break;
-        default:
-          throw new Error('不支持的平台');
-      }
-
-      // 退出应用
-      app.quit();
-
-    } catch (error) {
-      console.error('安装更新失败:', error);
-      throw new Error('安装更新失败');
-    }
-  }
-
-  // 手动检查更新
-  async checkForUpdatesManually() {
-    try {
-      const result = await this.checkForUpdates();
-      
-      if (result.hasUpdate) {
-        const options = {
-          type: 'info',
-          title: '发现新版本',
-          message: `发现新版本 ${result.version}，是否立即下载？`,
-          detail: result.releaseNotes || '性能优化和错误修复',
-          buttons: ['立即下载', '稍后提醒']
-        };
-
-        const { response } = await dialog.showMessageBox(options);
-        if (response === 0) {
-          // 立即下载
-          const downloadPath = await this.downloadUpdate(result.version);
-          this.installUpdate(downloadPath);
         }
-      } else {
-        const options = {
-          type: 'info',
-          title: '检查更新',
-          message: result.message || '当前已是最新版本',
-          buttons: ['确定']
-        };
-
-        await dialog.showMessageBox(options);
-      }
-
-    } catch (error) {
-      console.error('手动检查更新失败:', error);
-      const options = {
-        type: 'error',
-        title: '检查更新失败',
-        message: '检查更新失败，请检查网络连接',
-        buttons: ['确定']
-      };
-
-      await dialog.showMessageBox(options);
-    }
-  }
-
-  // 注册事件监听器
-  on(event, callback) {
-    if (event === 'downloadProgress') {
-      this.onDownloadProgress = callback;
+      }, 1000);
     }
   }
 }

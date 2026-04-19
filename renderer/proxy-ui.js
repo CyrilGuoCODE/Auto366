@@ -13,6 +13,21 @@ class ProxyUI {
       });
     }
 
+    // 初始化清理缓存按钮
+    const deleteTempBtn = document.getElementById('deleteTempBtn');
+    if (deleteTempBtn) {
+      deleteTempBtn.addEventListener('click', () => {
+        window.universalAnswerFeature.handleDeleteTemp();
+      });
+    }
+
+    const deleteFileTempBtn = document.getElementById('deleteFileTempBtn');
+    if (deleteFileTempBtn) {
+      deleteFileTempBtn.addEventListener('click', () => {
+        window.universalAnswerFeature.handleDeleteFileTemp();
+      });
+    }
+
     // 初始化答案获取开关
     const answerCaptureToggle = document.getElementById('answerCaptureEnabled');
     if (answerCaptureToggle) {
