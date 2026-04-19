@@ -364,8 +364,9 @@ class EventManager {
     if (importInput) {
       importInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if (file) {
-          // 由 answers-ui 模块处理
+        if (file && window.app && window.app.answersUI) {
+          window.app.answersUI.importAnswerFile(file);
+          e.target.value = '';
         }
       });
     }

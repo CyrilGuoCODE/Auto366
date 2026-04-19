@@ -434,6 +434,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM 加载完成，开始初始化应用...');
   try {
     const app = new Auto366App();
+    window.app = app;
     console.log('Auto366App 实例创建成功');
     app.exposeMethods();
     console.log('方法暴露成功');

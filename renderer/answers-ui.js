@@ -39,7 +39,7 @@ class AnswersUI {
     }
 
     // 分享答案按钮
-    const shareAnswersBtn = document.getElementById('shareAnswersBtn');
+    const shareAnswersBtn = document.getElementById('shareAnswerBtn');
     if (shareAnswersBtn) {
       shareAnswersBtn.addEventListener('click', () => {
         this.shareAnswers();
@@ -47,7 +47,7 @@ class AnswersUI {
     }
 
     // 导出答案按钮
-    const exportAnswersBtn = document.getElementById('exportAnswersBtn');
+    const exportAnswersBtn = document.getElementById('exportAnswerBtn');
     if (exportAnswersBtn) {
       exportAnswersBtn.addEventListener('click', () => {
         this.exportAnswers();
@@ -428,20 +428,24 @@ class AnswersUI {
   }
 
   // 导出答案文件
-  exportAnswers() {
+  async exportAnswers() {
     if (!this.state.lastAnswersData || !this.state.lastAnswersData.answers || this.state.lastAnswersData.answers.length === 0) {
       this.logManager.addErrorLog('没有可导出的答案数据');
       return;
     }
 
     try {
-      // 生成导出数据
+      let appVersion = '1.0';
+      if (window.electronAPI && window.electronAPI.getAppVersion) {
+        appVersion = await window.electronAPI.getAppVersion();
+      }
+
       const exportData = {
         timestamp: new Date().toISOString(),
         totalAnswers: this.state.lastAnswersData.answers.length,
         answers: this.state.lastAnswersData.answers,
-        version: '1.0',
-        exportedBy: 'UniversalAnswerTool'
+        version: appVersion,
+        exportedBy: 'Auto366'
       };
 
       // 创建下载链接
