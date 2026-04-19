@@ -27,7 +27,9 @@ class ProxyServer {
     this.serverDatas = {};
     this.isStopping = false;
     this.proxy = null;
-    this.answerExtractor = new AnswerExtractor();
+    this.answerExtractor = new AnswerExtractor((log) => {
+      this.safeIpcSend('rule-log', log);
+    });
     
     // 初始化目录
     this.appPath = process.cwd();

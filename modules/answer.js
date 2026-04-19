@@ -6,13 +6,20 @@ const crypto = require('crypto');
 const StreamZip = require('node-stream-zip');
 
 class AnswerExtractor {
-  constructor() {
+  constructor(logCallback = null) {
     this.cacheDir = path.join(os.homedir(), '.Auto366', 'cache');
     this.extractDir = path.join(this.cacheDir, 'extracted');
     this.appPath = process.cwd();
     this.tempDir = path.join(this.appPath, 'temp');
     this.ansDir = path.join(this.appPath, 'answers');
     this.fileDir = path.join(this.appPath, 'file');
+    this.logCallback = logCallback;
+  }
+
+  emitLog(type, message, details = null) {
+    if (this.logCallback) {
+      this.logCallback({ type, message, details });
+    }
   }
 
   ensureDirectories() {
@@ -187,8 +194,11 @@ class AnswerExtractor {
     const answerFiles = this.findAnswerFiles(extractDir);
 
     if (answerFiles.length === 0) {
+      this.emitLog('warning', '未找到可能包含答案的文件');
       return { success: false, message: '未找到可能包含答案的文件', processedFiles: [], allAnswers: [], allFilesContent: [] };
     }
+
+    this.emitLog('info', `找到 ${answerFiles.length} 个答案文件`);
 
     for (const filePath of answerFiles) {
       try {
@@ -201,8 +211,8 @@ class AnswerExtractor {
         });
 
         const answers = this.extractAnswersFromFile(filePath);
+        const fileName = path.basename(relativePath);
         if (answers.length > 0) {
-          const fileName = path.basename(relativePath);
           allAnswers.push(...answers.map(ans => ({
             ...ans,
             sourceFile: fileName
@@ -212,6 +222,7 @@ class AnswerExtractor {
             answerCount: answers.length,
             success: true
           });
+          this.emitLog('success', `${fileName}: 提取 ${answers.length} 个答案`);
         } else {
           processedFiles.push({
             file: relativePath,
@@ -219,6 +230,7 @@ class AnswerExtractor {
             success: false,
             error: '未找到答案数据'
           });
+          this.emitLog('info', `${fileName}: 未找到答案`);
         }
       } catch (error) {
         processedFiles.push({
@@ -227,10 +239,12 @@ class AnswerExtractor {
           success: false,
           error: error.message
         });
+        this.emitLog('error', `${path.basename(filePath)}: 提取失败 - ${error.message}`);
       }
     }
 
     const mergedAnswers = allAnswers.length > 0 ? this.mergeAnswerData(allAnswers) : [];
+    this.emitLog('success', `答案提取完成: 共找到 ${mergedAnswers.length} 个答案`);
 
     return {
       success: true,
@@ -244,18 +258,25 @@ class AnswerExtractor {
   findAnswerFiles(dir) {
     const answerFiles = [];
     const traverse = (currentDir) => {
-      const entries = fs.readdirSync(currentDir);
-      for (const entry of entries) {
-        const fullPath = path.join(currentDir, entry);
-        const stat = fs.statSync(fullPath);
-        if (stat.isDirectory()) {
-          traverse(fullPath);
-        } else if (stat.isFile()) {
-          const ext = path.extname(entry).toLowerCase();
-          if (['.json', '.js', '.xml', '.txt'].includes(ext)) {
-            answerFiles.push(fullPath);
+      try {
+        const entries = fs.readdirSync(currentDir);
+        for (const entry of entries) {
+          const fullPath = path.join(currentDir, entry);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            traverse(fullPath);
+          } else if (stat.isFile()) {
+            const ext = path.extname(entry).toLowerCase();
+            const name = entry.toLowerCase();
+            if (['.json', '.js', '.xml', '.txt'].includes(ext)) {
+              if (name.includes('answer') || name.includes('paper') || name.includes('question') || name.includes('questiondata')) {
+                answerFiles.push(fullPath);
+              }
+            }
           }
         }
+      } catch (error) {
+        console.error('查找答案文件失败:', error);
       }
     };
     traverse(dir);
@@ -735,6 +756,7 @@ class AnswerExtractor {
   }
 
   cleanHtmlText(text) {
+    if (!text || typeof text !== 'string') return '';
     return text
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
@@ -1441,7 +1463,21 @@ class AnswerExtractor {
   sortAndDeduplicateAnswers(answers) {
     if (!answers || answers.length === 0) return answers;
 
+    const patternPriority = {
+      '听后选择': 1,
+      '听后回答': 2,
+      '听后转述': 3,
+      '朗读短文': 4
+    };
+
     const sortedByMedia = [...answers].sort((a, b) => {
+      const priorityA = patternPriority[a.pattern] || 999;
+      const priorityB = patternPriority[b.pattern] || 999;
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
       const indexA = a.mediaIndex ?? Infinity;
       const indexB = b.mediaIndex ?? Infinity;
       return indexA - indexB;
@@ -1458,7 +1494,7 @@ class AnswerExtractor {
       }
     }
 
-    console.log(`排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条`);
+    this.emitLog('info', `排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条`);
 
     return deduplicated;
   }
