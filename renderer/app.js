@@ -55,6 +55,9 @@ class Auto366App {
       // 初始化更新设置
       this.settingsUI.initUpdateSettings();
       
+      // 绑定更新按钮点击事件
+      this.bindUpdateButtons();
+      
       // 初始化IPC监听器
       this.initIpcListeners();
       
@@ -113,6 +116,16 @@ class Auto366App {
         }
       });
     }
+  }
+
+  // 绑定更新按钮点击事件
+  bindUpdateButtons() {
+    const updateBtns = document.querySelectorAll('#update-notification-btn, #update-notification-btn-simple');
+    updateBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.settingsUI.handleUpdateNotification();
+      });
+    });
   }
 
   // 初始化UI模式

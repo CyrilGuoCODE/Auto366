@@ -242,11 +242,15 @@ class FileManager {
     let dirsDeleted = 0;
 
     try {
+      if (!fs.existsSync(this.tempDir)) {
+        return { success: true, filesDeleted: 0, dirsDeleted: 0 };
+      }
+
       const shouldKeepCache = await mainWindow.webContents.executeJavaScript(`
         localStorage.getItem('keep-cache-files') === 'true'
       `);
 
-      if (!shouldKeepCache && fs.existsSync(this.tempDir)) {
+      if (!shouldKeepCache) {
         const countItems = (dirPath) => {
           if (fs.existsSync(dirPath)) {
             const stats = fs.statSync(dirPath);
@@ -269,7 +273,8 @@ class FileManager {
         };
 
         countItems(this.tempDir);
-        await fs.rm(this.tempDir, { recursive: true, force: true });
+        await fs.remove(this.tempDir);
+        await fs.mkdirp(this.tempDir);
       }
 
       return { success: true, filesDeleted, dirsDeleted };
@@ -284,32 +289,34 @@ class FileManager {
     let dirsDeleted = 0;
 
     try {
-      if (fs.existsSync(this.fileDir)) {
-        const countItems = (dirPath) => {
-          if (fs.existsSync(dirPath)) {
-            const stats = fs.statSync(dirPath);
-            if (stats.isDirectory()) {
-              const items = fs.readdirSync(dirPath);
-              for (const item of items) {
-                const itemPath = path.join(dirPath, item);
-                const itemStats = fs.statSync(itemPath);
-                if (itemStats.isDirectory()) {
-                  countItems(itemPath);
-                } else {
-                  filesDeleted++;
-                }
-              }
-              dirsDeleted++;
-            } else {
-              filesDeleted++;
-            }
-          }
-        };
-
-        countItems(this.fileDir);
-        await fs.rm(this.fileDir, { recursive: true, force: true });
-        await fs.mkdir(this.fileDir, { recursive: true });
+      if (!fs.existsSync(this.fileDir)) {
+        return { success: true, filesDeleted: 0, dirsDeleted: 0 };
       }
+
+      const countItems = (dirPath) => {
+        if (fs.existsSync(dirPath)) {
+          const stats = fs.statSync(dirPath);
+          if (stats.isDirectory()) {
+            const items = fs.readdirSync(dirPath);
+            for (const item of items) {
+              const itemPath = path.join(dirPath, item);
+              const itemStats = fs.statSync(itemPath);
+              if (itemStats.isDirectory()) {
+                countItems(itemPath);
+              } else {
+                filesDeleted++;
+              }
+            }
+            dirsDeleted++;
+          } else {
+            filesDeleted++;
+          }
+        }
+      };
+
+      countItems(this.fileDir);
+      await fs.remove(this.fileDir);
+      await fs.mkdirp(this.fileDir);
 
       return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
