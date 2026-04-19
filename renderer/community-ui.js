@@ -657,10 +657,29 @@ class CommunityUI {
   }
 
   // 显示上传规则集模态框
-  showUploadRulesetModal() {
-    const modal = document.getElementById('uploadRulesetModal');
-    if (modal) {
-      modal.style.display = 'flex';
+  async showUploadRulesetModal() {
+    try {
+      const rules = await window.electronAPI.getRules();
+      const ruleGroups = rules.filter(rule => rule.isGroup);
+
+      const select = document.getElementById('uploadRulesetSelect');
+      if (select) {
+        select.innerHTML = '<option value="">请选择要上传的规则集</option>';
+        ruleGroups.forEach(group => {
+          const option = document.createElement('option');
+          option.value = group.id;
+          option.textContent = `${group.name} (${group.author || '未知作者'})`;
+          select.appendChild(option);
+        });
+      }
+
+      const modal = document.getElementById('uploadRulesetModal');
+      if (modal) {
+        modal.style.display = 'flex';
+      }
+    } catch (error) {
+      console.error('加载规则集列表失败:', error);
+      this.logManager.addErrorLog('加载规则集列表失败: ' + error.message);
     }
   }
 
@@ -670,62 +689,127 @@ class CommunityUI {
     if (modal) {
       modal.style.display = 'none';
     }
-  }
 
-  // 提交上传规则集
-  async submitUploadRuleset() {
-    const rulesetSelect = document.getElementById('uploadRulesetSelect');
-    const rulesetName = document.getElementById('rulesetName').value.trim();
-    const rulesetDescription = document.getElementById('rulesetDescription').value.trim();
-
-    if (!rulesetSelect.files || rulesetSelect.files.length === 0) {
-      this.logManager.addErrorLog('请选择规则集文件');
-      return;
+    const form = document.getElementById('uploadRulesetForm');
+    if (form) {
+      form.reset();
     }
 
-    if (!rulesetName) {
-      this.logManager.addErrorLog('请输入规则集名称');
-      return;
-    }
-
-    try {
-      this.logManager.addInfoLog('正在上传规则集...');
-
-      const file = rulesetSelect.files[0];
-      const formData = new FormData();
-      formData.append('ruleset', file);
-      formData.append('name', rulesetName);
-      formData.append('description', rulesetDescription);
-
-      const response = await fetch('https://366.cyril.qzz.io/api/rulesets/upload', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        this.logManager.addSuccessLog('规则集上传成功，等待审核');
-        this.hideUploadRulesetModal();
-        this.refreshRulesets();
-      } else {
-        this.logManager.addErrorLog(`上传失败: ${data.message}`);
-      }
-    } catch (error) {
-      console.error('上传规则集失败:', error);
-      this.logManager.addErrorLog(`上传失败: ${error.message}`);
+    const progress = document.getElementById('uploadProgress');
+    if (progress) {
+      progress.style.display = 'none';
     }
   }
 
   // 规则集选择变化
-  onRulesetSelectChange() {
-    const rulesetSelect = document.getElementById('uploadRulesetSelect');
-    const fileNameDisplay = document.getElementById('fileNameDisplay');
+  async onRulesetSelectChange() {
+    const select = document.getElementById('uploadRulesetSelect');
+    const nameInput = document.getElementById('uploadRulesetName');
+    const descInput = document.getElementById('uploadRulesetDescription');
+    const authorInput = document.getElementById('uploadRulesetAuthor');
+    const includeInjectionCheckbox = document.getElementById('uploadIncludeInjection');
 
-    if (rulesetSelect.files && rulesetSelect.files.length > 0) {
-      fileNameDisplay.textContent = rulesetSelect.files[0].name;
-    } else {
-      fileNameDisplay.textContent = '未选择文件';
+    if (!select.value) {
+      if (nameInput) nameInput.value = '';
+      if (descInput) descInput.value = '';
+      if (authorInput) authorInput.value = '';
+      if (includeInjectionCheckbox) includeInjectionCheckbox.checked = false;
+      return;
+    }
+
+    try {
+      const rules = await window.electronAPI.getRules();
+      const selectedGroup = rules.find(rule => rule.id === select.value);
+      const groupRules = rules.filter(rule => rule.groupId === select.value);
+
+      if (selectedGroup) {
+        if (nameInput) nameInput.value = selectedGroup.name || '';
+        if (descInput) descInput.value = selectedGroup.description || '';
+        if (authorInput) authorInput.value = selectedGroup.author || '';
+
+        const hasZipRules = groupRules.some(rule => rule.type === 'zip-implant');
+        if (includeInjectionCheckbox) includeInjectionCheckbox.checked = hasZipRules;
+      }
+    } catch (error) {
+      console.error('获取规则集详情失败:', error);
+    }
+  }
+
+  // 提交上传规则集
+  async submitUploadRuleset() {
+    const form = document.getElementById('uploadRulesetForm');
+    const submitBtn = document.getElementById('submitUploadRulesetBtn');
+    const progress = document.getElementById('uploadProgress');
+    const progressFill = document.getElementById('uploadProgressFill');
+    const progressText = document.getElementById('uploadProgressText');
+
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+
+    const rulesetId = document.getElementById('uploadRulesetSelect').value;
+    const name = document.getElementById('uploadRulesetName').value;
+    const description = document.getElementById('uploadRulesetDescription').value;
+    const author = document.getElementById('uploadRulesetAuthor').value;
+    const includeInjection = document.getElementById('uploadIncludeInjection').checked;
+
+    if (!rulesetId) {
+      this.logManager.addErrorLog('请选择规则集');
+      return;
+    }
+
+    try {
+      submitBtn.disabled = true;
+      progress.style.display = 'block';
+      progressText.textContent = '准备上传...';
+      progressFill.style.width = '0%';
+
+      const rules = await window.electronAPI.getRules();
+      const selectedGroup = rules.find(rule => rule.id === rulesetId);
+      const groupRules = rules.filter(rule => rule.groupId === rulesetId);
+
+      if (!selectedGroup || groupRules.length === 0) {
+        throw new Error('未找到规则集或规则集为空');
+      }
+
+      progressText.textContent = '正在上传规则集...';
+      progressFill.style.width = '30%';
+
+      const result = await window.electronAPI.uploadRules(
+        name,
+        description,
+        author,
+        groupRules,
+        (p) => {
+          progressFill.style.width = `${30 + p * 0.7}%`;
+          progressText.textContent = `上传中... ${Math.round(p)}%`;
+        }
+      );
+
+      if (result.status === 200 || result.status === 201) {
+        progressFill.style.width = '100%';
+        progressText.textContent = '上传成功！';
+
+        this.logManager.addSuccessLog(`规则集 "${name}" 上传成功，等待审核`);
+
+        setTimeout(() => {
+          this.hideUploadRulesetModal();
+          this.refreshRulesets();
+        }, 2000);
+      } else {
+        throw new Error(result.data?.message || `上传失败 (HTTP ${result.status})`);
+      }
+    } catch (error) {
+      console.error('上传规则集失败:', error);
+      this.logManager.addErrorLog('上传规则集失败: ' + error.message);
+      const progressEl = document.getElementById('uploadProgress');
+      if (progressEl) {
+        progressEl.style.display = 'none';
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+      }
     }
   }
 

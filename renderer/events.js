@@ -128,31 +128,32 @@ class EventManager {
 
       const deltaX = e.clientX - startX;
       const contentAreaRect = contentArea.getBoundingClientRect();
-      const totalWidth = contentAreaRect.width - 4; // 减去分隔条宽度
+      const totalWidth = contentAreaRect.width - 4;
 
       const newLeftWidth = Math.max(300, Math.min(startLeftWidth + deltaX, totalWidth - 250));
       const newRightWidth = totalWidth - newLeftWidth;
 
-      // 计算flex比例
-      const leftFlex = newLeftWidth / totalWidth * 3; // 乘以3是为了得到合适的flex值
+      const leftFlex = newLeftWidth / totalWidth * 3;
       const rightFlex = newRightWidth / totalWidth * 3;
 
       leftContent.style.flex = leftFlex.toString();
       rightLogs.style.flex = rightFlex.toString();
     });
 
-    document.addEventListener('mouseup', () => {
+    const finishResize = () => {
       if (isResizing) {
         isResizing = false;
         resizer.classList.remove('resizing');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
 
-        // 保存当前的flex值到localStorage
         localStorage.setItem('leftContentFlex', leftContent.style.flex);
         localStorage.setItem('rightLogsFlex', rightLogs.style.flex);
       }
-    });
+    };
+
+    document.addEventListener('mouseup', finishResize);
+    document.addEventListener('mouseleave', finishResize);
 
     // 防止拖拽时选中文本
     resizer.addEventListener('selectstart', (e) => {
@@ -199,9 +200,8 @@ class EventManager {
 
       const deltaX = e.clientX - startX;
       const containerRect = logsContainer.getBoundingClientRect();
-      const totalWidth = containerRect.width - 4; // 减去分隔条宽度
+      const totalWidth = containerRect.width - 4;
 
-      // 限制详情面板最大宽度为容器的50%，最小宽度为300px
       const maxDetailsWidth = totalWidth * 0.5;
       const minDetailsWidth = 300;
       const minMonitorWidth = 200;
@@ -209,25 +209,21 @@ class EventManager {
       let newMonitorWidth = startMonitorWidth + deltaX;
       let newDetailsWidth = totalWidth - newMonitorWidth;
 
-      // 确保详情面板不超过最大宽度
       if (newDetailsWidth > maxDetailsWidth) {
         newDetailsWidth = maxDetailsWidth;
         newMonitorWidth = totalWidth - newDetailsWidth;
       }
 
-      // 确保详情面板不小于最小宽度
       if (newDetailsWidth < minDetailsWidth) {
         newDetailsWidth = minDetailsWidth;
         newMonitorWidth = totalWidth - newDetailsWidth;
       }
 
-      // 确保监听器面板不小于最小宽度
       if (newMonitorWidth < minMonitorWidth) {
         newMonitorWidth = minMonitorWidth;
         newDetailsWidth = totalWidth - newMonitorWidth;
       }
 
-      // 计算flex比例
       const monitorFlex = newMonitorWidth / totalWidth * 2;
       const detailsFlex = newDetailsWidth / totalWidth * 2;
 
@@ -235,20 +231,21 @@ class EventManager {
       requestDetails.style.flex = detailsFlex.toString();
     });
 
-    document.addEventListener('mouseup', () => {
+    const finishDetailsResize = () => {
       if (isDetailsResizing) {
         isDetailsResizing = false;
         detailsResizer.classList.remove('resizing');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
 
-        // 保存当前的flex值到localStorage
         localStorage.setItem('trafficMonitorFlex', trafficMonitor.style.flex);
         localStorage.setItem('requestDetailsFlex', requestDetails.style.flex);
       }
-    });
+    };
 
-    // 防止拖拽时选中文本
+    document.addEventListener('mouseup', finishDetailsResize);
+    document.addEventListener('mouseleave', finishDetailsResize);
+
     detailsResizer.addEventListener('selectstart', (e) => {
       e.preventDefault();
     });
