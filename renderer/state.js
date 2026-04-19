@@ -51,6 +51,16 @@ class StateManager {
       }
     }
 
+    // 如果切换到规则管理视图，加载规则列表
+    if (viewName === 'rules') {
+      // 由 rules-ui 模块处理
+    }
+
+    // 如果切换到社区规则集视图，加载规则集列表
+    if (viewName === 'community') {
+      // 由 community-ui 模块处理
+    }
+
     // 同步简单模式控制面板状态
     this.syncSimpleControlPanelActive(viewName);
   }

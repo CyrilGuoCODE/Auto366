@@ -1961,6 +1961,27 @@ class ProxyServer {
     return this.answerCaptureEnabled;
   }
 
+  // 导入规则（供 rules.js 调用）
+  importRules(rules) {
+    try {
+      if (!Array.isArray(rules)) {
+        return { success: false, error: '无效的规则数据格式' };
+      }
+      const importedRules = rules.map(rule => ({
+        ...rule,
+        id: rule.id || uuidv4(),
+        createdAt: rule.createdAt || new Date().toISOString(),
+        updatedAt: rule.updatedAt || new Date().toISOString()
+      }));
+      const currentRules = this.getResponseRules();
+      this.responseRules = [...currentRules, ...importedRules];
+      this.saveResponseRules();
+      return { success: true, count: importedRules.length };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, uuidv4, fs, path, os, require) {
     // 代理控制 IPC
     ipcMain.on('start-answer-proxy', async () => {

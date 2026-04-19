@@ -728,6 +728,146 @@ class CommunityUI {
       fileNameDisplay.textContent = '未选择文件';
     }
   }
+
+  // 渲染简单模式首页规则集
+  async renderSimpleHomeRulesets() {
+    if (document.documentElement.getAttribute('data-ui') !== 'simple') {
+      return;
+    }
+    const grid = document.getElementById('simple-ruleset-grid');
+    const emptyEl = document.getElementById('simple-ruleset-empty');
+    if (!grid) {
+      return;
+    }
+    let rules;
+    try {
+      rules = await window.electronAPI.getRules();
+    } catch (e) {
+      grid.innerHTML = '';
+      if (emptyEl) {
+        emptyEl.hidden = false;
+        emptyEl.textContent = '无法加载规则集列表';
+      }
+      return;
+    }
+    const groups = rules.filter((r) => r.isGroup);
+    if (groups.length === 0) {
+      grid.innerHTML = '';
+      if (emptyEl) {
+        emptyEl.hidden = false;
+        emptyEl.textContent = '暂无已安装的规则集，请在专业模式下从社区安装或导入。';
+      }
+      return;
+    }
+    if (emptyEl) {
+      emptyEl.hidden = true;
+    }
+    grid.innerHTML = groups.map((g) => {
+      const name = this.escapeHtml(g.name || '未命名规则集');
+      const desc = this.escapeHtml(g.description || '无描述');
+      const gid = g.id;
+      const active = g.enabled ? ' feature-card--active' : '';
+      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`;
+    }).join('');
+    grid.querySelectorAll('.feature-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const gid = card.getAttribute('data-group-id');
+        if (gid) {
+          this.enterSimpleRuleset(gid);
+        }
+      });
+    });
+  }
+
+  // 进入简单模式规则集
+  async enterSimpleRuleset(groupId) {
+    await this.applyExclusiveRuleset(groupId);
+    document.documentElement.setAttribute('data-ui', 'simple');
+    document.documentElement.setAttribute('data-simple-page', 'app');
+    this.state.switchView('answers');
+  }
+
+  // 应用独占规则集
+  async applyExclusiveRuleset(groupId) {
+    let rules;
+    try {
+      rules = await window.electronAPI.getRules();
+    } catch (e) {
+      this.logManager.addErrorLog(`读取规则失败: ${e.message}`);
+      return;
+    }
+    const target = rules.find((r) => r.isGroup && r.id === groupId);
+    if (!target) {
+      this.logManager.addErrorLog('未找到该规则集');
+      return;
+    }
+    let changed = false;
+    const updated = rules.map((r) => {
+      if (!r.isGroup) {
+        return r;
+      }
+      const enabled = r.id === groupId;
+      if (r.enabled !== enabled) {
+        changed = true;
+        return { ...r, enabled };
+      }
+      return r;
+    });
+    if (changed) {
+      const res = await window.electronAPI.saveResponseRules(updated);
+      if (!res || !res.success) {
+        this.logManager.addErrorLog('保存规则集开关失败');
+        return;
+      }
+      this.logManager.addSuccessLog(`已启用规则集：${target.name || groupId}`);
+    }
+    const ui = document.documentElement.getAttribute('data-ui');
+    await this.renderSimpleHomeRulesets();
+    if (ui === 'simple' && this.state.currentView === 'rules') {
+      // Reload rules if in rules view
+    }
+  }
+
+  // 简单模式返回
+  goSimpleBack() {
+    const ui = document.documentElement.getAttribute('data-ui');
+    if (ui !== 'simple') return;
+    if (this.state.simpleViewHistory.length > 1) {
+      this.state.simpleViewHistory.pop();
+      const prev = this.state.simpleViewHistory[this.state.simpleViewHistory.length - 1];
+      this.state.switchView(prev, false);
+      return;
+    }
+    this.state.setSimplePage('menu');
+  }
+
+  // 删除简单模式规则集
+  async deleteSimpleRuleset(groupId) {
+    if (!confirm('确定删除这个规则集吗？这会同时删除规则集中的规则。')) {
+      return;
+    }
+    try {
+      const result = await window.electronAPI.deleteRule(groupId);
+      if (result && result.success) {
+        this.logManager.addSuccessLog('规则集删除成功');
+        await this.renderSimpleHomeRulesets();
+      } else {
+        this.logManager.addErrorLog(`规则集删除失败: ${result ? result.error : '未知错误'}`);
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`规则集删除失败: ${error.message}`);
+    }
+  }
+
+  // HTML转义
+  escapeHtml(text) {
+    if (typeof text !== 'string') return text;
+    return text.replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;')
+               .replace(/"/g, '&quot;')
+               .replace(/'/g, '&#039;');
+  }
 }
 
 export default CommunityUI;

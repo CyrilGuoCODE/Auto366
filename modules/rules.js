@@ -276,10 +276,10 @@ class RulesManager {
     }
   }
 
-  registerIpcHandlers() {
+  registerIpcHandlers(proxyServer) {
     ipcMain.handle('get-rules', () => {
       try {
-        return this.getRules();
+        return proxyServer.getResponseRules();
       } catch (error) {
         console.error('获取规则失败:', error);
         return [];
@@ -288,7 +288,7 @@ class RulesManager {
 
     ipcMain.handle('save-rule', (event, rule) => {
       try {
-        return this.saveRule(rule);
+        return proxyServer.saveRule(rule);
       } catch (error) {
         console.error('保存规则失败:', error);
         return { success: false, error: error.message };
@@ -297,7 +297,7 @@ class RulesManager {
 
     ipcMain.handle('delete-rule', (event, ruleId) => {
       try {
-        return this.deleteRule(ruleId);
+        return proxyServer.deleteRule(ruleId);
       } catch (error) {
         console.error('删除规则失败:', error);
         return { success: false, error: error.message };
@@ -306,7 +306,7 @@ class RulesManager {
 
     ipcMain.handle('toggle-rule', (event, ruleId, enabled) => {
       try {
-        return this.toggleRule(ruleId, enabled);
+        return proxyServer.toggleRule(ruleId, enabled);
       } catch (error) {
         console.error('切换规则状态失败:', error);
         return { success: false, error: error.message };
@@ -315,7 +315,7 @@ class RulesManager {
 
     ipcMain.handle('reset-rule-triggers', (event, ruleId) => {
       try {
-        return this.resetRuleTriggers(ruleId);
+        return proxyServer.resetRuleTriggers(ruleId);
       } catch (error) {
         console.error('重置规则触发次数失败:', error);
         return { success: false, error: error.message };
@@ -329,7 +329,7 @@ class RulesManager {
       });
       if (!result.canceled) {
         try {
-          fs.writeFileSync(result.filePath, JSON.stringify(this.rules, null, 2), 'utf-8');
+          fs.writeFileSync(result.filePath, JSON.stringify(proxyServer.getResponseRules(), null, 2), 'utf-8');
           return { success: true, path: result.filePath };
         } catch (error) {
           return { success: false, error: error.message };
@@ -347,7 +347,7 @@ class RulesManager {
         try {
           const rulesData = fs.readFileSync(result.filePaths[0], 'utf-8');
           const rules = JSON.parse(rulesData);
-          return this.importRules(rules);
+          return proxyServer.importRules(rules);
         } catch (error) {
           return { success: false, error: error.message };
         }

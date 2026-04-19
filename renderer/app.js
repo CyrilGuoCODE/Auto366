@@ -28,6 +28,12 @@ class Auto366App {
   // 初始化应用
   async init() {
     try {
+      // 暴露方法到全局（必须在最前面，因为HTML中的onclick依赖这些方法）
+      this.exposeMethods();
+      
+      // 初始化全局设置（缓存路径等）
+      this.initGlobalSettings();
+      
       // 初始化事件监听器
       this.eventManager.initEventListeners();
       
@@ -72,17 +78,48 @@ class Auto366App {
       // 显示赞赏弹窗
       this.showDonationModal();
       
+      // 自动启动代理
+      setTimeout(() => {
+        this.proxyUI.startProxy();
+      }, 1000);
+      
     } catch (error) {
       console.error('应用初始化失败:', error);
       this.logManager.addErrorLog('应用初始化失败: ' + error.message);
     }
   }
 
+  // 初始化全局设置
+  initGlobalSettings() {
+    const cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
+    if (window.electronAPI && window.electronAPI.setCachePath) {
+      window.electronAPI.setCachePath(cachePath);
+    }
+
+    // 监听目录选择事件
+    if (window.electronAPI && window.electronAPI.chooseDirectory) {
+      window.electronAPI.chooseDirectory((event, path) => {
+        if (path) {
+          localStorage.setItem('cache-path', path);
+          if (window.electronAPI.setCachePath) {
+            window.electronAPI.setCachePath(path);
+          }
+
+          // 更新设置页面的输入框
+          const cachePathInput = document.getElementById('cachePathInput');
+          if (cachePathInput) {
+            cachePathInput.value = path;
+          }
+        }
+      });
+    }
+  }
+
   // 初始化UI模式
   async initUIMode() {
     try {
-      if (window.electronAPI && window.electronAPI.getUIMode) {
-        const uiMode = await window.electronAPI.getUIMode();
+      if (window.electronAPI && window.electronAPI.getUiMode) {
+        const uiMode = await window.electronAPI.getUiMode();
         document.documentElement.setAttribute('data-ui', uiMode);
         
         if (uiMode === 'simple') {

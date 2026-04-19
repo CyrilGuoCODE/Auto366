@@ -283,7 +283,7 @@ app.whenReady().then(async () => {
   
   windowManager.registerIpcHandlers();
   proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, uuidv4, fs, path, os, require);
-  rulesManager.registerIpcHandlers();
+  rulesManager.registerIpcHandlers(proxyServer);
 
   await loadBuiltinRulesets();
 
