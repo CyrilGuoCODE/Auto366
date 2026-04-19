@@ -35,6 +35,9 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 #### 短期更新
 
+- 加入一键打开天学网(通过注册表获取路径)
+- 加入请求搜索
+- 加入加解密模块
 - 注入后将自动化程序运行日志上传到5290/logs端口
 - 首次使用时step by step教程
 
@@ -74,7 +77,7 @@ npm run build
 
 ### 资源路径
 
-windows默认资源路径：`D:/Up366StudentFiles/resources/`
+windows默认资源路径：`D:/Up366StudentFiles`
 
 如需修改，启动应用后在设置中更改
 

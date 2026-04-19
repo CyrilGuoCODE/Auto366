@@ -309,7 +309,7 @@ class FileManager {
     }
   }
 
-  // 清理天学网缓存（用户指定的file目录）
+  // 清理天学网缓存
   async removeCacheFile(mainWindow) {
     let filesDeleted = 0;
     let dirsDeleted = 0;
@@ -317,40 +317,55 @@ class FileManager {
     try {
       // 从 localStorage 获取用户设置的缓存路径
       const cachePath = await this.getCachePath(mainWindow);
-      console.log('开始清理天学网缓存，cachePath:', cachePath);
       
-      if (!fs.existsSync(cachePath)) {
+      if (!cachePath || !fs.existsSync(cachePath)) {
         console.log('天学网缓存目录不存在:', cachePath);
         return { success: true, filesDeleted: 0, dirsDeleted: 0 };
       }
 
-      const countItems = (dirPath) => {
+      console.log('开始清理天学网缓存，cachePath:', cachePath);
+
+      const flipbooksPath = path.join(cachePath, 'flipbooks');
+      const homeworkPath = path.join(cachePath, 'homework');
+      const resourcesPath = path.join(cachePath, 'resources');
+
+      // 统计并删除子目录
+      const countAndDelete = (dirPath) => {
         if (fs.existsSync(dirPath)) {
-          const stats = fs.statSync(dirPath);
-          if (stats.isDirectory()) {
-            const items = fs.readdirSync(dirPath);
-            for (const item of items) {
-              const itemPath = path.join(dirPath, item);
-              const itemStats = fs.statSync(itemPath);
-              if (itemStats.isDirectory()) {
-                countItems(itemPath);
+          const countItems = (currentPath) => {
+            if (fs.existsSync(currentPath)) {
+              const stats = fs.statSync(currentPath);
+              if (stats.isDirectory()) {
+                const items = fs.readdirSync(currentPath);
+                for (const item of items) {
+                  const itemPath = path.join(currentPath, item);
+                  const itemStats = fs.statSync(itemPath);
+                  if (itemStats.isDirectory()) {
+                    countItems(itemPath);
+                  } else {
+                    filesDeleted++;
+                  }
+                }
+                dirsDeleted++;
               } else {
                 filesDeleted++;
               }
             }
-            dirsDeleted++;
-          } else {
-            filesDeleted++;
-          }
+          };
+
+          countItems(dirPath);
+          console.log(`删除目录: ${dirPath}`);
+          fs.rmSync(dirPath, { recursive: true, force: true });
+          // 重新创建空目录
+          fs.mkdirSync(dirPath, { recursive: true });
         }
       };
 
-      countItems(cachePath);
+      countAndDelete(flipbooksPath);
+      countAndDelete(homeworkPath);
+      countAndDelete(resourcesPath);
+
       console.log('统计完成 - filesDeleted:', filesDeleted, 'dirsDeleted:', dirsDeleted);
-      
-      // 使用 fs-extra 的 removeSync 同步删除
-      fs.removeSync(cachePath);
-      console.log('天学网缓存目录已删除:', cachePath);
 
       return { success: true, filesDeleted, dirsDeleted };
     } catch (error) {
