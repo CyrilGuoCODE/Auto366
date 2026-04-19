@@ -13,6 +13,41 @@ class EventManager {
     this.initSimpleModeChrome();
     this.initWindowTitlebar();
     this.initImportAnswer();
+    this.initLogButtons();
+  }
+
+  // 初始化日志相关按钮
+  initLogButtons() {
+    const closeDetailsBtn = document.getElementById('closeDetailsBtn');
+    if (closeDetailsBtn) {
+      closeDetailsBtn.addEventListener('click', () => {
+        if (window.app && window.app.logManager) {
+          window.app.logManager.hideRequestDetails();
+        }
+      });
+    }
+
+    const clearLogsBtn = document.getElementById('clearLogsBtn');
+    if (clearLogsBtn) {
+      clearLogsBtn.addEventListener('click', () => {
+        if (window.app && window.app.logManager) {
+          window.app.logManager.clearLogs();
+        }
+      });
+    }
+
+    const detailsContent = document.getElementById('detailsContent');
+    if (detailsContent) {
+      detailsContent.addEventListener('click', (e) => {
+        const downloadBtn = e.target.closest('.download-response-btn');
+        if (downloadBtn) {
+          const uuid = downloadBtn.dataset.downloadUuid;
+          if (uuid && window.app) {
+            window.app.downloadResponse(uuid);
+          }
+        }
+      });
+    }
   }
 
   // 初始化侧边栏
@@ -45,7 +80,9 @@ class EventManager {
     const changePortBtn = document.getElementById('changePortBtn');
     if (changePortBtn) {
       changePortBtn.addEventListener('click', () => {
-        // 由 proxy-ui 模块处理
+        if (window.app && window.app.state) {
+          window.app.state.switchView('settings');
+        }
       });
     }
   }

@@ -257,7 +257,7 @@ class LogManager {
       html += `
         <div class="detail-section">
           <h5>操作</h5>
-          <button class="download-response-btn" onclick="universalAnswerFeature.downloadResponse('${requestData.uuid}')">
+          <button class="download-response-btn" data-download-uuid="${requestData.uuid}">
             <i class="bi bi-download"></i>
             <span>下载响应文件</span>
           </button>

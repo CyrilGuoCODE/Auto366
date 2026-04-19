@@ -1964,6 +1964,10 @@ class ProxyServer {
     }
   }
 
+  getTrafficByUuid(uuid) {
+    return this.trafficCache.get(uuid);
+  }
+
   registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET) {
     // 代理控制 IPC
     ipcMain.on('start-answer-proxy', async () => {
