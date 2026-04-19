@@ -259,7 +259,9 @@ class EventManager {
         await window.electronAPI.switchUiMode('simple');
         document.documentElement.setAttribute('data-ui', 'simple');
         document.documentElement.setAttribute('data-simple-page', 'menu');
-        // 由 community-ui 模块处理
+        if (window.app && window.app.communityUI) {
+          await window.app.communityUI.renderSimpleHomeRulesets();
+        }
       });
     }
   }
@@ -272,6 +274,9 @@ class EventManager {
         await window.electronAPI.switchUiMode('professional');
         document.documentElement.setAttribute('data-ui', 'professional');
         document.documentElement.removeAttribute('data-simple-page');
+        if (window.app && window.app.rulesUI) {
+          await window.app.rulesUI.loadRules();
+        }
         this.state.syncSimpleControlPanelActive(this.state.currentView);
       });
     }
