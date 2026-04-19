@@ -46,7 +46,7 @@
       "!web/**/*"
     ],
     "extraResources": {
-      "from": "./prize/Auto366CompatibilityMode.ps1",
+      "from": "./resources/Auto366CompatibilityMode.ps1",
       "to": "../"
     },
     "win": {

@@ -246,15 +246,15 @@ class Auto366App {
           </div>
           <div class="donation-body">
             <div class="donation-qr">
-              <img src="resources/Cyril_prize.jpg" alt="赞赏码" class="donation-qr-code">
+              <img src="./resources/Cyril_prize.jpg" alt="赞赏码" class="donation-qr-code">
               <p class="donation-label">Cyril</p>
             </div>
             <div class="donation-qr">
-              <img src="resources/Cyp_prize.jpg" alt="赞赏码" class="donation-qr-code">
+              <img src="./resources/Cyp_prize.jpg" alt="赞赏码" class="donation-qr-code">
               <p class="donation-label">Cyp</p>
             </div>
             <div class="donation-qr">
-              <img src="resources/qq.jpg" alt="QQ群" class="donation-qr-code">
+              <img src="./resources/qq.jpg" alt="QQ群" class="donation-qr-code">
               <p class="donation-label">QQ群</p>
             </div>
           </div>

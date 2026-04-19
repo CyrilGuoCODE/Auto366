@@ -4279,8 +4279,8 @@ function showDonationModal() {
               <div class="appreciation-popup">
                 <div class="appreciation-content">
                   <div class="appreciation-qr-container">
-                    <img src="prize/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
-                    <img src="prize/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
+                    <img src="resources/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
+                    <img src="resources/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
                   </div>
                 </div>
               </div>
@@ -4295,7 +4295,7 @@ function showDonationModal() {
               <div class="appreciation-popup">
                 <div class="appreciation-content">
                   <div class="appreciation-qr-container">
-                    <img src="prize/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
+                    <img src="resources/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
                   </div>
                 </div>
               </div>
