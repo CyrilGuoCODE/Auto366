@@ -179,6 +179,89 @@ class AnswerExtractor {
     return answers;
   }
 
+  async extractFromDirectory(extractDir) {
+    const allAnswers = [];
+    const processedFiles = [];
+    const allFilesContent = [];
+
+    const answerFiles = this.findAnswerFiles(extractDir);
+
+    if (answerFiles.length === 0) {
+      return { success: false, message: '未找到可能包含答案的文件', processedFiles: [], allAnswers: [], allFilesContent: [] };
+    }
+
+    for (const filePath of answerFiles) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const relativePath = path.relative(extractDir, filePath);
+
+        allFilesContent.push({
+          file: relativePath,
+          content: content
+        });
+
+        const answers = this.extractAnswersFromFile(filePath);
+        if (answers.length > 0) {
+          const fileName = path.basename(relativePath);
+          allAnswers.push(...answers.map(ans => ({
+            ...ans,
+            sourceFile: fileName
+          })));
+          processedFiles.push({
+            file: relativePath,
+            answerCount: answers.length,
+            success: true
+          });
+        } else {
+          processedFiles.push({
+            file: relativePath,
+            answerCount: 0,
+            success: false,
+            error: '未找到答案数据'
+          });
+        }
+      } catch (error) {
+        processedFiles.push({
+          file: path.relative(extractDir, filePath),
+          answerCount: 0,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    const mergedAnswers = allAnswers.length > 0 ? this.mergeAnswerData(allAnswers) : [];
+
+    return {
+      success: true,
+      answers: mergedAnswers,
+      count: mergedAnswers.length,
+      processedFiles: processedFiles,
+      allFilesContent: allFilesContent
+    };
+  }
+
+  findAnswerFiles(dir) {
+    const answerFiles = [];
+    const traverse = (currentDir) => {
+      const entries = fs.readdirSync(currentDir);
+      for (const entry of entries) {
+        const fullPath = path.join(currentDir, entry);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          traverse(fullPath);
+        } else if (stat.isFile()) {
+          const ext = path.extname(entry).toLowerCase();
+          if (['.json', '.js', '.xml', '.txt'].includes(ext)) {
+            answerFiles.push(fullPath);
+          }
+        }
+      }
+    };
+    traverse(dir);
+    return answerFiles;
+  }
+
   saveAnswers(answers) {
     try {
       this.ensureDirectories();

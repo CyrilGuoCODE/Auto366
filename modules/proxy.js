@@ -1216,63 +1216,31 @@ class ProxyServer {
     });
   }
 
-  // 扫描目录结构
-  scanDirectory(dir, maxDepth = 3, currentDepth = 0) {
-    if (currentDepth >= maxDepth) {
-      return [];
-    }
-
-    const result = [];
-    try {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        const filePath = path.join(dir, file);
-        const stats = fs.statSync(filePath);
-        
-        if (stats.isDirectory()) {
-          result.push({
-            name: file,
-            type: 'directory',
-            path: filePath,
-            children: this.scanDirectory(filePath, maxDepth, currentDepth + 1)
-          });
-        } else {
-          result.push({
-            name: file,
-            type: 'file',
-            path: filePath,
-            size: stats.size
-          });
+  // 扫描目录结构（只统计文件后缀数量）
+  scanDirectory(dir) {
+    const extCount = {};
+    const countExtensions = (currentDir) => {
+      try {
+        const entries = fs.readdirSync(currentDir);
+        for (const entry of entries) {
+          const fullPath = path.join(currentDir, entry);
+          const stats = fs.statSync(fullPath);
+          if (stats.isDirectory()) {
+            countExtensions(fullPath);
+          } else {
+            const ext = path.extname(entry).toLowerCase() || '(无后缀)';
+            extCount[ext] = (extCount[ext] || 0) + 1;
+          }
         }
+      } catch (error) {
+        console.error('扫描目录失败:', error);
       }
-    } catch (error) {
-      console.error('扫描目录失败:', error);
-    }
-    return result;
+    };
+    countExtensions(dir);
+    return extCount;
   }
 
   // 查找可能的答案文件
-  findAnswerFiles(dir) {
-    const answerFiles = [];
-    const extensions = ['.xml', '.json', '.txt', '.html', '.htm'];
-
-    try {
-      const files = fs.readdirSync(dir, { recursive: true });
-      for (const file of files) {
-        const filePath = path.join(dir, file);
-        const stats = fs.statSync(filePath);
-        
-        if (stats.isFile() && extensions.some(ext => file.toLowerCase().endsWith(ext))) {
-          answerFiles.push(filePath);
-        }
-      }
-    } catch (error) {
-      console.error('查找答案文件失败:', error);
-    }
-
-    return answerFiles;
-  }
-
   // 解压ZIP文件
   async extractZipFile(zipPath, ansDir) {
     let mergedAnswers = {};
@@ -1321,7 +1289,7 @@ class ProxyServer {
 
       this.safeIpcSend('process-status', { status: 'processing', message: '正在分析文件结构...' });
 
-      // 扫描所有解压的文件
+      // 扫描所有解压的文件（统计文件后缀数量）
       const fileStructure = this.scanDirectory(extractDir);
 
       // 发送文件结构到前端
@@ -1330,66 +1298,14 @@ class ProxyServer {
         extractDir: extractDir
       });
 
-      // 查找并处理所有可能的答案文件
-      const answerFiles = this.findAnswerFiles(extractDir);
+      // 将解压后的目录交给 answer.js 处理
+      this.safeIpcSend('process-status', { status: 'processing', message: '正在提取答案...' });
 
-      if (answerFiles.length > 0) {
-        this.safeIpcSend('process-status', { status: 'processing', message: `找到 ${answerFiles.length} 个可能的答案文件，正在提取...` });
-
-        let allAnswers = [];
-        let processedFiles = [];
-        let allFilesContent = []; // 存储所有文件内容
-
-        for (const filePath of answerFiles) {
-          try {
-            // 读取文件内容
-            const content = fs.readFileSync(filePath, 'utf-8');
-            const relativePath = path.relative(extractDir, filePath);
-
-            // 存储文件内容
-            allFilesContent.push({
-              file: relativePath,
-              content: content
-            });
-
-            const answers = this.answerExtractor.extractAnswersFromFile(filePath);
-            if (answers.length > 0) {
-              allAnswers = allAnswers.concat(answers.map(ans => ({
-                ...ans,
-                sourceFile: relativePath
-              })));
-              processedFiles.push({
-                file: relativePath,
-                answerCount: answers.length,
-                success: true
-              });
-            } else {
-              processedFiles.push({
-                file: relativePath,
-                answerCount: 0,
-                success: false,
-                error: '未找到答案数据'
-              });
-            }
-          } catch (error) {
-            processedFiles.push({
-              file: path.relative(extractDir, filePath),
-              answerCount: 0,
-              success: false,
-              error: error.message
-            });
-          }
-        }
-
-        // 发送处理结果
-        this.safeIpcSend('files-processed', {
-          processedFiles: processedFiles,
-          totalAnswers: allAnswers.length
-        });
-
-        if (allAnswers.length > 0) {
-          // 尝试合并correctAnswer.xml和paper.xml的数据
-          mergedAnswers = this.answerExtractor.mergeAnswerData(allAnswers);
+      try {
+        const extractResult = await this.answerExtractor.extractFromDirectory(extractDir);
+        
+        if (extractResult.success && extractResult.answers.length > 0) {
+          const mergedAnswers = extractResult.answers;
 
           // 保存所有答案到文件
           const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
@@ -1397,7 +1313,7 @@ class ProxyServer {
             answers: mergedAnswers,
             count: mergedAnswers.length,
             file: answerFile,
-            processedFiles: processedFiles
+            processedFiles: extractResult.processedFiles
           }, null, 2);
 
           fs.writeFileSync(answerFile, answerText, 'utf-8');
@@ -1406,12 +1322,12 @@ class ProxyServer {
             answers: mergedAnswers,
             count: mergedAnswers.length,
             file: answerFile,
-            processedFiles: processedFiles
+            processedFiles: extractResult.processedFiles
           });
-        } else {
+        } else if (extractResult.success && extractResult.answers.length === 0) {
           // 未找到有效答案数据时，展示所有文件内容
           const allContentFile = path.join(ansDir, `all_content_${Date.now()}.txt`);
-          const allContentText = allFilesContent.map(item =>
+          const allContentText = extractResult.allFilesContent.map(item =>
             `文件: ${item.file}\n内容:\n${item.content}\n\n${'='.repeat(50)}\n\n`
           ).join('\n');
 
@@ -1420,12 +1336,15 @@ class ProxyServer {
           this.safeIpcSend('no-answers-found', {
             message: '所有文件中都未找到有效的答案数据，已显示所有文件内容',
             file: allContentFile,
-            filesContent: allFilesContent,
-            processedFiles: processedFiles
+            filesContent: extractResult.allFilesContent,
+            processedFiles: extractResult.processedFiles
           });
+        } else {
+          this.safeIpcSend('process-error', { error: extractResult.message || '未找到可能包含答案的文件' });
         }
-      } else {
-        this.safeIpcSend('process-error', { error: '未找到可能包含答案的文件' });
+      } catch (extractError) {
+        console.error('答案提取失败:', extractError);
+        this.safeIpcSend('process-error', { error: `答案提取失败: ${extractError.message}` });
       }
 
     } catch (error) {
