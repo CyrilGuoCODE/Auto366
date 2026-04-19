@@ -9,6 +9,7 @@ const StreamZip = require('node-stream-zip');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
 const Proxy = require('http-mitm-proxy').Proxy;
+const { ipcMain } = require('electron');
 
 class ProxyServer {
   constructor(certManager) {
@@ -1958,6 +1959,433 @@ class ProxyServer {
   // 获取答案捕获启用状态
   getAnswerCaptureEnabled() {
     return this.answerCaptureEnabled;
+  }
+
+  registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, uuidv4, fs, path, os, require) {
+    // 代理控制 IPC
+    ipcMain.on('start-answer-proxy', async () => {
+      await this.start(mainWindow);
+    });
+
+    ipcMain.on('stop-answer-proxy', async () => {
+      try {
+        await this.stop();
+      } catch (error) {
+        console.error('停止代理服务器失败:', error);
+      }
+    });
+
+    ipcMain.handle('set-proxy-port', async (event, port) => {
+      try {
+        this.setProxyPort(port);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('get-proxy-port', () => {
+      return this.getProxyPort();
+    });
+
+    ipcMain.handle('set-bucket-port', async (event, port) => {
+      try {
+        this.setBucketPort(port);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('get-bucket-port', () => {
+      return this.getBucketPort();
+    });
+
+    ipcMain.handle('set-answer-capture-enabled', (event, enabled) => {
+      this.setAnswerCaptureEnabled(enabled);
+      return { success: true };
+    });
+
+    ipcMain.handle('get-answer-capture-enabled', () => {
+      return this.getAnswerCaptureEnabled();
+    });
+
+    // 文件操作 IPC
+    ipcMain.handle('clear-cache', async () => {
+      try {
+        const result = await this.clearCache();
+        return result;
+      } catch (error) {
+        return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
+      }
+    });
+
+    ipcMain.handle('import-implant-zip', async (event, sourcePath) => {
+      try {
+        return await this.importZIPToDir(sourcePath);
+      } catch (error) {
+        console.error('导入压缩包失败:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    ipcMain.handle('download-and-import-injection-package', async (event, arrayBuffer, rulesetName) => {
+      try {
+        const buffer = Buffer.from(arrayBuffer);
+        const tempPath = path.join(os.tmpdir(), `injection_${Date.now()}.zip`);
+        fs.writeFileSync(tempPath, buffer);
+        const result = await this.importZIPToDir(tempPath);
+        try {
+          fs.unlinkSync(tempPath);
+        } catch (error) {
+          console.warn('清理临时文件失败:', error);
+        }
+        return result;
+      } catch (error) {
+        console.error('下载并导入注入包失败:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    ipcMain.handle('download-and-save-injection-package', async (event, arrayBuffer, originalFileName, rulesetName) => {
+      try {
+        const buffer = Buffer.from(arrayBuffer);
+        const safeFileName = originalFileName.replace(/[<>:"/\\|?*]/g, '_');
+        const appDir = path.dirname(process.execPath);
+        const fileDir = path.join(appDir, 'file');
+        const isDev = process.env.NODE_ENV === 'development' || !require('electron').app.isPackaged;
+        const targetDir = isDev ? path.join(process.cwd(), 'file') : fileDir;
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const localPath = path.join(targetDir, safeFileName);
+        fs.writeFileSync(localPath, buffer);
+        console.log(`注入包已保存到: ${localPath}`);
+        return {
+          success: true,
+          localPath: localPath,
+          originalFileName: safeFileName
+        };
+      } catch (error) {
+        console.error('下载并保存注入包失败:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    ipcMain.handle('download-and-save-injection-package-with-md5', async (event, arrayBuffer, fileName, rulesetName, newFileMD5) => {
+      try {
+        const crypto = require('crypto');
+        const buffer = Buffer.from(arrayBuffer);
+        const appDir = path.dirname(process.execPath);
+        const fileDir = path.join(appDir, 'file');
+        const isDev = process.env.NODE_ENV === 'development' || !require('electron').app.isPackaged;
+        const targetDir = isDev ? path.join(process.cwd(), 'file') : fileDir;
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        const targetPath = path.join(targetDir, fileName);
+        let finalFileName = fileName;
+        let finalPath = targetPath;
+        if (fs.existsSync(targetPath)) {
+          const existingBuffer = fs.readFileSync(targetPath);
+          const existingMD5 = crypto.createHash('sha256').update(existingBuffer).digest('hex');
+          if (existingMD5 === newFileMD5) {
+            console.log(`文件已存在且内容相同，跳过下载: ${fileName}`);
+            return {
+              success: true,
+              skipped: true,
+              localPath: targetPath,
+              finalFileName: fileName
+            };
+          } else {
+            const nameWithoutExt = path.parse(fileName).name;
+            const ext = path.parse(fileName).ext;
+            const timestamp = Date.now();
+            finalFileName = `${nameWithoutExt}_${timestamp}${ext}`;
+            finalPath = path.join(targetDir, finalFileName);
+            console.log(`检测到重名文件但内容不同，重命名为: ${finalFileName}`);
+          }
+        }
+        fs.writeFileSync(finalPath, buffer);
+        console.log(`注入包已保存到: ${finalPath}`);
+        return {
+          success: true,
+          renamed: finalFileName !== fileName,
+          localPath: finalPath,
+          finalFileName: finalFileName
+        };
+      } catch (error) {
+        console.error('下载并保存注入包失败:', error);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    ipcMain.handle('download-file', async (event, uuid) => {
+      let traffic = this.getTrafficByUuid(uuid);
+      if (!traffic) return 0;
+      let extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.txt`;
+      if (traffic.contentType) {
+        if (traffic.contentType.includes('json')) {
+          extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.json`;
+        } else if (traffic.contentType.includes('html')) {
+          extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.html`;
+        } else if (traffic.contentType.includes('xml')) {
+          extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.xml`;
+        } else if (traffic.contentType.includes('javascript')) {
+          extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.js`;
+        } else if (traffic.contentType.includes('css')) {
+          extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.css`;
+        } else if (traffic.contentType.includes('image')) {
+          extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.png`;
+        } else if (traffic.contentType.includes('octet-stream')) {
+          extension = traffic.responseBody;
+        }
+      }
+      const result = await dialog.showSaveDialog({ defaultPath: extension });
+      if (result.canceled) return -1;
+      try {
+        await this.downloadFileByUuid(uuid, result.filePath);
+        return 1;
+      } catch (error) {
+        console.error('下载文件失败:', error);
+        return 0;
+      }
+    });
+
+    ipcMain.handle('share-answer-file', async (event, filePath) => {
+      try {
+        if (!fs.existsSync(filePath)) {
+          return { success: false, error: '文件不存在' };
+        }
+        const fileName = path.basename(filePath);
+        const fileExtension = path.extname(fileName);
+        const timestamp = Date.now();
+        const randomId = uuidv4().substring(0, 8);
+        const uniqueFileName = `${timestamp}_${randomId}${fileExtension}`;
+        const fileBuffer = fs.readFileSync(filePath);
+        const { data, error } = await supabase.storage
+          .from(SUPABASE_BUCKET)
+          .upload(uniqueFileName, fileBuffer, {
+            contentType: 'application/json',
+            upsert: false
+          });
+        if (error) {
+          console.error('Supabase 上传错误:', error);
+          return {
+            success: false,
+            error: `上传失败: ${error.message}`
+          };
+        }
+        const { data: urlData } = supabase.storage
+          .from(SUPABASE_BUCKET)
+          .getPublicUrl(uniqueFileName);
+        if (!urlData || !urlData.publicUrl) {
+          return {
+            success: false,
+            error: '获取下载链接失败'
+          };
+        }
+        return {
+          success: true,
+          fileId: data.path,
+          downloadUrl: urlData.publicUrl
+        };
+      } catch (error) {
+        console.error('分享答案文件失败:', error);
+        return {
+          success: false,
+          error: error.message || '上传失败'
+        };
+      }
+    });
+
+    // 规则管理 IPC
+    ipcMain.handle('get-response-rules', () => {
+      try {
+        const rules = this.getResponseRules();
+        return rules;
+      } catch (error) {
+        console.error('获取响应规则失败:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('save-response-rule', (event, rule) => {
+      try {
+        const success = this.saveRule(rule);
+        return { success };
+      } catch (error) {
+        console.error('保存规则失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('save-response-rules', (event, rules) => {
+      try {
+        const success = this.saveResponseRules(rules);
+        return { success };
+      } catch (error) {
+        console.error('保存规则失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('delete-response-rule', (event, ruleId) => {
+      try {
+        const success = this.deleteRule(ruleId);
+        return { success };
+      } catch (error) {
+        console.error('删除规则失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('toggle-response-rule', (event, ruleId, enabled) => {
+      try {
+        const success = this.toggleRule(ruleId, enabled);
+        return { success };
+      } catch (error) {
+        console.error('切换规则状态失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('reset-rule-triggers', (event, ruleId) => {
+      try {
+        const success = this.resetRuleTriggers(ruleId);
+        return { success };
+      } catch (error) {
+        console.error('重置规则触发次数失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('export-response-rules', async () => {
+      const rules = this.getResponseRules();
+      const result = await dialog.showSaveDialog({
+        defaultPath: `response-rules-${new Date().toISOString().split('T')[0]}.json`,
+        filters: [
+          { name: 'JSON Files', extensions: ['json'] }
+        ]
+      });
+      if (!result.canceled) {
+        try {
+          fs.writeFileSync(result.filePath, JSON.stringify(rules, null, 2), 'utf-8');
+          return { success: true, path: result.filePath };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+      return { success: false, error: '用户取消操作' };
+    });
+
+    ipcMain.handle('import-response-rules', async () => {
+      const result = await dialog.showOpenDialog({
+        filters: [
+          { name: 'JSON Files', extensions: ['json'] }
+        ],
+        properties: ['openFile']
+      });
+      if (!result.canceled && result.filePaths.length > 0) {
+        try {
+          const rulesData = fs.readFileSync(result.filePaths[0], 'utf-8');
+          const rules = JSON.parse(rulesData);
+          if (Array.isArray(rules)) {
+            const importedRules = rules.map(rule => ({
+              ...rule,
+              id: uuidv4(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }));
+            const currentRules = this.getResponseRules();
+            this.responseRules = [...currentRules, ...importedRules];
+            this.saveResponseRules();
+            return { success: true, count: importedRules.length };
+          } else {
+            return { success: false, error: '无效的规则文件格式' };
+          }
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+      return { success: false, error: '用户取消操作' };
+    });
+
+    ipcMain.handle('import-response-rules-from-data', async (event, rulesData) => {
+      try {
+        let rules;
+        if (typeof rulesData === 'string') {
+          rules = JSON.parse(rulesData);
+        } else {
+          rules = rulesData;
+        }
+        let rulesToImport = [];
+        let groupToImport = null;
+        if (Array.isArray(rules)) {
+          rulesToImport = rules;
+        } else if (rules.group && rules.rules) {
+          groupToImport = rules.group;
+          rulesToImport = rules.rules;
+        } else if (rules.rules && Array.isArray(rules.rules)) {
+          rulesToImport = rules.rules;
+        } else {
+          return { success: false, error: '无效的规则数据格式' };
+        }
+        const currentRules = this.getResponseRules();
+        if (groupToImport) {
+          const existingGroupIndex = currentRules.findIndex(rule =>
+            rule.isGroup && (
+              rule.communityRulesetId === groupToImport.communityRulesetId ||
+              (rule.name === groupToImport.name && rule.author === groupToImport.author)
+            )
+          );
+          if (existingGroupIndex !== -1) {
+            const existingGroup = currentRules[existingGroupIndex];
+            const groupId = existingGroup.id;
+            console.log(`发现已存在的规则集: ${existingGroup.name}，正在替换...`);
+            this.responseRules = this.responseRules.filter(rule =>
+              rule.id !== groupId && rule.groupId !== groupId
+            );
+          }
+          this.responseRules.push(groupToImport);
+          rulesToImport.forEach(rule => {
+            rule.groupId = groupToImport.id;
+          });
+        } else {
+          const existingRuleNames = currentRules
+            .filter(rule => !rule.isGroup && rule.name)
+            .map(rule => rule.name);
+          const originalCount = rulesToImport.length;
+          rulesToImport = rulesToImport.filter(rule => {
+            if (rule.name && existingRuleNames.includes(rule.name)) {
+              console.log(`跳过重复规则: ${rule.name}`);
+              return false;
+            }
+            return true;
+          });
+          if (originalCount > rulesToImport.length) {
+            console.log(`过滤了 ${originalCount - rulesToImport.length} 个重复规则`);
+          }
+        }
+        this.responseRules = [...this.responseRules, ...rulesToImport];
+        this.saveResponseRules();
+        return { success: true, count: rulesToImport.length };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
   }
 
   // 注册事件监听器

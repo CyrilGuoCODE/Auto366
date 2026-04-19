@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { ipcMain, dialog } = require('electron');
 
 class RulesManager {
   constructor() {
@@ -273,6 +274,86 @@ class RulesManager {
       console.error('导出规则失败:', error);
       return { success: false, error: error.message };
     }
+  }
+
+  registerIpcHandlers() {
+    ipcMain.handle('get-rules', () => {
+      try {
+        return this.getRules();
+      } catch (error) {
+        console.error('获取规则失败:', error);
+        return [];
+      }
+    });
+
+    ipcMain.handle('save-rule', (event, rule) => {
+      try {
+        return this.saveRule(rule);
+      } catch (error) {
+        console.error('保存规则失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('delete-rule', (event, ruleId) => {
+      try {
+        return this.deleteRule(ruleId);
+      } catch (error) {
+        console.error('删除规则失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('toggle-rule', (event, ruleId, enabled) => {
+      try {
+        return this.toggleRule(ruleId, enabled);
+      } catch (error) {
+        console.error('切换规则状态失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('reset-rule-triggers', (event, ruleId) => {
+      try {
+        return this.resetRuleTriggers(ruleId);
+      } catch (error) {
+        console.error('重置规则触发次数失败:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('export-rules', async () => {
+      const result = await dialog.showSaveDialog({
+        defaultPath: `rules-${new Date().toISOString().split('T')[0]}.json`,
+        filters: [{ name: 'JSON Files', extensions: ['json'] }]
+      });
+      if (!result.canceled) {
+        try {
+          fs.writeFileSync(result.filePath, JSON.stringify(this.rules, null, 2), 'utf-8');
+          return { success: true, path: result.filePath };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+      return { success: false, error: '用户取消操作' };
+    });
+
+    ipcMain.handle('import-rules', async () => {
+      const result = await dialog.showOpenDialog({
+        filters: [{ name: 'JSON Files', extensions: ['json'] }],
+        properties: ['openFile']
+      });
+      if (!result.canceled && result.filePaths.length > 0) {
+        try {
+          const rulesData = fs.readFileSync(result.filePaths[0], 'utf-8');
+          const rules = JSON.parse(rulesData);
+          return this.importRules(rules);
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      }
+      return { success: false, error: '用户取消操作' };
+    });
   }
 }
 

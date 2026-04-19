@@ -1,261 +1,326 @@
-const { app, ipcMain, protocol } = require('electron');
+const { app, ipcMain, protocol, shell, dialog, BrowserWindow } = require('electron');
 const path = require('path');
+const fs = require('fs-extra');
+const os = require('os');
+const { autoUpdater } = require('electron-updater');
+const { createClient } = require('@supabase/supabase-js');
+const { v4: uuidv4 } = require('uuid');
 
-// 导入模块
 const WindowManager = require('./modules/window');
 const ProxyServer = require('./modules/proxy');
 const CertificateManager = require('./modules/cert');
 const RulesManager = require('./modules/rules');
-const RulesLoader = require('./modules/rules-loader');
-const AnswerExtractor = require('./modules/answer');
-const UpdateManager = require('./modules/update');
-const FileManager = require('./modules/file');
 
-class Auto366App {
-  constructor() {
-    this.windowManager = null;
-    this.certManager = null;
-    this.proxyServer = null;
-    this.rulesManager = null;
-    this.rulesLoader = null;
-    this.answerExtractor = null;
-    this.updateManager = null;
-    this.fileManager = null;
+const SUPABASE_URL = 'https://myenzpblosjnrtvicdor.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU';
+const SUPABASE_BUCKET = 'auto366-share';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    this.init();
+let mainWindow;
+let updateInfo = null;
+let proxyServer;
+let windowManager;
+let rulesManager;
+
+process.on('uncaughtException', (error) => {
+  if (error.code === 'ECONNRESET') {
+    console.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
+    return;
   }
+  console.error(error);
+});
 
-  // 初始化应用
-  init() {
-    // 应用事件
-    app.whenReady().then(() => {
-      // 注册协议
-      this.registerProtocol();
-      // 初始化所有模块
-      this.windowManager = new WindowManager();
-      this.certManager = new CertificateManager();
-      this.proxyServer = new ProxyServer(this.certManager);
-      this.rulesManager = new RulesManager();
-      this.rulesLoader = new RulesLoader();
-      this.answerExtractor = new AnswerExtractor();
-      this.updateManager = new UpdateManager();
-      this.fileManager = new FileManager();
+process.on('unhandledRejection', (reason, promise) => {
+  if (reason.code === 'ECONNRESET') {
+    console.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
+    return;
+  }
+  console.error(reason);
+});
 
-      this.createWindow();
-      this.initIpcListeners();
-      this.checkForUpdates();
-    });
+autoUpdater.setFeedURL({
+  provider: 'github',
+  owner: 'cyrilguocode',
+  repo: 'Auto366'
+});
 
-    app.on('window-all-closed', () => {
-      if (process.platform !== 'darwin') {
-        app.quit();
+autoUpdater.autoDownload = false;
+
+autoUpdater.on('update-available', (info) => {
+  updateInfo = info;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    let releaseNotes = '新版本已发布，请更新以获得最新功能。';
+    if (info.releaseNotes) {
+      if (typeof info.releaseNotes === 'string') {
+        releaseNotes = info.releaseNotes;
+      } else if (info.releaseNotes.body) {
+        releaseNotes = info.releaseNotes.body;
+      } else if (Array.isArray(info.releaseNotes)) {
+        releaseNotes = info.releaseNotes.join('\n');
       }
+    }
+    mainWindow.webContents.send('update-available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: releaseNotes
+    });
+  }
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-download-progress', {
+      percent: progressObj.percent,
+      transferred: progressObj.transferred,
+      total: progressObj.total,
+      bytesPerSecond: progressObj.bytesPerSecond
+    });
+  }
+});
+
+autoUpdater.on('update-downloaded', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-downloaded');
+  }
+});
+
+autoUpdater.on('error', (error) => {
+  console.error('更新检查失败:', error);
+});
+
+autoUpdater.on('update-not-available', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-not-available', {});
+  }
+});
+
+ipcMain.on('update-confirm', async () => {
+  if (updateInfo) {
+    await autoUpdater.downloadUpdate();
+  }
+});
+
+ipcMain.on('update-install', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
+ipcMain.handle('check-for-updates', async () => {
+  if (!app.isPackaged) {
+    return { hasUpdate: false, isDev: true, message: '开发环境不支持自动更新' };
+  }
+
+  try {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ hasUpdate: false, message: '检查更新超时' });
+      }, 20000);
+
+      const onUpdateAvailable = (info) => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        autoUpdater.removeListener('error', onError);
+        resolve({
+          hasUpdate: true,
+          version: info.version,
+          releaseNotes: info.releaseNotes,
+          releaseDate: info.releaseDate
+        });
+      };
+
+      const onUpdateNotAvailable = () => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('error', onError);
+        resolve({ hasUpdate: false, message: '当前已是最新版本' });
+      };
+
+      const onError = (error) => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        resolve({ hasUpdate: false, error: error.message });
+      };
+
+      autoUpdater.once('update-available', onUpdateAvailable);
+      autoUpdater.once('update-not-available', onUpdateNotAvailable);
+      autoUpdater.once('error', onError);
+
+      autoUpdater.checkForUpdates().catch(error => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        autoUpdater.removeListener('error', onError);
+        resolve({ hasUpdate: false, error: error.message });
+      });
+    });
+  } catch (error) {
+    console.error('检查更新失败:', error);
+    return { hasUpdate: false, error: error.message };
+  }
+});
+
+ipcMain.on('open-directory-choosing', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  if (!result.canceled) mainWindow.webContents.send('choose-directory', result.filePaths[0]);
+});
+
+ipcMain.on('open-file-choosing', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      { name: 'All Files', extensions: ['*'] },
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+      { name: 'Videos', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv'] },
+      { name: 'Archives', extensions: ['zip', 'rar', '7z', 'tar', 'gz'] },
+      { name: 'Documents', extensions: ['pdf', 'doc', 'docx', 'txt', 'rtf'] },
+      { name: 'JSON Files', extensions: ['json'] },
+      { name: 'XML Files', extensions: ['xml'] },
+      { name: 'HTML Files', extensions: ['html', 'htm'] }
+    ]
+  });
+  if (!result.canceled) mainWindow.webContents.send('choose-file', result.filePaths[0]);
+});
+
+ipcMain.on('open-implant-zip-choosing', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      { name: 'Zip Files', extensions: ['zip'] }
+    ]
+  });
+  if (!result.canceled) mainWindow.webContents.send('choose-implant-zip', result.filePaths[0]);
+});
+
+async function loadBuiltinRulesets() {
+  try {
+    const rulesetsDir = path.join(__dirname, 'rulesets');
+    if (!fs.existsSync(rulesetsDir)) {
+      console.log('内置规则集目录不存在');
+      return;
+    }
+
+    const folders = fs.readdirSync(rulesetsDir).filter(item => {
+      const itemPath = path.join(rulesetsDir, item);
+      return fs.statSync(itemPath).isDirectory();
     });
 
-    app.on('activate', () => {
-      if (!this.windowManager || this.windowManager.mainWindow === null) {
-        // 重新初始化模块
-        this.windowManager = new WindowManager();
-        this.certManager = new CertificateManager();
-        this.proxyServer = new ProxyServer(this.certManager);
-        this.rulesManager = new RulesManager();
-        this.rulesLoader = new RulesLoader();
-        this.answerExtractor = new AnswerExtractor();
-        this.updateManager = new UpdateManager();
-        this.fileManager = new FileManager();
-        
-        this.createWindow();
-        this.initIpcListeners();
+    for (const folderName of folders) {
+      const folderPath = path.join(rulesetsDir, folderName);
+      const rulesetJsonPath = path.join(folderPath, 'ruleset.json');
+      const rulesJsonPath = path.join(folderPath, `${folderName}.json`);
+
+      if (!fs.existsSync(rulesetJsonPath) || !fs.existsSync(rulesJsonPath)) {
+        console.log(`跳过不完整的规则集: ${folderName}`);
+        continue;
       }
-    });
-  }
 
-  // 注册协议
-  registerProtocol() {
-    protocol.registerFileProtocol('auto366', (request, callback) => {
-      const url = request.url.replace('auto366://', '');
-      const filePath = path.join(__dirname, url);
-      callback({ path: filePath });
-    });
-  }
+      try {
+        const rulesetInfo = JSON.parse(fs.readFileSync(rulesetJsonPath, 'utf-8'));
+        let rulesData = JSON.parse(fs.readFileSync(rulesJsonPath, 'utf-8'));
 
-  // 创建窗口
-  createWindow() {
-    this.windowManager.createWindow();
-    // 打开开发者工具
-    if (this.windowManager.mainWindow) {
-      this.windowManager.mainWindow.webContents.openDevTools();
-    }
-  }
+        rulesData = rulesData.map(rule => {
+          if (rule.type === 'zip-implant' && rule.zipImplant && !rule.zipImplant.startsWith('http')) {
+            const zipPath = path.join(folderPath, rule.zipImplant);
+            if (fs.existsSync(zipPath)) {
+              rule.zipImplant = zipPath;
+            }
+          }
+          return rule;
+        });
 
-  // 初始化IPC监听器
-  initIpcListeners() {
-    // 窗口控制
-    ipcMain.handle('toggle-always-on-top', () => this.windowManager.toggleAlwaysOnTop());
-    ipcMain.handle('get-always-on-top', () => this.windowManager.getAlwaysOnTop());
-    ipcMain.handle('window-is-maximized', () => this.windowManager.windowIsMaximized());
-    ipcMain.handle('window-toggle-maximize', () => this.windowManager.windowToggleMaximize());
-    ipcMain.handle('window-minimize', () => this.windowManager.windowMinimize());
-    ipcMain.handle('window-close', () => this.windowManager.windowClose());
-    ipcMain.handle('get-app-version', () => this.windowManager.getAppVersion());
+        const groupId = uuidv4();
+        const rulesetGroup = {
+          id: groupId,
+          name: rulesetInfo.name,
+          description: rulesetInfo.description,
+          isGroup: true,
+          isBuiltin: true,
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
 
-    // 代理控制
-    ipcMain.handle('start-answer-proxy', () => this.startProxy());
-    ipcMain.handle('stop-answer-proxy', () => this.stopProxy());
-    ipcMain.handle('get-proxy-port', () => this.proxyServer.getProxyPort());
-    ipcMain.handle('set-proxy-port', (_, port) => this.proxyServer.setProxyPort(port));
-    ipcMain.handle('get-bucket-port', () => this.proxyServer.getBucketPort());
-    ipcMain.handle('set-bucket-port', (_, port) => this.proxyServer.setBucketPort(port));
-    ipcMain.handle('get-answer-capture-enabled', () => this.proxyServer.getAnswerCaptureEnabled());
-    ipcMain.handle('set-answer-capture-enabled', (_, enabled) => this.proxyServer.setAnswerCaptureEnabled(enabled));
+        const rules = rulesData.map(rule => ({
+          ...rule,
+          groupId: groupId,
+          isBuiltin: true,
+          createdAt: rule.createdAt || new Date().toISOString(),
+          updatedAt: rule.updatedAt || new Date().toISOString()
+        }));
 
-    // 规则管理
-    ipcMain.handle('get-rules', () => this.rulesManager.getRules());
-    ipcMain.handle('save-rule', (_, rule) => this.rulesManager.saveRule(rule));
-    ipcMain.handle('delete-rule', (_, ruleId) => this.rulesManager.deleteRule(ruleId));
-    ipcMain.handle('toggle-rule', (_, ruleId, enabled) => this.rulesManager.toggleRule(ruleId, enabled));
-    ipcMain.handle('reset-rule-triggers', (_, ruleId) => this.rulesManager.resetRuleTriggers(ruleId));
-    ipcMain.handle('save-response-rules', (_, rules) => {
-      this.rulesManager.rules = rules;
-      return this.rulesManager.saveRules();
-    });
+        const existingRules = proxyServer.getResponseRules();
+        const existingBuiltinGroup = existingRules.find(rule =>
+          rule.isGroup && rule.isBuiltin && rule.name === rulesetInfo.name
+        );
 
-    // 文件操作
-    ipcMain.handle('open-directory-choosing', () => this.fileManager.openDirectoryDialog());
-    ipcMain.handle('open-implant-zip-choosing', () => this.fileManager.openFileDialog({
-      filters: [{ name: 'ZIP Files', extensions: ['zip'] }]
-    }));
-    ipcMain.handle('download-file', (_, uuid) => this.downloadFile(uuid));
-    ipcMain.handle('clear-cache', () => this.fileManager.clearCache());
-    ipcMain.handle('remove-cache-file', () => this.removeCacheFile());
-    ipcMain.handle('share-answer-file', (_, filePath) => this.shareAnswerFile(filePath));
-    ipcMain.handle('save-injection-package', (_, data) => this.saveInjectionPackage(data));
+        if (existingBuiltinGroup) {
+          console.log(`内置规则集已存在，跳过: ${rulesetInfo.name}`);
+          continue;
+        }
 
-    // UI模式
-    ipcMain.handle('get-ui-mode', () => this.getUIMode());
-    ipcMain.handle('switch-ui-mode', (_, mode) => this.switchUIMode(mode));
+        proxyServer.responseRules = [...proxyServer.responseRules, rulesetGroup, ...rules];
 
-    // 更新管理
-    ipcMain.handle('check-for-updates', () => this.updateManager.checkForUpdates());
-    ipcMain.handle('update-confirm', () => this.confirmUpdate());
-    ipcMain.handle('update-install', () => this.installUpdate());
-
-    // 代理服务器事件
-    this.proxyServer.on('trafficLog', (data) => {
-      this.windowManager.sendToRenderer('traffic-log', data);
-    });
-
-    // 更新事件
-    this.updateManager.on('downloadProgress', (progress) => {
-      this.windowManager.sendToRenderer('update-download-progress', progress);
-    });
-  }
-
-  // 启动代理
-  async startProxy() {
-    try {
-      // 启动代理服务器
-      const result = await this.proxyServer.start(this.windowManager.mainWindow);
-      this.windowManager.sendToRenderer('proxy-status', result);
-      return result;
-    } catch (error) {
-      console.error('启动代理失败:', error);
-      this.windowManager.sendToRenderer('proxy-error', { message: error.message });
-      return { running: false, error: error.message };
-    }
-  }
-
-  // 停止代理
-  async stopProxy() {
-    try {
-      const result = await this.proxyServer.stop();
-      this.windowManager.sendToRenderer('proxy-status', { running: false });
-      return result;
-    } catch (error) {
-      console.error('停止代理失败:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // 下载文件
-  async downloadFile(uuid) {
-    try {
-      // 这里需要实现具体的下载逻辑
-      return 1; // 成功
-    } catch (error) {
-      console.error('下载文件失败:', error);
-      return 0; // 失败
-    }
-  }
-
-  // 移除缓存文件
-  removeCacheFile() {
-    try {
-      // 这里需要实现具体的缓存清理逻辑
-      return { success: true, filesDeleted: 0, dirsDeleted: 0 };
-    } catch (error) {
-      console.error('清理缓存文件失败:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // 分享答案文件
-  async shareAnswerFile(filePath) {
-    try {
-      // 这里需要实现具体的分享逻辑
-      return { success: true, downloadUrl: 'https://example.com/download' };
-    } catch (error) {
-      console.error('分享答案文件失败:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // 保存注入包
-  async saveInjectionPackage(data) {
-    try {
-      // 这里需要实现具体的保存逻辑
-      return { path: 'path/to/injection.zip' };
-    } catch (error) {
-      console.error('保存注入包失败:', error);
-      return { error: error.message };
-    }
-  }
-
-  // 获取UI模式
-  getUIMode() {
-    // 从本地存储或配置文件中获取UI模式
-    return 'professional'; // 默认专业模式
-  }
-
-  // 切换UI模式
-  switchUIMode(mode) {
-    // 保存UI模式到本地存储或配置文件
-    return { success: true };
-  }
-
-  // 检查更新
-  async checkForUpdates() {
-    try {
-      const result = await this.updateManager.checkForUpdates();
-      if (result.hasUpdate) {
-        this.windowManager.sendToRenderer('update-available', result);
+        console.log(`成功导入内置规则集: ${rulesetInfo.name} (${rules.length} 个规则)`);
+      } catch (error) {
+        console.error(`导入规则集 ${folderName} 失败:`, error);
       }
-    } catch (error) {
-      console.error('检查更新失败:', error);
     }
-  }
 
-  // 确认更新
-  confirmUpdate() {
-    // 这里需要实现具体的更新确认逻辑
-    this.updateManager.checkForUpdatesManually();
-  }
-
-  // 安装更新
-  installUpdate() {
-    // 这里需要实现具体的更新安装逻辑
+    proxyServer.saveResponseRules();
+    console.log('内置规则集导入完成');
+  } catch (error) {
+    console.error('导入内置规则集失败:', error);
   }
 }
 
-// 启动应用
-new Auto366App();
+app.whenReady().then(async () => {
+  windowManager = new WindowManager();
+  mainWindow = windowManager.createWindow();
+  
+  const certManager = new CertificateManager();
+  proxyServer = new ProxyServer(certManager);
+  rulesManager = new RulesManager();
+  
+  windowManager.registerIpcHandlers();
+  proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, uuidv4, fs, path, os, require);
+  rulesManager.registerIpcHandlers();
+
+  await loadBuiltinRulesets();
+
+  if (app.isPackaged) {
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.executeJavaScript(`
+          localStorage.getItem('auto-check-updates') !== 'false'
+        `).then(autoCheckEnabled => {
+          if (autoCheckEnabled) {
+            console.log('应用启动，开始检查更新...');
+            autoUpdater.checkForUpdates().catch(error => {
+              console.error('启动时检查更新失败:', error);
+            });
+          } else {
+            console.log('自动检查更新已禁用');
+          }
+        }).catch(error => {
+          console.error('获取自动检查更新设置失败:', error);
+          console.log('获取设置失败，默认检查更新...');
+          autoUpdater.checkForUpdates().catch(error => {
+            console.error('默认检查更新失败:', error);
+          });
+        });
+      }
+    }, 1000);
+  }
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      mainWindow = windowManager.createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

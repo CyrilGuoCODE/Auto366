@@ -12,16 +12,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   switchUiMode: (mode) => ipcRenderer.invoke('switch-ui-mode', mode),
   toggleAlwaysOnTop: () => ipcRenderer.invoke('toggle-always-on-top'),
   getAlwaysOnTop: () => ipcRenderer.invoke('get-always-on-top'),
-  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
-  windowClose: () => ipcRenderer.invoke('window-close'),
+  windowMinimize: () => ipcRenderer.send('window-minimize'),
+  windowClose: () => ipcRenderer.send('window-close'),
   windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize'),
   windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   onWindowMaximized: (callback) => ipcRenderer.on('window-maximized', (event, value) => callback(value)),
+  getScaleFactor: () => ipcRenderer.invoke('get-scale-factor'),
+  setGlobalScale: () => ipcRenderer.send('set-global-scale'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
   // 答案获取相关API
-  startAnswerProxy: () => ipcRenderer.invoke('start-answer-proxy'),
-  stopAnswerProxy: () => ipcRenderer.invoke('stop-answer-proxy'),
+  startAnswerProxy: () => ipcRenderer.send('start-answer-proxy'),
+  stopAnswerProxy: () => ipcRenderer.send('stop-answer-proxy'),
   setProxyPort: (port) => ipcRenderer.invoke('set-proxy-port', port),
   getProxyPort: () => ipcRenderer.invoke('get-proxy-port'),
   setBucketPort: (port) => ipcRenderer.invoke('set-bucket-port', port),
@@ -53,8 +55,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveInjectionPackage: (data) => ipcRenderer.invoke('save-injection-package', data),
 
   // 目录选择
-  openDirectoryChoosing: () => ipcRenderer.invoke('open-directory-choosing'),
-  openImplantZipChoosing: () => ipcRenderer.invoke('open-implant-zip-choosing'),
+  openDirectoryChoosing: () => ipcRenderer.send('open-directory-choosing'),
+  openFileChoosing: () => ipcRenderer.send('open-file-choosing'),
+  openImplantZipChoosing: () => ipcRenderer.send('open-implant-zip-choosing'),
+  chooseDirectory: (callback) => ipcRenderer.on('choose-directory', (event, dirPath) => callback(dirPath)),
+  chooseFile: (callback) => ipcRenderer.on('choose-file', (event, filePath) => callback(filePath)),
   chooseImplantZip: (callback) => ipcRenderer.on('choose-implant-zip', (event, filePath) => callback(filePath)),
 
   // 缓存路径管理
@@ -75,19 +80,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 规则管理API
   getRules: () => ipcRenderer.invoke('get-rules'),
-  saveRule: (rule) => ipcRenderer.invoke('save-rule', rule),
-  deleteRule: (ruleId) => ipcRenderer.invoke('delete-rule', ruleId),
-  toggleRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-rule', ruleId, enabled),
+  getResponseRules: () => ipcRenderer.invoke('get-response-rules'),
+  saveRule: (rule) => ipcRenderer.invoke('save-response-rule', rule),
+  saveRules: (rules) => ipcRenderer.invoke('save-response-rules', rules),
+  deleteRule: (ruleId) => ipcRenderer.invoke('delete-response-rule', ruleId),
+  toggleRule: (ruleId, enabled) => ipcRenderer.invoke('toggle-response-rule', ruleId, enabled),
   resetRuleTriggers: (ruleId) => ipcRenderer.invoke('reset-rule-triggers', ruleId),
   saveResponseRules: (rules) => ipcRenderer.invoke('save-response-rules', rules),
+  exportResponseRules: () => ipcRenderer.invoke('export-response-rules'),
+  importResponseRules: () => ipcRenderer.invoke('import-response-rules'),
+  importResponseRulesFromData: (rulesData) => ipcRenderer.invoke('import-response-rules-from-data', rulesData),
+  getActionTypes: (ruleType) => ipcRenderer.invoke('get-action-types', ruleType),
+
+  // 注入包相关
+  importImplantZip: (sourcePath) => ipcRenderer.invoke('import-implant-zip', sourcePath),
+  downloadAndImportInjectionPackage: (arrayBuffer, rulesetName) => ipcRenderer.invoke('download-and-import-injection-package', arrayBuffer, rulesetName),
+  downloadAndSaveInjectionPackage: (arrayBuffer, originalFileName, rulesetName) => ipcRenderer.invoke('download-and-save-injection-package', arrayBuffer, originalFileName, rulesetName),
+  downloadAndSaveInjectionPackageWithMD5: (arrayBuffer, fileName, rulesetName, newFileMD5) => ipcRenderer.invoke('download-and-save-injection-package-with-md5', arrayBuffer, fileName, rulesetName, newFileMD5),
 
   // 更新相关API
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-  updateConfirm: () => ipcRenderer.invoke('update-confirm'),
-  updateInstall: () => ipcRenderer.invoke('update-install'),
+  updateConfirm: () => ipcRenderer.send('update-confirm'),
+  updateInstall: () => ipcRenderer.send('update-install'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, data) => callback(data)),
   onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, data) => callback(data)),
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
+  onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, data) => callback(data)),
 
   // 上传规则集
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {

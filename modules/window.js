@@ -1,134 +1,163 @@
-const { app, BrowserWindow, screen, ipcMain, nativeTheme, Menu, protocol, dialog, shell } = require('electron');
+const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs-extra');
 
 class WindowManager {
   constructor() {
     this.mainWindow = null;
-    this.isAlwaysOnTop = false;
+    this.uiModePath = path.join(app.getPath('userData'), 'ui-mode');
   }
 
-  // 创建主窗口
+  readUiMode() {
+    try {
+      const v = fs.readFileSync(this.uiModePath, 'utf8').trim();
+      if (v === 'simple' || v === 'professional') return v;
+    } catch (e) {}
+    return 'professional';
+  }
+
   createWindow() {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    const mode = this.readUiMode();
+    const winW = mode === 'simple' ? 875 : 1400;
+    const winH = mode === 'simple' ? 1010 : 900;
 
     this.mainWindow = new BrowserWindow({
-      width: Math.min(width * 0.9, 1200),
-      height: Math.min(height * 0.9, 800),
-      minWidth: 800,
-      minHeight: 600,
-      frame: false, // 无边框窗口
-      titleBarStyle: 'customButtonsOnHover',
-      trafficLightPosition: { x: 15, y: 13 },
+      width: winW,
+      height: winH,
+      icon: path.join(__dirname, '../icon.png'),
+      frame: false,
       webPreferences: {
         preload: path.join(__dirname, '../preload.js'),
-        nodeIntegration: true,
         contextIsolation: true,
         enableRemoteModule: false,
-        webSecurity: true,
-        sandbox: false
+        nodeIntegration: true,
       }
     });
 
-    // 加载HTML文件
-    this.mainWindow.loadFile('index.html');
-
-    // 窗口事件
-    this.mainWindow.on('closed', () => {
-      this.mainWindow = null;
-    });
+    this.mainWindow.setMenu(null);
 
     this.mainWindow.on('maximize', () => {
-      this.mainWindow.webContents.send('window-maximized');
+      if (!this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('window-maximized', true);
+      }
     });
-
     this.mainWindow.on('unmaximize', () => {
-      this.mainWindow.webContents.send('window-unmaximized');
+      if (!this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('window-maximized', false);
+      }
     });
 
-    // 禁用默认的菜单
-    Menu.setApplicationMenu(null);
+    this.mainWindow.loadFile('index.html');
+
+    this.mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.key === 'F12') {
+        this.mainWindow.webContents.openDevTools({ mode: 'detach' });
+        event.preventDefault();
+      }
+    });
+
+    return this.mainWindow;
   }
 
-  // 切换窗口置顶
-  async toggleAlwaysOnTop() {
-    if (!this.mainWindow) return { success: false, error: '窗口未初始化' };
+  registerIpcHandlers() {
+    ipcMain.handle('get-ui-mode', () => this.readUiMode());
 
-    this.isAlwaysOnTop = !this.isAlwaysOnTop;
-    this.mainWindow.setAlwaysOnTop(this.isAlwaysOnTop);
+    ipcMain.handle('switch-ui-mode', async (e, mode) => {
+      if (mode !== 'simple' && mode !== 'professional') return { ok: false };
+      try {
+        fs.writeFileSync(this.uiModePath, mode, 'utf8');
+      } catch (err) {
+        console.error('写入 ui-mode 失败:', err);
+        return { ok: false };
+      }
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        if (mode === 'simple') {
+          this.mainWindow.setSize(875, 1010);
+        } else {
+          this.mainWindow.setSize(1400, 900);
+        }
+        this.mainWindow.center();
+      }
+      return { ok: true };
+    });
 
-    return {
-      success: true,
-      isAlwaysOnTop: this.isAlwaysOnTop
-    };
-  }
+    ipcMain.handle('toggle-always-on-top', () => {
+      if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+        return { success: false, isAlwaysOnTop: false };
+      }
+      const next = !this.mainWindow.isAlwaysOnTop();
+      this.mainWindow.setAlwaysOnTop(next);
+      return { success: true, isAlwaysOnTop: next };
+    });
 
-  // 获取窗口置顶状态
-  getAlwaysOnTop() {
-    return this.isAlwaysOnTop;
-  }
+    ipcMain.handle('get-always-on-top', () => {
+      if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+        return false;
+      }
+      return this.mainWindow.isAlwaysOnTop();
+    });
 
-  // 检查窗口是否最大化
-  async windowIsMaximized() {
-    if (!this.mainWindow) return false;
-    return this.mainWindow.isMaximized();
-  }
+    ipcMain.on('window-minimize', () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) this.mainWindow.minimize();
+    });
 
-  // 切换窗口最大化
-  async windowToggleMaximize() {
-    if (!this.mainWindow) return;
+    ipcMain.on('window-close', () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) this.mainWindow.close();
+    });
 
-    if (this.mainWindow.isMaximized()) {
-      this.mainWindow.unmaximize();
-    } else {
+    ipcMain.handle('window-toggle-maximize', () => {
+      if (!this.mainWindow || this.mainWindow.isDestroyed()) return { maximized: false };
+      if (this.mainWindow.isMaximized()) {
+        this.mainWindow.unmaximize();
+        return { maximized: false };
+      }
       this.mainWindow.maximize();
-    }
+      return { maximized: true };
+    });
+
+    ipcMain.handle('window-is-maximized', () => {
+      if (!this.mainWindow || this.mainWindow.isDestroyed()) return false;
+      return this.mainWindow.isMaximized();
+    });
+
+    ipcMain.handle('get-scale-factor', () => {
+      try {
+        return Math.round(screen.getPrimaryDisplay().scaleFactor * 100);
+      } catch (e) {
+        return 100;
+      }
+    });
+
+    ipcMain.on('set-global-scale', () => {});
+
+    ipcMain.handle('get-action-types', (e, ruleType) => {
+      if (ruleType === 'request') {
+        return [
+          { value: 'replace', label: '替换请求体', description: '' },
+          { value: 'modify', label: '修改请求体', description: '' },
+          { value: 'redirect', label: '重定向URL', description: '' }
+        ];
+      }
+      if (ruleType === 'response-headers') {
+        return [
+          { value: 'modify', label: '修改响应头', description: '' },
+          { value: 'remove', label: '删除响应头', description: '' }
+        ];
+      }
+      return [
+        { value: 'replace', label: '替换响应体', description: '' },
+        { value: 'modify', label: '修改响应体', description: '' },
+        { value: 'inject', label: '注入内容', description: '' }
+      ];
+    });
+
+    ipcMain.handle('get-app-version', () => {
+      return app.getVersion();
+    });
   }
 
-  // 最小化窗口
-  windowMinimize() {
-    if (this.mainWindow) {
-      this.mainWindow.minimize();
-    }
-  }
-
-  // 关闭窗口
-  windowClose() {
-    if (this.mainWindow) {
-      this.mainWindow.close();
-    }
-  }
-
-  // 显示窗口
-  showWindow() {
-    if (this.mainWindow) {
-      this.mainWindow.show();
-    }
-  }
-
-  // 隐藏窗口
-  hideWindow() {
-    if (this.mainWindow) {
-      this.mainWindow.hide();
-    }
-  }
-
-  // 聚焦窗口
-  focusWindow() {
-    if (this.mainWindow) {
-      this.mainWindow.focus();
-    }
-  }
-
-  // 发送消息到渲染进程
-  sendToRenderer(channel, data) {
-    if (this.mainWindow && this.mainWindow.webContents) {
-      this.mainWindow.webContents.send(channel, data);
-    }
-  }
-
-  // 获取应用版本
-  getAppVersion() {
-    return app.getVersion();
+  getMainWindow() {
+    return this.mainWindow;
   }
 }
 
