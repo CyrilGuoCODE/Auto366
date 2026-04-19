@@ -3564,6 +3564,15 @@ select.form-input {
     color: #6c757d;
 }
 
+.donation-messages {
+    text-align: center;
+    margin: 20px 0;
+}
+
+.donation-messages .donation-message + .donation-message {
+    margin-top: 8px;
+}
+
 .donation-modal .appreciation-wrapper {
     display: flex;
     justify-content: center;
