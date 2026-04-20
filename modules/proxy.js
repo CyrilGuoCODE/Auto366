@@ -967,7 +967,7 @@ class ProxyServer {
             }
           }
           else {
-            this.serverDatas[rule.serverLocate] = extracted_answers;
+            this.serverDatas[rule.serverLocate] = extracted_answers.answers;
           }
         }
       }
