@@ -107,11 +107,23 @@ function extractMeanings(text) {
         part = part.trim();
         if (part) {
             meanings.push(part);
+            const bracketRegex = /[\(（][^\)）]*[\)）]/;
+            if (bracketRegex.test(part)) {
+                const cleaned = part.replace(/[\(（][^\)）]*[\)）]/g, '').replace(/\s+/g, ' ').trim();
+                if (cleaned && cleaned !== part) {
+                    meanings.push(cleaned);
+                    addLogMessage('提取括号去除释义: "' + part + '" → "' + cleaned + '"', 'info');
+                }
+            }
         }
     }
     
     if (meanings.length === 0) {
         meanings.push(text.trim());
+    }
+    
+    if (meanings.length > 1) {
+        addLogMessage('提取到 ' + meanings.length + ' 个释义: ' + meanings.join(', '), 'info');
     }
     
     return meanings;
@@ -348,6 +360,35 @@ function stopAutoPk() {
     updateAutoPkPanelStatus();
 }
 
+// 导出日志到桌面
+function exportLogs() {
+    if (logMessages.length === 0) {
+        addLogMessage('没有日志可导出', 'warning');
+        return;
+    }
+    
+    const logText = logMessages.reverse().map(msg => {
+        let typePrefix = '';
+        if (msg.type === 'success') typePrefix = '[成功] ';
+        if (msg.type === 'error') typePrefix = '[错误] ';
+        if (msg.type === 'warning') typePrefix = '[警告] ';
+        if (msg.type === 'match') typePrefix = '[匹配] ';
+        return `[${msg.timestamp}] ${typePrefix}${msg.message}`;
+    }).join('\n');
+    
+    const blob = new Blob([logText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `auto-pk-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    addLogMessage('日志已导出到桌面', 'success');
+}
+
 // 添加日志消息
 function addLogMessage(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
@@ -391,6 +432,23 @@ function createLogPanel() {
     titleSpan.style.fontSize = '14px';
     titleSpan.style.fontWeight = 'bold';
     header.appendChild(titleSpan);
+    
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = '导出';
+    exportBtn.title = '导出日志到桌面';
+    exportBtn.style.fontSize = '12px';
+    exportBtn.style.padding = '2px 6px';
+    exportBtn.style.cursor = 'pointer';
+    exportBtn.style.background = 'rgba(76, 175, 80, 0.8)';
+    exportBtn.style.border = 'none';
+    exportBtn.style.color = '#fff';
+    exportBtn.style.borderRadius = '3px';
+    exportBtn.style.marginRight = '3px';
+    exportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportLogs();
+    });
+    header.appendChild(exportBtn);
     
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '×';
