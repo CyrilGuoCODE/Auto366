@@ -84,17 +84,17 @@ app.whenReady().then(async () => {
   updateManager.checkForUpdatesOnStartup();
   
   const certManager = new CertificateManager();
-  proxyServer = new ProxyServer(certManager);
   rulesManager = new RulesManager();
+  proxyServer = new ProxyServer(certManager, rulesManager);
   fileManager = new FileManager(app.getAppPath());
-  rulesLoader = new RulesLoader();
+  rulesLoader = new RulesLoader(app.getAppPath());
   
   windowManager.registerIpcHandlers();
-  proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET);
-  rulesManager.registerIpcHandlers(proxyServer);
+  rulesManager.registerIpcHandlers();
+  proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, rulesManager);
   fileManager.registerIpcHandlers(mainWindow);
 
-  await rulesLoader.loadBuiltinRulesets(proxyServer);
+  await rulesLoader.loadBuiltinRulesets(rulesManager);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

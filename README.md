@@ -35,6 +35,10 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 #### 短期更新
 
+- WEB端加入贡献者与捐赠者页面
+- WEB端加入反馈状态跟踪
+- WEB端修复答案查看样式，兼容新的排序算法
+- WEB端加入新公共下载API加速规则集文件下载
 - 加入一键打开天学网(通过注册表获取路径)
 - 加入请求搜索
 - 加入加解密模块
@@ -45,7 +49,6 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 - 加入天学网进程加速(基于OpenSpeedy)
 - 加入听力自动化
-- 加入官网捐赠名单
 
 ## 安装说明
 

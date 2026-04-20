@@ -3,14 +3,15 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
 class RulesLoader {
-  constructor() {
-    this.rulesetsDir = path.join(__dirname, '../rulesets');
+  constructor(appPath) {
+    this.appPath = appPath || process.cwd();
+    this.rulesetsDir = path.join(this.appPath, 'rulesets');
   }
 
-  async loadBuiltinRulesets(proxyServer) {
+  async loadBuiltinRulesets(rulesManager) {
     try {
       if (!fs.existsSync(this.rulesetsDir)) {
-        console.log('内置规则集目录不存在');
+        console.log('内置规则集目录不存在:', this.rulesetsDir);
         return;
       }
 
@@ -63,7 +64,7 @@ class RulesLoader {
             updatedAt: rule.updatedAt || new Date().toISOString()
           }));
 
-          const existingRules = proxyServer.getResponseRules();
+          const existingRules = rulesManager.getRules();
           const existingBuiltinGroup = existingRules.find(rule =>
             rule.isGroup && rule.isBuiltin && rule.name === rulesetInfo.name
           );
@@ -73,7 +74,7 @@ class RulesLoader {
             continue;
           }
 
-          proxyServer.responseRules = [...proxyServer.responseRules, rulesetGroup, ...rules];
+          rulesManager.saveRules([...existingRules, rulesetGroup, ...rules]);
 
           console.log(`成功导入内置规则集: ${rulesetInfo.name} (${rules.length} 个规则)`);
         } catch (error) {
@@ -81,7 +82,6 @@ class RulesLoader {
         }
       }
 
-      proxyServer.saveResponseRules();
       console.log('内置规则集导入完成');
     } catch (error) {
       console.error('导入内置规则集失败:', error);

@@ -186,6 +186,80 @@ class AnswerExtractor {
     return answers;
   }
 
+  async processZipAnswer(zipPath, ansDir) {
+    let extractDir = zipPath.replace('.zip', '');
+
+    if (fs.existsSync(extractDir)) {
+      fs.removeSync(extractDir);
+    }
+    fs.ensureDirSync(extractDir);
+
+    const zip = new StreamZip.async({ file: zipPath });
+    const entries = await zip.entries();
+    if (Object.keys(entries).length === 0) {
+      await zip.close();
+      throw new Error('ZIP文件为空或损坏');
+    }
+    await zip.extract(null, extractDir);
+    await zip.close();
+
+    const extCount = this.scanFileExtensions(extractDir);
+
+    const extractResult = await this.extractFromDirectory(extractDir);
+
+    if (extractResult.success && extractResult.answers.length > 0) {
+      const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
+      const answerText = JSON.stringify({
+        answers: extractResult.answers,
+        count: extractResult.count,
+        file: answerFile,
+        processedFiles: extractResult.processedFiles,
+        fileStructure: extCount
+      }, null, 2);
+      fs.writeFileSync(answerFile, answerText, 'utf-8');
+    } else if (extractResult.success && extractResult.answers.length === 0) {
+      const allContentFile = path.join(ansDir, `all_content_${Date.now()}.txt`);
+      const allContentText = extractResult.allFilesContent.map(item =>
+        `文件: ${item.file}\n内容:\n${item.content}\n\n${'='.repeat(50)}\n\n`
+      ).join('\n');
+      fs.writeFileSync(allContentFile, allContentText, 'utf-8');
+    }
+
+    return {
+      extractDir: extractDir,
+      fileStructure: extCount,
+      answers: extractResult.answers,
+      count: extractResult.count,
+      processedFiles: extractResult.processedFiles,
+      allFilesContent: extractResult.allFilesContent,
+      success: extractResult.success,
+      message: extractResult.message
+    };
+  }
+
+  scanFileExtensions(dir) {
+    const extCount = {};
+    const traverse = (currentDir) => {
+      try {
+        const entries = fs.readdirSync(currentDir);
+        for (const entry of entries) {
+          const fullPath = path.join(currentDir, entry);
+          const stats = fs.statSync(fullPath);
+          if (stats.isDirectory()) {
+            traverse(fullPath);
+          } else {
+            const ext = path.extname(entry).toLowerCase() || '(无后缀)';
+            extCount[ext] = (extCount[ext] || 0) + 1;
+          }
+        }
+      } catch (error) {
+        console.error('扫描目录失败:', error);
+      }
+    };
+    traverse(dir);
+    return extCount;
+  }
+
   async extractFromDirectory(extractDir) {
     const allAnswers = [];
     const processedFiles = [];

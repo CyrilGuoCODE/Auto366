@@ -13,8 +13,9 @@ const { ipcMain, app } = require('electron');
 const AnswerExtractor = require('./answer');
 
 class ProxyServer {
-  constructor(certManager) {
+  constructor(certManager, rulesManager) {
     this.certManager = certManager;
+    this.rulesManager = rulesManager;
     this.bucketServer = null;
     this.proxyPort = 5291;
     this.bucketPort = 5290;
@@ -23,7 +24,6 @@ class ProxyServer {
     this.answerCaptureEnabled = true;
     this.mainWindow = null;
     this.trafficCache = new Map();
-    this.responseRules = [];
     this.serverDatas = {};
     this.isStopping = false;
     this.proxy = null;
@@ -36,10 +36,6 @@ class ProxyServer {
     this.tempDir = path.join(this.appPath, 'temp');
     this.ansDir = path.join(this.appPath, 'answers');
     this.fileDir = path.join(this.appPath, 'file');
-    this.rulesDir = path.join(process.env.APPDATA || (process.platform === 'darwin' ? path.join(process.env.HOME, 'Library', 'Application Support') : path.join(process.env.HOME, '.local', 'share')), 'Auto366', 'response-rules');
-    
-    // 加载响应规则
-    this.loadResponseRules();
   }
 
   // 启动代理服务器
@@ -119,7 +115,7 @@ class ProxyServer {
 
             if (isFileDownloadRequest) {
               // 获取匹配的规则并计算新文件的MD5
-              for (const rule of this.responseRules) {
+              for (const rule of this.rulesManager.getRules()) {
                 if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant') continue;
 
                 const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
@@ -134,9 +130,9 @@ class ProxyServer {
                   ctx.serverToProxyResponse.headers['content-length'] = buffer.length.toString();
 
                   if (rule.maxTriggers !== undefined) {
-                    rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-                    this.saveResponseRules();
-                  }
+                  rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+                  this.rulesManager.saveRules();
+                }
 
                   // 发送响应头修改日志
                   this.safeIpcSend('rule-log', {
@@ -632,165 +628,6 @@ class ProxyServer {
     }
   }
 
-  // 加载响应体更改规则
-  loadResponseRules() {
-    try {
-      fs.ensureDirSync(this.rulesDir);
-      const rulesFile = path.join(this.rulesDir, 'rules.json');
-
-      if (fs.existsSync(rulesFile)) {
-        const rulesData = fs.readFileSync(rulesFile, 'utf-8');
-        this.responseRules = JSON.parse(rulesData);
-      } else {
-        this.responseRules = [];
-      }
-    } catch (error) {
-      console.error('加载响应体更改规则失败:', error);
-      this.responseRules = [];
-    }
-  }
-
-  // 保存响应体更改规则
-  saveResponseRules(rules = null) {
-    try {
-      fs.ensureDirSync(this.rulesDir);
-      const rulesFile = path.join(this.rulesDir, 'rules.json');
-
-      // 如果传入了规则数组，则使用传入的规则；否则使用当前规则
-      const rulesToSave = rules !== null ? rules : this.responseRules;
-
-      fs.writeFileSync(rulesFile, JSON.stringify(rulesToSave, null, 2), 'utf-8');
-
-      // 如果传入了规则数组，则更新当前规则
-      if (rules !== null) {
-        this.responseRules = rules;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('保存响应体更改规则失败:', error);
-      return false;
-    }
-  }
-
-  // 获取所有规则
-  getResponseRules() {
-    return this.responseRules || [];
-  }
-
-  // 添加或更新规则
-  saveRule(rule) {
-    try {
-      if (rule.id) {
-        // 更新现有规则
-        const index = this.responseRules.findIndex(r => r.id === rule.id);
-        if (index !== -1) {
-          const updatedRule = {
-            ...this.responseRules[index],
-            ...rule,
-            updatedAt: new Date().toISOString()
-          };
-          this.responseRules[index] = updatedRule;
-        }
-      } else {
-        // 添加新规则
-        rule.id = uuidv4();
-        rule.createdAt = new Date().toISOString();
-        rule.updatedAt = new Date().toISOString();
-        this.responseRules.push(rule);
-      }
-
-      return this.saveResponseRules();
-    } catch (error) {
-      console.error('保存规则失败:', error);
-      return false;
-    }
-  }
-
-  // 删除规则
-  deleteRule(ruleId) {
-    try {
-      // 查找要删除的规则
-      const ruleToDelete = this.responseRules.find(r => r.id === ruleId);
-
-      if (!ruleToDelete) {
-        return false;
-      }
-
-      // 如果是规则集，需要删除规则集和所有属于它的规则
-      if (ruleToDelete.isGroup) {
-        this.responseRules = this.responseRules.filter(r =>
-          r.id !== ruleId && r.groupId !== ruleId
-        );
-      } else {
-        // 如果是单个规则，只删除该规则
-        this.responseRules = this.responseRules.filter(r => r.id !== ruleId);
-      }
-
-      return this.saveResponseRules();
-    } catch (error) {
-      console.error('删除规则失败:', error);
-      return false;
-    }
-  }
-
-  // 切换规则启用状态
-  toggleRule(ruleId, enabled) {
-    try {
-      const rule = this.responseRules.find(r => r.id === ruleId);
-      if (rule) {
-        rule.enabled = enabled;
-        rule.updatedAt = new Date().toISOString();
-
-        if (rule.isGroup && enabled) {
-          const childRules = this.responseRules.filter(r => r.groupId === rule.id);
-          childRules.forEach(childRule => {
-            if (childRule.maxTriggers !== undefined) {
-              childRule.currentTriggers = 0;
-            }
-          });
-        }
-
-        if (!rule.isGroup && rule.maxTriggers !== undefined) {
-          rule.currentTriggers = 0;
-        }
-
-        return this.saveResponseRules();
-      }
-      return false;
-    } catch (error) {
-      console.error('切换规则状态失败:', error);
-      return false;
-    }
-  }
-
-  // 重置规则触发次数
-  resetRuleTriggers(ruleId) {
-    try {
-      const rule = this.responseRules.find(r => r.id === ruleId);
-      if (rule) {
-        rule.updatedAt = new Date().toISOString();
-
-        if (rule.isGroup) {
-          const childRules = this.responseRules.filter(r => r.groupId === rule.id);
-          childRules.forEach(childRule => {
-            if (childRule.maxTriggers !== undefined) {
-              childRule.currentTriggers = 0;
-            }
-          });
-        } else if (rule.maxTriggers !== undefined) {
-          rule.currentTriggers = 0;
-        }
-
-        return this.saveResponseRules();
-      }
-      return false;
-    } catch (error) {
-      console.error('重置规则触发次数失败:', error);
-      return false;
-    }
-  }
-
   // 检查端口是否被占用
   async checkPortInUse(port) {
     return new Promise((resolve) => {
@@ -893,7 +730,7 @@ class ProxyServer {
     }
 
     if (rule.groupId) {
-      const ruleGroup = this.responseRules.find(r => r.id === rule.groupId && r.isGroup);
+      const ruleGroup = this.rulesManager.getRules().find(r => r.id === rule.groupId && r.isGroup);
       if (ruleGroup && !ruleGroup.enabled) {
         return false;
       }
@@ -912,7 +749,7 @@ class ProxyServer {
 
   // 检查是否有启用的zip注入规则
   hasEnabledZipImplantRules() {
-    return this.responseRules.some(rule =>
+    return this.rulesManager.getRules().some(rule =>
       this.isRuleEffective(rule) &&
       !rule.isGroup &&
       rule.type === 'zip-implant' &&
@@ -923,7 +760,7 @@ class ProxyServer {
   haveRules(url, type) {
     let l = [];
     try {
-      for (const rule of this.responseRules) {
+      for (const rule of this.rulesManager.getRules()) {
         if (!this.isRuleEffective(rule)) continue;
         if (rule.isGroup) continue;
         if (rule.type === 'content-change') {
@@ -959,7 +796,7 @@ class ProxyServer {
 
             if (rule.maxTriggers !== undefined) {
               rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-              this.saveResponseRules();
+              this.rulesManager.saveRules();
             }
           }
         }
@@ -968,7 +805,7 @@ class ProxyServer {
 
           if (rule.maxTriggers !== undefined) {
             rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-            this.saveResponseRules();
+            this.rulesManager.saveRules();
           }
 
           l.push(3)
@@ -1037,7 +874,7 @@ class ProxyServer {
   // 应用zip注入规则
   applyZipImplantRules(url, responseBody) {
     try {
-      for (const rule of this.responseRules) {
+      for (const rule of this.rulesManager.getRules()) {
         if (!this.isRuleEffective(rule)) continue;
         if (rule.isGroup) continue;
         if (rule.type === 'zip-implant') {
@@ -1090,7 +927,7 @@ class ProxyServer {
 
             if (rule.maxTriggers !== undefined) {
               rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-              this.saveResponseRules();
+              this.rulesManager.saveRules();
             }
 
             return Buffer.from(responseBody);
@@ -1098,7 +935,7 @@ class ProxyServer {
           else if (zipUrlMatches && isFileDownloadRequest) {
             if (rule.maxTriggers !== undefined) {
               rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-              this.saveResponseRules();
+              this.rulesManager.saveRules();
             }
 
             return fs.readFileSync(rule.zipImplant);
@@ -1115,7 +952,7 @@ class ProxyServer {
   // 应用答案上传规则
   applyAnswerUploadRules(url, responseBody, extracted_answers) {
     try {
-      for (const rule of this.responseRules) {
+      for (const rule of this.rulesManager.getRules()) {
         if (!this.isRuleEffective(rule)) continue;
         if (rule.isGroup) continue;
         if (rule.type === 'answer-upload') {
@@ -1219,33 +1056,8 @@ class ProxyServer {
   }
 
   // 扫描目录结构（只统计文件后缀数量）
-  scanDirectory(dir) {
-    const extCount = {};
-    const countExtensions = (currentDir) => {
-      try {
-        const entries = fs.readdirSync(currentDir);
-        for (const entry of entries) {
-          const fullPath = path.join(currentDir, entry);
-          const stats = fs.statSync(fullPath);
-          if (stats.isDirectory()) {
-            countExtensions(fullPath);
-          } else {
-            const ext = path.extname(entry).toLowerCase() || '(无后缀)';
-            extCount[ext] = (extCount[ext] || 0) + 1;
-          }
-        }
-      } catch (error) {
-        console.error('扫描目录失败:', error);
-      }
-    };
-    countExtensions(dir);
-    return extCount;
-  }
-
-  // 查找可能的答案文件
-  // 解压ZIP文件
+  // 解压ZIP文件并提取答案（交给answer.js处理）
   async extractZipFile(zipPath, ansDir) {
-    let mergedAnswers = {};
     try {
       if (!fs.existsSync(zipPath)) {
         throw new Error(`ZIP文件不存在: ${zipPath}`);
@@ -1261,99 +1073,40 @@ class ProxyServer {
         throw new Error('文件不是有效的ZIP格式');
       }
 
-      const extractDir = zipPath.replace('.zip', '');
+      this.safeIpcSend('process-status', { status: 'processing', message: '正在处理ZIP文件...' });
 
-      if (fs.existsSync(extractDir)) {
-        fs.removeSync(extractDir);
+      const result = await this.answerExtractor.processZipAnswer(zipPath, ansDir);
+
+      if (result.success && result.answers.length > 0) {
+        const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
+        this.safeIpcSend('file-structure', {
+          structure: result.fileStructure,
+          extractDir: result.extractDir
+        });
+        this.safeIpcSend('answers-extracted', {
+          answers: result.answers,
+          count: result.count,
+          file: answerFile,
+          processedFiles: result.processedFiles
+        });
+      } else if (result.success && result.answers.length === 0) {
+        const allContentFile = path.join(ansDir, `all_content_${Date.now()}.txt`);
+        this.safeIpcSend('no-answers-found', {
+          message: '所有文件中都未找到有效的答案数据，已显示所有文件内容',
+          file: allContentFile,
+          filesContent: result.allFilesContent,
+          processedFiles: result.processedFiles
+        });
+      } else {
+        this.safeIpcSend('process-error', { error: result.message || '未找到可能包含答案的文件' });
       }
 
-      fs.ensureDirSync(extractDir);
-
-      this.safeIpcSend('process-status', { status: 'processing', message: '正在解压ZIP文件...' });
-
-      try {
-        const zip = new StreamZip.async({ file: zipPath });
-
-        const entries = await zip.entries();
-        if (Object.keys(entries).length === 0) {
-          await zip.close();
-          throw new Error('ZIP文件为空或损坏');
-        }
-
-        await zip.extract(null, extractDir);
-        await zip.close();
-
-        console.log(`ZIP文件解压成功: ${zipPath} -> ${extractDir}`);
-      } catch (zipError) {
-        console.error('StreamZip解压失败，尝试使用备用方法:', zipError);
-        throw new Error(`ZIP文件解压失败，可能文件已损坏: ${zipError.message}`);
-      }
-
-      this.safeIpcSend('process-status', { status: 'processing', message: '正在分析文件结构...' });
-
-      // 扫描所有解压的文件（统计文件后缀数量）
-      const fileStructure = this.scanDirectory(extractDir);
-
-      // 发送文件结构到前端
-      this.safeIpcSend('file-structure', {
-        structure: fileStructure,
-        extractDir: extractDir
-      });
-
-      // 将解压后的目录交给 answer.js 处理
-      this.safeIpcSend('process-status', { status: 'processing', message: '正在提取答案...' });
-
-      try {
-        const extractResult = await this.answerExtractor.extractFromDirectory(extractDir);
-        
-        if (extractResult.success && extractResult.answers.length > 0) {
-          const mergedAnswers = extractResult.answers;
-
-          // 保存所有答案到文件
-          const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
-          const answerText = JSON.stringify({
-            answers: mergedAnswers,
-            count: mergedAnswers.length,
-            file: answerFile,
-            processedFiles: extractResult.processedFiles
-          }, null, 2);
-
-          fs.writeFileSync(answerFile, answerText, 'utf-8');
-
-          this.safeIpcSend('answers-extracted', {
-            answers: mergedAnswers,
-            count: mergedAnswers.length,
-            file: answerFile,
-            processedFiles: extractResult.processedFiles
-          });
-        } else if (extractResult.success && extractResult.answers.length === 0) {
-          // 未找到有效答案数据时，展示所有文件内容
-          const allContentFile = path.join(ansDir, `all_content_${Date.now()}.txt`);
-          const allContentText = extractResult.allFilesContent.map(item =>
-            `文件: ${item.file}\n内容:\n${item.content}\n\n${'='.repeat(50)}\n\n`
-          ).join('\n');
-
-          fs.writeFileSync(allContentFile, allContentText, 'utf-8');
-
-          this.safeIpcSend('no-answers-found', {
-            message: '所有文件中都未找到有效的答案数据，已显示所有文件内容',
-            file: allContentFile,
-            filesContent: extractResult.allFilesContent,
-            processedFiles: extractResult.processedFiles
-          });
-        } else {
-          this.safeIpcSend('process-error', { error: extractResult.message || '未找到可能包含答案的文件' });
-        }
-      } catch (extractError) {
-        console.error('答案提取失败:', extractError);
-        this.safeIpcSend('process-error', { error: `答案提取失败: ${extractError.message}` });
-      }
-
+      return result;
     } catch (error) {
-      console.error('解压ZIP文件失败:', error);
-      this.safeIpcSend('process-error', { error: `解压失败: ${error.message}` });
+      console.error('处理ZIP文件失败:', error);
+      this.safeIpcSend('process-error', { error: `处理失败: ${error.message}` });
+      return {};
     }
-    return mergedAnswers;
   }
 
   // 下载文件
@@ -1667,7 +1420,7 @@ class ProxyServer {
 
         if (isFileDownloadRequest) {
           // 获取匹配的规则并计算新文件的MD5
-          for (const rule of this.responseRules) {
+          for (const rule of this.rulesManager.getRules()) {
             if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant') continue;
 
             const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
@@ -1683,7 +1436,7 @@ class ProxyServer {
 
               if (rule.maxTriggers !== undefined) {
                 rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-                this.saveResponseRules();
+                this.rulesManager.saveRules();
               }
 
               break;
@@ -1864,32 +1617,12 @@ class ProxyServer {
     return this.answerCaptureEnabled;
   }
 
-  // 导入规则（供 rules.js 调用）
-  importRules(rules) {
-    try {
-      if (!Array.isArray(rules)) {
-        return { success: false, error: '无效的规则数据格式' };
-      }
-      const importedRules = rules.map(rule => ({
-        ...rule,
-        id: rule.id || uuidv4(),
-        createdAt: rule.createdAt || new Date().toISOString(),
-        updatedAt: rule.updatedAt || new Date().toISOString()
-      }));
-      const currentRules = this.getResponseRules();
-      this.responseRules = [...currentRules, ...importedRules];
-      this.saveResponseRules();
-      return { success: true, count: importedRules.length };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
 
   getTrafficByUuid(uuid) {
     return this.trafficCache.get(uuid);
   }
 
-  registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET) {
+  registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, rulesManager) {
     // 代理控制 IPC
     ipcMain.on('start-answer-proxy', async () => {
       await this.start(mainWindow);
@@ -2129,118 +1862,6 @@ class ProxyServer {
       }
     });
 
-    // 规则管理 IPC
-    ipcMain.handle('get-response-rules', () => {
-      try {
-        const rules = this.getResponseRules();
-        return rules;
-      } catch (error) {
-        console.error('获取响应规则失败:', error);
-        return [];
-      }
-    });
-
-    ipcMain.handle('save-response-rule', (event, rule) => {
-      try {
-        const success = this.saveRule(rule);
-        return { success };
-      } catch (error) {
-        console.error('保存规则失败:', error);
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle('save-response-rules', (event, rules) => {
-      try {
-        const success = this.saveResponseRules(rules);
-        return { success };
-      } catch (error) {
-        console.error('保存规则失败:', error);
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle('delete-response-rule', (event, ruleId) => {
-      try {
-        const success = this.deleteRule(ruleId);
-        return { success };
-      } catch (error) {
-        console.error('删除规则失败:', error);
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle('toggle-response-rule', (event, ruleId, enabled) => {
-      try {
-        const success = this.toggleRule(ruleId, enabled);
-        return { success };
-      } catch (error) {
-        console.error('切换规则状态失败:', error);
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle('reset-rule-triggers', (event, ruleId) => {
-      try {
-        const success = this.resetRuleTriggers(ruleId);
-        return { success };
-      } catch (error) {
-        console.error('重置规则触发次数失败:', error);
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle('export-response-rules', async () => {
-      const rules = this.getResponseRules();
-      const result = await dialog.showSaveDialog({
-        defaultPath: `response-rules-${new Date().toISOString().split('T')[0]}.json`,
-        filters: [
-          { name: 'JSON Files', extensions: ['json'] }
-        ]
-      });
-      if (!result.canceled) {
-        try {
-          fs.writeFileSync(result.filePath, JSON.stringify(rules, null, 2), 'utf-8');
-          return { success: true, path: result.filePath };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }
-      return { success: false, error: '用户取消操作' };
-    });
-
-    ipcMain.handle('import-response-rules', async () => {
-      const result = await dialog.showOpenDialog({
-        filters: [
-          { name: 'JSON Files', extensions: ['json'] }
-        ],
-        properties: ['openFile']
-      });
-      if (!result.canceled && result.filePaths.length > 0) {
-        try {
-          const rulesData = fs.readFileSync(result.filePaths[0], 'utf-8');
-          const rules = JSON.parse(rulesData);
-          if (Array.isArray(rules)) {
-            const importedRules = rules.map(rule => ({
-              ...rule,
-              id: uuidv4(),
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            }));
-            const currentRules = this.getResponseRules();
-            this.responseRules = [...currentRules, ...importedRules];
-            this.saveResponseRules();
-            return { success: true, count: importedRules.length };
-          } else {
-            return { success: false, error: '无效的规则文件格式' };
-          }
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }
-      return { success: false, error: '用户取消操作' };
-    });
-
     ipcMain.handle('import-response-rules-from-data', async (event, rulesData) => {
       try {
         let rules;
@@ -2261,7 +1882,7 @@ class ProxyServer {
         } else {
           return { success: false, error: '无效的规则数据格式' };
         }
-        const currentRules = this.getResponseRules();
+        const currentRules = this.rulesManager.getRules();
         if (groupToImport) {
           const existingGroupIndex = currentRules.findIndex(rule =>
             rule.isGroup && (
@@ -2272,15 +1893,17 @@ class ProxyServer {
           if (existingGroupIndex !== -1) {
             const existingGroup = currentRules[existingGroupIndex];
             const groupId = existingGroup.id;
-            console.log(`发现已存在的规则集: ${existingGroup.name}，正在替换...`);
-            this.responseRules = this.responseRules.filter(rule =>
+            const allRules = this.rulesManager.getRules();
+            this.rulesManager.saveRules(allRules.filter(rule =>
               rule.id !== groupId && rule.groupId !== groupId
-            );
+            ));
+            groupToImport.id = groupId;
+            rulesToImport.forEach(rule => {
+              rule.groupId = groupToImport.id;
+            });
           }
-          this.responseRules.push(groupToImport);
-          rulesToImport.forEach(rule => {
-            rule.groupId = groupToImport.id;
-          });
+          const allRules = this.rulesManager.getRules();
+          this.rulesManager.saveRules([...allRules, groupToImport, ...rulesToImport]);
         } else {
           const existingRuleNames = currentRules
             .filter(rule => !rule.isGroup && rule.name)
@@ -2288,17 +1911,13 @@ class ProxyServer {
           const originalCount = rulesToImport.length;
           rulesToImport = rulesToImport.filter(rule => {
             if (rule.name && existingRuleNames.includes(rule.name)) {
-              console.log(`跳过重复规则: ${rule.name}`);
               return false;
             }
             return true;
           });
-          if (originalCount > rulesToImport.length) {
-            console.log(`过滤了 ${originalCount - rulesToImport.length} 个重复规则`);
-          }
+          const allRules = this.rulesManager.getRules();
+          this.rulesManager.saveRules([...allRules, ...rulesToImport]);
         }
-        this.responseRules = [...this.responseRules, ...rulesToImport];
-        this.saveResponseRules();
         return { success: true, count: rulesToImport.length };
       } catch (error) {
         return { success: false, error: error.message };
