@@ -1,11 +1,4 @@
 const { contextBridge, ipcRenderer } = require('electron')
-const fs = require('fs')
-const path = require('path')
-const { v4 : uuidv4 } = require('uuid')
-const FormData = require('form-data');
-const https = require('https');
-
-let cachePath = 'D:\\Up366StudentFiles'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getUiMode: () => ipcRenderer.invoke('get-ui-mode'),
@@ -63,19 +56,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chooseImplantZip: (callback) => ipcRenderer.on('choose-implant-zip', (event, filePath) => callback(filePath)),
 
   // 缓存路径管理
-  setCachePath: (newPath) => {
-    try {
-      const normalizedPath = path.resolve(newPath);
-      if (!fs.existsSync(normalizedPath)) {
-        fs.mkdirSync(normalizedPath, { recursive: true });
-      }
-      cachePath = normalizedPath;
-      return 1;
-    } catch (error) {
-      console.error('设置缓存路径失败:', error);
-      return 0;
-    }
-  },
+  setCachePath: (newPath) => ipcRenderer.invoke('set-cache-path', newPath),
   removeCacheFile: () => ipcRenderer.invoke('remove-cache-file'),
 
   // 规则管理API
@@ -107,96 +88,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
   onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, data) => callback(data)),
 
-  // 上传规则集
+  // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
-    const formData = new FormData();
-    formData.append('name', name);
-    formData.append('description', description);
-    formData.append('author', author);
-
-    for (let rule of groupRules){
-      if (rule.type === 'zip-implant'){
-        const stream = fs.createReadStream(rule.zipImplant)
-        const filename = uuidv4() + path.extname(rule.zipImplant);
-        formData.append('files', stream, { filename: filename });
-        rule.zipImplant = 'https://objectstorageapi.us-west-1.clawcloudrun.com/d9k8xp0t-auto366-ruleset/files/'+filename
-      }
-    }
-
-    const rulesJson = JSON.stringify(groupRules, null, 2);
-    formData.append('json', Buffer.from(rulesJson), { filename: `${name}.json`, type: 'application/json' });
-
-    updateUploadProgress(0, '上传中...');
-
-    return await new Promise((resolve, reject) => {
-      const headers = formData.getHeaders();
-
-      const url = new URL('https://366.cyril.qzz.io/api/rulesets');
-
-      const options = {
-        hostname: url.hostname,
-        port: url.port || 443,
-        path: url.pathname + url.search,
-        method: 'POST',
-        headers: {
-          ...headers,
-        },
-        timeout: 30000
-      };
-
-      // 创建请求
-      const req = https.request(options, (res) => {
-        let responseData = '';
-        res.on('data', (chunk) => {
-          responseData += chunk;
-        });
-        res.on('end', () => {
-          updateUploadProgress(100, '上传完成');
-          try {
-            const parsed = JSON.parse(responseData);
-            resolve({
-              status: res.statusCode,
-              headers: res.headers,
-              data: parsed
-            });
-          } catch (e) {
-            resolve({
-              status: res.statusCode,
-              headers: res.headers,
-              data: responseData
-            });
-          }
-        });
-      });
-      req.on('error', (error) => {
-        reject(error);
-      });
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      formData.pipe(req);
-    })
+    return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);
   },
-  downloadRuleFile: (url) => {
-    return new Promise((resolve) => {
-      const fileDir = path.join(__dirname, 'file');
-      if (!fs.existsSync(fileDir)) {
-        fs.mkdirSync(fileDir, { recursive: true });
-      }
-      const dest = path.join(fileDir, url.split('/').pop());
-      const file = fs.createWriteStream(dest);
-      https.get(url, (response) => {
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close();
-          resolve(dest);
-        })
-      }).on('error', (err) => {
-        fs.unlink(dest, () => {}); // 删除错误文件
-        console.error('下载出错:', err.message);
-      });
-    })
-  }
+  downloadRuleFile: (url) => ipcRenderer.invoke('download-rule-file', url)
 })

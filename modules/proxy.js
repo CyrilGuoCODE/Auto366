@@ -545,15 +545,55 @@ class ProxyServer {
 
       if (pathname === '/') {
         // 服务器信息页面
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<h1>Auto366 Bucket Server</h1><p>本地答案服务器运行中...</p>');
+        const availablePaths = Object.keys(this.serverDatas);
+        let pathsHtml = '';
+        if (availablePaths.length > 0) {
+          pathsHtml = availablePaths.map(p =>
+            `<li><a href="${p}">${p}</a></li>`
+          ).join('');
+          pathsHtml = `<ul>${pathsHtml}</ul>`;
+        } else {
+          pathsHtml = '<p>暂无已上传的答案路径</p>';
+        }
+
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="UTF-8"><title>Auto366 Local Bucket Server</title></head>
+          <body>
+            <h1>Auto366 Local Bucket Server</h1>
+            <p>本地答案服务器运行中...</p>
+            <h2>已上传的答案路径:</h2>
+            ${pathsHtml}
+          </body>
+          </html>
+        `);
         return;
       }
 
-      // 处理其他请求
-      res.writeHead(404);
-      res.end('Not Found');
-
+      if (pathname in this.serverDatas) {
+        const data = this.serverDatas[pathname];
+        if (typeof data === 'object') {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          });
+          res.end(JSON.stringify(data, null, 2));
+        } else {
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Access-Control-Allow-Origin': '*'
+          });
+          res.end(data);
+        }
+      } else {
+        res.writeHead(404, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ error: 'not found' }));
+      }
     } catch (error) {
       console.error('处理本地服务器请求失败:', error);
       res.writeHead(500);
@@ -1281,343 +1321,6 @@ class ProxyServer {
     });
   }
 
-  handleProxyStop() {
-    this.isStopping = false;
-    console.log('处理代理服务器停止...');
-
-    this.safeIpcSend('proxy-status', {
-      running: false,
-      host: null,
-      port: null,
-      message: '代理服务器已停止'
-    });
-
-    console.log('代理服务器停止处理完成');
-  }
-
-  // 处理HTTP请求
-  handleHttpRequest(req, res) {
-    try {
-      const urlObj = url.parse(req.url);
-      if (urlObj.pathname === '/') {
-        // 本地代理服务器信息页面
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<h1>Auto366 Proxy Server</h1><p>代理服务器运行中...</p>');
-        return;
-      }
-
-      // 处理HTTPS连接
-      if (req.method === 'CONNECT') {
-        this.handleHttpsConnect(req, res);
-      } else {
-        // 处理HTTP请求
-        this.proxyHttpRequest(req, res);
-      }
-    } catch (error) {
-      console.error('处理HTTP请求失败:', error);
-      res.writeHead(500);
-      res.end('Internal Server Error');
-    }
-  }
-
-  // 处理HTTPS连接
-  handleHttpsConnect(req, res) {
-    try {
-      const [host, port] = req.url.split(':');
-      const socket = require('net').connect(port || 443, host, () => {
-        res.writeHead(200, 'Connection Established');
-        res.end();
-
-        // 建立双向通信
-        socket.pipe(req.connection);
-        req.connection.pipe(socket);
-      });
-
-      socket.on('error', (error) => {
-        console.error('HTTPS连接失败:', error);
-        req.connection.end();
-      });
-
-      req.connection.on('error', (error) => {
-        socket.end();
-      });
-    } catch (error) {
-      console.error('处理HTTPS连接失败:', error);
-      res.end();
-    }
-  }
-
-  // 处理HTTPS请求
-  handleHttpsRequest(req, res) {
-    try {
-      const urlObj = url.parse(`https://${req.headers.host}${req.url}`);
-      this.proxyHttpRequest(req, res, true);
-    } catch (error) {
-      console.error('处理HTTPS请求失败:', error);
-      res.writeHead(500);
-      res.end('Internal Server Error');
-    }
-  }
-
-  // 代理HTTP请求
-  proxyHttpRequest(req, res, isHttps = false) {
-    try {
-      const urlObj = url.parse(isHttps ? `https://${req.headers.host}${req.url}` : req.url);
-      const fullUrl = urlObj.href;
-      const options = {
-        hostname: urlObj.hostname,
-        port: urlObj.port || (isHttps ? 443 : 80),
-        path: urlObj.path,
-        method: req.method,
-        headers: req.headers
-      };
-
-      // 移除代理相关的头部
-      delete options.headers['proxy-connection'];
-      delete options.headers['proxy-authorization'];
-
-      const protocol = isHttps ? https : http;
-      const proxyReq = protocol.request(options, (proxyRes) => {
-        // 处理响应
-        this.handleProxyResponse(req, res, proxyRes, isHttps, fullUrl);
-      });
-
-      // 处理请求体
-      let requestBody = [];
-      req.on('data', (chunk) => {
-        requestBody.push(chunk);
-        proxyReq.write(chunk);
-      });
-
-      req.on('end', () => {
-        proxyReq.end();
-      });
-
-      proxyReq.on('error', (error) => {
-        console.error('代理请求失败:', error);
-        res.writeHead(502);
-        res.end('Bad Gateway');
-      });
-
-    } catch (error) {
-      console.error('代理HTTP请求失败:', error);
-      res.writeHead(500);
-      res.end('Internal Server Error');
-    }
-  }
-
-  // 处理代理响应
-  handleProxyResponse(req, res, proxyRes, isHttps, fullUrl) {
-    try {
-      const responseBodyRules = this.haveRules(fullUrl, 'response-body');
-      
-      // 如果是文件下载请求且需要应用规则，修改响应头
-      if (responseBodyRules.includes(2)) {
-        // 检查是否是文件下载请求
-        const isFileDownloadRequest = fullUrl.endsWith('.zip') ||
-          fullUrl.includes('/download/') ||
-          fullUrl.includes('/cn/files/');
-
-        if (isFileDownloadRequest) {
-          // 获取匹配的规则并计算新文件的MD5
-          for (const rule of this.rulesManager.getRules()) {
-            if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant') continue;
-
-            const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
-            if (urlMatches && fs.existsSync(rule.zipImplant)) {
-              const buffer = fs.readFileSync(rule.zipImplant);
-              const md5 = crypto.createHash('md5').update(buffer).digest('hex');
-              const md5Base64 = Buffer.from(md5, 'hex').toString('base64');
-
-              // 修改响应头
-              proxyRes.headers['etag'] = md5;
-              proxyRes.headers['content-md5'] = md5Base64;
-              proxyRes.headers['content-length'] = buffer.length.toString();
-
-              if (rule.maxTriggers !== undefined) {
-                rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-                this.rulesManager.saveRules();
-              }
-
-              break;
-            }
-          }
-        }
-      }
-
-      // 复制响应头部
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
-
-      // 处理响应体
-      let responseBody = [];
-      proxyRes.on('data', (chunk) => {
-        responseBody.push(chunk);
-        if (!responseBodyRules.includes(2)) {
-          res.write(chunk);
-        }
-      });
-
-      proxyRes.on('end', async () => {
-        const buffer = Buffer.concat(responseBody);
-        let processedBuffer = buffer;
-        
-        if (responseBodyRules.includes(2)) {
-          processedBuffer = this.applyZipImplantRules(fullUrl, buffer);
-          res.write(processedBuffer);
-        }
-        
-        res.end();
-
-        // 记录请求和响应信息
-        if (this.answerCaptureEnabled) {
-          const requestId = uuidv4();
-          const requestInfo = {
-            uuid: requestId,
-            method: req.method,
-            url: fullUrl,
-            headers: req.headers,
-            statusCode: proxyRes.statusCode,
-            statusMessage: proxyRes.statusMessage,
-            responseHeaders: proxyRes.headers,
-            contentType: proxyRes.headers['content-type'],
-            contentEncoding: proxyRes.headers['content-encoding'],
-            timestamp: new Date().toISOString(),
-            originalResponse: buffer
-          };
-
-          this.trafficCache.set(requestId, requestInfo);
-
-          // 发送请求日志
-          if (this.onTrafficLog) {
-            this.onTrafficLog(requestInfo);
-          }
-
-          // 处理答案提取
-          const isFile = /application\/octet-stream|image/.test(requestInfo.contentType);
-          if (isFile && requestInfo.contentType && requestInfo.contentType.includes('zip')) {
-            fs.mkdirSync(this.tempDir, { recursive: true });
-            fs.mkdirSync(this.ansDir, { recursive: true });
-            const filePath = path.join(this.tempDir, `${requestId}.zip`);
-            await this.downloadFileByUuid(requestId, filePath);
-            const extracted_answers = await this.extractZipFile(filePath, this.ansDir);
-
-            try {
-              if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-                const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
-                  localStorage.getItem('keep-cache-files') === 'true'
-                `);
-
-                if (!shouldKeepCache) {
-                  await fs.unlink(filePath);
-                  await fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true });
-                }
-              } else {
-                await fs.unlink(filePath);
-                await fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true });
-              }
-            } catch (error) {
-              await fs.unlink(filePath);
-              await fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true });
-            }
-
-            if (responseBodyRules.includes(3)) {
-              this.applyAnswerUploadRules(fullUrl, buffer, extracted_answers);
-            }
-          }
-        }
-      });
-
-    } catch (error) {
-      console.error('处理代理响应失败:', error);
-      res.end();
-    }
-  }
-
-  // 启动本地答案服务器
-  startBucketServer() {
-    this.bucketServer = http.createServer((req, res) => {
-      try {
-        if (req.method === 'GET') {
-          if (!(req.url in this.serverDatas)) {
-            res.writeHead(404, {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
-            });
-            res.end(JSON.stringify({ error: 'no bucket data' }));
-            return;
-          }
-
-          if (typeof this.serverDatas[req.url] === 'object') {
-            res.writeHead(200, {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
-            });
-            res.end(JSON.stringify(this.serverDatas[req.url], null, 2));
-          }
-          else {
-            res.writeHead(200, {
-              'Content-Type': 'application/octet-stream',
-              'Access-Control-Allow-Origin': '*'
-            });
-            res.end(this.serverDatas[req.url]);
-          }
-        } else {
-          res.writeHead(404, {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          });
-          res.end(JSON.stringify({ error: 'not found' }));
-        }
-      } catch (e) {
-        console.error('词库HTTP服务器处理请求失败:', e);
-        try {
-          res.writeHead(500, {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          });
-          res.end(JSON.stringify({ error: 'server error' }));
-        } catch (_) { }
-      }
-    });
-
-    this.bucketServer.listen(this.bucketPort, '127.0.0.1', () => {
-      console.log(`本地服务器已启动: http://127.0.0.1:${this.bucketPort}/`);
-    });
-  }
-
-  // 设置代理端口
-  setProxyPort(port) {
-    this.proxyPort = port;
-    return { success: true };
-  }
-
-  // 获取代理端口
-  getProxyPort() {
-    return this.proxyPort;
-  }
-
-  // 设置答案服务器端口
-  setBucketPort(port) {
-    this.bucketPort = port;
-    return { success: true };
-  }
-
-  // 获取答案服务器端口
-  getBucketPort() {
-    return this.bucketPort;
-  }
-
-  // 设置答案捕获启用状态
-  setAnswerCaptureEnabled(enabled) {
-    this.answerCaptureEnabled = enabled;
-  }
-
-  // 获取答案捕获启用状态
-  getAnswerCaptureEnabled() {
-    return this.answerCaptureEnabled;
-  }
-
-
   getTrafficByUuid(uuid) {
     return this.trafficCache.get(uuid);
   }
@@ -1921,6 +1624,91 @@ class ProxyServer {
         return { success: true, count: rulesToImport.length };
       } catch (error) {
         return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('set-cache-path', (event, newPath) => {
+      try {
+        const normalizedPath = require('path').resolve(newPath);
+        fs.ensureDirSync(normalizedPath);
+        return 1;
+      } catch (error) {
+        return 0;
+      }
+    });
+
+    ipcMain.handle('upload-rules', async (event, { name, description, author, groupRules }) => {
+      try {
+        const { v4: uploadUuid } = require('uuid');
+        const FormData = require('form-data');
+        const https = require('https');
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('description', description);
+        formData.append('author', author);
+
+        for (const rule of groupRules) {
+          if (rule.type === 'zip-implant' && rule.zipImplant && !rule.zipImplant.startsWith('http')) {
+            const stream = fs.createReadStream(rule.zipImplant);
+            const filename = uploadUuid() + require('path').extname(rule.zipImplant);
+            formData.append('files', stream, { filename: filename });
+            rule.zipImplant = 'https://objectstorageapi.us-west-1.clawcloudrun.com/d9k8xp0t-auto366-ruleset/files/' + filename;
+          }
+        }
+
+        const rulesJson = JSON.stringify(groupRules, null, 2);
+        formData.append('json', Buffer.from(rulesJson), { filename: `${name}.json`, type: 'application/json' });
+
+        const headers = formData.getHeaders();
+        const url = new URL('https://366.cyril.qzz.io/api/rulesets');
+
+        return await new Promise((resolve, reject) => {
+          const options = {
+            hostname: url.hostname,
+            port: url.port || 443,
+            path: url.pathname + url.search,
+            method: 'POST',
+            headers: { ...headers },
+            timeout: 30000
+          };
+
+          const req = https.request(options, (res) => {
+            let responseData = '';
+            res.on('data', (chunk) => { responseData += chunk; });
+            res.on('end', () => {
+              try {
+                resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(responseData) });
+              } catch (e) {
+                resolve({ status: res.statusCode, headers: res.headers, data: responseData });
+              }
+            });
+          });
+          req.on('error', reject);
+          req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+          formData.pipe(req);
+        });
+      } catch (error) {
+        return { status: 500, data: { error: error.message } };
+      }
+    });
+
+    ipcMain.handle('download-rule-file', async (event, url) => {
+      try {
+        const https = require('https');
+        const path = require('path');
+        const fileDir = path.join(this.appPath, 'file');
+        fs.ensureDirSync(fileDir);
+        const dest = path.join(fileDir, url.split('/').pop());
+
+        return await new Promise((resolve) => {
+          const file = fs.createWriteStream(dest);
+          https.get(url, (response) => {
+            response.pipe(file);
+            file.on('finish', () => { file.close(); resolve(dest); });
+          }).on('error', (err) => { fs.unlink(dest, () => {}); resolve(null); });
+        });
+      } catch (error) {
+        return null;
       }
     });
   }
