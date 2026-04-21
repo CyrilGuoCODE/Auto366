@@ -1,8 +1,5 @@
-const { app, ipcMain, protocol, shell, dialog, BrowserWindow } = require('electron');
-const path = require('path');
-const fs = require('fs-extra');
+const { app, ipcMain, dialog, BrowserWindow } = require('electron');
 const { createClient } = require('@supabase/supabase-js');
-const { v4: uuidv4 } = require('uuid');
 
 const WindowManager = require('./modules/window');
 const ProxyServer = require('./modules/proxy');
