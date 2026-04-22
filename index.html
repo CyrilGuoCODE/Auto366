@@ -474,9 +474,32 @@
             <div class="right-logs" id="rightLogs">
                 <div class="panel-header">
                     <h3>监听日志</h3>
-                    <button id="clearLogsBtn" class="clear-btn" title="清空日志">
-                        <i class="bi bi-trash"></i>
-                    </button>
+                    <div class="panel-header-actions">
+                        <button id="searchLogsBtn" class="search-btn" title="搜索日志">
+                            <i class="bi bi-search"></i>
+                        </button>
+                        <button id="clearLogsBtn" class="clear-btn" title="清空日志">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- 日志搜索栏 -->
+                <div id="logSearchBar" class="log-search-bar" style="display: none;">
+                    <div class="search-input-group">
+                        <i class="bi bi-search search-icon"></i>
+                        <input type="text" id="logSearchInput" placeholder="搜索日志和请求详细信息..." class="log-search-input">
+                        <button id="logSearchCloseBtn" class="log-search-close" title="关闭搜索">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                    <div id="logSearchFilters" class="log-search-filters">
+                        <button class="filter-btn active" data-filter="all">全部</button>
+                        <button class="filter-btn" data-filter="request">请求</button>
+                        <button class="filter-btn" data-filter="success">成功</button>
+                        <button class="filter-btn" data-filter="error">错误</button>
+                        <button class="filter-btn" data-filter="info">信息</button>
+                    </div>
+                    <div id="logSearchStatus" class="log-search-status"></div>
                 </div>
                 <div class="logs-container">
                     <div class="logs-main-area">

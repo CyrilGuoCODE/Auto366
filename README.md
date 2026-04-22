@@ -23,6 +23,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 - 重构项目底层架构
 - 加入一键打开天学网(通过注册表获取路径)
+- 加入监听日志搜索功能
 - 合并删除Auto366缓存和删除天学网缓存
 - WEB端修复答案查看样式，兼容新的排序算法
 
@@ -37,7 +38,6 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - WEB端加入贡献者与捐赠者页面
 - WEB端加入反馈状态跟踪
 - WEB端加入新公共下载API加速规则集文件下载
-- 加入请求搜索
 - 加入加解密模块
 - 注入后将自动化程序运行日志上传到5290/logs端口
 - 首次使用时step by step教程

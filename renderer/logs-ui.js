@@ -3,6 +3,184 @@ import Utils from './utils.js';
 class LogManager {
   constructor(state) {
     this.state = state;
+    this.searchActive = false;
+    this.currentSearchKeyword = '';
+    this.currentFilter = 'all';
+    this.initSearchEvents();
+  }
+
+  initSearchEvents() {
+    const searchBtn = document.getElementById('searchLogsBtn');
+    const closeBtn = document.getElementById('logSearchCloseBtn');
+    const searchInput = document.getElementById('logSearchInput');
+    const filterBtns = document.querySelectorAll('#logSearchFilters .filter-btn');
+
+    if (searchBtn) {
+      searchBtn.addEventListener('click', () => {
+        this.toggleSearch();
+      });
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.hideSearch();
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        this.executeSearch();
+      });
+    }
+
+    if (filterBtns) {
+      filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          filterBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.currentFilter = btn.dataset.filter;
+          this.executeSearch();
+        });
+      });
+    }
+  }
+
+  toggleSearch() {
+    const searchBar = document.getElementById('logSearchBar');
+    const searchBtn = document.getElementById('searchLogsBtn');
+    if (!searchBar) return;
+
+    if (searchBar.style.display === 'none') {
+      searchBar.style.display = 'block';
+      searchBtn.classList.add('active');
+      this.searchActive = true;
+      const input = document.getElementById('logSearchInput');
+      if (input) {
+        input.focus();
+        this.executeSearch();
+      }
+    } else {
+      this.hideSearch();
+    }
+  }
+
+  hideSearch() {
+    const searchBar = document.getElementById('logSearchBar');
+    const searchBtn = document.getElementById('searchLogsBtn');
+    if (searchBar) searchBar.style.display = 'none';
+    if (searchBtn) searchBtn.classList.remove('active');
+    this.searchActive = false;
+    this.currentSearchKeyword = '';
+    this.currentFilter = 'all';
+
+    // 重置 filter 按钮
+    const filterBtns = document.querySelectorAll('#logSearchFilters .filter-btn');
+    filterBtns.forEach(b => b.classList.remove('active'));
+    if (filterBtns[0]) filterBtns[0].classList.add('active');
+
+    // 重置 input
+    const input = document.getElementById('logSearchInput');
+    if (input) input.value = '';
+
+    // 重置 status
+    const status = document.getElementById('logSearchStatus');
+    if (status) status.textContent = '';
+
+    // 显示所有日志
+    this.showAllLogs();
+  }
+
+  showAllLogs(showCount = false) {
+    const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+    const items = trafficLog.querySelectorAll('.log-item');
+    let totalCount = 0;
+    items.forEach(item => {
+      if (!item.textContent.includes('等待网络请求')) totalCount++;
+      item.classList.remove('log-item-hidden', 'highlight-match');
+    });
+    const status = document.getElementById('logSearchStatus');
+    if (status) {
+      status.textContent = showCount ? `共 ${totalCount} 条` : '';
+    }
+  }
+
+  executeSearch() {
+    const input = document.getElementById('logSearchInput');
+    const status = document.getElementById('logSearchStatus');
+    if (!input) return;
+
+    const keyword = input.value.trim().toLowerCase();
+    this.currentSearchKeyword = keyword;
+
+    if (!keyword && this.currentFilter === 'all') {
+      this.showAllLogs(true);
+      return;
+    }
+
+    const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+
+    const items = trafficLog.querySelectorAll('.log-item');
+    let matchCount = 0;
+
+    items.forEach(item => {
+      const text = item.textContent.toLowerCase();
+      const type = this.getLogItemType(item);
+      const requestId = item.dataset.requestId;
+      const requestData = requestId ? this.state.requestDataMap.get(requestId) : null;
+
+      // 构建可搜索的完整文本（包括请求详情）
+      let searchableText = text;
+      if (requestData) {
+        const details = [
+          requestData.method || '',
+          requestData.url || '',
+          requestData.responseBody || '',
+          requestData.requestBody || '',
+          JSON.stringify(requestData.requestHeaders || ''),
+          JSON.stringify(requestData.responseHeaders || '')
+        ].join(' ');
+        searchableText += ' ' + details.toLowerCase();
+      }
+
+      // 类型过滤
+      let typeMatch = this.currentFilter === 'all';
+      if (this.currentFilter === 'request' && item.classList.contains('clickable')) typeMatch = true;
+      if (this.currentFilter === 'success' && (item.classList.contains('success') || item.classList.contains('rule-success'))) typeMatch = true;
+      if (this.currentFilter === 'error' && (item.classList.contains('error') || item.classList.contains('rule-error'))) typeMatch = true;
+      if (this.currentFilter === 'info' && (item.classList.contains('normal') || item.classList.contains('important')) && !item.classList.contains('clickable')) typeMatch = true;
+
+      // 关键词过滤
+      let keywordMatch = true;
+      if (keyword) {
+        keywordMatch = searchableText.includes(keyword);
+      }
+
+      if (typeMatch && keywordMatch) {
+        item.classList.remove('log-item-hidden');
+        if (keyword) {
+          item.classList.add('highlight-match');
+        } else {
+          item.classList.remove('highlight-match');
+        }
+        matchCount++;
+      } else {
+        item.classList.add('log-item-hidden');
+        item.classList.remove('highlight-match');
+      }
+    });
+
+    if (status) {
+      status.textContent = keyword ? `找到 ${matchCount} 条结果` : `共 ${matchCount} 条`;
+    }
+  }
+
+  getLogItemType(item) {
+    if (item.classList.contains('clickable')) return 'request';
+    if (item.classList.contains('success') || item.classList.contains('rule-success')) return 'success';
+    if (item.classList.contains('error') || item.classList.contains('rule-error')) return 'error';
+    return 'info';
   }
 
   // 添加流量日志
@@ -83,7 +261,6 @@ class LogManager {
     const displayTimestamp = timestamp || new Date().toLocaleTimeString();
 
     if (requestId) {
-      // 这是一个可点击的请求日志项
       logItem.className = `log-item ${type} clickable`;
       logItem.dataset.requestId = requestId;
 
@@ -93,11 +270,9 @@ class LogManager {
         <span class="log-text">${text}</span>
       `;
 
-      // 添加点击事件
       logItem.addEventListener('click', () => {
         this.showRequestDetails(requestId);
 
-        // 更新选中状态
         if (this.state.selectedLogItem) {
           this.state.selectedLogItem.classList.remove('selected');
         }
@@ -105,7 +280,6 @@ class LogManager {
         this.state.selectedLogItem = logItem;
       });
     } else {
-      // 这是一个普通的日志项（状态信息等）
       logItem.className = `log-item ${type}`;
       logItem.innerHTML = `
         <div class="log-time">${displayTimestamp}</div>
@@ -114,7 +288,6 @@ class LogManager {
       `;
     }
 
-    // 如果是第一个日志项且显示"等待网络请求..."，则替换它
     const firstItem = trafficLog.querySelector('.log-item');
     if (firstItem && firstItem.textContent.includes('等待网络请求')) {
       trafficLog.removeChild(firstItem);
@@ -122,22 +295,22 @@ class LogManager {
 
     trafficLog.appendChild(logItem);
 
-    // 限制日志数量，保持最新的200条
     const logItems = trafficLog.querySelectorAll('.log-item');
     if (logItems.length > 200) {
       const removedItem = logItems[0];
-      // 如果删除的是请求项，也要清理对应的数据
       if (removedItem.dataset.requestId) {
         this.state.requestDataMap.delete(removedItem.dataset.requestId);
       }
       trafficLog.removeChild(removedItem);
     }
 
-    // 自动滚动到底部
     trafficLog.scrollTop = trafficLog.scrollHeight;
 
-    // 更新请求计数
     this.updateRequestCount();
+
+    if (this.searchActive) {
+      this.executeSearch();
+    }
   }
 
   // 更新请求计数
@@ -307,6 +480,12 @@ class LogManager {
 
     // 重置请求计数
     this.updateRequestCount();
+
+    // 重置搜索状态
+    if (this.searchActive) {
+      const status = document.getElementById('logSearchStatus');
+      if (status) status.textContent = '共 0 条结果';
+    }
 
     this.addInfoLog('日志已清空');
   }
