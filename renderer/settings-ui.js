@@ -90,17 +90,17 @@ class SettingsUI {
     }
   }
 
-  // 处理清理临时文件
-  handleDeleteTemp() {
+  // 处理清理缓存
+  handleClearCache() {
     const resultDiv = document.getElementById('trafficLog');
 
     const confirmHtml = `
       <div class="log-item warning">
         <i class="bi bi-exclamation-triangle"></i>
-        <span>确定要清理Auto366临时文件吗？此操作不可撤销。</span>
+        <span>确定要清理所有缓存吗？此操作将清理 Auto366 临时文件和天学网缓存，不可撤销。</span>
         <div class="cache-buttons">
           <button onclick="this.parentElement.remove()" class="btn-small btn-cancel">取消</button>
-          <button onclick="universalAnswerFeature.confirmDeleteTemp()" class="btn-small btn-danger">确认清理</button>
+          <button onclick="universalAnswerFeature.confirmClearCache()" class="btn-small btn-danger">确认清理</button>
         </div>
       </div>
     `;
@@ -109,68 +109,36 @@ class SettingsUI {
     resultDiv.scrollTop = resultDiv.scrollHeight;
   }
 
-  // 确认清理临时文件
-  async confirmDeleteTemp() {
-    // 移除确认对话框
+  // 确认清理缓存
+  async confirmClearCache() {
     const confirmDialog = document.querySelector('.log-item.warning');
     if (confirmDialog) {
       confirmDialog.remove();
     }
 
-    // 显示清理进度
-    this.logManager.addInfoLog('正在清理Auto366缓存...');
+    this.logManager.addInfoLog('正在清理缓存...');
 
     const result = await window.electronAPI.clearCache();
     if (result && result.success) {
-      this.logManager.addSuccessLog(`Auto366缓存清理成功 - 已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
+      result.messages.forEach(msg => {
+        this.logManager.addSuccessLog(msg);
+      });
+      this.logManager.addSuccessLog(`总计已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
     } else if (result && !result.success) {
-      this.logManager.addErrorLog(`Auto366缓存清理失败: ${result.error || '未知错误'}`);
-    } else if (result) {
-      this.logManager.addSuccessLog('Auto366缓存清理完成');
+      this.logManager.addErrorLog(`缓存清理失败: ${result.error || '未知错误'}`);
     } else {
-      this.logManager.addErrorLog('Auto366缓存清理失败');
+      this.logManager.addErrorLog('缓存清理失败');
     }
   }
 
-  // 处理清理天学网文件缓存
-  handleDeleteFileTemp() {
-    const resultDiv = document.getElementById('trafficLog');
-
-    const confirmHtml = `
-      <div class="log-item warning">
-        <i class="bi bi-exclamation-triangle"></i>
-        <span>确定要清理天学网文件缓存吗？此操作将删除天学网缓存目录，不可撤销。</span>
-        <div class="cache-buttons">
-          <button onclick="this.parentElement.remove()" class="btn-small btn-cancel">取消</button>
-          <button onclick="universalAnswerFeature.confirmDeleteFileTemp()" class="btn-small btn-danger">确认清理</button>
-        </div>
-      </div>
-    `;
-
-    resultDiv.insertAdjacentHTML('beforeend', confirmHtml);
-    resultDiv.scrollTop = resultDiv.scrollHeight;
-  }
-
-  // 确认清理天学网文件缓存
-  async confirmDeleteFileTemp() {
-    // 移除确认对话框
-    const confirmDialog = document.querySelector('.log-item.warning');
-    if (confirmDialog) {
-      confirmDialog.remove();
-    }
-
-    // 显示清理进度
-    this.logManager.addInfoLog('正在清理天学网缓存...');
-
-    const result = await window.electronAPI.removeCacheFile();
+  // 处理一键打开天学网
+  async handleOpenUp366() {
+    this.logManager.addInfoLog('正在打开天学网...');
+    const result = await window.electronAPI.openUp366();
     if (result && result.success) {
-      this.logManager.addSuccessLog(`天学网缓存清理成功 - 已清理 ${result.filesDeleted} 个文件，${result.dirsDeleted} 个目录`);
-    } else if (result && !result.success) {
-      this.logManager.addErrorLog(`天学网缓存清理失败: ${result.error || '未知错误'}`);
-    } else if (result) {
-      this.logManager.addSuccessLog('天学网缓存清理完成');
+      this.logManager.addSuccessLog(`天学网已启动`);
     } else {
-      this.logManager.addErrorLog('天学网缓存清理失败');
+      this.logManager.addErrorLog(`打开天学网失败: ${result?.error || '未找到天学网安装路径，请确认已安装天学网'}`);
     }
   }
 

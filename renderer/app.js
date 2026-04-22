@@ -407,10 +407,9 @@ class Auto366App {
       clearLogs: () => this.logManager.clearLogs(),
       
       // 设置管理
-      handleDeleteTemp: () => this.settingsUI.handleDeleteTemp(),
-      confirmDeleteTemp: () => this.settingsUI.confirmDeleteTemp(),
-      handleDeleteFileTemp: () => this.settingsUI.handleDeleteFileTemp(),
-      confirmDeleteFileTemp: () => this.settingsUI.confirmDeleteFileTemp(),
+      handleClearCache: () => this.settingsUI.handleClearCache(),
+      confirmClearCache: () => this.settingsUI.confirmClearCache(),
+      handleOpenUp366: () => this.settingsUI.handleOpenUp366(),
       handleUpdateNotification: () => this.settingsUI.handleUpdateNotification(),
       startUpdateDownload: (version) => this.settingsUI.startUpdateDownload(version),
       installUpdate: () => this.settingsUI.installUpdate(),

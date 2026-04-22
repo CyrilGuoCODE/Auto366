@@ -205,6 +205,28 @@
     box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
 }
 
+.action-btn {
+    background: #ffffff;
+    color: #007bff;
+    border: 1px solid #007bff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.action-btn:hover {
+    background: #007bff;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(13, 202, 240, 0.3);
+}
+
 /* 状态指示器 */
 .status-item {
     display: flex;

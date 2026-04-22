@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 文件操作
   clearCache: () => ipcRenderer.invoke('clear-cache'),
+  openUp366: () => ipcRenderer.invoke('open-up366'),
   downloadFile: (uuid) => ipcRenderer.invoke('download-file', uuid),
   shareAnswerFile: (filePath) => ipcRenderer.invoke('share-answer-file', filePath),
   saveInjectionPackage: (data) => ipcRenderer.invoke('save-injection-package', data),
@@ -57,7 +58,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 缓存路径管理
   setCachePath: (newPath) => ipcRenderer.invoke('set-cache-path', newPath),
-  removeCacheFile: () => ipcRenderer.invoke('remove-cache-file'),
 
   // 规则管理API
   getRules: () => ipcRenderer.invoke('get-rules'),

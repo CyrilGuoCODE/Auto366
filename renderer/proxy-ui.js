@@ -14,17 +14,18 @@ class ProxyUI {
     }
 
     // 初始化清理缓存按钮
-    const deleteTempBtn = document.getElementById('deleteTempBtn');
-    if (deleteTempBtn) {
-      deleteTempBtn.addEventListener('click', () => {
-        window.universalAnswerFeature.handleDeleteTemp();
+    const clearCacheBtn = document.getElementById('clearCacheBtn');
+    if (clearCacheBtn) {
+      clearCacheBtn.addEventListener('click', () => {
+        window.universalAnswerFeature.handleClearCache();
       });
     }
 
-    const deleteFileTempBtn = document.getElementById('deleteFileTempBtn');
-    if (deleteFileTempBtn) {
-      deleteFileTempBtn.addEventListener('click', () => {
-        window.universalAnswerFeature.handleDeleteFileTemp();
+    // 初始化一键打开天学网按钮
+    const openUp366Btn = document.getElementById('openUp366Btn');
+    if (openUp366Btn) {
+      openUp366Btn.addEventListener('click', () => {
+        window.universalAnswerFeature.handleOpenUp366();
       });
     }
 
