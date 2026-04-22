@@ -207,8 +207,11 @@ class AnswerExtractor {
 
     const extractResult = await this.extractFromDirectory(extractDir);
 
-    if (extractResult.success && extractResult.answers.length > 0) {
-      const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
+    const answerFile = extractResult.success && extractResult.answers.length > 0
+      ? path.join(ansDir, `answers_${Date.now()}.json`)
+      : null;
+
+    if (answerFile) {
       const answerText = JSON.stringify({
         answers: extractResult.answers,
         count: extractResult.count,
@@ -233,7 +236,8 @@ class AnswerExtractor {
       processedFiles: extractResult.processedFiles,
       allFilesContent: extractResult.allFilesContent,
       success: extractResult.success,
-      message: extractResult.message
+      message: extractResult.message,
+      answerFile: answerFile
     };
   }
 

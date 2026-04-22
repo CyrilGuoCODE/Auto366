@@ -1,4 +1,3 @@
-
 <div align=center><img src="icon_black.png"></div>
 
 # Auto366
@@ -22,10 +21,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 ### 新版本已完成
 
-- 修复自动更新按钮被遮挡
-- 加入安装目录内置兼容性ps脚本(Auto366CompatibilityMode.ps1)
-- 答案乱序解决(由SubmergeDQ)
-- 启动代理时自动检查端口占用情况
+- 重构项目底层架构
 
 ### BUG问题
 
@@ -92,12 +88,16 @@ windows默认资源路径：`D:/Up366StudentFiles`
 
 ## 您在使用中有任何问题都可以在讨论中提出
 
+## 贡献指南
+
+[贡献指南](https://366.cyril.qzz.io/tutorial/contributing-guide)
+
 ## 许可证
 
 本项目采用 GNU General Public License v3.0 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 但此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等。
 
----
+***
 
 **免责声明**：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。

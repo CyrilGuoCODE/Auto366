@@ -938,7 +938,6 @@ class ProxyServer {
       const result = await this.answerExtractor.processZipAnswer(zipPath, ansDir);
 
       if (result.success && result.answers.length > 0) {
-        const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
         this.safeIpcSend('file-structure', {
           structure: result.fileStructure,
           extractDir: result.extractDir
@@ -946,7 +945,7 @@ class ProxyServer {
         this.safeIpcSend('answers-extracted', {
           answers: result.answers,
           count: result.count,
-          file: answerFile,
+          file: result.answerFile,
           processedFiles: result.processedFiles
         });
       } else if (result.success && result.answers.length === 0) {
