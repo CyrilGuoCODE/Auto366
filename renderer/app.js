@@ -7,6 +7,7 @@ import AnswersUI from './answers-ui.js';
 import RulesUI from './rules-ui.js';
 import CommunityUI from './community-ui.js';
 import SettingsUI from './settings-ui.js';
+import FileUI from './file-ui.js';
 
 class Auto366App {
   constructor() {
@@ -23,6 +24,7 @@ class Auto366App {
     this.rulesUI = new RulesUI(this.state, this.logManager);
     this.communityUI = new CommunityUI(this.state, this.logManager);
     this.settingsUI = new SettingsUI(this.state, this.logManager);
+    this.fileUI = new FileUI(this.state, this.logManager);
   }
 
   // 初始化应用
@@ -42,6 +44,9 @@ class Auto366App {
       
       // 初始化答案UI
       this.answersUI.initAnswersUI();
+
+      // 初始化文件管理UI
+      this.fileUI.initFileUI();
       
       // 初始化规则事件监听器
       this.rulesUI.initRuleEventListeners();

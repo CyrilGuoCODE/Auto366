@@ -7,6 +7,13 @@ const StreamZip = require('node-stream-zip');
 const CryptoManager = require('./crypto');
 
 class AnswerExtractor {
+  // 题型ID常量定义（避免魔法数字）
+  static get QTYPE_CHOICE() { return 133; }      // 选择题
+  static get QTYPE_SPEAKING() { return 237; }     // 口语跟读题
+  static get QTYPE_READING() { return 449; }      // 朗读题
+  static get QTYPE_FILL_BLANK() { return 503; }   // 听力填空题
+  static get QTYPE_RETELL() { return 554; }       // 故事复述题
+
   constructor(logCallback = null) {
     this.cacheDir = path.join(os.homedir(), '.Auto366', 'cache');
     this.extractDir = path.join(this.cacheDir, 'extracted');
@@ -224,7 +231,7 @@ class AnswerExtractor {
     return results;
   }
 
-  // 从 pageConfig 提取选择题答案（保持原始顺序）
+  // 从 pageConfig 提取所有题型答案（选择题、口语、朗读、复述、填空等）
   extractFromPage1(pageConfig) {
     const answers = [];
     try {
@@ -234,6 +241,9 @@ class AnswerExtractor {
         const questionList = slide.questionList || [];
 
         for (const question of questionList) {
+          const qtypeId = question.qtype_id;
+
+          // 选择题（已有逻辑）
           if (question.answer_text && question.options && question.options.length > 0) {
             const correctOption = question.options.find(opt => opt.id === question.answer_text);
             if (correctOption) {
@@ -250,6 +260,7 @@ class AnswerExtractor {
             }
           }
 
+          // 嵌套选择题
           if (question.questions_list && question.questions_list.length > 0) {
             for (const q of question.questions_list) {
               if (q.answer_text && q.options && q.options.length > 0) {
@@ -265,6 +276,99 @@ class AnswerExtractor {
                     pattern: '听后选择-嵌套',
                     mediaIndex: this.extractMediaIndexFromContent(q.media?.file || '')
                   });
+                }
+              }
+            }
+          }
+
+          // 口语跟读题
+          if (qtypeId === AnswerExtractor.QTYPE_SPEAKING && question.record_speak && question.record_speak.length > 0) {
+            const speakList = question.record_speak;
+            const correctAnswers = speakList.filter(item => item.work === "1" && item.show === "1");
+            for (const item of correctAnswers) {
+              if (item.content && item.content.trim()) {
+                const questionText = this.cleanHtmlText(question.question_text || '口语跟读');
+                const answerContent = this.cleanHtmlText(item.content.trim());
+                answers.push({
+                  question: questionText,
+                  answer: answerContent,
+                  content: `请回答: ${answerContent}`,
+                  questionText: questionText,
+                  pattern: '口语跟读',
+                  mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+                });
+              }
+            }
+          }
+
+          // 朗读题
+          if (qtypeId === AnswerExtractor.QTYPE_READING && question.analysis && question.analysis.trim()) {
+            const analysisText = this.cleanHtmlText(question.analysis).trim();
+            if (analysisText) {
+              answers.push({
+                question: '朗读文本',
+                answer: analysisText,
+                content: `请朗读: ${analysisText}`,
+                questionText: analysisText.substring(0, 50) + (analysisText.length > 50 ? '...' : ''),
+                pattern: '朗读',
+                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+              });
+            }
+          }
+
+          // 故事复述题
+          if (qtypeId === AnswerExtractor.QTYPE_RETELL && question.analysis && question.analysis.trim()) {
+            let analysisText = question.analysis
+              .replace(/<p[^>]*>答案[一二三四五六七八九十]+：<\/p>/g, '')
+              .replace(/<[^>]+>/g, '')
+              .trim();
+            analysisText = analysisText.replace(/\s+/g, ' ').trim();
+            if (analysisText) {
+              const firstAnswer = analysisText.split(/\s*答案[一二三四五六七八九十]+：\s*/)[0] || analysisText;
+              const questionText = this.cleanHtmlText(question.question_text || '故事复述');
+              answers.push({
+                question: questionText,
+                answer: firstAnswer.trim(),
+                content: `请复述: ${firstAnswer.trim()}`,
+                questionText: questionText,
+                pattern: '故事复述',
+                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+              });
+            }
+          }
+
+          // 听力填空题
+          if (qtypeId === AnswerExtractor.QTYPE_FILL_BLANK) {
+            if (question.analysis && question.analysis.trim()) {
+              const analysisText = this.cleanHtmlText(question.analysis).trim();
+              if (analysisText) {
+                answers.push({
+                  question: this.cleanHtmlText(question.question_text || '听力填空'),
+                  answer: analysisText,
+                  content: `请回答: ${analysisText}`,
+                  questionText: this.cleanHtmlText(question.question_text || '听力填空'),
+                  pattern: '听力填空',
+                  mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+                });
+              }
+            } else if (question.record_follow_read?.paragraph_list) {
+              for (const para of question.record_follow_read.paragraph_list) {
+                const sentences = para.sentences || [];
+                for (const sent of sentences) {
+                  if (sent.keyNo && sent.content_en) {
+                    const boldMatch = sent.content_en.match(/<b>([^<]+)<\/b>/);
+                    const answerText = boldMatch ? boldMatch[1] : this.cleanHtmlText(sent.content_en);
+                    if (answerText.trim()) {
+                      answers.push({
+                        question: `问题 ${sent.keyNo}`,
+                        answer: answerText.trim(),
+                        content: `请回答: ${answerText.trim()}`,
+                        questionText: answerText.trim(),
+                        pattern: '听力填空',
+                        mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+                      });
+                    }
+                  }
                 }
               }
             }
@@ -335,58 +439,80 @@ class AnswerExtractor {
 
     const extCount = this.scanFileExtensions(extractDir);
 
-    // 查找并解密 page1.js.u3enc 文件提取答案
+    // 查找并解密 page1.js.u3enc 文件提取答案（选择题）
+    let allAnswers = [];
+    let processedFiles = [];
+    let page1AnswerCount = 0;
+    let dirAnswerCount = 0;
+
     const rawPage1Answers = this.processU3encFiles(extractDir);
 
     if (rawPage1Answers.length > 0) {
-      const page1Answers = this.sortAndDeduplicateAnswers(rawPage1Answers);
-
-      const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
-      fs.writeFileSync(answerFile, JSON.stringify({
-        answers: page1Answers,
-        count: page1Answers.length,
-        file: answerFile,
-        processedFiles: [{ file: 'page1.js.u3enc', answerCount: page1Answers.length, success: true }],
-        sourceMode: 'page1',
-        fileStructure: extCount
-      }, null, 2), 'utf-8');
-
-      this.emitLog('success', `page1 提取完成: 原始 ${rawPage1Answers.length} 条 -> 去重后 ${page1Answers.length} 条`);
-
-      return {
-        extractDir: extractDir,
-        fileStructure: extCount,
-        answers: page1Answers,
-        count: page1Answers.length,
-        processedFiles: [{ file: 'page1.js/.u3enc', answerCount: page1Answers.length, success: true }],
-        allFilesContent: [],
+      const page1Answers = this.sortAndDeduplicateAnswers(rawPage1Answers, 'page1');
+      page1AnswerCount = page1Answers.length;
+      allAnswers = allAnswers.concat(page1Answers);
+      processedFiles.push({
+        file: 'page1.js.u3enc',
+        answerCount: page1Answers.length,
+        sourceType: 'u3enc',
         success: true,
-        message: '从 page1.js/.u3enc 提取完成',
-        answerFile: answerFile,
-        sourceMode: 'page1'
-      };
+        details: `提取 ${page1Answers.length} 个选择题`
+      });
+      this.emitLog('success', `page1 选择题提取完成: ${page1Answers.length} 个`);
+    } else {
+      this.emitLog('info', '未从 u3enc 文件中提取到选择题，将尝试从 questionData.js 提取其他题型');
     }
 
-    // 回退：使用原有的 questionData.js 逻辑
-    const extractResult = await this.extractFromDirectory(extractDir);
+    // 始终执行目录扫描，提取其他题型（口语、朗读、复述等）
+    const dirExtractResult = await this.extractFromDirectory(extractDir);
 
-    const answerFile = extractResult.success && extractResult.answers.length > 0
+    if (dirExtractResult.success && dirExtractResult.answers.length > 0) {
+      // 使用 questionText 字段进行去重（与 sortAndDeduplicateAnswers 保持一致）
+      const existingKeys = new Set(allAnswers.map(a => `${a.questionText || a.question}|${a.answer}`));
+      const newAnswers = dirExtractResult.answers.filter(a => !existingKeys.has(`${a.questionText || a.question}|${a.answer}`));
+
+      if (newAnswers.length > 0) {
+        dirAnswerCount = newAnswers.length;
+        allAnswers = allAnswers.concat(newAnswers);
+        processedFiles = processedFiles.concat(dirExtractResult.processedFiles);
+        this.emitLog('success', `目录扫描补充提取: ${newAnswers.length} 个新答案`);
+      }
+    }
+
+    // 根据实际提取结果动态设置来源模式
+    let sourceMode;
+    if (page1AnswerCount > 0 && dirAnswerCount > 0) {
+      sourceMode = 'mixed';
+    } else if (page1AnswerCount > 0) {
+      sourceMode = 'page1';
+    } else if (dirAnswerCount > 0) {
+      sourceMode = 'fallback';
+    } else {
+      sourceMode = 'none';
+    }
+
+    // 最终去重和排序（根据数据来源选择排序策略）
+    const finalAnswers = this.sortAndDeduplicateAnswers(allAnswers, sourceMode);
+
+    // 保存结果
+    const answerFile = finalAnswers.length > 0
       ? path.join(ansDir, `answers_${Date.now()}.json`)
       : null;
 
     if (answerFile) {
-      const answerText = JSON.stringify({
-        answers: extractResult.answers,
-        count: extractResult.count,
+      fs.writeFileSync(answerFile, JSON.stringify({
+        answers: finalAnswers,
+        count: finalAnswers.length,
         file: answerFile,
-        processedFiles: extractResult.processedFiles,
-        fileStructure: extCount,
-        sourceMode: 'fallback'
-      }, null, 2);
-      fs.writeFileSync(answerFile, answerText, 'utf-8');
-    } else if (extractResult.success && extractResult.answers.length === 0) {
+        processedFiles: processedFiles,
+        sourceMode: sourceMode,
+        fileStructure: extCount
+      }, null, 2), 'utf-8');
+
+      this.emitLog('success', `答案提取完成: 共 ${finalAnswers.length} 个答案 (来源: ${sourceMode})`);
+    } else if (dirExtractResult.success && dirExtractResult.allFilesContent && dirExtractResult.allFilesContent.length > 0) {
       const allContentFile = path.join(ansDir, `all_content_${Date.now()}.txt`);
-      const allContentText = extractResult.allFilesContent.map(item =>
+      const allContentText = dirExtractResult.allFilesContent.map(item =>
         `文件: ${item.file}\n内容:\n${item.content}\n\n${'='.repeat(50)}\n\n`
       ).join('\n');
       fs.writeFileSync(allContentFile, allContentText, 'utf-8');
@@ -395,14 +521,14 @@ class AnswerExtractor {
     return {
       extractDir: extractDir,
       fileStructure: extCount,
-      answers: extractResult.answers,
-      count: extractResult.count,
-      processedFiles: extractResult.processedFiles,
-      allFilesContent: extractResult.allFilesContent,
-      success: extractResult.success,
-      message: extractResult.message,
+      answers: finalAnswers,
+      count: finalAnswers.length,
+      processedFiles: processedFiles,
+      allFilesContent: dirExtractResult.allFilesContent || [],
+      success: finalAnswers.length > 0,
+      message: finalAnswers.length > 0 ? `提取完成，共 ${finalAnswers.length} 个答案` : '未找到答案',
       answerFile: answerFile,
-      sourceMode: 'fallback'
+      sourceMode: sourceMode
     };
   }
 
@@ -487,7 +613,6 @@ class AnswerExtractor {
     }
 
     const mergedAnswers = allAnswers.length > 0 ? this.mergeAnswerData(allAnswers) : [];
-    this.emitLog('success', `答案提取完成: 共找到 ${mergedAnswers.length} 个答案`);
 
     return {
       success: true,
@@ -1689,47 +1814,42 @@ class AnswerExtractor {
         console.log(`合并完成: 成功合并 ${successfulMerges}/${correctAnswers.length} 个答案`);
 
         if (successfulMerges > 0) {
-          return this.sortAndDeduplicateAnswers(mergedAnswers);
+          return this.sortAndDeduplicateAnswers(mergedAnswers, 'fallback');
         }
 
         console.log('合并成功率过低，回退到普通模式');
-        return this.sortAndDeduplicateAnswers(allAnswers);
+        return this.sortAndDeduplicateAnswers(allAnswers, 'fallback');
       }
 
-      return this.sortAndDeduplicateAnswers(allAnswers);
+      return this.sortAndDeduplicateAnswers(allAnswers, 'fallback');
     } catch (error) {
       console.error('合并答案数据失败:', error);
       return allAnswers;
     }
   }
 
-  sortAndDeduplicateAnswers(answers) {
+  sortAndDeduplicateAnswers(answers, sourceMode = 'page1') {
     if (!answers || answers.length === 0) return answers;
 
-    const patternPriority = {
-      '听后选择': 1,
-      '听后回答': 2,
-      '听后转述': 3,
-      '朗读短文': 4
-    };
+    let sortedAnswers;
 
-    const sortedByMedia = [...answers].sort((a, b) => {
-      const priorityA = patternPriority[a.pattern] || 999;
-      const priorityB = patternPriority[b.pattern] || 999;
+    if (sourceMode === 'page1' || sourceMode === 'mixed') {
+      // 有 page1 数据时：保持原始顺序（pageConfig 的 slides 数组已有序）
+      sortedAnswers = [...answers];
+    } else {
+      // 只有 questionData.js 时：按媒体索引排序（T1, T2, T3...）
+      sortedAnswers = [...answers].sort((a, b) => {
+        const indexA = a.mediaIndex ?? Infinity;
+        const indexB = b.mediaIndex ?? Infinity;
+        return indexA - indexB;
+      });
+    }
 
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-
-      const indexA = a.mediaIndex ?? Infinity;
-      const indexB = b.mediaIndex ?? Infinity;
-      return indexA - indexB;
-    });
-
+    // 去重（基于 questionText + answer）
     const seen = new Map();
     const deduplicated = [];
 
-    for (const ans of sortedByMedia) {
+    for (const ans of sortedAnswers) {
       const key = `${ans.questionText}|${ans.answer}`;
       if (!seen.has(key)) {
         seen.set(key, true);
@@ -1737,7 +1857,7 @@ class AnswerExtractor {
       }
     }
 
-    this.emitLog('info', `排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条`);
+    this.emitLog('info', `排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条 (来源: ${sourceMode})`);
 
     return deduplicated;
   }
