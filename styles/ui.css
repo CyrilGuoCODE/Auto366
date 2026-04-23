@@ -1056,13 +1056,13 @@
 }
 
 .share-btn {
-    background: #17a2b8;
+    background: #007bff;
     color: white;
     padding: 8px 16px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
-    border: none;
+    border: 1px solid #007bff;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1071,9 +1071,10 @@
 }
 
 .share-btn:hover {
-    background: #138496;
+    background: #0056b3;
+    border-color: #0056b3;
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(23, 162, 184, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
 }
 
 .export-btn {
@@ -1095,6 +1096,28 @@
     background: #218838;
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+
+.replace-audio-btn {
+    background: #007bff;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    border: 1px solid #007bff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.replace-audio-btn:hover {
+    background: #0056b3;
+    border-color: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
 }
 
 #importAnswer {
