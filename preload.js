@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件操作
   clearCache: () => ipcRenderer.invoke('clear-cache'),
   openUp366: () => ipcRenderer.invoke('open-up366'),
+  replaceAudio: () => ipcRenderer.invoke('replace-audio'),
   downloadFile: (uuid) => ipcRenderer.invoke('download-file', uuid),
   shareAnswerFile: (filePath) => ipcRenderer.invoke('share-answer-file', filePath),
   saveInjectionPackage: (data) => ipcRenderer.invoke('save-injection-package', data),

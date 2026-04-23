@@ -1,6 +1,6 @@
 {
   "name": "auto366",
-  "version": "0.0.1",
+  "version": "2.0.0",
   "description": "天学网自动化答题工具，支持各类题型答案获取和自动填写",
   "main": "main.js",
   "author": "Auto366",
@@ -45,10 +45,16 @@
       "!.git/**/*",
       "!web/**/*"
     ],
-    "extraResources": {
-      "from": "./resources/Auto366CompatibilityMode.ps1",
-      "to": "../"
-    },
+    "extraResources": [
+      {
+        "from": "./resources/Auto366CompatibilityMode.ps1",
+        "to": "../"
+      },
+      {
+        "from": "./resources/init.mp3",
+        "to": "../"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "icon.png",
