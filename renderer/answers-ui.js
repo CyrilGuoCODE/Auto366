@@ -53,6 +53,14 @@ class AnswersUI {
         this.exportAnswers();
       });
     }
+
+    // 替换音频按钮
+    const replaceAudioBtn = document.getElementById('replaceAudioBtn');
+    if (replaceAudioBtn) {
+      replaceAudioBtn.addEventListener('click', () => {
+        this.replaceAudio();
+      });
+    }
   }
 
   // 更新排序按钮状态
@@ -468,6 +476,24 @@ class AnswersUI {
 
     } catch (error) {
       this.logManager.addErrorLog(`导出失败: ${error.message}`);
+    }
+  }
+
+  // 替换音频文件
+  async replaceAudio() {
+    try {
+      this.logManager.addInfoLog('正在替换音频文件...');
+      const result = await window.electronAPI.replaceAudio();
+
+      if (result && result.success) {
+        this.logManager.addSuccessLog(result.message);
+      } else if (result && !result.success) {
+        this.logManager.addErrorLog(`音频替换失败: ${result.error || '未知错误'}`);
+      } else {
+        this.logManager.addErrorLog('音频替换失败');
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`音频替换失败: ${error.message}`);
     }
   }
 
