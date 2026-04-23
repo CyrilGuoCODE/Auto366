@@ -359,6 +359,72 @@ class FileManager {
     }
   }
 
+  // 替换音频文件（批量替换 flipbooks 目录下的所有 MP3 文件）
+  async replaceAudioFiles(mainWindow) {
+    try {
+      const cachePath = await this.getCachePath(mainWindow);
+      if (!cachePath) {
+        return { success: false, error: '未找到缓存路径' };
+      }
+
+      const flipbooksPath = path.join(cachePath, 'flipbooks');
+
+      // 查找 init.mp3 文件的位置
+      let initAudioPath = path.join(this.appPath, 'resources', 'init.mp3');
+      if (!fs.existsSync(initAudioPath)) {
+        initAudioPath = path.join(process.resourcesPath, 'init.mp3');
+      }
+
+      if (!fs.existsSync(initAudioPath)) {
+        return { success: false, error: 'init.mp3 文件不存在于 resources 目录' };
+      }
+
+      if (!fs.existsSync(flipbooksPath)) {
+        return { success: false, error: 'flipbooks 目录不存在' };
+      }
+
+      const initAudioBuffer = fs.readFileSync(initAudioPath);
+      let replacedCount = 0;
+      const directories = new Set();
+
+      // 递归遍历并替换
+      const traverseAndReplace = (dirPath) => {
+        const items = fs.readdirSync(dirPath);
+        for (const item of items) {
+          const fullPath = path.join(dirPath, item);
+          const stat = fs.statSync(fullPath);
+
+          if (stat.isDirectory()) {
+            directories.add(fullPath);
+            traverseAndReplace(fullPath);
+          } else if (stat.isFile()) {
+            const ext = path.extname(item).toLowerCase();
+            if (ext === '.mp3') {
+              fs.writeFileSync(fullPath, initAudioBuffer);
+              replacedCount++;
+            }
+          }
+        }
+      };
+
+      traverseAndReplace(flipbooksPath);
+
+      if (replacedCount === 0) {
+        return { success: true, message: '未找到需要替换的音频文件', replacedCount: 0, directoryCount: directories.size };
+      }
+
+      return {
+        success: true,
+        message: `音频替换成功 - 已替换 ${replacedCount} 个文件，${directories.size} 个目录`,
+        replacedCount,
+        directoryCount: directories.size
+      };
+    } catch (error) {
+      console.error('音频替换失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // 注册 IPC 处理器
   registerIpcHandlers(mainWindow) {
     ipcMain.handle('clear-cache', async () => {
@@ -372,6 +438,14 @@ class FileManager {
     ipcMain.handle('open-up366', async () => {
       try {
         return await this.openUp366();
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('replace-audio', async () => {
+      try {
+        return await this.replaceAudioFiles(mainWindow);
       } catch (error) {
         return { success: false, error: error.message };
       }

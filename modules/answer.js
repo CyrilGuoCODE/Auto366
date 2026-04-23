@@ -4,6 +4,7 @@ const os = require('os');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
 const StreamZip = require('node-stream-zip');
+const CryptoManager = require('./crypto');
 
 class AnswerExtractor {
   constructor(logCallback = null) {
@@ -14,6 +15,7 @@ class AnswerExtractor {
     this.ansDir = path.join(this.appPath, 'answers');
     this.fileDir = path.join(this.appPath, 'file');
     this.logCallback = logCallback;
+    this.cryptoManager = new CryptoManager();
   }
 
   emitLog(type, message, details = null) {
@@ -186,6 +188,134 @@ class AnswerExtractor {
     return answers;
   }
 
+  // ========== Page1.u3enc 处理方法 ==========
+
+  // 从 JS 内容中提取 pageConfig JSON
+  extractJsonFromPageConfig(content) {
+    const match = content.match(/var\s+pageConfig\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+    if (match && match[1]) return match[1];
+
+    const startIndex = content.indexOf('{');
+    const lastBrace = content.lastIndexOf('}');
+    if (startIndex !== -1 && lastBrace !== -1 && lastBrace > startIndex) {
+      return content.substring(startIndex, lastBrace + 1);
+    }
+    return null;
+  }
+
+  // 递归查找目录中的 page1.js.u3enc 文件
+  findU3encFiles(dirPath) {
+    const results = [];
+    try {
+      const items = fs.readdirSync(dirPath);
+      for (const item of items) {
+        const itemPath = path.join(dirPath, item);
+        const stat = fs.statSync(itemPath);
+
+        if (stat.isDirectory()) {
+          results.push(...this.findU3encFiles(itemPath));
+        } else if (item.toLowerCase() === 'page1.js.u3enc') {
+          results.push(itemPath);
+        }
+      }
+    } catch (error) {
+      console.error(`搜索 u3enc 文件失败: ${dirPath}`, error);
+    }
+    return results;
+  }
+
+  // 从 pageConfig 提取选择题答案（保持原始顺序）
+  extractFromPage1(pageConfig) {
+    const answers = [];
+    try {
+      if (!pageConfig || !pageConfig.slides) return answers;
+
+      for (const slide of pageConfig.slides) {
+        const questionList = slide.questionList || [];
+
+        for (const question of questionList) {
+          if (question.answer_text && question.options && question.options.length > 0) {
+            const correctOption = question.options.find(opt => opt.id === question.answer_text);
+            if (correctOption) {
+              const questionText = this.cleanHtmlText(question.question_text || '');
+              const answerContent = this.cleanHtmlText(correctOption.content?.trim() || '');
+              answers.push({
+                question: questionText || '未知问题',
+                answer: `${question.answer_text}. ${answerContent}`,
+                content: `请回答: ${question.answer_text}. ${answerContent}`,
+                questionText: questionText,
+                pattern: '听后选择-整体',
+                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+              });
+            }
+          }
+
+          if (question.questions_list && question.questions_list.length > 0) {
+            for (const q of question.questions_list) {
+              if (q.answer_text && q.options && q.options.length > 0) {
+                const correctOption = q.options.find(opt => opt.id === q.answer_text);
+                if (correctOption) {
+                  const questionText = this.cleanHtmlText(q.question_text || '');
+                  const answerContent = this.cleanHtmlText(correctOption.content?.trim() || '');
+                  answers.push({
+                    question: questionText || '未知问题',
+                    answer: `${q.answer_text}. ${answerContent}`,
+                    content: `请回答: ${q.answer_text}. ${answerContent}`,
+                    questionText: questionText,
+                    pattern: '听后选择-嵌套',
+                    mediaIndex: this.extractMediaIndexFromContent(q.media?.file || '')
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      console.log(`从 pageConfig 提取到 ${answers.length} 个答案`);
+      return answers;
+    } catch (error) {
+      console.error('从 pageConfig 提取答案失败:', error);
+      return [];
+    }
+  }
+
+  // 查找并解密所有 page1.js.u3enc 文件，提取答案
+  processU3encFiles(dirPath) {
+    const u3encFiles = this.findU3encFiles(dirPath);
+    let answers = [];
+
+    if (u3encFiles.length === 0) return answers;
+
+    console.log(`找到 ${u3encFiles.length} 个 page1.js.u3enc 文件`);
+
+    for (const u3encFile of u3encFiles) {
+      console.log(`处理 page1.js.u3enc 文件: ${u3encFile}`);
+      try {
+        const encryptedData = fs.readFileSync(u3encFile);
+        const decryptedData = this.cryptoManager.decryptU3enc(encryptedData);
+
+        if (decryptedData) {
+          const content = decryptedData.toString('utf-8');
+          const jsonStr = this.extractJsonFromPageConfig(content);
+
+          if (jsonStr) {
+            const pageConfig = JSON.parse(jsonStr);
+            const fileAnswers = this.extractFromPage1(pageConfig);
+            answers = answers.concat(fileAnswers);
+            console.log(`从 ${path.basename(path.dirname(u3encFile))}/page1.js 提取到 ${fileAnswers.length} 个答案`);
+          }
+        } else {
+          console.log(`解密 page1.js.u3enc 失败: ${u3encFile}`);
+        }
+      } catch (error) {
+        console.error(`解析 page1.js.u3enc 失败 (${u3encFile}):`, error);
+      }
+    }
+
+    return answers;
+  }
+
   async processZipAnswer(zipPath, ansDir) {
     let extractDir = zipPath.replace('.zip', '');
 
@@ -205,6 +335,39 @@ class AnswerExtractor {
 
     const extCount = this.scanFileExtensions(extractDir);
 
+    // 查找并解密 page1.js.u3enc 文件提取答案
+    const rawPage1Answers = this.processU3encFiles(extractDir);
+
+    if (rawPage1Answers.length > 0) {
+      const page1Answers = this.sortAndDeduplicateAnswers(rawPage1Answers);
+
+      const answerFile = path.join(ansDir, `answers_${Date.now()}.json`);
+      fs.writeFileSync(answerFile, JSON.stringify({
+        answers: page1Answers,
+        count: page1Answers.length,
+        file: answerFile,
+        processedFiles: [{ file: 'page1.js.u3enc', answerCount: page1Answers.length, success: true }],
+        sourceMode: 'page1',
+        fileStructure: extCount
+      }, null, 2), 'utf-8');
+
+      this.emitLog('success', `page1 提取完成: 原始 ${rawPage1Answers.length} 条 -> 去重后 ${page1Answers.length} 条`);
+
+      return {
+        extractDir: extractDir,
+        fileStructure: extCount,
+        answers: page1Answers,
+        count: page1Answers.length,
+        processedFiles: [{ file: 'page1.js/.u3enc', answerCount: page1Answers.length, success: true }],
+        allFilesContent: [],
+        success: true,
+        message: '从 page1.js/.u3enc 提取完成',
+        answerFile: answerFile,
+        sourceMode: 'page1'
+      };
+    }
+
+    // 回退：使用原有的 questionData.js 逻辑
     const extractResult = await this.extractFromDirectory(extractDir);
 
     const answerFile = extractResult.success && extractResult.answers.length > 0
@@ -217,7 +380,8 @@ class AnswerExtractor {
         count: extractResult.count,
         file: answerFile,
         processedFiles: extractResult.processedFiles,
-        fileStructure: extCount
+        fileStructure: extCount,
+        sourceMode: 'fallback'
       }, null, 2);
       fs.writeFileSync(answerFile, answerText, 'utf-8');
     } else if (extractResult.success && extractResult.answers.length === 0) {
@@ -237,7 +401,8 @@ class AnswerExtractor {
       allFilesContent: extractResult.allFilesContent,
       success: extractResult.success,
       message: extractResult.message,
-      answerFile: answerFile
+      answerFile: answerFile,
+      sourceMode: 'fallback'
     };
   }
 
