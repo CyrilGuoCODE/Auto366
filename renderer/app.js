@@ -8,16 +8,12 @@ import RulesUI from './rules-ui.js';
 import CommunityUI from './community-ui.js';
 import SettingsUI from './settings-ui.js';
 import FileUI from './file-ui.js';
+import TutorialManager from './tutorial-ui.js';
 
 class Auto366App {
   constructor() {
-    // 初始化状态管理
     this.state = new StateManager();
-    
-    // 初始化日志管理器
     this.logManager = new LogManager(this.state);
-    
-    // 初始化各个UI模块
     this.eventManager = new EventManager(this.state);
     this.proxyUI = new ProxyUI(this.state, this.logManager);
     this.answersUI = new AnswersUI(this.state, this.logManager);
@@ -25,6 +21,7 @@ class Auto366App {
     this.communityUI = new CommunityUI(this.state, this.logManager);
     this.settingsUI = new SettingsUI(this.state, this.logManager);
     this.fileUI = new FileUI(this.state, this.logManager);
+    this.tutorialUI = new TutorialManager(this.state, this.logManager);
   }
 
   // 初始化应用
@@ -90,6 +87,9 @@ class Auto366App {
       setTimeout(() => {
         this.proxyUI.startProxy();
       }, 1000);
+      
+      // 初始化新手教程
+      this.tutorialUI.init();
       
     } catch (error) {
       console.error('应用初始化失败:', error);
