@@ -10,6 +10,28 @@ class RulesLoader {
 
   async loadBuiltinRulesets(rulesManager) {
     try {
+      const existingRules = rulesManager.getRules();
+      const existingBuiltinGroup = existingRules.find(rule =>
+        rule.isGroup && rule.isBuiltin && rule.name === '内置-答案获取'
+      );
+
+      if (!existingBuiltinGroup) {
+        const answerGroupId = uuidv4();
+        const answerGroup = {
+          id: answerGroupId,
+          name: '内置-答案获取',
+          description: '程序内置的空规则集，仅用于答案获取功能',
+          isGroup: true,
+          isBuiltin: true,
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        rulesManager.saveRules([...existingRules, answerGroup]);
+        console.log('成功导入内置规则集: 内置-答案获取 (0 个规则)');
+      }
+
       if (!fs.existsSync(this.rulesetsDir)) {
         console.log('内置规则集目录不存在:', this.rulesetsDir);
         return;
@@ -51,7 +73,7 @@ class RulesLoader {
             description: rulesetInfo.description,
             isGroup: true,
             isBuiltin: true,
-            enabled: true,
+            enabled: false,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
@@ -60,21 +82,22 @@ class RulesLoader {
             ...rule,
             groupId: groupId,
             isBuiltin: true,
+            enabled: false,
             createdAt: rule.createdAt || new Date().toISOString(),
             updatedAt: rule.updatedAt || new Date().toISOString()
           }));
 
-          const existingRules = rulesManager.getRules();
-          const existingBuiltinGroup = existingRules.find(rule =>
+          const currentRules = rulesManager.getRules();
+          const existingRulesetGroup = currentRules.find(rule =>
             rule.isGroup && rule.isBuiltin && rule.name === rulesetInfo.name
           );
 
-          if (existingBuiltinGroup) {
+          if (existingRulesetGroup) {
             console.log(`内置规则集已存在，跳过: ${rulesetInfo.name}`);
             continue;
           }
 
-          rulesManager.saveRules([...existingRules, rulesetGroup, ...rules]);
+          rulesManager.saveRules([...currentRules, rulesetGroup, ...rules]);
 
           console.log(`成功导入内置规则集: ${rulesetInfo.name} (${rules.length} 个规则)`);
         } catch (error) {

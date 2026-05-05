@@ -425,6 +425,49 @@ class FileManager {
     }
   }
 
+  // 自动寻找 Up366StudentFiles 文件夹
+  async autoFindCacheDir() {
+    try {
+      const drives = [];
+      for (let i = 67; i <= 90; i++) {
+        const drive = String.fromCharCode(i) + ':\\';
+        try {
+          if (fs.existsSync(drive)) {
+            const stats = fs.statSync(drive);
+            if (stats.isDirectory()) {
+              drives.push(drive);
+            }
+          }
+        } catch (e) {
+          // 忽略无效驱动器
+        }
+      }
+
+      const foundPaths = [];
+      for (const drive of drives) {
+        try {
+          const searchTarget = path.join(drive, 'Up366StudentFiles');
+          if (fs.existsSync(searchTarget)) {
+            const stats = fs.statSync(searchTarget);
+            if (stats.isDirectory()) {
+              foundPaths.push(searchTarget);
+            }
+          }
+        } catch (e) {
+          // 忽略访问失败的驱动器
+        }
+      }
+
+      if (foundPaths.length === 1) {
+        return { success: true, path: foundPaths[0] };
+      } else {
+        return { success: false, count: foundPaths.length, paths: foundPaths };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   // 注册 IPC 处理器
   registerIpcHandlers(mainWindow) {
     ipcMain.handle('clear-cache', async () => {
@@ -446,6 +489,14 @@ class FileManager {
     ipcMain.handle('replace-audio', async () => {
       try {
         return await this.replaceAudioFiles(mainWindow);
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('auto-find-cache-dir', async () => {
+      try {
+        return await this.autoFindCacheDir();
       } catch (error) {
         return { success: false, error: error.message };
       }

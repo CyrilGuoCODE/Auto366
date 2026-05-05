@@ -66,6 +66,37 @@ class SettingsUI {
           }
         });
       }
+
+      const autoFindCacheBtn = document.getElementById('autoFindCacheBtn');
+      if (autoFindCacheBtn) {
+        autoFindCacheBtn.addEventListener('click', async () => {
+          try {
+            autoFindCacheBtn.disabled = true;
+            const result = await window.electronAPI.autoFindCacheDir();
+            const cachePathInput = document.getElementById('cachePathInput');
+            if (result.success) {
+              localStorage.setItem('cache-path', result.path);
+              if (window.electronAPI.setCachePath) {
+                window.electronAPI.setCachePath(result.path);
+              }
+              if (cachePathInput) {
+                cachePathInput.value = result.path;
+              }
+              this.logManager.addSuccessLog(`自动寻找缓存目录成功，路径为：${result.path}`);
+            } else {
+              if (result.count === 0) {
+                this.logManager.addErrorLog('自动寻找缓存目录失败，未找到 Up366StudentFiles 文件夹');
+              } else {
+                this.logManager.addErrorLog(`自动寻找缓存目录失败，找到 ${result.count} 个 Up366StudentFiles 文件夹`);
+              }
+            }
+          } catch (error) {
+            this.logManager.addErrorLog(`自动寻找缓存目录失败: ${error.message}`);
+          } finally {
+            autoFindCacheBtn.disabled = false;
+          }
+        });
+      }
     } catch (error) {
       console.error('初始化缓存设置失败:', error);
     }

@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 缓存路径管理
   setCachePath: (newPath) => ipcRenderer.invoke('set-cache-path', newPath),
+  autoFindCacheDir: () => ipcRenderer.invoke('auto-find-cache-dir'),
 
   // 规则管理API
   getRules: () => ipcRenderer.invoke('get-rules'),
