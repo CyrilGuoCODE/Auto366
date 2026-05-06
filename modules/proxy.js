@@ -22,6 +22,7 @@ class ProxyServer {
     this.isRunning = false;
     this.isCapturing = false;
     this.answerCaptureEnabled = true;
+    this.aiApiKey = '';
     this.mainWindow = null;
     this.trafficCache = new Map();
     this.serverDatas = {};
@@ -234,89 +235,6 @@ class ProxyServer {
     });
   }
 
-  // 启动代理服务器
-  start() {
-    return new Promise((resolve, reject) => {
-      try {
-        // 启动HTTP代理服务器
-        this.startProxyPromise()
-          .then(() => {
-            // 启动本地答案服务器
-            this.startBucketServer();
-
-            this.isRunning = true;
-            resolve({ running: true, host: '127.0.0.1', port: this.proxyPort });
-          })
-          .catch((error) => {
-            console.error('启动代理服务器失败:', error);
-            reject(error);
-          });
-
-      } catch (error) {
-        console.error('启动代理服务器失败:', error);
-        reject(error);
-      }
-    });
-  }
-
-  // 停止代理服务器
-  stop() {
-    return new Promise((resolve) => {
-      try {
-        this.isStopping = true;
-        console.log('开始停止代理服务器...');
-
-        // 关闭代理服务器
-        if (this.proxy) {
-          console.log('代理对象存在，检查close方法...');
-          console.log('代理对象类型:', typeof this.proxy);
-          console.log('代理对象close方法:', typeof this.proxy.close);
-
-          if (typeof this.proxy.close === 'function') {
-            try {
-              // 不使用回调，直接关闭
-              this.proxy.close();
-              console.log('代理服务器关闭命令已发送');
-
-              // 清理代理对象引用
-              this.proxy = null;
-
-              this.handleProxyStop();
-              resolve({ success: true });
-            } catch (closeError) {
-              console.error('调用proxy.close时出错:', closeError);
-              this.proxy = null;
-              this.handleProxyStop();
-              resolve({ success: true });
-            }
-          } else {
-            console.log('代理对象没有close方法，直接处理停止');
-            this.handleProxyStop();
-            resolve({ success: true });
-          }
-        } else {
-          console.log('代理服务器未运行或已关闭');
-          this.handleProxyStop();
-          resolve({ success: true });
-        }
-
-        setTimeout(() => {
-          if (this.isStopping) {
-            console.log('代理服务器停止超时，强制完成');
-            this.proxy = null;
-            this.handleProxyStop();
-            resolve({ success: true });
-          }
-        }, 3000);
-
-      } catch (error) {
-        console.error('停止代理服务器时出错:', error);
-        this.proxy = null;
-        this.handleProxyStop();
-        resolve({ success: false, error: error.message });
-      }
-    });
-  }
 
   handleProxyStop() {
     this.isStopping = false;
@@ -352,16 +270,55 @@ class ProxyServer {
       this.handleBucketRequest(req, res);
     });
 
-    this.bucketServer.listen(this.bucketPort, () => {
-      console.log(`本地答案服务器已启动，监听端口: ${this.bucketPort}`);
+    this.bucketServer.listen(this.bucketPort, '127.0.0.1', () => {
+      console.log(`本地服务器已启动: http://127.0.0.1:${this.bucketPort}/`);
     });
   }
 
   // 处理本地答案服务器请求
   handleBucketRequest(req, res) {
     try {
+      if (req.method === 'POST' && req.url === '/save-log') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const { content } = JSON.parse(body);
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            const safeFilename = `auto-pk-logs-${timestamp}.txt`;
+            const logDir = path.join(this.appPath, 'temp');
+            if (!fs.existsSync(logDir)) {
+              fs.mkdirSync(logDir, { recursive: true });
+            }
+            const filePath = path.join(logDir, safeFilename);
+            fs.writeFileSync(filePath, content, 'utf-8');
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: true, path: filePath }));
+          } catch (e) {
+            res.writeHead(500, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: false, error: e.message }));
+          }
+        });
+        return;
+      }
+
       const urlObj = url.parse(req.url);
       const pathname = urlObj.pathname;
+
+      if (pathname === '/ai-api-key') {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ key: this.aiApiKey }));
+        return;
+      }
 
       if (pathname === '/') {
         // 服务器信息页面
@@ -451,6 +408,15 @@ class ProxyServer {
   // 获取答案捕获启用状态
   getAnswerCaptureEnabled() {
     return this.answerCaptureEnabled;
+  }
+
+  setAiApiKey(key) {
+    this.aiApiKey = key || '';
+    return { success: true };
+  }
+
+  getAiApiKey() {
+    return this.aiApiKey;
   }
 
   // 清理HTML标签和转义符号的通用函数
@@ -1193,6 +1159,19 @@ class ProxyServer {
       return this.getAnswerCaptureEnabled();
     });
 
+    ipcMain.handle('set-ai-api-key', async (event, key) => {
+      try {
+        this.setAiApiKey(key);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('get-ai-api-key', () => {
+      return this.getAiApiKey();
+    });
+
     ipcMain.handle('import-implant-zip', async (event, sourcePath) => {
       try {
         return await this.importZIPToDir(sourcePath);
@@ -1308,28 +1287,69 @@ class ProxyServer {
     ipcMain.handle('download-file', async (event, uuid) => {
       let traffic = this.getTrafficByUuid(uuid);
       if (!traffic) return 0;
+
+      let contentType = traffic.contentType;
+      if (!contentType && traffic.responseHeaders) {
+        contentType = traffic.responseHeaders['content-type'];
+      }
+
       let extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.txt`;
-      if (traffic.contentType) {
-        if (traffic.contentType.includes('json')) {
+      let filters = [
+        { name: 'All Files', extensions: ['*'] }
+      ];
+      let detectedType = null;
+      if (contentType) {
+        if (contentType.includes('json')) {
+          detectedType = 'json';
           extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.json`;
-        } else if (traffic.contentType.includes('html')) {
+          filters.unshift({ name: 'JSON Files', extensions: ['json'] });
+        } else if (contentType.includes('html')) {
+          detectedType = 'html';
           extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.html`;
-        } else if (traffic.contentType.includes('xml')) {
+          filters.unshift({ name: 'HTML Files', extensions: ['html'] });
+        } else if (contentType.includes('xml')) {
+          detectedType = 'xml';
           extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.xml`;
-        } else if (traffic.contentType.includes('javascript')) {
+          filters.unshift({ name: 'XML Files', extensions: ['xml'] });
+        } else if (contentType.includes('javascript')) {
+          detectedType = 'js';
           extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.js`;
-        } else if (traffic.contentType.includes('css')) {
+          filters.unshift({ name: 'JavaScript Files', extensions: ['js'] });
+        } else if (contentType.includes('css')) {
+          detectedType = 'css';
           extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.css`;
-        } else if (traffic.contentType.includes('image')) {
+          filters.unshift({ name: 'CSS Files', extensions: ['css'] });
+        } else if (contentType.includes('image')) {
+          detectedType = 'image';
           extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.png`;
-        } else if (traffic.contentType.includes('octet-stream')) {
+          filters.unshift({ name: 'Image Files', extensions: ['png'] });
+        } else if (contentType.includes('octet-stream')) {
+          detectedType = 'octet';
           extension = traffic.responseBody;
         }
       }
-      const result = await dialog.showSaveDialog({ defaultPath: extension });
+
+      if (!detectedType && traffic.responseBody) {
+        try {
+          JSON.parse(traffic.responseBody);
+          detectedType = 'json';
+          extension = `traffic_${traffic.timestamp.replace(/[:.]/g, '-')}.json`;
+          filters.unshift({ name: 'JSON Files', extensions: ['json'] });
+        } catch (e) {}
+      }
+
+      const result = await dialog.showSaveDialog({ defaultPath: extension, filters });
       if (result.canceled) return -1;
       try {
-        await this.downloadFileByUuid(uuid, result.filePath);
+        if (detectedType === 'json') {
+          let jsonContent = traffic.responseBody || (traffic.originalResponse ? traffic.originalResponse.toString('utf-8') : '');
+          try {
+            jsonContent = JSON.stringify(JSON.parse(jsonContent), null, 2);
+          } catch (e) {}
+          fs.writeFileSync(result.filePath, jsonContent, 'utf-8');
+        } else {
+          await this.downloadFileByUuid(uuid, result.filePath);
+        }
         return 1;
       } catch (error) {
         console.error('下载文件失败:', error);

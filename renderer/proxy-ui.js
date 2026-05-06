@@ -117,6 +117,33 @@ class ProxyUI {
           }
         });
       }
+
+      // 初始化AI API Key（与缓存路径相同的保存方式：localStorage + IPC同步）
+      const aiApiKeyInput = document.getElementById('aiApiKeyInput');
+      if (aiApiKeyInput) {
+        // 从 localStorage 读取初始值（持久化记忆）
+        const savedAiApiKey = localStorage.getItem('ai-api-key') || '';
+        aiApiKeyInput.value = savedAiApiKey;
+        // 同步到主进程
+        if (savedAiApiKey && window.electronAPI && window.electronAPI.setAiApiKey) {
+          window.electronAPI.setAiApiKey(savedAiApiKey);
+        }
+
+        aiApiKeyInput.addEventListener('change', async () => {
+          const newKey = aiApiKeyInput.value.trim();
+          // 保存到 localStorage（持久化）
+          localStorage.setItem('ai-api-key', newKey);
+          // 同步到主进程
+          if (window.electronAPI && window.electronAPI.setAiApiKey) {
+            try {
+              await window.electronAPI.setAiApiKey(newKey);
+            } catch (error) {
+              console.error('同步AI API Key到主进程失败:', error);
+            }
+          }
+          this.logManager.addSuccessLog('DeepSeek Key已更新' + (newKey ? '' : ' (已清空)'));
+        });
+      }
     } catch (error) {
       console.error('初始化代理端口设置失败:', error);
     }

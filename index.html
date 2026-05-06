@@ -366,10 +366,6 @@
                                     <i class="bi bi-folder"></i>
                                     <span>浏览</span>
                                 </button>
-                                <button id="autoFindCacheBtn" class="secondary-btn">
-                                    <i class="bi bi-search"></i>
-                                    <span>自动寻找</span>
-                                </button>
                             </div>
                         </div>
                         <div class="setting-group">
@@ -389,6 +385,13 @@
                                     <input type="checkbox" id="autoStartProxy" checked>
                                     <span>启动时自动开启代理</span>
                                 </label>
+                            </div>
+                        </div>
+                        <div class="setting-group">
+                            <h4>API Key</h4>
+                            <div class="setting-item">
+                                <label for="aiApiKeyInput">DeepSeek Key:</label>
+                                <input type="password" id="aiApiKeyInput" class="form-input" placeholder="sk-...">
                             </div>
                         </div>
                         <div class="setting-group">
@@ -813,117 +816,6 @@
                     <i class="bi bi-cloud-upload"></i>
                     <span>上传规则集</span>
                 </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 新手教程模态框 -->
-    <div class="modal" id="tutorialModal" style="display: none;">
-        <div class="modal-content tutorial-modal">
-            <div class="tutorial-body">
-                <!-- 第1页：欢迎 -->
-                <div class="tutorial-page" data-page="0">
-                    <p class="tutorial-greeting">Hello!</p>
-                    <h2 class="tutorial-title">欢迎使用 Auto366</h2>
-                    <p class="tutorial-desc">本教程将帮助你快速了解和使用 Auto366 的核心功能。</p>
-                </div>
-
-                <!-- 第2页：选择UI模式 -->
-                <div class="tutorial-page" data-page="1" style="display: none;">
-                    <h2 class="tutorial-title">选择操作界面</h2>
-                    <p class="tutorial-desc">你想以什么界面操作此软件？</p>
-                    <div class="tutorial-mode-options">
-                        <div class="tutorial-mode-card" data-mode="simple">
-                            <div class="mode-card-icon">
-                                <span class="bi bi-grid-1x2"></span>
-                            </div>
-                            <h3>简易模式</h3>
-                            <p>简化UI，适合普通人使用。</p>
-                        </div>
-                        <div class="tutorial-mode-card" data-mode="professional">
-                            <div class="mode-card-icon">
-                                <span class="bi bi-sliders"></span>
-                            </div>
-                            <h3>专业模式</h3>
-                            <p>显示侧边栏与完整多视图界面，适合技术人员。</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 第3页：设置天学网缓存 -->
-                <div class="tutorial-page" data-page="2" style="display: none;">
-                    <h2 class="tutorial-title">设置天学网缓存</h2>
-                    <p class="tutorial-desc" id="tutorialCacheDesc">正在自动寻找天学网缓存目录...</p>
-                    <div class="tutorial-finding-status">
-                        <div class="tutorial-spinner" id="tutorialCacheSpinner"></div>
-                        <span id="tutorialCacheStatus">正在搜索...</span>
-                    </div>
-                    <div class="tutorial-cache-path-wrap" id="tutorialCachePathWrap" style="display: none;">
-                        <input type="text" id="tutorialCachePathInput" class="tutorial-cache-input" readonly>
-                        <button type="button" id="tutorialBrowseCacheBtn" class="tutorial-browse-btn">
-                            <span>浏览</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 第4页：代理设置 -->
-                <div class="tutorial-page" data-page="3" style="display: none;">
-                    <h2 class="tutorial-title">天学网代理设置</h2>
-                    <p class="tutorial-desc">请按照以下步骤设置天学网代理：</p>
-                    <ol class="tutorial-steps">
-                        <li>打开天学网设置页面</li>
-                        <li>选择 <strong>HTTP代理</strong></li>
-                        <li>IP 地址填写：<code>127.0.0.1</code></li>
-                        <li>端口填写：<code>5291</code></li>
-                        <li>点击 <strong>保存</strong></li>
-                    </ol>
-                    <div class="tutorial-hint">
-                        <span class="bi bi-info-circle"></span>
-                        <span>设置完成后，你可以点击"下一步"继续</span>
-                    </div>
-                </div>
-
-                <!-- 第5页：规则集使用 -->
-                <div class="tutorial-page" data-page="4" style="display: none;">
-                    <h2 class="tutorial-title">规则集使用</h2>
-                    <div class="tutorial-text-content">
-                        <p>规则集是 Auto366 实现各个功能的模块，我们内置了以下几个功能：</p>
-                        <ul class="tutorial-feature-list">
-                            <li><strong>内置-答案获取</strong> - 用于答案获取功能不拦截任何请求</li>
-                            <li><strong>内置-通用自动填空</strong> - 基于请求注入实现的自动填空</li>
-                            <li><strong>内置-自动单词PK</strong> - 利用请求注入实现的自动单词PK</li>
-                        </ul>
-                        <p class="tutorial-note">你可以在"规则管理"页面中启用或禁用这些规则集。</p>
-                        <p class="tutorial-note">要用哪个题型用哪个规则集，错误选择需要删除缓存并重启天学网，一次仅启用一个规则集(防止冲突)。</p>
-                    </div>
-                </div>
-
-                <!-- 第6页：教程完成 -->
-                <div class="tutorial-page" data-page="5" style="display: none;">
-                    <div class="tutorial-icon-wrap">
-                        <div class="tutorial-icon-circle success">
-                            <span class="tutorial-check-icon">
-                                <span class="bi bi-check-lg"></span>
-                            </span>
-                        </div>
-                    </div>
-                    <h2 class="tutorial-title">教程已完成</h2>
-                    <p class="tutorial-desc">你已了解 Auto366 的基本功能，现在可以开始使用了！</p>
-                </div>
-            </div>
-            <div class="tutorial-footer">
-                <div class="tutorial-progress">
-                    <span class="progress-dot active" data-dot="0"></span>
-                    <span class="progress-dot" data-dot="1"></span>
-                    <span class="progress-dot" data-dot="2"></span>
-                    <span class="progress-dot" data-dot="3"></span>
-                    <span class="progress-dot" data-dot="4"></span>
-                    <span class="progress-dot" data-dot="5"></span>
-                </div>
-                <div class="tutorial-actions">
-                    <button type="button" class="tutorial-btn-secondary" id="tutorialPrevBtn" style="display: none;">上一步</button>
-                    <button type="button" class="tutorial-btn-primary" id="tutorialNextBtn">下一步</button>
-                </div>
             </div>
         </div>
     </div>
