@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBucketPort: () => ipcRenderer.invoke('get-bucket-port'),
   setAnswerCaptureEnabled: (enabled) => ipcRenderer.invoke('set-answer-capture-enabled', enabled),
   getAnswerCaptureEnabled: () => ipcRenderer.invoke('get-answer-capture-enabled'),
+  setAiApiKey: (key) => ipcRenderer.invoke('set-ai-api-key', key),
+  getAiApiKey: () => ipcRenderer.invoke('get-ai-api-key'),
 
   // 监听事件
   onProxyStatus: (callback) => ipcRenderer.on('proxy-status', callback),
