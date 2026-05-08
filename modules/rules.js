@@ -125,6 +125,15 @@ class RulesManager {
               childRule.currentTriggers = 0;
             }
           });
+          // 禁用不兼容的规则集
+          if (rule.compatible === false) {
+            this.rules.forEach(r => {
+              if (r.isGroup && r.id !== ruleId && r.enabled) {
+                r.enabled = false;
+                r.updatedAt = new Date().toISOString();
+              }
+            });
+          }
         }
 
         if (!rule.isGroup && rule.maxTriggers !== undefined) {

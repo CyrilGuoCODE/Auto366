@@ -578,27 +578,29 @@ class CommunityUI {
           if (rule.isGroup) {
             return {
               ...rule,
-              communityRulesetId: communityRulesetId
+              //为社区规则集默认补充不兼容属性
+              communityRulesetId: communityRulesetId,
+              compatible: rule.compatible !== undefined ? rule.compatible : false
             };
           }
           return rule;
         });
       } else if (rulesData.rules) {
-        // 包含rules的对象格式
         rulesToSave = rulesData.rules.map(rule => {
           if (rule.isGroup) {
             return {
               ...rule,
-              communityRulesetId: communityRulesetId
+              communityRulesetId: communityRulesetId,
+              compatible: rule.compatible !== undefined ? rule.compatible : true
             };
           }
           return rule;
         });
       } else if (rulesData.isGroup) {
-        // 单个规则集对象
         rulesToSave = [{
           ...rulesData,
-          communityRulesetId: communityRulesetId
+          communityRulesetId: communityRulesetId,
+          compatible: rulesData.compatible !== undefined ? rulesData.compatible : true
         }];
       }
 
@@ -851,7 +853,9 @@ class CommunityUI {
       const desc = this.escapeHtml(g.description || '无描述');
       const gid = g.id;
       const active = g.enabled ? ' feature-card--active' : '';
-      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`;
+      //添加徽章
+      const badge = this.getCompatibleBadgeHtml(g);
+      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
     }).join('');
     grid.querySelectorAll('.feature-card').forEach((card) => {
       card.addEventListener('click', () => {
@@ -890,10 +894,16 @@ class CommunityUI {
       if (!r.isGroup) {
         return r;
       }
-      const enabled = r.id === groupId;
-      if (r.enabled !== enabled) {
+      if (r.id === groupId) {
+        if (!r.enabled) {
+          changed = true;
+          return { ...r, enabled: true };
+        }
+        return r;
+      }
+      if (target.compatible === false && r.enabled) {
         changed = true;
-        return { ...r, enabled };
+        return { ...r, enabled: false };
       }
       return r;
     });
@@ -941,6 +951,15 @@ class CommunityUI {
     } catch (error) {
       this.logManager.addErrorLog(`规则集删除失败: ${error.message}`);
     }
+  }
+
+  // 获取兼容性徽章HTML
+  getCompatibleBadgeHtml(group) {
+    if (!group || group.compatible === undefined) return '';
+    if (group.compatible) {
+      return '<span class="compatible-badge compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
+    }
+    return '<span class="compatible-badge incompatible"><i class="bi bi-x-circle"></i> 不兼容</span>';
   }
 
   // HTML转义

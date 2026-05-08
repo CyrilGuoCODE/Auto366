@@ -134,6 +134,7 @@ class RulesUI {
     document.getElementById('ruleGroupDescription').value = ruleGroup.description || '';
     document.getElementById('ruleGroupAuthor').value = ruleGroup.author || '';
     document.getElementById('ruleGroupEnabled').checked = ruleGroup.enabled !== false;
+    document.getElementById('ruleGroupCompatible').checked = ruleGroup.compatible !== false;
   }
 
   // 保存规则集
@@ -144,6 +145,7 @@ class RulesUI {
       description: document.getElementById('ruleGroupDescription').value.trim(),
       author: document.getElementById('ruleGroupAuthor').value.trim(),
       enabled: document.getElementById('ruleGroupEnabled').checked,
+      compatible: document.getElementById('ruleGroupCompatible').checked,
       isGroup: true,
       rules: this.state.currentEditingRuleGroup?.rules || []
     };
@@ -419,6 +421,7 @@ class RulesUI {
               <div class="rule-group-name">
                 <i class="bi bi-collection"></i>
                 ${group.name || '未命名规则集'}
+                ${this.getCompatibleBadgeHtml(group)}
               </div>
               ${group.description ? `<div class="rule-group-description">${group.description}</div>` : ''}
             </div>
@@ -452,6 +455,7 @@ class RulesUI {
               <div class="rule-group-name">
                 <i class="bi bi-collection"></i>
                 ${group.name || '未命名规则集'}
+                ${this.getCompatibleBadgeHtml(group)}
                 <label class="rule-toggle">
                   <input type="checkbox" ${group.enabled ? 'checked' : ''} 
                          onchange="universalAnswerFeature.toggleRule('${group.id}', this.checked)">
@@ -513,6 +517,15 @@ class RulesUI {
   // 检查规则组是否有触发次数限制
   hasTriggersInGroup(rules) {
     return rules && rules.some(rule => rule.maxTriggers !== undefined && rule.maxTriggers > 0);
+  }
+
+  // 获取兼容性徽章HTML
+  getCompatibleBadgeHtml(group) {
+    if (!group || group.compatible === undefined) return '';
+    if (group.compatible) {
+      return '<span class="compatible-badge compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
+    }
+    return '<span class="compatible-badge incompatible"><i class="bi bi-x-circle"></i> 不兼容</span>';
   }
 
   // 生成规则组HTML
@@ -829,10 +842,16 @@ class RulesUI {
       if (!r.isGroup) {
         return r;
       }
-      const enabled = r.id === groupId;
-      if (r.enabled !== enabled) {
+      if (r.id === groupId) {
+        if (!r.enabled) {
+          changed = true;
+          return { ...r, enabled: true };
+        }
+        return r;
+      }
+      if (target.compatible === false && r.enabled) {
         changed = true;
-        return { ...r, enabled };
+        return { ...r, enabled: false };
       }
       return r;
     });
@@ -889,7 +908,8 @@ class RulesUI {
       const desc = Utils.escapeHtml(g.description || '无描述');
       const gid = g.id;
       const active = g.enabled ? ' feature-card--active' : '';
-      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`;
+      const badge = this.getCompatibleBadgeHtml(g);
+      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
     }).join('');
     grid.querySelectorAll('.feature-card').forEach((card) => {
       card.addEventListener('click', () => {

@@ -1,4 +1,5 @@
 {
   "name": "内置-自动单词PK",
-  "description": "利用请求注入实现的自动单词PK，正确率优化版本"
+  "description": "利用请求注入实现的自动单词PK，正确率优化版本",
+  "compatible": false
 }

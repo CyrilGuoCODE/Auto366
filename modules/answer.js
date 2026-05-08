@@ -231,6 +231,27 @@ class AnswerExtractor {
     return results;
   }
 
+  // 递归查找目录中的 page1.js 文件（已解密的）
+  findPage1JsFiles(dirPath) {
+    const results = [];
+    try {
+      const items = fs.readdirSync(dirPath);
+      for (const item of items) {
+        const itemPath = path.join(dirPath, item);
+        const stat = fs.statSync(itemPath);
+
+        if (stat.isDirectory()) {
+          results.push(...this.findPage1JsFiles(itemPath));
+        } else if (item.toLowerCase() === 'page1.js') {
+          results.push(itemPath);
+        }
+      }
+    } catch (error) {
+      console.error(`搜索 未加密page1.js 文件失败: ${dirPath}`, error);
+    }
+    return results;
+  }
+
   // 从 pageConfig 提取所有题型答案（选择题、口语、朗读、复述、填空等）
   extractFromPage1(pageConfig) {
     const answers = [];
@@ -384,36 +405,60 @@ class AnswerExtractor {
     }
   }
 
-  // 查找并解密所有 page1.js.u3enc 文件，提取答案
+  // 查找并处理所有 page1 文件（优先已解密的 page1.js，其次 page1.js.u3enc），提取答案
   processU3encFiles(dirPath) {
+    const page1JsFiles = this.findPage1JsFiles(dirPath);
     const u3encFiles = this.findU3encFiles(dirPath);
+
+    const jsDirs = new Set(page1JsFiles.map(f => path.dirname(f)));
+    const filteredU3encFiles = u3encFiles.filter(f => !jsDirs.has(path.dirname(f)));
+
     let answers = [];
 
-    if (u3encFiles.length === 0) return answers;
+    if (page1JsFiles.length === 0 && filteredU3encFiles.length === 0) return answers;
 
-    console.log(`找到 ${u3encFiles.length} 个 page1.js.u3enc 文件`);
-
-    for (const u3encFile of u3encFiles) {
-      console.log(`处理 page1.js.u3enc 文件: ${u3encFile}`);
+    for (const jsFile of page1JsFiles) {
+      console.log(`处理 page1.js 文件: ${jsFile}`);
       try {
-        const encryptedData = fs.readFileSync(u3encFile);
-        const decryptedData = this.cryptoManager.decryptU3enc(encryptedData);
+        const content = fs.readFileSync(jsFile, 'utf-8');
+        const jsonStr = this.extractJsonFromPageConfig(content);
 
-        if (decryptedData) {
-          const content = decryptedData.toString('utf-8');
-          const jsonStr = this.extractJsonFromPageConfig(content);
-
-          if (jsonStr) {
-            const pageConfig = JSON.parse(jsonStr);
-            const fileAnswers = this.extractFromPage1(pageConfig);
-            answers = answers.concat(fileAnswers);
-            console.log(`从 ${path.basename(path.dirname(u3encFile))}/page1.js 提取到 ${fileAnswers.length} 个答案`);
-          }
-        } else {
-          console.log(`解密 page1.js.u3enc 失败: ${u3encFile}`);
+        if (jsonStr) {
+          const pageConfig = JSON.parse(jsonStr);
+          const fileAnswers = this.extractFromPage1(pageConfig);
+          answers = answers.concat(fileAnswers);
+          console.log(`从 ${path.basename(path.dirname(jsFile))}/page1.js(已解密) 提取到 ${fileAnswers.length} 个答案`);
         }
       } catch (error) {
-        console.error(`解析 page1.js.u3enc 失败 (${u3encFile}):`, error);
+        console.error(`解析 page1.js 失败 (${jsFile}):`, error);
+      }
+    }
+
+    if (filteredU3encFiles.length > 0) {
+      console.log(`找到 ${filteredU3encFiles.length} 个 page1.js.u3enc 文件`);
+
+      for (const u3encFile of filteredU3encFiles) {
+        console.log(`处理 page1.js.u3enc 文件: ${u3encFile}`);
+        try {
+          const encryptedData = fs.readFileSync(u3encFile);
+          const decryptedData = this.cryptoManager.decryptU3enc(encryptedData);
+
+          if (decryptedData) {
+            const content = decryptedData.toString('utf-8');
+            const jsonStr = this.extractJsonFromPageConfig(content);
+
+            if (jsonStr) {
+              const pageConfig = JSON.parse(jsonStr);
+              const fileAnswers = this.extractFromPage1(pageConfig);
+              answers = answers.concat(fileAnswers);
+              console.log(`从 ${path.basename(path.dirname(u3encFile))}/page1.js 提取到 ${fileAnswers.length} 个答案`);
+            }
+          } else {
+            console.log(`解密 page1.js.u3enc 失败: ${u3encFile}`);
+          }
+        } catch (error) {
+          console.error(`解析 page1.js.u3enc 失败 (${u3encFile}):`, error);
+        }
       }
     }
 
@@ -439,7 +484,7 @@ class AnswerExtractor {
 
     const extCount = this.scanFileExtensions(extractDir);
 
-    // 查找并解密 page1.js.u3enc 文件提取答案（选择题）
+    // 查找并处理 page1 文件提取答案（选择题），优先使用已解密的 page1.js
     let allAnswers = [];
     let processedFiles = [];
     let page1AnswerCount = 0;
@@ -452,15 +497,15 @@ class AnswerExtractor {
       page1AnswerCount = page1Answers.length;
       allAnswers = allAnswers.concat(page1Answers);
       processedFiles.push({
-        file: 'page1.js.u3enc',
+        file: 'page1.js',
         answerCount: page1Answers.length,
-        sourceType: 'u3enc',
+        sourceType: 'page1',
         success: true,
         details: `提取 ${page1Answers.length} 个选择题`
       });
       this.emitLog('success', `page1 选择题提取完成: ${page1Answers.length} 个`);
     } else {
-      this.emitLog('info', '未从 u3enc 文件中提取到选择题，将尝试从 questionData.js 提取其他题型');
+      this.emitLog('info', '未从 page1 文件中提取到答案，将尝试从 questionData.js 提取其他题型');
     }
 
     // 始终执行目录扫描，提取其他题型（口语、朗读、复述等）

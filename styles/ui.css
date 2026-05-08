@@ -2016,6 +2016,12 @@ select.form-input {
     transform: scale(1.1);
 }
 
+.form-help-text {
+    margin: 4px 0 0 0;
+    font-size: 12px;
+    color: #6c757d;
+}
+
 /* 动画效果 */
 @keyframes slideIn {
     from {
@@ -2891,6 +2897,27 @@ select.form-input {
     font-size: 10px;
     font-weight: 500;
     margin-left: 8px;
+}
+
+.compatible-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 15px;
+}
+
+.compatible-badge.compatible {
+    background: #d4edda;
+    color: #155724;
+}
+
+.compatible-badge.incompatible {
+    background: #f8d7da;
+    color: #721c24;
 }
 
 .install-btn.installed {

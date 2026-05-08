@@ -24,6 +24,7 @@ class RulesLoader {
           isGroup: true,
           isBuiltin: true,
           enabled: true,
+          compatible: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
@@ -74,6 +75,7 @@ class RulesLoader {
             isGroup: true,
             isBuiltin: true,
             enabled: false,
+            compatible: rulesetInfo.compatible !== undefined ? rulesetInfo.compatible : false,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };

@@ -588,8 +588,16 @@
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="ruleGroupEnabled" checked>
-                            <span>启用此规则集</span>
+                            <span>强制启用此规则集</span>
                         </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="ruleGroupCompatible" checked>
+                            <span>允许与其他规则集同时开启</span>
+                        </label>
+                        <p class="form-help-text">关闭后，开启此规则集时将自动关闭其他规则集</p>
                     </div>
                 </form>
             </div>
