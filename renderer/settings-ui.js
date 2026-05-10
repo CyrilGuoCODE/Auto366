@@ -2,6 +2,9 @@ class SettingsUI {
   constructor(state, logManager) {
     this.state = state;
     this.logManager = logManager;
+    this._clearBtnLongPressTimer = null;
+    this._clearBtnClosingState = false;
+    this._clearBtnMouseDown = false;
   }
 
   // 初始化缓存设置
@@ -130,22 +133,164 @@ class SettingsUI {
         <i class="bi bi-exclamation-triangle"></i>
         <span>确定要清理所有缓存吗？此操作将清理 Auto366 临时文件和天学网缓存，不可撤销。</span>
         <div class="cache-buttons">
-          <button onclick="this.parentElement.remove()" class="btn-small btn-cancel">取消</button>
-          <button onclick="universalAnswerFeature.confirmClearCache()" class="btn-small btn-danger">确认清理</button>
+          <button class="btn-small btn-cancel" id="cancelClearCacheBtn">取消</button>
+          <button class="btn-small btn-danger" id="confirmClearCacheBtn" style="position:relative;overflow:hidden">
+            <span>清理并重启</span>
+            <div class="cache-progress-bar"></div>
+          </button>
         </div>
       </div>
     `;
 
     resultDiv.insertAdjacentHTML('beforeend', confirmHtml);
     resultDiv.scrollTop = resultDiv.scrollHeight;
+
+    setTimeout(() => this._initConfirmClearCacheBtn(), 0);
   }
 
-  // 确认清理缓存
+  // 确认清理缓存（保留供外部直接调用）
   async confirmClearCache() {
     const confirmDialog = document.querySelector('.log-item.warning');
-    if (confirmDialog) {
-      confirmDialog.remove();
+    if (confirmDialog) confirmDialog.remove();
+    await this._performClearCache();
+  }
+
+  _initConfirmClearCacheBtn() {
+    const btn = document.getElementById('confirmClearCacheBtn');
+    if (!btn) return;
+
+    const cancelBtn = document.getElementById('cancelClearCacheBtn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        cancelBtn.parentElement.parentElement.remove();
+      });
     }
+
+    btn.addEventListener('mousedown', (e) => this._onClearBtnMouseDown(e));
+    btn.addEventListener('mouseup', (e) => this._onClearBtnMouseUp(e));
+    btn.addEventListener('mouseleave', () => this._onClearBtnMouseLeave());
+    btn.addEventListener('animationend', (e) => {
+      if (e.target.classList.contains('cache-progress-bar') && e.target.classList.contains('active')) {
+        this._onClearProgressComplete();
+      }
+    });
+  }
+
+  _onClearBtnMouseDown(e) {
+    if (e.button !== 0) return;
+    const btn = document.getElementById('confirmClearCacheBtn');
+    if (!btn) return;
+    if (btn.classList.contains('cache-closing')) return;
+
+    this._clearBtnMouseDown = true;
+
+    this._clearBtnLongPressTimer = setTimeout(() => {
+      this._enterClearOnlyState();
+    }, 300);
+  }
+
+  _onClearBtnMouseUp(e) {
+    const btn = document.getElementById('confirmClearCacheBtn');
+    if (!btn) return;
+
+    this._clearLongPressTimer();
+
+    if (this._clearBtnClosingState) {
+      this._clearBtnMouseDown = false;
+      return;
+    }
+
+    if (this._clearBtnMouseDown) {
+      this._handleClearAndRestart();
+    }
+
+    this._clearBtnMouseDown = false;
+  }
+
+  _onClearBtnMouseLeave() {
+    this._clearLongPressTimer();
+
+    if (this._clearBtnClosingState) {
+      this._cancelClearOnlyState();
+    }
+
+    this._clearBtnMouseDown = false;
+  }
+
+  _clearLongPressTimer() {
+    if (this._clearBtnLongPressTimer) {
+      clearTimeout(this._clearBtnLongPressTimer);
+      this._clearBtnLongPressTimer = null;
+    }
+  }
+
+  _enterClearOnlyState() {
+    const btn = document.getElementById('confirmClearCacheBtn');
+    if (!btn) return;
+
+    this._clearBtnClosingState = true;
+    btn.classList.add('cache-closing');
+    btn.querySelector('span').textContent = '仅清理';
+
+    const bar = btn.querySelector('.cache-progress-bar');
+    if (bar) {
+      bar.classList.add('active');
+    }
+  }
+
+  _cancelClearOnlyState() {
+    const btn = document.getElementById('confirmClearCacheBtn');
+    if (!btn) return;
+
+    this._clearBtnClosingState = false;
+
+    const bar = btn.querySelector('.cache-progress-bar');
+    if (bar) {
+      bar.classList.remove('active');
+      void bar.offsetWidth;
+    }
+
+    btn.classList.remove('cache-closing');
+    btn.querySelector('span').textContent = '清理并重启';
+  }
+
+  async _onClearProgressComplete() {
+    const btn = document.getElementById('confirmClearCacheBtn');
+    if (!btn) return;
+
+    this._clearBtnClosingState = false;
+
+    const bar = btn.querySelector('.cache-progress-bar');
+    if (bar) {
+      bar.classList.remove('active');
+    }
+
+    btn.classList.add('cache-done');
+
+    await this._performClearCache();
+  }
+
+  async _handleClearAndRestart() {
+    await this._performClearCache();
+
+    this.logManager.addInfoLog('正在重启天学网...');
+    const killResult = await window.electronAPI.killUp366();
+    if (killResult && killResult.success) {
+      this.logManager.addSuccessLog('天学网已强制关闭，正在重新启动...');
+    } else {
+      this.logManager.addInfoLog('正在重新启动天学网...');
+    }
+    const openResult = await window.electronAPI.openUp366();
+    if (openResult && openResult.success) {
+      this.logManager.addSuccessLog('天学网已重新启动');
+    } else {
+      this.logManager.addErrorLog(`打开天学网失败: ${openResult?.error || '未找到天学网安装路径'}`);
+    }
+  }
+
+  async _performClearCache() {
+    const dialog = document.querySelector('.log-item.warning');
+    if (dialog) dialog.remove();
 
     this.logManager.addInfoLog('正在清理缓存...');
 

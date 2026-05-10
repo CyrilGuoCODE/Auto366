@@ -493,7 +493,7 @@ class ProxyUI {
     this._clearLongPressTimer();
 
     if (this._up366BtnClosing) {
-      this._cancelClosingState();
+      this._up366BtnMouseDown = false;
       return;
     }
 

@@ -959,7 +959,7 @@ class CommunityUI {
     if (group.compatible) {
       return '<span class="compatible-badge compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
     }
-    return '<span class="compatible-badge incompatible"><i class="bi bi-x-circle"></i> 不兼容</span>';
+    return '<span class="compatible-badge incompatible">不兼容其他规则</span>';
   }
 
   // HTML转义

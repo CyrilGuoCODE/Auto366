@@ -287,6 +287,49 @@
     to   { width: 100%; }
 }
 
+/* 清理缓存确认按钮 — 仅清理倒计时状态 */
+.btn-danger.cache-closing {
+    background: transparent;
+    color: #ffffff;
+    border: 1px solid #dc3545;
+}
+
+.btn-danger.cache-closing:hover {
+    background: transparent;
+}
+
+.btn-danger.cache-closing span {
+    position: relative;
+    z-index: 1;
+}
+
+/* 清理缓存确认按钮 — 进度条完成后文字变红 */
+.btn-danger.cache-closing.cache-done span {
+    color: #dc3545;
+}
+
+/* 清理缓存确认按钮 — 红色进度条（初始隐藏） */
+.cache-progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0;
+    background: #dc3545;
+    z-index: 0;
+    border-radius: 3px;
+}
+
+/* 清理缓存确认按钮 — 进度条填充动画 0.7s */
+.cache-progress-bar.active {
+    animation: cacheProgressFill 0.7s linear forwards;
+}
+
+@keyframes cacheProgressFill {
+    from { width: 0; }
+    to   { width: 100%; }
+}
+
 /* 状态指示器 */
 .status-item {
     display: flex;
