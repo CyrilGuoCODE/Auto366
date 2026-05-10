@@ -2,6 +2,9 @@ class ProxyUI {
   constructor(state, logManager) {
     this.state = state;
     this.logManager = logManager;
+    this._up366BtnLongPressTimer = null;
+    this._up366BtnClosing = false;
+    this._up366BtnMouseDown = false;
   }
 
   // 初始化代理控制
@@ -21,13 +24,8 @@ class ProxyUI {
       });
     }
 
-    // 初始化一键打开天学网按钮
-    const openUp366Btn = document.getElementById('openUp366Btn');
-    if (openUp366Btn) {
-      openUp366Btn.addEventListener('click', () => {
-        window.universalAnswerFeature.handleOpenUp366();
-      });
-    }
+    // 初始化一键打开天学网按钮（支持单击/长按/状态切换）
+    this._initOpenUp366Btn();
 
     // 初始化答案获取开关
     const answerCaptureToggle = document.getElementById('answerCaptureEnabled');
@@ -456,6 +454,169 @@ class ProxyUI {
       if (startBtn) startBtn.disabled = false;
       if (stopBtn) stopBtn.disabled = true;
       this.logManager.addInfoLog('网络监听已停止');
+    }
+  }
+
+  _initOpenUp366Btn() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    btn.addEventListener('mousedown', (e) => this._onUp366BtnMouseDown(e));
+    btn.addEventListener('mouseup', (e) => this._onUp366BtnMouseUp(e));
+    btn.addEventListener('mouseleave', () => this._onUp366BtnMouseLeave());
+    btn.addEventListener('animationend', (e) => {
+      if (e.target.classList.contains('close-progress-bar') && e.target.classList.contains('active')) {
+        this._onCloseProgressComplete();
+      }
+    });
+  }
+
+  _onUp366BtnMouseDown(e) {
+    if (e.button !== 0) return;
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+    if (btn.classList.contains('closing')) return;
+
+    this._up366BtnMouseDown = true;
+
+    if (btn.classList.contains('restart')) {
+      this._up366BtnLongPressTimer = setTimeout(() => {
+        this._enterClosingState();
+      }, 300);
+    }
+  }
+
+  _onUp366BtnMouseUp(e) {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._clearLongPressTimer();
+
+    if (this._up366BtnClosing) {
+      this._cancelClosingState();
+      return;
+    }
+
+    if (this._up366BtnMouseDown) {
+      if (btn.classList.contains('restart')) {
+        this._handleRestartClick();
+      } else {
+        this._handleOpenClick();
+      }
+    }
+
+    this._up366BtnMouseDown = false;
+  }
+
+  _onUp366BtnMouseLeave() {
+    this._clearLongPressTimer();
+
+    if (this._up366BtnClosing) {
+      this._cancelClosingState();
+    }
+
+    this._up366BtnMouseDown = false;
+  }
+
+  _clearLongPressTimer() {
+    if (this._up366BtnLongPressTimer) {
+      clearTimeout(this._up366BtnLongPressTimer);
+      this._up366BtnLongPressTimer = null;
+    }
+  }
+
+  _enterClosingState() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._up366BtnClosing = true;
+    btn.className = 'action-btn closing';
+    btn.querySelector('span').textContent = '关闭天学网';
+    btn.querySelector('i').className = 'bi bi-power';
+
+    const bar = btn.querySelector('.close-progress-bar');
+    if (bar) {
+      bar.classList.add('active');
+    }
+  }
+
+  _cancelClosingState() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._up366BtnClosing = false;
+
+    const bar = btn.querySelector('.close-progress-bar');
+    if (bar) {
+      bar.classList.remove('active');
+      void bar.offsetWidth;
+    }
+
+    btn.className = 'action-btn restart';
+    btn.querySelector('span').textContent = '重启天学网';
+    btn.querySelector('i').className = 'bi bi-arrow-repeat';
+  }
+
+  async _onCloseProgressComplete() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._up366BtnClosing = false;
+
+    const bar = btn.querySelector('.close-progress-bar');
+    if (bar) {
+      bar.classList.remove('active');
+    }
+
+    btn.classList.add('done');
+
+    this.logManager.addInfoLog('正在强制关闭天学网...');
+    const killResult = await window.electronAPI.killUp366();
+    if (killResult && killResult.success) {
+      this.logManager.addSuccessLog('天学网已强制关闭');
+    } else {
+      this.logManager.addErrorLog(`关闭天学网失败: ${killResult?.error || '未知错误'}`);
+    }
+  }
+
+  async _handleRestartClick() {
+    this.logManager.addInfoLog('正在强制关闭天学网...');
+    const killResult = await window.electronAPI.killUp366();
+    if (killResult && killResult.success) {
+      this.logManager.addSuccessLog('天学网已强制关闭，正在重新启动...');
+    } else {
+      this.logManager.addInfoLog('正在重新启动天学网...');
+    }
+    const openResult = await window.electronAPI.openUp366();
+    if (openResult && openResult.success) {
+      this.logManager.addSuccessLog('天学网已重新启动');
+    } else {
+      this.logManager.addErrorLog(`打开天学网失败: ${openResult?.error || '未找到天学网安装路径'}`);
+    }
+  }
+
+  async _handleOpenClick() {
+    this.logManager.addInfoLog('正在打开天学网...');
+    const result = await window.electronAPI.openUp366();
+    if (result && result.success) {
+      this.logManager.addSuccessLog('天学网已启动');
+    } else {
+      this.logManager.addErrorLog(`打开天学网失败: ${result?.error || '未找到天学网安装路径，请确认已安装天学网'}`);
+    }
+  }
+
+  updateUp366BtnState(data) {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn || this._up366BtnClosing) return;
+
+    if (data.currentState === true) {
+      btn.className = 'action-btn restart';
+      btn.querySelector('i').className = 'bi bi-arrow-repeat';
+      btn.querySelector('span').textContent = '重启天学网';
+    } else {
+      btn.className = 'action-btn';
+      btn.querySelector('i').className = 'bi bi-box-arrow-up-right';
+      btn.querySelector('span').textContent = '打开天学网';
     }
   }
 }

@@ -42,10 +42,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onFilesProcessed: (callback) => ipcRenderer.on('files-processed', callback),
   onCertificateStatus: (callback) => ipcRenderer.on('certificate-status', callback),
   onRuleLog: (callback) => ipcRenderer.on('rule-log', callback),
+  onProcessMonitorEvent: (callback) => ipcRenderer.on('process-monitor-event', callback),
 
   // 文件操作
   clearCache: () => ipcRenderer.invoke('clear-cache'),
   openUp366: () => ipcRenderer.invoke('open-up366'),
+  killUp366: () => ipcRenderer.invoke('kill-up366'),
   replaceAudio: () => ipcRenderer.invoke('replace-audio'),
   downloadFile: (uuid) => ipcRenderer.invoke('download-file', uuid),
   shareAnswerFile: (filePath) => ipcRenderer.invoke('share-answer-file', filePath),
@@ -91,6 +93,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, data) => callback(data)),
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
   onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, data) => callback(data)),
+
+  // 进程监控API
+  startProcessMonitor: () => ipcRenderer.invoke('start-process-monitor'),
+  stopProcessMonitor: () => ipcRenderer.invoke('stop-process-monitor'),
+  getProcessMonitorStatus: () => ipcRenderer.invoke('get-process-monitor-status'),
 
   // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {

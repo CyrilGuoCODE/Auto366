@@ -1,10 +1,9 @@
-const { dialog, app, ipcMain, shell } = require('electron');
+const { dialog, app, ipcMain } = require('electron');
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
 const https = require('https');
 const http = require('http');
-const { execSync } = require('child_process');
 
 class FileManager {
   constructor(appPath) {
@@ -33,41 +32,6 @@ class FileManager {
       console.error('获取缓存路径失败，使用默认值:', error);
       return null;
     }
-  }
-
-  // 从注册表获取天学网安装路径
-  getUp366Path() {
-    try {
-      const regPath = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\up366-2016';
-      const result = execSync(`reg query "${regPath}" /v DisplayIcon`, { encoding: 'utf8' });
-      const match = result.match(/DisplayIcon\s+REG_SZ\s+(.+)/);
-      if (match && match[1]) {
-        let exePath = match[1].trim();
-        // 去除引号（如果有）
-        exePath = exePath.replace(/^"|"$/g, '');
-        if (fs.existsSync(exePath)) {
-          return exePath;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('读取天学网注册表路径失败:', error);
-      return null;
-    }
-  }
-
-  // 一键打开天学网
-  async openUp366() {
-    const up366Path = this.getUp366Path();
-    if (up366Path) {
-      try {
-        await shell.openPath(up366Path);
-        return { success: true, path: up366Path };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-    return { success: false, error: '未找到天学网安装路径' };
   }
 
   // 统计目录中的文件和目录数量
@@ -475,14 +439,6 @@ class FileManager {
         return await this.clearAllCache(mainWindow);
       } catch (error) {
         return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
-      }
-    });
-
-    ipcMain.handle('open-up366', async () => {
-      try {
-        return await this.openUp366();
-      } catch (error) {
-        return { success: false, error: error.message };
       }
     });
 

@@ -87,6 +87,11 @@ class Auto366App {
       setTimeout(() => {
         this.proxyUI.startProxy();
       }, 1000);
+
+      // 自动启动天学网进程监控
+      if (window.electronAPI.startProcessMonitor) {
+        window.electronAPI.startProcessMonitor();
+      }
       
       // 初始化新手教程
       this.tutorialUI.init();
@@ -217,6 +222,19 @@ class Auto366App {
     // 监听规则触发日志
     window.electronAPI.onRuleLog((event, data) => {
       this.logManager.addRuleLog(data);
+    });
+
+    // 监听进程监控事件
+    window.electronAPI.onProcessMonitorEvent((event, data) => {
+      if (data.type === 'count-updated') {
+        if (this.proxyUI && this.proxyUI.updateUp366BtnState) {
+          this.proxyUI.updateUp366BtnState({ currentState: data.isRunning });
+        }
+      } else if (data.type === 'state-changed') {
+        if (this.proxyUI && this.proxyUI.updateUp366BtnState) {
+          this.proxyUI.updateUp366BtnState(data);
+        }
+      }
     });
 
     // 监听更新下载进度
