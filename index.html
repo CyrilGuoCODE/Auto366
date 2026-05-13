@@ -631,6 +631,7 @@
                             <option value="">选择规则类型</option>
                             <option value="content-change">内容修改</option>
                             <option value="zip-implant">ZIP注入</option>
+                            <option value="zip-implant-dynamic">动态注入</option>
                             <option value="answer-upload">答案上传</option>
                         </select>
                     </div>
@@ -706,6 +707,38 @@
                                 min="0">
                             <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
                             <small class="form-help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
+                        </div>
+                    </div>
+
+                    <!-- 动态注入规则字段 -->
+                    <div id="zipimplantdynamicFields" class="rule-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="diUrlFileinfo">文件信息URL匹配</label>
+                            <input type="text" id="diUrlFileinfo" class="form-input" placeholder="输入文件信息URL匹配模式（如 *://fs.up366.cn/fileinfo/*）">
+                        </div>
+                        <div class="form-group">
+                            <label for="diUrlZip">ZIP文件URL匹配</label>
+                            <input type="text" id="diUrlZip" class="form-input" placeholder="输入ZIP文件URL匹配模式（如 *://cdn-ws.up366.cn/cn/files/feishu/**/*.zip）">
+                        </div>
+                        <div class="form-group">
+                            <label for="diTargetFileName">目标注入文件名</label>
+                            <input type="text" id="diTargetFileName" class="form-input" placeholder="输入目标文件名（如 Pc.zip）">
+                            <small class="form-help">只有当文件信息响应体中的文件名匹配此字段时才会进行注入</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="diInjectScript">注入脚本路径</label>
+                            <input type="text" id="diInjectScript" class="form-input" placeholder="留空则默认使用 rulesets/auto-listening/auto-listening.js">
+                            <small class="form-help">指定要注入到HTML中的JS文件路径</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="diDownloadTimeout">下载超时时间（毫秒）</label>
+                            <input type="number" id="diDownloadTimeout" class="form-input" placeholder="默认30000（30秒）" min="5000" step="1000">
+                            <small class="form-help">下载原始ZIP的超时时间，单位毫秒</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="diMaxTriggers">最大触发次数</label>
+                            <input type="number" id="diMaxTriggers" class="form-input" placeholder="留空表示无限制" min="0">
+                            <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
                         </div>
                     </div>
 

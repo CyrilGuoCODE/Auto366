@@ -64,6 +64,12 @@ class RulesLoader {
                 rule.zipImplant = zipPath;
               }
             }
+            if (rule.type === 'zip-implant-dynamic' && rule.injectScript && !rule.injectScript.startsWith('http') && !path.isAbsolute(rule.injectScript)) {
+              const scriptPath = path.join(folderPath, rule.injectScript);
+              if (fs.existsSync(scriptPath)) {
+                rule.injectScript = scriptPath;
+              }
+            }
             return rule;
           });
 

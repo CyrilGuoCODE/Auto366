@@ -9,8 +9,9 @@ const StreamZip = require('node-stream-zip');
 const zlib = require('zlib');
 const { v4: uuidv4 } = require('uuid');
 const Proxy = require('http-mitm-proxy').Proxy;
-const { ipcMain, app } = require('electron');
+const { ipcMain, app, BrowserWindow } = require('electron');
 const AnswerExtractor = require('./answer');
+const archiver = require('archiver');
 
 class ProxyServer {
   constructor(certManager, rulesManager) {
@@ -37,6 +38,8 @@ class ProxyServer {
     this.tempDir = path.join(this.appPath, 'temp');
     this.ansDir = path.join(this.appPath, 'answers');
     this.fileDir = path.join(this.appPath, 'file');
+    this.dynamicInjectTemp = new Map();
+    this.progressWindow = null;
   }
 
   // 启动代理服务器
@@ -161,13 +164,17 @@ class ProxyServer {
         })
         ctx.onResponseData((ctx, chunk, callback) => {
           responseBody.push(chunk)
-          if (responseBodyRules.includes(2)) return callback(null, Buffer.from(''));
+          if (responseBodyRules.includes(2) || responseBodyRules.includes(4)) return callback(null, Buffer.from(''));
           else return callback(null, chunk);
         })
         ctx.onResponseEnd(async (ctx, callback) => {
           let { buffer, text } = await this.decompressResponse(Buffer.concat(responseBody), ctx.serverToProxyResponse.headers['content-encoding']);
           if (responseBodyRules.includes(2)) {
             buffer = this.applyZipImplantRules(fullUrl, buffer);
+            ctx.proxyToClientResponse.write(buffer);
+          }
+          if (responseBodyRules.includes(4)) {
+            buffer = await this.applyDynamicInjectRules(fullUrl, buffer);
             ctx.proxyToClientResponse.write(buffer);
           }
           const isJson = /application\/json/.test(requestInfo.contentType);
@@ -291,6 +298,36 @@ class ProxyServer {
               fs.mkdirSync(logDir, { recursive: true });
             }
             const filePath = path.join(logDir, safeFilename);
+            fs.writeFileSync(filePath, content, 'utf-8');
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: true, path: filePath }));
+          } catch (e) {
+            res.writeHead(500, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: false, error: e.message }));
+          }
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/save-collected-data') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const { content, filename } = JSON.parse(body);
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            const safeFilename = filename || `collected-data-${timestamp}.json`;
+            const dataDir = path.join(this.appPath, 'temp');
+            if (!fs.existsSync(dataDir)) {
+              fs.mkdirSync(dataDir, { recursive: true });
+            }
+            const filePath = path.join(dataDir, safeFilename);
             fs.writeFileSync(filePath, content, 'utf-8');
             res.writeHead(200, {
               'Content-Type': 'application/json',
@@ -636,6 +673,23 @@ class ProxyServer {
 
           l.push(3)
         }
+        if (type === 'response-body' && rule.type === 'zip-implant-dynamic') {
+          const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
+          const isFileInfoRequest = url.includes('/fileinfo/') ||
+            (url.includes('/files/') && !url.endsWith('.zip')) ||
+            (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+
+          const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
+          const isFileDownloadRequest = url.endsWith('.zip') ||
+            url.includes('/download/') ||
+            url.includes('/cn/files/');
+
+          if (isFileInfoRequest && fileinfoUrlMatches) {
+            l.push(4);
+          } else if (zipUrlMatches && isFileDownloadRequest) {
+            l.push(4);
+          }
+        }
       }
     } catch (error) {
       console.error('获取需要应用的规则失败:', error);
@@ -801,6 +855,472 @@ class ProxyServer {
       console.error('应用答案上传规则失败:', error);
       return {};
     }
+  }
+
+  async applyDynamicInjectRules(url, responseBody) {
+    try {
+      const isFileInfoRequest = url.includes('/fileinfo/') ||
+        (url.includes('/files/') && !url.endsWith('.zip')) ||
+        (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+      const isFileDownloadRequest = url.endsWith('.zip') ||
+        url.includes('/download/') ||
+        url.includes('/cn/files/');
+
+      for (const rule of this.rulesManager.getRules()) {
+        if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant-dynamic') continue;
+
+        const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
+        const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
+
+        if (isFileInfoRequest && fileinfoUrlMatches) {
+          return await this.handleDynamicInjectFileInfo(url, responseBody, rule);
+        }
+
+        if (zipUrlMatches && isFileDownloadRequest) {
+          const result = await this.handleDynamicInjectZipDownload(url, rule);
+          if (result !== null) return result;
+        }
+      }
+    } catch (error) {
+      console.error('应用动态注入规则失败:', error);
+      this.sendProgress('error', '动态注入失败: ' + error.message);
+      this.closeProgressWindow();
+    }
+    return responseBody;
+  }
+
+  async handleDynamicInjectFileInfo(url, responseBody, rule) {
+    try {
+      let bodyStr = responseBody.toString();
+      let jsonData;
+      try {
+        jsonData = JSON.parse(bodyStr);
+      } catch (e) {
+        return responseBody;
+      }
+
+      let objectName = jsonData.objectName || jsonData.object_name || '';
+      if (jsonData.data) {
+        objectName = objectName || jsonData.data.objectName || jsonData.data.object_name || '';
+      }
+
+      if (rule.targetFileName && !this.fileNameMatchesPattern(objectName, rule.targetFileName)) {
+        return responseBody;
+      }
+
+      let downloadUrl = jsonData.downloadUrl || jsonData.download_url || '';
+      if (jsonData.data) {
+        downloadUrl = downloadUrl || jsonData.data.downloadUrl || jsonData.data.download_url || '';
+      }
+
+      if (!downloadUrl) {
+        this.safeIpcSend('rule-log', { type: 'error', message: `动态注入: 未找到downloadUrl` });
+        return responseBody;
+      }
+
+      this.showProgressWindow();
+
+      const requestKey = crypto.createHash('md5').update(downloadUrl).digest('hex');
+      this.sendProgress('downloading', '正在下载原始ZIP...', 10);
+
+      const timeout = rule.downloadTimeout || 30000;
+      const injectDir = path.join(this.tempDir, 'dynamic-inject', requestKey);
+      if (!fs.existsSync(injectDir)) {
+        fs.mkdirSync(injectDir, { recursive: true });
+      }
+
+      const originalZipPath = path.join(injectDir, objectName || 'original.zip');
+      await this.downloadWithTimeout(downloadUrl, originalZipPath, timeout);
+
+      this.sendProgress('extracting', '正在解压ZIP...', 30);
+      const extractDir = path.join(injectDir, 'extracted');
+      if (fs.existsSync(extractDir)) {
+        fs.removeSync(extractDir);
+      }
+      fs.mkdirSync(extractDir, { recursive: true });
+
+      await this.extractZip(originalZipPath, extractDir);
+
+      this.sendProgress('injecting', '正在注入脚本...', 50);
+      const injectScriptPath = this.resolveInjectScript(rule);
+      if (!injectScriptPath || !fs.existsSync(injectScriptPath)) {
+        this.safeIpcSend('rule-log', { type: 'error', message: `动态注入: 注入脚本不存在: ${injectScriptPath}` });
+        this.closeProgressWindow();
+        return responseBody;
+      }
+
+      const htmlFiles = this.findAllHtmlFiles(extractDir);
+      if (htmlFiles.length === 0) {
+        this.safeIpcSend('rule-log', { type: 'warning', message: '动态注入: 未找到HTML文件' });
+        this.closeProgressWindow();
+        return responseBody;
+      }
+
+      for (const htmlFile of htmlFiles) {
+        this.injectScriptIntoHtml(htmlFile, path.basename(injectScriptPath));
+        const scriptDest = path.join(path.dirname(htmlFile), path.basename(injectScriptPath));
+        fs.copyFileSync(injectScriptPath, scriptDest);
+      }
+
+      this.sendProgress('packing', '正在重新打包...', 70);
+      const injectedZipPath = path.join(injectDir, 'injected.zip');
+      if (fs.existsSync(injectedZipPath)) {
+        fs.unlinkSync(injectedZipPath);
+      }
+      await this.repackZip(extractDir, injectedZipPath);
+
+      this.sendProgress('modifying', '正在修改响应...', 90);
+      const injectedBuffer = fs.readFileSync(injectedZipPath);
+      const injectedMd5 = crypto.createHash('md5').update(injectedBuffer).digest('hex');
+      const injectedSize = injectedBuffer.length;
+
+      this.dynamicInjectTemp.set(requestKey, {
+        zipPath: injectedZipPath,
+        md5: injectedMd5,
+        size: injectedSize,
+        timestamp: Date.now(),
+        downloadUrl: downloadUrl
+      });
+
+      bodyStr = bodyStr.replace(/"filemd5"\s*:\s*"[^"]*"/g, `"filemd5":"${injectedMd5}"`);
+      bodyStr = bodyStr.replace(/"objectMD5"\s*:\s*"[^"]*"/g, `"objectMD5":"${injectedMd5}"`);
+      bodyStr = bodyStr.replace(/"filesize"\s*:\s*\d+/g, `"filesize":${injectedSize}`);
+      bodyStr = bodyStr.replace(/"filesize"\s*:\s*"\d+"/g, `"filesize":"${injectedSize}"`);
+      bodyStr = bodyStr.replace(/"objectSize"\s*:\s*\d+/g, `"objectSize":${injectedSize}`);
+      bodyStr = bodyStr.replace(/"objectSize"\s*:\s*"\d+"/g, `"objectSize":"${injectedSize}"`);
+
+      if (rule.maxTriggers !== undefined) {
+        rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+        this.rulesManager.saveRules();
+      }
+
+      this.safeIpcSend('rule-log', {
+        type: 'success',
+        message: `动态注入完成: ${objectName} → ${htmlFiles.length}个HTML已注入`,
+        ruleId: rule.id,
+        ruleName: rule.name
+      });
+
+      this.sendProgress('done', '动态注入完成', 100);
+      setTimeout(() => this.closeProgressWindow(), 1500);
+
+      return Buffer.from(bodyStr);
+    } catch (error) {
+      console.error('处理动态注入fileinfo失败:', error);
+      this.safeIpcSend('rule-log', { type: 'error', message: `动态注入失败: ${error.message}` });
+      this.sendProgress('error', '失败: ' + error.message);
+      setTimeout(() => this.closeProgressWindow(), 3000);
+      return responseBody;
+    }
+  }
+
+  async handleDynamicInjectZipDownload(url, rule) {
+    let bestMatch = null;
+    let bestMatchKey = null;
+
+    for (const [key, value] of this.dynamicInjectTemp) {
+      if (Date.now() - value.timestamp > 300000) {
+        this.dynamicInjectTemp.delete(key);
+        continue;
+      }
+      if (!fs.existsSync(value.zipPath)) {
+        this.dynamicInjectTemp.delete(key);
+        continue;
+      }
+
+      if (value.downloadUrl) {
+        if (url.includes(value.downloadUrl) || value.downloadUrl.includes(url)) {
+          bestMatch = value;
+          bestMatchKey = key;
+          break;
+        }
+
+        try {
+          const storedUrlObj = new URL(value.downloadUrl);
+          const requestUrlObj = new URL(url);
+          if (storedUrlObj.hostname === requestUrlObj.hostname && storedUrlObj.pathname === requestUrlObj.pathname) {
+            bestMatch = value;
+            bestMatchKey = key;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (!bestMatch) {
+      for (const [key, value] of this.dynamicInjectTemp) {
+        if (Date.now() - value.timestamp > 300000) {
+          this.dynamicInjectTemp.delete(key);
+          continue;
+        }
+        if (fs.existsSync(value.zipPath)) {
+          bestMatch = value;
+          bestMatchKey = key;
+          break;
+        }
+        this.dynamicInjectTemp.delete(key);
+      }
+    }
+
+    if (bestMatch) {
+      if (rule.maxTriggers !== undefined) {
+        rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+        this.rulesManager.saveRules();
+      }
+      this.safeIpcSend('rule-log', {
+        type: 'success',
+        message: `动态注入: 返回已注入的ZIP (${bestMatch.md5})`,
+        ruleId: rule.id,
+        ruleName: rule.name
+      });
+      return fs.readFileSync(bestMatch.zipPath);
+    }
+
+    this.safeIpcSend('rule-log', { type: 'warning', message: '动态注入: 未找到已处理的ZIP，返回原始响应' });
+    return null;
+  }
+
+  resolveInjectScript(rule) {
+    if (rule.injectScript && fs.existsSync(rule.injectScript)) {
+      return rule.injectScript;
+    }
+    const defaultPath = path.join(this.appPath, 'rulesets', 'auto-listening', 'auto-listening.js');
+    if (fs.existsSync(defaultPath)) {
+      return defaultPath;
+    }
+    if (rule.injectScript) {
+      return rule.injectScript;
+    }
+    return defaultPath;
+  }
+
+  downloadWithTimeout(downloadUrl, savePath, timeout) {
+    return new Promise((resolve, reject) => {
+      const protocol = downloadUrl.startsWith('https') ? https : http;
+      const timer = setTimeout(() => {
+        reject(new Error(`下载超时 (${timeout}ms)`));
+      }, timeout);
+
+      const file = fs.createWriteStream(savePath);
+
+      const request = protocol.get(downloadUrl, (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          clearTimeout(timer);
+          file.close();
+          fs.unlinkSync(savePath);
+          this.downloadWithTimeout(response.headers.location, savePath, timeout)
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
+        response.pipe(file);
+        file.on('finish', () => {
+          clearTimeout(timer);
+          file.close();
+          const buf = fs.readFileSync(savePath);
+          if (buf.length < 4 || buf.readUInt32LE(0) !== 0x04034b50) {
+            fs.unlinkSync(savePath);
+            reject(new Error('下载的文件不是有效的ZIP格式'));
+            return;
+          }
+          resolve(savePath);
+        });
+      });
+
+      request.on('error', (err) => {
+        clearTimeout(timer);
+        file.close();
+        if (fs.existsSync(savePath)) fs.unlinkSync(savePath);
+        reject(err);
+      });
+    });
+  }
+
+  extractZip(zipPath, extractDir) {
+    return new Promise((resolve, reject) => {
+      try {
+        const zip = new StreamZip({ file: zipPath, storeEntries: true });
+        zip.on('ready', () => {
+          zip.extract(null, extractDir, (err, count) => {
+            zip.close();
+            if (err) reject(err);
+            else resolve(count);
+          });
+        });
+        zip.on('error', (err) => {
+          zip.close();
+          reject(err);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  findAllHtmlFiles(dir) {
+    const results = [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...this.findAllHtmlFiles(fullPath));
+      } else if (entry.name.endsWith('.html') || entry.name.endsWith('.htm')) {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  }
+
+  injectScriptIntoHtml(htmlFilePath, scriptFileName) {
+    let content = fs.readFileSync(htmlFilePath, 'utf-8');
+
+    const injectCode = `var s = document.createElement('script');s.src='./${scriptFileName}';document.body.appendChild(s);`;
+
+    if (content.includes('loadFile.load()')) {
+      content = content.replace(
+        /\.then\s*\(\s*function\s*\(\s*\)\s*\{/g,
+        '.then(function(){' + injectCode
+      );
+    } else {
+      content = content.replace(
+        /<\/body>/i,
+        '<script>' + injectCode + '</script></body>'
+      );
+    }
+
+    fs.writeFileSync(htmlFilePath, content, 'utf-8');
+  }
+
+  repackZip(sourceDir, outputPath) {
+    return new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(outputPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+
+      output.on('close', () => {
+        resolve(outputPath);
+      });
+
+      archive.on('error', (err) => {
+        reject(err);
+      });
+
+      archive.pipe(output);
+      archive.directory(sourceDir, false);
+      archive.finalize();
+    });
+  }
+
+  showProgressWindow() {
+    try {
+      if (this.progressWindow && !this.progressWindow.isDestroyed()) {
+        this.progressWindow.show();
+        return;
+      }
+
+      this.progressWindow = new BrowserWindow({
+        width: 400,
+        height: 160,
+        frame: false,
+        resizable: false,
+        movable: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        transparent: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+
+      this.progressWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  background:#fff;
+  color:#333;
+  padding:20px;
+  overflow:hidden
+}
+.header{
+  display:flex;align-items:center;margin-bottom:16px
+}
+.header-icon{
+  width:28px;height:28px;border-radius:50%;
+  background:#e7f1ff;display:flex;align-items:center;justify-content:center;
+  margin-right:10px;font-size:14px;color:#007bff
+}
+.header-title{font-size:15px;font-weight:600;color:#495057}
+.progress-wrap{margin-bottom:12px}
+.progress-bar{
+  width:100%;height:6px;background:#e9ecef;border-radius:3px;overflow:hidden
+}
+.progress-fill{
+  height:100%;background:#007bff;border-radius:3px;
+  transition:width 0.35s cubic-bezier(.25,.46,.45,.94);width:0%
+}
+.info-row{
+  display:flex;justify-content:space-between;align-items:center
+}
+.status-text{font-size:13px;color:#6c757d}
+.percent-text{font-size:13px;font-weight:600;color:#007bff;min-width:36px;text-align:right}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-icon">&#9881;</div>
+  <div class="header-title">动态注入处理中</div>
+</div>
+<div class="progress-wrap">
+  <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
+</div>
+<div class="info-row">
+  <span class="status-text" id="status">准备中...</span>
+  <span class="percent-text" id="pct">--%</span>
+</div>
+</body></html>
+      `)}`);
+
+      this.progressWindow.on('closed', () => {
+        this.progressWindow = null;
+      });
+    } catch (error) {
+      console.error('创建进度窗口失败:', error);
+    }
+  }
+
+  sendProgress(step, message, percent) {
+    try {
+      if (this.progressWindow && !this.progressWindow.isDestroyed()) {
+        const safeMsg = message.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ');
+        this.progressWindow.webContents.executeJavaScript(`
+          var fill = document.getElementById('fill');
+          if (fill) fill.style.width = '${percent || 0}%';
+          var status = document.getElementById('status');
+          if (status) status.textContent = '${safeMsg}';
+          var pct = document.getElementById('pct');
+          if (pct) pct.textContent = '${percent || 0}%';
+        `).catch(() => {});
+      }
+      this.safeIpcSend('rule-log', {
+        type: step === 'error' ? 'error' : (step === 'done' ? 'success' : 'info'),
+        message: `[动态注入] ${message} (${percent || 0}%)`
+      });
+    } catch (error) {}
+  }
+
+  closeProgressWindow() {
+    try {
+      if (this.progressWindow && !this.progressWindow.isDestroyed()) {
+        this.progressWindow.close();
+        this.progressWindow = null;
+      }
+    } catch (error) {}
   }
 
   // 响应体解压缩工具函数

@@ -214,7 +214,8 @@ class RulesUI {
 
     // 显示对应的字段
     if (ruleType) {
-      const targetFields = document.getElementById(`${ruleType.replace('-', '')}Fields`);
+      const fieldId = ruleType === 'zip-implant-dynamic' ? 'zipimplantdynamicFields' : `${ruleType.replace('-', '')}Fields`;
+      const targetFields = document.getElementById(fieldId);
       if (targetFields) {
         targetFields.style.display = 'block';
       }
@@ -242,6 +243,12 @@ class RulesUI {
       document.getElementById('urlZip').value = rule.urlZip || '';
       document.getElementById('targetFileName').value = rule.targetFileName || '';
       document.getElementById('zipImplant').value = rule.zipImplant || '';
+    } else if (rule.type === 'zip-implant-dynamic') {
+      document.getElementById('diUrlFileinfo').value = rule.urlFileinfo || '';
+      document.getElementById('diUrlZip').value = rule.urlZip || '';
+      document.getElementById('diTargetFileName').value = rule.targetFileName || '';
+      document.getElementById('diInjectScript').value = rule.injectScript || '';
+      document.getElementById('diDownloadTimeout').value = rule.downloadTimeout || '';
     } else if (rule.type === 'answer-upload') {
       document.getElementById('urlUpload').value = rule.urlUpload || '';
       document.getElementById('uploadType').value = rule.uploadType || 'original';
@@ -253,6 +260,8 @@ class RulesUI {
       maxTriggersInput = document.querySelector('#contentChangeMaxTriggers');
     } else if (rule.type === 'zip-implant') {
       maxTriggersInput = document.querySelector('#zipImplantMaxTriggers');
+    } else if (rule.type === 'zip-implant-dynamic') {
+      maxTriggersInput = document.querySelector('#diMaxTriggers');
     } else if (rule.type === 'answer-upload') {
       maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
     }
@@ -320,6 +329,27 @@ class RulesUI {
         this.logManager.addErrorLog('请选择注入ZIP文件');
         return;
       }
+    } else if (rule.type === 'zip-implant-dynamic') {
+      rule.urlFileinfo = document.getElementById('diUrlFileinfo').value.trim();
+      rule.urlZip = document.getElementById('diUrlZip').value.trim();
+      rule.targetFileName = document.getElementById('diTargetFileName').value.trim();
+      rule.injectScript = document.getElementById('diInjectScript').value.trim();
+      rule.downloadTimeout = parseInt(document.getElementById('diDownloadTimeout').value) || 30000;
+
+      if (!rule.urlFileinfo) {
+        this.logManager.addErrorLog('请输入文件信息URL匹配');
+        return;
+      }
+
+      if (!rule.urlZip) {
+        this.logManager.addErrorLog('请输入ZIP文件URL匹配');
+        return;
+      }
+
+      if (!rule.targetFileName) {
+        this.logManager.addErrorLog('请输入目标注入文件名');
+        return;
+      }
     } else if (rule.type === 'answer-upload') {
       rule.urlUpload = document.getElementById('urlUpload').value.trim();
       rule.uploadType = document.getElementById('uploadType').value;
@@ -338,6 +368,8 @@ class RulesUI {
       maxTriggersInput = document.querySelector('#contentChangeMaxTriggers');
     } else if (ruleType === 'zip-implant') {
       maxTriggersInput = document.querySelector('#zipImplantMaxTriggers');
+    } else if (ruleType === 'zip-implant-dynamic') {
+      maxTriggersInput = document.querySelector('#diMaxTriggers');
     } else if (ruleType === 'answer-upload') {
       maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
     }
@@ -610,6 +642,7 @@ class RulesUI {
     const typeMap = {
       'content-change': '内容修改',
       'zip-implant': 'ZIP注入',
+      'zip-implant-dynamic': '动态注入',
       'answer-upload': '答案上传'
     };
     return typeMap[type] || type || '未知类型';
@@ -661,6 +694,35 @@ class RulesUI {
         <div class="config-item">
           <span class="config-label">注入文件:</span>
           <span class="config-value">${rule.zipImplant || '未设置'}</span>
+        </div>
+        ${rule.maxTriggers ? `
+        <div class="config-item">
+          <span class="config-label">触发次数:</span>
+          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
+      `;
+    } else if (rule.type === 'zip-implant-dynamic') {
+      html += `
+        <div class="config-item">
+          <span class="config-label">文件信息URL匹配:</span>
+          <span class="config-value">${rule.urlFileinfo || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">ZIP URL匹配:</span>
+          <span class="config-value">${rule.urlZip || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">目标文件名:</span>
+          <span class="config-value">${rule.targetFileName || '未设置'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">注入脚本:</span>
+          <span class="config-value">${rule.injectScript || '默认(auto-listening.js)'}</span>
+        </div>
+        <div class="config-item">
+          <span class="config-label">下载超时:</span>
+          <span class="config-value">${rule.downloadTimeout ? rule.downloadTimeout + 'ms' : '30000ms(默认)'}</span>
         </div>
         ${rule.maxTriggers ? `
         <div class="config-item">
