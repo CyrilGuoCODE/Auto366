@@ -40,11 +40,15 @@ class ProxyServer {
     this.fileDir = path.join(this.appPath, 'file');
     this.dynamicInjectTemp = new Map();
     this.progressWindow = null;
+    this._progressWindowReady = false;
   }
 
   // 启动代理服务器
   startProxyPromise() {
     return new Promise((resolve) => {
+      // 执行maxTriggers数据迁移（幂等，仅首次生效）
+      this._migrateMaxTriggers();
+
       // 创建新的代理实例
       this.proxy = new Proxy();
 
@@ -113,9 +117,7 @@ class ProxyServer {
           // 如果是文件下载请求且需要应用规则，修改响应头
           if (responseBodyRules.includes(2)) {
             // 检查是否是文件下载请求
-            const isFileDownloadRequest = fullUrl.endsWith('.zip') ||
-              fullUrl.includes('/download/') ||
-              fullUrl.includes('/cn/files/');
+            const isFileDownloadRequest = this._isFileDownloadRequest(fullUrl);
 
             if (isFileDownloadRequest) {
               // 获取匹配的规则并计算新文件的MD5
@@ -133,15 +135,10 @@ class ProxyServer {
                   ctx.serverToProxyResponse.headers['content-md5'] = md5Base64;
                   ctx.serverToProxyResponse.headers['content-length'] = buffer.length.toString();
 
-                  if (rule.maxTriggers !== undefined) {
-                  rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-                  this.rulesManager.saveRules();
-                }
-
                   // 发送响应头修改日志
                   this.safeIpcSend('rule-log', {
                     type: 'success',
-                    message: `规则 "${rule.name}" 修改响应头 (${rule.currentTriggers || 1}/${rule.maxTriggers || '∞'})`,
+                    message: `规则 "${rule.name}" 修改响应头`,
                     ruleId: rule.id,
                     ruleName: rule.name,
                     url: fullUrl,
@@ -386,7 +383,42 @@ class ProxyServer {
         return;
       }
 
-      if (pathname in this.serverDatas) {
+      if (pathname === '/listening-answer') {
+        const ansDir = path.join(this.appPath, 'answers');
+        if (fs.existsSync(ansDir)) {
+          const files = fs.readdirSync(ansDir)
+            .filter(f => f.startsWith('answers_') && f.endsWith('.json'))
+            .sort()
+            .reverse();
+
+          if (files.length > 0) {
+            const latestFile = path.join(ansDir, files[0]);
+            try {
+              const content = fs.readFileSync(latestFile, 'utf-8');
+              const parsed = JSON.parse(content);
+              const answers = parsed.answers || parsed;
+              res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(JSON.stringify(answers, null, 2));
+            } catch (e) {
+              console.error('读取答案文件失败:', e);
+              res.writeHead(500, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(JSON.stringify({ error: '答案文件解析失败', detail: e.message }));
+            }
+            return;
+          }
+        }
+        res.writeHead(404, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ error: '答案尚未提取，请先启动代理捕获', code: 'ANSWER_NOT_FOUND' }));
+      } else if (pathname in this.serverDatas) {
         const data = this.serverDatas[pathname];
         if (typeof data === 'object') {
           res.writeHead(200, {
@@ -610,6 +642,63 @@ class ProxyServer {
     return true;
   }
 
+  // 判断URL是否为文件信息请求（fileinfo/非ZIP的files请求等）
+  _isFileInfoRequest(url) {
+    return url.includes('/fileinfo/') ||
+      (url.includes('/files/') && !url.endsWith('.zip')) ||
+      (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+  }
+
+  // 判断URL是否为文件下载请求（ZIP下载/download/cn/files等）
+  _isFileDownloadRequest(url) {
+    return url.endsWith('.zip') ||
+      url.includes('/download/') ||
+      url.includes('/cn/files/');
+  }
+
+  // 替换响应体中的MD5和文件大小字段（统一处理filemd5/objectMD5/filesize/objectSize）
+  _replaceFileInfoFields(bodyStr, md5, fileSize) {
+    bodyStr = bodyStr.replace(/"filemd5"\s*:\s*"[^"]*"/g, `"filemd5":"${md5}"`);
+    bodyStr = bodyStr.replace(/"objectMD5"\s*:\s*"[^"]*"/g, `"objectMD5":"${md5}"`);
+    bodyStr = bodyStr.replace(/"filesize"\s*:\s*\d+/g, `"filesize":${fileSize}`);
+    bodyStr = bodyStr.replace(/"filesize"\s*:\s*"\d+"/g, `"filesize":"${fileSize}"`);
+    bodyStr = bodyStr.replace(/"objectSize"\s*:\s*\d+/g, `"objectSize":${fileSize}`);
+    bodyStr = bodyStr.replace(/"objectSize"\s*:\s*"\d+"/g, `"objectSize":"${fileSize}"`);
+    return bodyStr;
+  }
+
+  // maxTriggers数据迁移：将zip-implant的maxTriggers从"每次请求消耗3次"语义修正为"每次请求消耗1次"
+  _migrateMaxTriggers() {
+    const APP_VERSION = '1.0.0-maxTriggers-fix';
+    const configPath = path.join(this.appPath, 'temp', '.migration');
+    let done = false;
+    try {
+      if (fs.existsSync(configPath)) {
+        done = fs.readFileSync(configPath, 'utf-8').trim() === APP_VERSION;
+      }
+    } catch (e) {}
+
+    if (done) return;
+
+    let migrated = false;
+    for (const rule of this.rulesManager.getRules()) {
+      if (rule.type === 'zip-implant' && rule.maxTriggers !== undefined && rule.maxTriggers > 0) {
+        rule.maxTriggers = Math.ceil(rule.maxTriggers / 3);
+        rule.currentTriggers = Math.floor((rule.currentTriggers || 0) / 3);
+        migrated = true;
+      }
+    }
+    if (migrated) {
+      this.rulesManager.saveRules();
+    }
+
+    try {
+      const dir = path.dirname(configPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(configPath, APP_VERSION, 'utf-8');
+    } catch (e) {}
+  }
+
   // 检查是否有启用的zip注入规则
   hasEnabledZipImplantRules() {
     return this.rulesManager.getRules().some(rule =>
@@ -643,24 +732,15 @@ class ProxyServer {
           const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
 
           // 支持文件信息请求的多种域名模式（更精确的判断）
-          const isFileInfoRequest = url.includes('/fileinfo/') ||
-            (url.includes('/files/') && !url.endsWith('.zip')) ||
-            (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+          const isFileInfoRequest = this._isFileInfoRequest(url);
 
           // 支持文件下载请求的多种模式  
-          const isFileDownloadRequest = url.endsWith('.zip') ||
-            url.includes('/download/') ||
-            url.includes('/cn/files/');
+          const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
           // 对于文件信息请求，优先使用fileinfo URL模式匹配，如果没有设置则使用通用匹配
           // 对于文件下载请求，使用ZIP URL模式匹配
           if ((isFileInfoRequest && fileinfoUrlMatches) || (zipUrlMatches && isFileDownloadRequest)) {
             l.push(2)
-
-            if (rule.maxTriggers !== undefined) {
-              rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-              this.rulesManager.saveRules();
-            }
           }
         }
         if (type === 'response-body' && rule.type === 'answer-upload') {
@@ -675,14 +755,10 @@ class ProxyServer {
         }
         if (type === 'response-body' && rule.type === 'zip-implant-dynamic') {
           const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
-          const isFileInfoRequest = url.includes('/fileinfo/') ||
-            (url.includes('/files/') && !url.endsWith('.zip')) ||
-            (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+          const isFileInfoRequest = this._isFileInfoRequest(url);
 
           const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
-          const isFileDownloadRequest = url.endsWith('.zip') ||
-            url.includes('/download/') ||
-            url.includes('/cn/files/');
+          const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
           if (isFileInfoRequest && fileinfoUrlMatches) {
             l.push(4);
@@ -769,14 +845,10 @@ class ProxyServer {
           const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
 
           // 支持文件信息请求的多种域名模式（更精确的判断）
-          const isFileInfoRequest = url.includes('/fileinfo/') ||
-            (url.includes('/files/') && !url.endsWith('.zip')) ||
-            (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
+          const isFileInfoRequest = this._isFileInfoRequest(url);
 
           // 支持文件下载请求的多种模式  
-          const isFileDownloadRequest = url.endsWith('.zip') ||
-            url.includes('/download/') ||
-            url.includes('/cn/files/');
+          const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
           // 对于文件信息请求，优先使用fileinfo URL模式匹配，如果没有设置则使用通用匹配
           // 对于文件下载请求，使用ZIP URL模式匹配
@@ -793,17 +865,7 @@ class ProxyServer {
             const md5 = crypto.createHash('md5').update(buffer).digest('hex');
             const fileSize = buffer.length;
 
-            responseBody = responseBody.toString();
-
-            // 替换MD5相关字段
-            responseBody = responseBody.replace(/"filemd5":"[^"]+"/g, `"filemd5":"${md5}"`);
-            responseBody = responseBody.replace(/"objectMD5":"[^"]+"/g, `"objectMD5":"${md5}"`);
-
-            // 替换文件大小相关字段
-            responseBody = responseBody.replace(/"filesize":\s*\d+/g, `"filesize":${fileSize}`);
-            responseBody = responseBody.replace(/"filesize":\s*"\d+"/g, `"filesize":"${fileSize}"`);
-            responseBody = responseBody.replace(/"objectSize":\s*\d+/g, `"objectSize":${fileSize}`);
-            responseBody = responseBody.replace(/"objectSize":\s*"\d+"/g, `"objectSize":"${fileSize}"`);
+            responseBody = this._replaceFileInfoFields(responseBody.toString(), md5, fileSize);
 
             if (rule.maxTriggers !== undefined) {
               rule.currentTriggers = (rule.currentTriggers || 0) + 1;
@@ -859,12 +921,8 @@ class ProxyServer {
 
   async applyDynamicInjectRules(url, responseBody) {
     try {
-      const isFileInfoRequest = url.includes('/fileinfo/') ||
-        (url.includes('/files/') && !url.endsWith('.zip')) ||
-        (url.includes('.json') && (url.includes('/fileinfo/') || url.includes('/files/')));
-      const isFileDownloadRequest = url.endsWith('.zip') ||
-        url.includes('/download/') ||
-        url.includes('/cn/files/');
+      const isFileInfoRequest = this._isFileInfoRequest(url);
+      const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
       for (const rule of this.rulesManager.getRules()) {
         if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant-dynamic') continue;
@@ -979,15 +1037,21 @@ class ProxyServer {
         md5: injectedMd5,
         size: injectedSize,
         timestamp: Date.now(),
-        downloadUrl: downloadUrl
+        downloadUrl: downloadUrl,
+        objectName: objectName
       });
 
-      bodyStr = bodyStr.replace(/"filemd5"\s*:\s*"[^"]*"/g, `"filemd5":"${injectedMd5}"`);
-      bodyStr = bodyStr.replace(/"objectMD5"\s*:\s*"[^"]*"/g, `"objectMD5":"${injectedMd5}"`);
-      bodyStr = bodyStr.replace(/"filesize"\s*:\s*\d+/g, `"filesize":${injectedSize}`);
-      bodyStr = bodyStr.replace(/"filesize"\s*:\s*"\d+"/g, `"filesize":"${injectedSize}"`);
-      bodyStr = bodyStr.replace(/"objectSize"\s*:\s*\d+/g, `"objectSize":${injectedSize}`);
-      bodyStr = bodyStr.replace(/"objectSize"\s*:\s*"\d+"/g, `"objectSize":"${injectedSize}"`);
+      // 以rule.id作为匹配键存储，确保fileinfo请求和ZIP下载请求通过同一规则关联
+      this.dynamicInjectTemp.set(rule.id, {
+        zipPath: injectedZipPath,
+        md5: injectedMd5,
+        size: injectedSize,
+        timestamp: Date.now(),
+        downloadUrl: downloadUrl,
+        objectName: objectName
+      });
+
+      bodyStr = this._replaceFileInfoFields(bodyStr, injectedMd5, injectedSize);
 
       if (rule.maxTriggers !== undefined) {
         rule.currentTriggers = (rule.currentTriggers || 0) + 1;
@@ -1015,9 +1079,7 @@ class ProxyServer {
   }
 
   async handleDynamicInjectZipDownload(url, rule) {
-    let bestMatch = null;
-    let bestMatchKey = null;
-
+    // 清理过期和无效的缓存条目
     for (const [key, value] of this.dynamicInjectTemp) {
       if (Date.now() - value.timestamp > 300000) {
         this.dynamicInjectTemp.delete(key);
@@ -1025,58 +1087,29 @@ class ProxyServer {
       }
       if (!fs.existsSync(value.zipPath)) {
         this.dynamicInjectTemp.delete(key);
-        continue;
-      }
-
-      if (value.downloadUrl) {
-        if (url.includes(value.downloadUrl) || value.downloadUrl.includes(url)) {
-          bestMatch = value;
-          bestMatchKey = key;
-          break;
-        }
-
-        try {
-          const storedUrlObj = new URL(value.downloadUrl);
-          const requestUrlObj = new URL(url);
-          if (storedUrlObj.hostname === requestUrlObj.hostname && storedUrlObj.pathname === requestUrlObj.pathname) {
-            bestMatch = value;
-            bestMatchKey = key;
-            break;
-          }
-        } catch (e) {}
       }
     }
 
-    if (!bestMatch) {
-      for (const [key, value] of this.dynamicInjectTemp) {
-        if (Date.now() - value.timestamp > 300000) {
-          this.dynamicInjectTemp.delete(key);
-          continue;
-        }
-        if (fs.existsSync(value.zipPath)) {
-          bestMatch = value;
-          bestMatchKey = key;
-          break;
-        }
-        this.dynamicInjectTemp.delete(key);
-      }
-    }
-
-    if (bestMatch) {
+    // 通过rule.id精确匹配：fileinfo请求和ZIP下载请求都匹配同一规则，用规则ID关联
+    const entry = this.dynamicInjectTemp.get(rule.id);
+    if (entry) {
       if (rule.maxTriggers !== undefined) {
         rule.currentTriggers = (rule.currentTriggers || 0) + 1;
         this.rulesManager.saveRules();
       }
       this.safeIpcSend('rule-log', {
         type: 'success',
-        message: `动态注入: 返回已注入的ZIP (${bestMatch.md5})`,
+        message: `动态注入: 返回已注入的ZIP (${entry.md5})`,
         ruleId: rule.id,
         ruleName: rule.name
       });
-      return fs.readFileSync(bestMatch.zipPath);
+      return fs.readFileSync(entry.zipPath);
     }
 
-    this.safeIpcSend('rule-log', { type: 'warning', message: '动态注入: 未找到已处理的ZIP，返回原始响应' });
+    this.safeIpcSend('rule-log', {
+      type: 'warning',
+      message: '动态注入: 未找到已处理的ZIP，返回原始响应'
+    });
     return null;
   }
 
@@ -1218,6 +1251,7 @@ class ProxyServer {
         return;
       }
 
+      this._progressWindowReady = false;
       this.progressWindow = new BrowserWindow({
         width: 400,
         height: 160,
@@ -1226,68 +1260,25 @@ class ProxyServer {
         movable: true,
         alwaysOnTop: true,
         skipTaskbar: true,
-        transparent: false,
         webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true
+          preload: path.join(__dirname, '..', 'preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false
         }
       });
 
-      this.progressWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
-  background:#fff;
-  color:#333;
-  padding:20px;
-  overflow:hidden
-}
-.header{
-  display:flex;align-items:center;margin-bottom:16px
-}
-.header-icon{
-  width:28px;height:28px;border-radius:50%;
-  background:#e7f1ff;display:flex;align-items:center;justify-content:center;
-  margin-right:10px;font-size:14px;color:#007bff
-}
-.header-title{font-size:15px;font-weight:600;color:#495057}
-.progress-wrap{margin-bottom:12px}
-.progress-bar{
-  width:100%;height:6px;background:#e9ecef;border-radius:3px;overflow:hidden
-}
-.progress-fill{
-  height:100%;background:#007bff;border-radius:3px;
-  transition:width 0.35s cubic-bezier(.25,.46,.45,.94);width:0%
-}
-.info-row{
-  display:flex;justify-content:space-between;align-items:center
-}
-.status-text{font-size:13px;color:#6c757d}
-.percent-text{font-size:13px;font-weight:600;color:#007bff;min-width:36px;text-align:right}
-</style>
-</head>
-<body>
-<div class="header">
-  <div class="header-icon">&#9881;</div>
-  <div class="header-title">动态注入处理中</div>
-</div>
-<div class="progress-wrap">
-  <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
-</div>
-<div class="info-row">
-  <span class="status-text" id="status">准备中...</span>
-  <span class="percent-text" id="pct">--%</span>
-</div>
-</body></html>
-      `)}`);
+      // 加载独立的进度窗口HTML文件（替代内联data URL方式）
+      const htmlPath = path.join(__dirname, '..', 'components', 'progress-window.html');
+      this.progressWindow.loadFile(htmlPath);
+
+      // 窗口加载完成后标记就绪，避免在DOM未就绪时发送IPC消息导致消息丢失
+      this.progressWindow.webContents.on('did-finish-load', () => {
+        this._progressWindowReady = true;
+      });
 
       this.progressWindow.on('closed', () => {
         this.progressWindow = null;
+        this._progressWindowReady = false;
       });
     } catch (error) {
       console.error('创建进度窗口失败:', error);
@@ -1296,16 +1287,12 @@ body{
 
   sendProgress(step, message, percent) {
     try {
-      if (this.progressWindow && !this.progressWindow.isDestroyed()) {
-        const safeMsg = message.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ');
-        this.progressWindow.webContents.executeJavaScript(`
-          var fill = document.getElementById('fill');
-          if (fill) fill.style.width = '${percent || 0}%';
-          var status = document.getElementById('status');
-          if (status) status.textContent = '${safeMsg}';
-          var pct = document.getElementById('pct');
-          if (pct) pct.textContent = '${percent || 0}%';
-        `).catch(() => {});
+      // 通过IPC发送进度更新到渲染进程（替代executeJavaScript方式，更安全可靠）
+      if (this.progressWindow && !this.progressWindow.isDestroyed() && this._progressWindowReady) {
+        this.progressWindow.webContents.send('progress-update', {
+          message: message,
+          percent: percent || 0
+        });
       }
       this.safeIpcSend('rule-log', {
         type: step === 'error' ? 'error' : (step === 'done' ? 'success' : 'info'),

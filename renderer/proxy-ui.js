@@ -5,6 +5,8 @@ class ProxyUI {
     this._up366BtnLongPressTimer = null;
     this._up366BtnClosing = false;
     this._up366BtnMouseDown = false;
+    this._up366BtnPressStartTime = 0;
+    this._up366BtnLongPressTriggered = false;
   }
 
   // 初始化代理控制
@@ -478,9 +480,12 @@ class ProxyUI {
     if (btn.classList.contains('closing')) return;
 
     this._up366BtnMouseDown = true;
+    this._up366BtnPressStartTime = Date.now();
+    this._up366BtnLongPressTriggered = false;
 
     if (btn.classList.contains('restart')) {
       this._up366BtnLongPressTimer = setTimeout(() => {
+        this._up366BtnLongPressTriggered = true;
         this._enterClosingState();
       }, 300);
     }
@@ -492,14 +497,19 @@ class ProxyUI {
 
     this._clearLongPressTimer();
 
-    if (this._up366BtnClosing) {
+    if (this._up366BtnLongPressTriggered || this._up366BtnClosing) {
       this._up366BtnMouseDown = false;
       return;
     }
 
     if (this._up366BtnMouseDown) {
       if (btn.classList.contains('restart')) {
-        this._handleRestartClick();
+        const pressDuration = Date.now() - this._up366BtnPressStartTime;
+        if (pressDuration >= 300) {
+          this._enterClosingState();
+        } else {
+          this._handleRestartClick();
+        }
       } else {
         this._handleOpenClick();
       }

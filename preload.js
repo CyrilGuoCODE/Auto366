@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onFilesProcessed: (callback) => ipcRenderer.on('files-processed', callback),
   onCertificateStatus: (callback) => ipcRenderer.on('certificate-status', callback),
   onRuleLog: (callback) => ipcRenderer.on('rule-log', callback),
+  onProgressUpdate: (callback) => ipcRenderer.on('progress-update', (event, data) => callback(data)),
   onProcessMonitorEvent: (callback) => ipcRenderer.on('process-monitor-event', callback),
 
   // 文件操作

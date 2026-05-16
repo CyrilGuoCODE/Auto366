@@ -206,6 +206,14 @@ class RulesUI {
 
   // 显示规则字段
   showRuleFields(ruleType) {
+    // 规则类型到字段容器ID的映射表
+    const FIELD_ID_MAP = {
+      'content-change': 'contentchangeFields',
+      'zip-implant': 'zipimplantFields',
+      'zip-implant-dynamic': 'zipimplantdynamicFields',
+      'answer-upload': 'answeruploadFields'
+    };
+
     // 隐藏所有规则字段
     const allFields = document.querySelectorAll('.rule-fields');
     allFields.forEach(field => {
@@ -214,8 +222,7 @@ class RulesUI {
 
     // 显示对应的字段
     if (ruleType) {
-      const fieldId = ruleType === 'zip-implant-dynamic' ? 'zipimplantdynamicFields' : `${ruleType.replace('-', '')}Fields`;
-      const targetFields = document.getElementById(fieldId);
+      const targetFields = document.getElementById(FIELD_ID_MAP[ruleType]);
       if (targetFields) {
         targetFields.style.display = 'block';
       }
@@ -244,11 +251,11 @@ class RulesUI {
       document.getElementById('targetFileName').value = rule.targetFileName || '';
       document.getElementById('zipImplant').value = rule.zipImplant || '';
     } else if (rule.type === 'zip-implant-dynamic') {
-      document.getElementById('diUrlFileinfo').value = rule.urlFileinfo || '';
-      document.getElementById('diUrlZip').value = rule.urlZip || '';
-      document.getElementById('diTargetFileName').value = rule.targetFileName || '';
-      document.getElementById('diInjectScript').value = rule.injectScript || '';
-      document.getElementById('diDownloadTimeout').value = rule.downloadTimeout || '';
+      document.getElementById('dynUrlFileinfo').value = rule.urlFileinfo || '';
+      document.getElementById('dynUrlZip').value = rule.urlZip || '';
+      document.getElementById('dynTargetFileName').value = rule.targetFileName || '';
+      document.getElementById('dynInjectScript').value = rule.injectScript || '';
+      document.getElementById('dynDownloadTimeout').value = rule.downloadTimeout || '';
     } else if (rule.type === 'answer-upload') {
       document.getElementById('urlUpload').value = rule.urlUpload || '';
       document.getElementById('uploadType').value = rule.uploadType || 'original';
@@ -261,7 +268,7 @@ class RulesUI {
     } else if (rule.type === 'zip-implant') {
       maxTriggersInput = document.querySelector('#zipImplantMaxTriggers');
     } else if (rule.type === 'zip-implant-dynamic') {
-      maxTriggersInput = document.querySelector('#diMaxTriggers');
+      maxTriggersInput = document.querySelector('#dynMaxTriggers');
     } else if (rule.type === 'answer-upload') {
       maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
     }
@@ -330,11 +337,11 @@ class RulesUI {
         return;
       }
     } else if (rule.type === 'zip-implant-dynamic') {
-      rule.urlFileinfo = document.getElementById('diUrlFileinfo').value.trim();
-      rule.urlZip = document.getElementById('diUrlZip').value.trim();
-      rule.targetFileName = document.getElementById('diTargetFileName').value.trim();
-      rule.injectScript = document.getElementById('diInjectScript').value.trim();
-      rule.downloadTimeout = parseInt(document.getElementById('diDownloadTimeout').value) || 30000;
+      rule.urlFileinfo = document.getElementById('dynUrlFileinfo').value.trim();
+      rule.urlZip = document.getElementById('dynUrlZip').value.trim();
+      rule.targetFileName = document.getElementById('dynTargetFileName').value.trim();
+      rule.injectScript = document.getElementById('dynInjectScript').value.trim();
+      rule.downloadTimeout = parseInt(document.getElementById('dynDownloadTimeout').value) || 30000;
 
       if (!rule.urlFileinfo) {
         this.logManager.addErrorLog('请输入文件信息URL匹配');
@@ -369,7 +376,7 @@ class RulesUI {
     } else if (ruleType === 'zip-implant') {
       maxTriggersInput = document.querySelector('#zipImplantMaxTriggers');
     } else if (ruleType === 'zip-implant-dynamic') {
-      maxTriggersInput = document.querySelector('#diMaxTriggers');
+      maxTriggersInput = document.querySelector('#dynMaxTriggers');
     } else if (ruleType === 'answer-upload') {
       maxTriggersInput = document.querySelector('#answerUploadMaxTriggers');
     }

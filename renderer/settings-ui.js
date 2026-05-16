@@ -5,6 +5,8 @@ class SettingsUI {
     this._clearBtnLongPressTimer = null;
     this._clearBtnClosingState = false;
     this._clearBtnMouseDown = false;
+    this._clearBtnPressStartTime = 0;
+    this._clearBtnLongPressTriggered = false;
   }
 
   // 初始化缓存设置
@@ -183,8 +185,11 @@ class SettingsUI {
     if (btn.classList.contains('cache-closing')) return;
 
     this._clearBtnMouseDown = true;
+    this._clearBtnPressStartTime = Date.now();
+    this._clearBtnLongPressTriggered = false;
 
     this._clearBtnLongPressTimer = setTimeout(() => {
+      this._clearBtnLongPressTriggered = true;
       this._enterClearOnlyState();
     }, 300);
   }
@@ -195,13 +200,18 @@ class SettingsUI {
 
     this._clearLongPressTimer();
 
-    if (this._clearBtnClosingState) {
+    if (this._clearBtnLongPressTriggered || this._clearBtnClosingState) {
       this._clearBtnMouseDown = false;
       return;
     }
 
     if (this._clearBtnMouseDown) {
-      this._handleClearAndRestart();
+      const pressDuration = Date.now() - this._clearBtnPressStartTime;
+      if (pressDuration >= 300) {
+        this._enterClearOnlyState();
+      } else {
+        this._handleClearAndRestart();
+      }
     }
 
     this._clearBtnMouseDown = false;
@@ -230,7 +240,7 @@ class SettingsUI {
 
     this._clearBtnClosingState = true;
     btn.classList.add('cache-closing');
-    btn.querySelector('span').textContent = '仅清理';
+    btn.querySelector('span').textContent = '仅执行清理';
 
     const bar = btn.querySelector('.cache-progress-bar');
     if (bar) {
