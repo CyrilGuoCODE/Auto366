@@ -205,8 +205,8 @@ class CommunityUI {
     const container = document.getElementById('rulesetsContainer');
     if (container) {
       container.innerHTML = `
-        <div class="loading-state">
-          <div class="loading-spinner"></div>
+        <div class="community-view__loading">
+          <div class="community-view__spinner"></div>
           <p>正在加载规则集...</p>
         </div>
       `;
@@ -218,10 +218,10 @@ class CommunityUI {
     const container = document.getElementById('rulesetsContainer');
     if (container) {
       container.innerHTML = `
-        <div class="error-state">
+        <div class="community-view__error">
           <i class="bi bi-exclamation-triangle"></i>
           <p>加载失败</p>
-          <p class="error-message">${message}</p>
+          <p class="community-view__error-text">${message}</p>
           <button class="primary-btn" onclick="universalAnswerFeature.refreshRulesets()">
             重试
           </button>
@@ -237,10 +237,10 @@ class CommunityUI {
 
     if (this.state.communityRulesets.length === 0) {
       container.innerHTML = `
-        <div class="no-rulesets">
+        <div class="community-view__empty">
           <i class="bi bi-collection"></i>
           <p>未找到规则集</p>
-          <p class="text-muted">尝试调整搜索条件或刷新列表</p>
+          <p class="text--muted">尝试调整搜索条件或刷新列表</p>
         </div>
       `;
       return;
@@ -296,17 +296,17 @@ class CommunityUI {
 
     if (isSimple) {
       return `
-        <div class="ruleset-item ${isInstalled ? 'installed' : ''}">
-          <div class="ruleset-header">
-            <div class="ruleset-info">
-              <div class="ruleset-name">
+        <div class="ruleset-item ${isInstalled ? 'is-installed' : ''}">
+          <div class="ruleset-item__header">
+            <div class="ruleset-item__info">
+              <div class="ruleset-item__name">
                 ${Utils.escapeHtml(ruleset.name)}
-                ${isInstalled ? '<span class="installed-badge"><i class="bi bi-check-circle"></i> 已安装</span>' : ''}
+                ${isInstalled ? '<span class="badge--installed"><i class="bi bi-check-circle"></i> 已安装</span>' : ''}
               </div>
-              <div class="ruleset-description">${Utils.escapeHtml(ruleset.description || '暂无描述')}</div>
+              <div class="ruleset-item__description">${Utils.escapeHtml(ruleset.description || '暂无描述')}</div>
             </div>
-            <div class="ruleset-actions">
-              <button class="install-btn ${isInstalled ? 'installed' : ''}" 
+            <div class="ruleset-item__actions">
+              <button class="btn--install ${isInstalled ? 'is-installed' : ''}" 
                       onclick="universalAnswerFeature.installRuleset('${ruleset.id}')"
                       ${isInstalled ? 'disabled' : ''}>
                 <i class="bi bi-${isInstalled ? 'check-circle' : 'download'}"></i>
@@ -319,33 +319,33 @@ class CommunityUI {
     }
 
     return `
-      <div class="ruleset-item ${isInstalled ? 'installed' : ''}" onclick="universalAnswerFeature.showRulesetDetail('${ruleset.id}')">
-        <div class="ruleset-header">
-          <div class="ruleset-info">
-            <div class="ruleset-name">
+      <div class="ruleset-item ${isInstalled ? 'is-installed' : ''}" onclick="universalAnswerFeature.showRulesetDetail('${ruleset.id}')">
+        <div class="ruleset-item__header">
+          <div class="ruleset-item__info">
+            <div class="ruleset-item__name">
               ${Utils.escapeHtml(ruleset.name)}
-              ${isInstalled ? '<span class="installed-badge"><i class="bi bi-check-circle"></i> 已安装</span>' : ''}
+              ${isInstalled ? '<span class="badge--installed"><i class="bi bi-check-circle"></i> 已安装</span>' : ''}
             </div>
-            <div class="ruleset-author">作者: ${Utils.escapeHtml(ruleset.author)}</div>
-            <div class="ruleset-description">${Utils.escapeHtml(ruleset.description || '暂无描述')}</div>
-            <div class="ruleset-meta">
-              <div class="ruleset-downloads">
+            <div class="ruleset-item__author">作者: ${Utils.escapeHtml(ruleset.author)}</div>
+            <div class="ruleset-item__description">${Utils.escapeHtml(ruleset.description || '暂无描述')}</div>
+            <div class="ruleset-item__meta">
+              <div class="ruleset-item__downloads">
                 <i class="bi bi-download"></i>
                 <span>${downloadCount} 次下载</span>
               </div>
-              <div class="ruleset-date">${createdDate}</div>
+              <div class="ruleset-item__date">${createdDate}</div>
             </div>
-            <div class="ruleset-tags">
-              ${hasInjection ? '<span class="ruleset-tag has-injection">包含注入文件</span>' : ''}
-              <span class="ruleset-tag">已审核</span>
+            <div class="ruleset-item__tags">
+              ${hasInjection ? '<span class="badge--tag has-injection">包含注入文件</span>' : ''}
+              <span class="badge--tag">已审核</span>
             </div>
           </div>
-          <div class="ruleset-actions" onclick="event.stopPropagation()">
-            <button class="view-details-btn" onclick="universalAnswerFeature.showRulesetDetail('${ruleset.id}')">
+          <div class="ruleset-item__actions" onclick="event.stopPropagation()">
+            <button class="btn--view-details" onclick="universalAnswerFeature.showRulesetDetail('${ruleset.id}')">
               <i class="bi bi-eye"></i>
               <span>查看详情</span>
             </button>
-            <button class="install-btn ${isInstalled ? 'installed' : ''}" 
+            <button class="btn--install ${isInstalled ? 'is-installed' : ''}" 
                     onclick="universalAnswerFeature.installRuleset('${ruleset.id}')"
                     ${isInstalled ? 'disabled' : ''}>
               <i class="bi bi-${isInstalled ? 'check-circle' : 'download'}"></i>
@@ -455,44 +455,44 @@ class CommunityUI {
     let filesHTML = '';
     if (ruleset.file_info?.files) {
       filesHTML = ruleset.file_info.files.map(file => `
-        <div class="file-item">
-          <div class="file-info">
-            <i class="file-icon bi ${Utils.getFileIcon(file.type)}"></i>
-            <span class="file-name">${Utils.escapeHtml(file.name)}</span>
+        <div class="modal__file-item">
+          <div class="modal__file-info">
+            <i class="modal__file-icon bi ${Utils.getFileIcon(file.type)}"></i>
+            <span class="modal__file-name">${Utils.escapeHtml(file.name)}</span>
           </div>
-          <span class="file-size">${Utils.formatFileSize(file.size)}</span>
+          <span class="modal__file-size">${Utils.formatFileSize(file.size)}</span>
         </div>
       `).join('');
     }
 
     content.innerHTML = `
-      <div class="detail-header">
-        <div class="detail-title">${Utils.escapeHtml(ruleset.name)}</div>
-        <div class="detail-author">作者: ${Utils.escapeHtml(ruleset.author)}</div>
-        <div class="detail-description">${Utils.escapeHtml(ruleset.description || '暂无描述')}</div>
-        <div class="detail-stats">
-          <div class="detail-stat">
+      <div class="modal__detail-header">
+        <div class="modal__detail-title">${Utils.escapeHtml(ruleset.name)}</div>
+        <div class="modal__detail-author">作者: ${Utils.escapeHtml(ruleset.author)}</div>
+        <div class="modal__detail-description">${Utils.escapeHtml(ruleset.description || '暂无描述')}</div>
+        <div class="modal__detail-stats">
+          <div class="modal__detail-stat">
             <i class="bi bi-download"></i>
             <span>${downloadCount} 次下载</span>
           </div>
-          <div class="detail-stat">
+          <div class="modal__detail-stat">
             <i class="bi bi-calendar"></i>
             <span>${createdDate}</span>
           </div>
-          <div class="detail-stat">
+          <div class="modal__detail-stat">
             <i class="bi bi-files"></i>
             <span>${fileCount} 个文件</span>
           </div>
-          <div class="detail-stat">
+          <div class="modal__detail-stat">
             <i class="bi bi-hdd"></i>
             <span>${totalSize}</span>
           </div>
         </div>
       </div>
       ${filesHTML ? `
-        <div class="detail-files">
+        <div class="modal__detail-files">
           <h4>包含文件</h4>
-          <div class="file-list">
+          <div class="modal__file-list">
             ${filesHTML}
           </div>
         </div>
@@ -852,12 +852,12 @@ class CommunityUI {
       const name = this.escapeHtml(g.name || '未命名规则集');
       const desc = this.escapeHtml(g.description || '无描述');
       const gid = g.id;
-      const active = g.enabled ? ' feature-card--active' : '';
+      const active = g.enabled ? ' simple-home__card is-active' : '';
       //添加徽章
       const badge = this.getCompatibleBadgeHtml(g);
-      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
+      return `<div class="simple-home__card${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
     }).join('');
-    grid.querySelectorAll('.feature-card').forEach((card) => {
+    grid.querySelectorAll('.simple-home__card').forEach((card) => {
       card.addEventListener('click', () => {
         const gid = card.getAttribute('data-group-id');
         if (gid) {
@@ -957,9 +957,9 @@ class CommunityUI {
   getCompatibleBadgeHtml(group) {
     if (!group || group.compatible === undefined) return '';
     if (group.compatible) {
-      return '<span class="compatible-badge compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
+      return '<span class="badge--compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
     }
-    return '<span class="compatible-badge incompatible">不兼容其他规则</span>';
+    return '<span class="badge--incompatible">不兼容其他规则</span>';
   }
 
   // HTML转义

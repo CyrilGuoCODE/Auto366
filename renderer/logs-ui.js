@@ -13,7 +13,7 @@ class LogManager {
     const searchBtn = document.getElementById('searchLogsBtn');
     const closeBtn = document.getElementById('logSearchCloseBtn');
     const searchInput = document.getElementById('logSearchInput');
-    const filterBtns = document.querySelectorAll('#logSearchFilters .filter-btn');
+    const filterBtns = document.querySelectorAll('#logSearchFilters .btn--filter');
 
     if (searchBtn) {
       searchBtn.addEventListener('click', () => {
@@ -36,8 +36,8 @@ class LogManager {
     if (filterBtns) {
       filterBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-          filterBtns.forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
+          filterBtns.forEach(b => b.classList.remove('is-active'));
+          btn.classList.add('is-active');
           this.currentFilter = btn.dataset.filter;
           this.executeSearch();
         });
@@ -52,7 +52,7 @@ class LogManager {
 
     if (searchBar.style.display === 'none') {
       searchBar.style.display = 'block';
-      searchBtn.classList.add('active');
+      searchBtn.classList.add('is-active');
       this.searchActive = true;
       const input = document.getElementById('logSearchInput');
       if (input) {
@@ -68,15 +68,15 @@ class LogManager {
     const searchBar = document.getElementById('logSearchBar');
     const searchBtn = document.getElementById('searchLogsBtn');
     if (searchBar) searchBar.style.display = 'none';
-    if (searchBtn) searchBtn.classList.remove('active');
+    if (searchBtn) searchBtn.classList.remove('is-active');
     this.searchActive = false;
     this.currentSearchKeyword = '';
     this.currentFilter = 'all';
 
     // 重置 filter 按钮
-    const filterBtns = document.querySelectorAll('#logSearchFilters .filter-btn');
-    filterBtns.forEach(b => b.classList.remove('active'));
-    if (filterBtns[0]) filterBtns[0].classList.add('active');
+    const filterBtns = document.querySelectorAll('#logSearchFilters .btn--filter');
+    filterBtns.forEach(b => b.classList.remove('is-active'));
+    if (filterBtns[0]) filterBtns[0].classList.add('is-active');
 
     // 重置 input
     const input = document.getElementById('logSearchInput');
@@ -97,7 +97,7 @@ class LogManager {
     let totalCount = 0;
     items.forEach(item => {
       if (!item.textContent.includes('等待网络请求')) totalCount++;
-      item.classList.remove('log-item-hidden', 'highlight-match');
+      item.classList.remove('log-item--hidden', 'log-item__highlight');
     });
     const status = document.getElementById('logSearchStatus');
     if (status) {
@@ -146,10 +146,10 @@ class LogManager {
 
       // 类型过滤
       let typeMatch = this.currentFilter === 'all';
-      if (this.currentFilter === 'request' && item.classList.contains('clickable')) typeMatch = true;
-      if (this.currentFilter === 'success' && (item.classList.contains('success') || item.classList.contains('rule-success'))) typeMatch = true;
-      if (this.currentFilter === 'error' && (item.classList.contains('error') || item.classList.contains('rule-error'))) typeMatch = true;
-      if (this.currentFilter === 'info' && (item.classList.contains('normal') || item.classList.contains('important')) && !item.classList.contains('clickable')) typeMatch = true;
+      if (this.currentFilter === 'request' && item.classList.contains('log-item--clickable')) typeMatch = true;
+      if (this.currentFilter === 'success' && (item.classList.contains('log-item--success') || item.classList.contains('log-item--rule-success'))) typeMatch = true;
+      if (this.currentFilter === 'error' && (item.classList.contains('log-item--error') || item.classList.contains('log-item--rule-error'))) typeMatch = true;
+      if (this.currentFilter === 'info' && item.classList.contains('log-item--important') && !item.classList.contains('log-item--clickable')) typeMatch = true;
 
       // 关键词过滤
       let keywordMatch = true;
@@ -158,16 +158,16 @@ class LogManager {
       }
 
       if (typeMatch && keywordMatch) {
-        item.classList.remove('log-item-hidden');
+        item.classList.remove('log-item--hidden');
         if (keyword) {
-          item.classList.add('highlight-match');
+          item.classList.add('log-item__highlight');
         } else {
-          item.classList.remove('highlight-match');
+          item.classList.remove('log-item__highlight');
         }
         matchCount++;
       } else {
-        item.classList.add('log-item-hidden');
-        item.classList.remove('highlight-match');
+        item.classList.add('log-item--hidden');
+        item.classList.remove('log-item__highlight');
       }
     });
 
@@ -177,9 +177,9 @@ class LogManager {
   }
 
   getLogItemType(item) {
-    if (item.classList.contains('clickable')) return 'request';
-    if (item.classList.contains('success') || item.classList.contains('rule-success')) return 'success';
-    if (item.classList.contains('error') || item.classList.contains('rule-error')) return 'error';
+    if (item.classList.contains('log-item--clickable')) return 'request';
+    if (item.classList.contains('log-item--success') || item.classList.contains('log-item--rule-success')) return 'success';
+    if (item.classList.contains('log-item--error') || item.classList.contains('log-item--rule-error')) return 'error';
     return 'info';
   }
 
@@ -261,30 +261,30 @@ class LogManager {
     const displayTimestamp = timestamp || new Date().toLocaleTimeString();
 
     if (requestId) {
-      logItem.className = `log-item ${type} clickable`;
+      logItem.className = `log-item log-item--${type} log-item--clickable`;
       logItem.dataset.requestId = requestId;
 
       logItem.innerHTML = `
-        <div class="log-time">${displayTimestamp}</div>
+        <div class="log-item__time">${displayTimestamp}</div>
         <i class="${iconClass}"></i>
-        <span class="log-text">${text}</span>
+        <span class="log-item__text">${text}</span>
       `;
 
       logItem.addEventListener('click', () => {
         this.showRequestDetails(requestId);
 
         if (this.state.selectedLogItem) {
-          this.state.selectedLogItem.classList.remove('selected');
+          this.state.selectedLogItem.classList.remove('log-item--selected');
         }
-        logItem.classList.add('selected');
+        logItem.classList.add('log-item--selected');
         this.state.selectedLogItem = logItem;
       });
     } else {
-      logItem.className = `log-item ${type}`;
+      logItem.className = `log-item log-item--${type}`;
       logItem.innerHTML = `
-        <div class="log-time">${displayTimestamp}</div>
+        <div class="log-item__time">${displayTimestamp}</div>
         <i class="${iconClass}"></i>
-        <span class="log-text">${text}</span>
+        <span class="log-item__text">${text}</span>
       `;
     }
 
@@ -358,28 +358,28 @@ class LogManager {
 
     // 基本信息
     html += `
-      <div class="detail-section">
+      <div class="log-detail__section">
         <h5>基本信息</h5>
-        <div class="detail-item">
-          <span class="detail-label">方法:</span>
-          <span class="detail-value">${requestData.method || 'GET'}</span>
+        <div class="log-detail__item">
+          <span class="log-detail__label">方法:</span>
+          <span class="log-detail__value">${requestData.method || 'GET'}</span>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">URL:</span>
-          <span class="detail-value">${requestData.url || ''}</span>
+        <div class="log-detail__item">
+          <span class="log-detail__label">URL:</span>
+          <span class="log-detail__value">${requestData.url || ''}</span>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">状态码:</span>
-          <span class="detail-value">${requestData.statusCode || requestData.status || '未知'}</span>
+        <div class="log-detail__item">
+          <span class="log-detail__label">状态码:</span>
+          <span class="log-detail__value">${requestData.statusCode || requestData.status || '未知'}</span>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">时间:</span>
-          <span class="detail-value">${new Date(requestData.timestamp).toLocaleString()}</span>
+        <div class="log-detail__item">
+          <span class="log-detail__label">时间:</span>
+          <span class="log-detail__value">${new Date(requestData.timestamp).toLocaleString()}</span>
         </div>
         ${requestData.bodySize ? `
-        <div class="detail-item">
-          <span class="detail-label">大小:</span>
-          <span class="detail-value">${Utils.formatFileSize(requestData.bodySize)}</span>
+        <div class="log-detail__item">
+          <span class="log-detail__label">大小:</span>
+          <span class="log-detail__value">${Utils.formatFileSize(requestData.bodySize)}</span>
         </div>
         ` : ''}
       </div>
@@ -388,9 +388,9 @@ class LogManager {
     // 请求头
     if (requestData.requestHeaders) {
       html += `
-        <div class="detail-section">
+        <div class="log-detail__section">
           <h5>请求头</h5>
-          <div class="detail-json">${Utils.formatHeaders(requestData.requestHeaders)}</div>
+          <div class="log-detail__json">${Utils.formatHeaders(requestData.requestHeaders)}</div>
         </div>
       `;
     }
@@ -398,9 +398,9 @@ class LogManager {
     // 请求体
     if (requestData.requestBody) {
       html += `
-        <div class="detail-section">
+        <div class="log-detail__section">
           <h5>请求体</h5>
-          <div class="detail-json">${Utils.formatBody(requestData.requestBody, true)}</div>
+          <div class="log-detail__json">${Utils.formatBody(requestData.requestBody, true)}</div>
         </div>
       `;
     }
@@ -408,9 +408,9 @@ class LogManager {
     // 响应头
     if (requestData.responseHeaders) {
       html += `
-        <div class="detail-section">
+        <div class="log-detail__section">
           <h5>响应头</h5>
-          <div class="detail-json">${Utils.formatHeaders(requestData.responseHeaders)}</div>
+          <div class="log-detail__json">${Utils.formatHeaders(requestData.responseHeaders)}</div>
         </div>
       `;
     }
@@ -418,9 +418,9 @@ class LogManager {
     // 响应体
     if (requestData.responseBody) {
       html += `
-        <div class="detail-section">
+        <div class="log-detail__section">
           <h5>响应体</h5>
-          <div class="detail-json">${Utils.formatBody(requestData.responseBody, true)}</div>
+          <div class="log-detail__json">${Utils.formatBody(requestData.responseBody, true)}</div>
         </div>
       `;
     }
@@ -428,9 +428,9 @@ class LogManager {
     // 下载按钮（如果有UUID）
     if (requestData.uuid) {
       html += `
-        <div class="detail-section">
+        <div class="log-detail__section">
           <h5>操作</h5>
-          <button class="download-response-btn" data-download-uuid="${requestData.uuid}">
+          <button class="btn--download" data-download-uuid="${requestData.uuid}">
             <i class="bi bi-download"></i>
             <span>下载响应文件</span>
           </button>
@@ -455,7 +455,7 @@ class LogManager {
 
     // 清除选中状态
     if (this.state.selectedLogItem) {
-      this.state.selectedLogItem.classList.remove('selected');
+      this.state.selectedLogItem.classList.remove('log-item--selected');
       this.state.selectedLogItem = null;
     }
   }

@@ -1,30 +1,125 @@
 :root {
-    --color-bg-page: #ffffff;
-    --color-bg-muted: #f8f9fa;
-    --color-bg-panel: #ffffff;
-    --color-border: #e9ecef;
-    --color-border-strong: #dee2e6;
-    --color-text: #333333;
-    --color-text-muted: #6c757d;
-    --color-text-heading: #495057;
-    --color-primary: #007bff;
-    --color-primary-hover: #0056b3;
-    --color-danger: #dc3545;
-    --color-danger-hover: #c82333;
-    --color-success-bg: #d4edda;
-    --color-success-text: #155724;
-    --color-error-bg: #f8d7da;
-    --color-error-text: #721c24;
-    --color-warn-bg: #fff3cd;
-    --color-warn-text: #856404;
+    --color-primary-50: #e3f2fd;
+    --color-primary-100: #bbdefb;
+    --color-primary-200: #90caf9;
+    --color-primary-500: #007bff;
+    --color-primary-600: #0056b3;
+    --color-primary-700: #004494;
+
+    --color-danger-50: #fde8ea;
+    --color-danger-100: #f8d7da;
+    --color-danger-500: #dc3545;
+    --color-danger-600: #c82333;
+    --color-danger-700: #a71e2a;
+
+    --color-success-50: #d4edda;
+    --color-success-500: #28a745;
+    --color-success-600: #218838;
+    --color-success-700: #155724;
+
+    --color-warn-50: #fff3cd;
+    --color-warn-500: #ffc107;
+    --color-warn-700: #856404;
+
+    --color-info-500: #17a2b8;
+    --color-info-600: #138496;
+    --color-info-100: #bbdefb;
+
+    --color-gray-50: #f8f9fa;
+    --color-gray-100: #e9ecef;
+    --color-gray-200: #dee2e6;
+    --color-gray-300: #ced4da;
+    --color-gray-400: #adb5bd;
+    --color-gray-500: #6c757d;
+    --color-gray-600: #495057;
+    --color-gray-700: #333333;
+    --color-gray-800: #212529;
+    --color-white: #ffffff;
+
+    --color-bg-page: var(--color-white);
+    --color-bg-muted: var(--color-gray-50);
+    --color-bg-panel: var(--color-white);
+    --color-border: var(--color-gray-100);
+    --color-border-strong: var(--color-gray-200);
+    --color-text: var(--color-gray-700);
+    --color-text-muted: var(--color-gray-500);
+    --color-text-heading: var(--color-gray-600);
+    --color-primary: var(--color-primary-500);
+    --color-primary-hover: var(--color-primary-600);
+    --color-danger: var(--color-danger-500);
+    --color-danger-hover: var(--color-danger-600);
+    --color-success-bg: var(--color-success-50);
+    --color-success-text: var(--color-success-700);
+    --color-error-bg: var(--color-danger-100);
+    --color-error-text: var(--color-danger-700);
+    --color-warn-bg: var(--color-warn-50);
+    --color-warn-text: var(--color-warn-700);
+
+    --space-2xs: 2px;
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 20px;
+    --space-2xl: 24px;
+    --space-3xl: 32px;
+    --space-4xl: 40px;
+
+    --radius-xs: 3px;
     --radius-sm: 4px;
     --radius-md: 6px;
     --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-2xl: 24px;
+    --radius-full: 9999px;
+
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace;
+    --text-xs: 10px;
+    --text-sm: 12px;
+    --text-base: 13px;
+    --text-lg: 14px;
+    --text-xl: 16px;
+    --text-2xl: 18px;
+    --text-3xl: 20px;
+    --text-4xl: 22px;
+    --text-5xl: 50px;
+    --leading-normal: 1.4;
+    --leading-relaxed: 1.5;
+    --leading-loose: 1.6;
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
     --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.08);
-    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    --font-mono: 'Consolas', 'Monaco', monospace;
+    --shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.2);
+    --shadow-2xl: 0 20px 60px rgba(0, 0, 0, 0.2);
+
+    --ease-fast: 0.15s ease;
+    --ease-normal: 0.2s ease;
+    --ease-slow: 0.3s ease;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 300;
+    --z-modal: 400;
+    --z-toast: 500;
+    --z-titlebar: 1000;
+    --z-tooltip: 1100;
+
+    --titlebar-height: 36px;
+    --sidebar-width-collapsed: 60px;
+    --sidebar-width-expanded: 200px;
+    --sidebar-item-height: 48px;
+    --panel-header-height: 45px;
+    --resizer-width: 4px;
+
     --transition-fast: 0.15s ease;
+    --transition-normal: 0.2s ease;
 }
 
 html[data-ui="simple"] {

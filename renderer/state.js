@@ -24,23 +24,23 @@ class StateManager {
   switchView(viewName, pushSimpleHistory = true) {
     const ui = document.documentElement.getAttribute('data-ui');
     // 更新菜单项状态
-    const menuItems = document.querySelectorAll('.menu-item');
+    const menuItems = document.querySelectorAll('.sidebar__item');
     menuItems.forEach(item => {
-      item.classList.remove('active');
+      item.classList.remove('is-active');
       if (item.getAttribute('data-view') === viewName) {
-        item.classList.add('active');
+        item.classList.add('is-active');
       }
     });
 
     // 更新左侧视图面板（右侧日志始终显示）
     const viewPanels = document.querySelectorAll('.left-content .view-panel');
     viewPanels.forEach(panel => {
-      panel.classList.remove('active');
+      panel.classList.remove('is-active');
     });
 
     const targetPanel = document.getElementById(`${viewName}-view`);
     if (targetPanel) {
-      targetPanel.classList.add('active');
+      targetPanel.classList.add('is-active');
     }
 
     this.currentView = viewName;
@@ -71,7 +71,7 @@ class StateManager {
     const ui = document.documentElement.getAttribute('data-ui');
     const page = document.documentElement.getAttribute('data-simple-page');
     ids.forEach((id) => {
-      document.getElementById(id)?.classList.remove('simple-cp-active');
+      document.getElementById(id)?.classList.remove('simple__cp-active');
     });
     if (ui !== 'simple' || page !== 'app') {
       return;
@@ -85,7 +85,7 @@ class StateManager {
       activeId = 'simple-open-settings';
     }
     if (activeId) {
-      document.getElementById(activeId)?.classList.add('simple-cp-active');
+      document.getElementById(activeId)?.classList.add('simple__cp-active');
     }
   }
 

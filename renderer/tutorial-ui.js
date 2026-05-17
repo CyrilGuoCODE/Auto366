@@ -34,7 +34,7 @@ class TutorialManager {
   bindEvents() {
     const nextBtn = document.getElementById('tutorialNextBtn');
     const prevBtn = document.getElementById('tutorialPrevBtn');
-    const modeCards = document.querySelectorAll('.tutorial-mode-card');
+    const modeCards = document.querySelectorAll('.modal__mode-card');
 
     if (nextBtn) {
       nextBtn.onclick = () => this.handleNext();
@@ -89,9 +89,9 @@ class TutorialManager {
   }
 
   handleModeSelect(card) {
-    const modeCards = document.querySelectorAll('.tutorial-mode-card');
-    modeCards.forEach(c => c.classList.remove('selected'));
-    card.classList.add('selected');
+    const modeCards = document.querySelectorAll('.modal__mode-card');
+    modeCards.forEach(c => c.classList.remove('is-selected'));
+    card.classList.add('is-selected');
     this.selectedMode = card.dataset.mode;
   }
 
@@ -140,8 +140,8 @@ class TutorialManager {
   }
 
   updatePage() {
-    const pages = document.querySelectorAll('.tutorial-page');
-    const dots = document.querySelectorAll('.progress-dot');
+    const pages = document.querySelectorAll('.modal__page');
+    const dots = document.querySelectorAll('.modal__progress-dot');
     const prevBtn = document.getElementById('tutorialPrevBtn');
     const nextBtn = document.getElementById('tutorialNextBtn');
 
@@ -150,7 +150,7 @@ class TutorialManager {
     });
 
     dots.forEach((dot, index) => {
-      dot.classList.toggle('active', index <= this.currentPage);
+      dot.classList.toggle('is-active', index <= this.currentPage);
     });
 
     prevBtn.style.display = this.currentPage > 0 ? 'inline-block' : 'none';

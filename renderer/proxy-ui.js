@@ -167,15 +167,15 @@ class ProxyUI {
 
     // 创建模态对话框HTML
     const modalHTML = `
-      <div id="portChangeModal" class="modal-overlay">
-        <div class="modal-content">
-          <div class="modal-header">
+      <div id="portChangeModal" class="modal">
+        <div class="modal__content">
+          <div class="modal__header">
             <h3>修改代理端口</h3>
-            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+            <button class="btn--close" onclick="this.closest('.modal').remove()">
               <i class="bi bi-x"></i>
             </button>
           </div>
-          <div class="modal-body">
+          <div class="modal__body">
             <div class="form-group">
               <label for="newPortInput">新端口号 (1024-65535):</label>
               <input type="number" id="newPortInput" class="form-input" 
@@ -183,11 +183,11 @@ class ProxyUI {
                      placeholder="请输入端口号">
             </div>
           </div>
-          <div class="modal-footer">
-            <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">
+          <div class="modal__footer">
+            <button class="btn--ghost" onclick="this.closest('.modal').remove()">
               取消
             </button>
-            <button class="primary-btn" id="confirmPortChange">
+            <button class="btn--primary" id="confirmPortChange">
               确定
             </button>
           </div>
@@ -256,7 +256,7 @@ class ProxyUI {
         if (toggleBtn) {
           toggleBtn.disabled = false;
           toggleBtn.innerHTML = '<i class="bi bi-play-circle"></i><span>启动代理</span>';
-          toggleBtn.className = 'primary-btn';
+          toggleBtn.className = 'btn--primary';
         }
       }
     }, 10000); // 10秒超时
@@ -336,24 +336,24 @@ class ProxyUI {
       const host = data.host || '127.0.0.1';
       const port = data.port || '5291';
       statusElement.textContent = `已开启在 ${host}:${port}`;
-      statusElement.className = 'status-value running';
+      statusElement.className = 'badge--running';
 
       if (toggleBtn) {
         toggleBtn.disabled = false;
         toggleBtn.innerHTML = '<i class="bi bi-stop-circle"></i><span>停止代理</span>';
-        toggleBtn.className = 'danger-btn';
+        toggleBtn.className = 'btn--danger';
       }
 
       this.logManager.addInfoLog(`代理服务器已启动，监听地址: ${host}:${port}`);
     } else {
       this.state.isProxyRunning = false;
       statusElement.textContent = '已停止';
-      statusElement.className = 'status-value stopped';
+      statusElement.className = 'badge--stopped';
 
       if (toggleBtn) {
         toggleBtn.disabled = false;
         toggleBtn.innerHTML = '<i class="bi bi-play-circle"></i><span>启动代理</span>';
-        toggleBtn.className = 'primary-btn';
+        toggleBtn.className = 'btn--primary';
       }
 
       this.logManager.addInfoLog('代理服务器已停止');
@@ -446,13 +446,13 @@ class ProxyUI {
 
     if (data.capturing) {
       statusElement.textContent = '监听中';
-      statusElement.className = 'status-value running';
+      statusElement.className = 'badge--running';
       if (startBtn) startBtn.disabled = true;
       if (stopBtn) stopBtn.disabled = false;
       this.logManager.addSuccessLog('网络监听已启动');
     } else {
       statusElement.textContent = '未开始';
-      statusElement.className = 'status-value stopped';
+      statusElement.className = 'badge--stopped';
       if (startBtn) startBtn.disabled = false;
       if (stopBtn) stopBtn.disabled = true;
       this.logManager.addInfoLog('网络监听已停止');
@@ -467,7 +467,7 @@ class ProxyUI {
     btn.addEventListener('mouseup', (e) => this._onUp366BtnMouseUp(e));
     btn.addEventListener('mouseleave', () => this._onUp366BtnMouseLeave());
     btn.addEventListener('animationend', (e) => {
-      if (e.target.classList.contains('close-progress-bar') && e.target.classList.contains('active')) {
+      if (e.target.classList.contains('btn__progress-bar') && e.target.classList.contains('active')) {
         this._onCloseProgressComplete();
       }
     });
@@ -477,13 +477,13 @@ class ProxyUI {
     if (e.button !== 0) return;
     const btn = document.getElementById('openUp366Btn');
     if (!btn) return;
-    if (btn.classList.contains('closing')) return;
+    if (btn.classList.contains('is-closing')) return;
 
     this._up366BtnMouseDown = true;
     this._up366BtnPressStartTime = Date.now();
     this._up366BtnLongPressTriggered = false;
 
-    if (btn.classList.contains('restart')) {
+    if (btn.classList.contains('is-restart')) {
       this._up366BtnLongPressTimer = setTimeout(() => {
         this._up366BtnLongPressTriggered = true;
         this._enterClosingState();
@@ -503,7 +503,7 @@ class ProxyUI {
     }
 
     if (this._up366BtnMouseDown) {
-      if (btn.classList.contains('restart')) {
+      if (btn.classList.contains('is-restart')) {
         const pressDuration = Date.now() - this._up366BtnPressStartTime;
         if (pressDuration >= 300) {
           this._enterClosingState();
@@ -540,11 +540,11 @@ class ProxyUI {
     if (!btn) return;
 
     this._up366BtnClosing = true;
-    btn.className = 'action-btn closing';
+    btn.className = 'btn--action is-closing';
     btn.querySelector('span').textContent = '关闭天学网';
     btn.querySelector('i').className = 'bi bi-power';
 
-    const bar = btn.querySelector('.close-progress-bar');
+    const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
       bar.classList.add('active');
     }
@@ -556,13 +556,13 @@ class ProxyUI {
 
     this._up366BtnClosing = false;
 
-    const bar = btn.querySelector('.close-progress-bar');
+    const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
       bar.classList.remove('active');
       void bar.offsetWidth;
     }
 
-    btn.className = 'action-btn restart';
+    btn.className = 'btn--action is-restart';
     btn.querySelector('span').textContent = '重启天学网';
     btn.querySelector('i').className = 'bi bi-arrow-repeat';
   }
@@ -573,12 +573,12 @@ class ProxyUI {
 
     this._up366BtnClosing = false;
 
-    const bar = btn.querySelector('.close-progress-bar');
+    const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
       bar.classList.remove('active');
     }
 
-    btn.classList.add('done');
+    btn.classList.add('is-done');
 
     this.logManager.addInfoLog('正在强制关闭天学网...');
     const killResult = await window.electronAPI.killUp366();
@@ -620,11 +620,11 @@ class ProxyUI {
     if (!btn || this._up366BtnClosing) return;
 
     if (data.currentState === true) {
-      btn.className = 'action-btn restart';
+      btn.className = 'btn--action is-restart';
       btn.querySelector('i').className = 'bi bi-arrow-repeat';
       btn.querySelector('span').textContent = '重启天学网';
     } else {
-      btn.className = 'action-btn';
+      btn.className = 'btn--action';
       btn.querySelector('i').className = 'bi bi-box-arrow-up-right';
       btn.querySelector('span').textContent = '打开天学网';
     }

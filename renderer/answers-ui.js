@@ -78,7 +78,7 @@ class AnswersUI {
 
     if (!data || !data.answers || data.answers.length === 0) {
       container.innerHTML = `
-        <div class="no-answers">
+        <div class="answers-view__empty">
           <i class="bi bi-inbox"></i>
           <p>暂无答案数据</p>
         </div>
@@ -115,11 +115,11 @@ class AnswersUI {
       const answers = organizedData[groupName];
       html += `
         <div class="answer-group">
-          <div class="group-header">
+          <div class="answer-group__header">
             <h4>${groupName}</h4>
-            <span class="answer-count">${answers.length} 个答案</span>
+            <span class="badge--count">${answers.length} 个答案</span>
           </div>
-          <div class="answers-list">
+          <div class="answer-group__list">
       `;
 
       answers.forEach((answer, index) => {
@@ -144,41 +144,41 @@ class AnswersUI {
         const hasChildren = answer.children && Array.isArray(answer.children) && answer.children.length > 0;
 
         html += `
-          <div class="answer-item ${hasChildren ? 'has-children' : ''}">
-            <div class="answer-header">
-              <span class="answer-index">#${index + 1}</span>
-              <span class="answer-type">${answer.pattern || '未知题型'}</span>
-              <button class="copy-answer-btn" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="复制答案">
+          <div class="answer-item ${hasChildren ? 'answer-item--has-children' : ''}">
+            <div class="answer-item__header">
+              <span class="answer-item__index">#${index + 1}</span>
+              <span class="answer-item__type">${answer.pattern || '未知题型'}</span>
+              <button class="btn--copy" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="复制答案">
                 <i class="bi bi-copy"></i>
               </button>
             </div>
-            <div class="answer-content">
-              <div class="question">${safeQuestionText}</div>
+            <div class="answer-item__content">
+              <div class="answer-item__question">${safeQuestionText}</div>
               ${hasChildren ? `
-                <div class="answer main-answer">${safeAnswerText}</div>
-                <button class="expand-answer-btn" onclick="universalAnswerFeature.toggleAnswerExpansion(this)" title="展开/收起答案">
+                <div class="answer-item__text answer-item__main">${safeAnswerText}</div>
+                <button class="btn--expand" onclick="universalAnswerFeature.toggleAnswerExpansion(this)" title="展开/收起答案">
                   <i class="bi bi-chevron-down"></i>
                   <span>展开全部答案</span>
                 </button>
-                <div class="children-answers" style="display: none;">
+                <div class="answer-item__children" style="display: none;">
                   ${answer.children.map((child, childIndex) => {
           const safeChildAnswer = (child.answer || '无答案').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           const childAnswerForJs = (child.answer || '').replace(/'/g, "\\'").replace(/"/g, '\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
           return `
-                      <div class="child-answer-item">
-                        <div class="child-answer-header">
-                          <span class="child-answer-index">${child.question || `答案${childIndex + 1}`}</span>
-                          <button class="copy-child-answer-btn" onclick="universalAnswerFeature.copyAnswer('${childAnswerForJs}', this)" title="复制此答案">
+                      <div class="child-answer">
+                        <div class="child-answer__header">
+                          <span class="child-answer__index">${child.question || `答案${childIndex + 1}`}</span>
+                          <button class="btn--copy" onclick="universalAnswerFeature.copyAnswer('${childAnswerForJs}', this)" title="复制此答案">
                             <i class="bi bi-copy"></i>
                           </button>
                         </div>
-                        <div class="child-answer-content clickable-answer" onclick="universalAnswerFeature.copyAnswer('${childAnswerForJs}', this)" title="点击复制答案">${safeChildAnswer}</div>
+                        <div class="child-answer__content answer-item__content--clickable" onclick="universalAnswerFeature.copyAnswer('${childAnswerForJs}', this)" title="点击复制答案">${safeChildAnswer}</div>
                       </div>
                     `;
         }).join('')}
                 </div>
               ` : `
-                <div class="answer clickable-answer" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="点击复制答案">${safeAnswerText}</div>
+                <div class="answer-item__text answer-item__content--clickable" onclick="universalAnswerFeature.copyAnswerByIndex(${index}, '${groupName}', this)" title="点击复制答案">${safeAnswerText}</div>
               `}
             </div>
           </div>
@@ -244,7 +244,7 @@ class AnswersUI {
   toggleAnswerExpansion(button) {
     try {
       const answerItem = button.closest('.answer-item');
-      const childrenAnswers = answerItem.querySelector('.children-answers');
+      const childrenAnswers = answerItem.querySelector('.answer-item__children');
       const icon = button.querySelector('i');
       const buttonText = button.querySelector('span');
 
@@ -320,14 +320,14 @@ class AnswersUI {
   // 显示复制提示
   showCopyToast(message, type = 'success') {
     // 移除现有的提示
-    const existingToast = document.querySelector('.copy-toast');
+    const existingToast = document.querySelector('.toast');
     if (existingToast) {
       existingToast.remove();
     }
 
     // 创建新的提示
     const toast = document.createElement('div');
-    toast.className = `copy-toast ${type}`;
+    toast.className = type === 'error' ? 'toast toast--error' : 'toast';
     toast.innerHTML = `
       <i class="bi bi-${type === 'success' ? 'check-circle' : 'x-circle'}"></i>
       <span>${message}</span>
@@ -337,12 +337,12 @@ class AnswersUI {
 
     // 显示动画
     setTimeout(() => {
-      toast.classList.add('show');
+      toast.classList.add('is-visible');
     }, 10);
 
     // 自动隐藏
     setTimeout(() => {
-      toast.classList.remove('show');
+      toast.classList.remove('is-visible');
       setTimeout(() => {
         if (toast.parentNode) {
           toast.parentNode.removeChild(toast);
@@ -354,9 +354,9 @@ class AnswersUI {
   // 复制按钮动画
   animateCopyButton(element) {
     if (element && element.classList) {
-      element.classList.add('copied');
+      element.classList.add('is-copied');
       setTimeout(() => {
-        element.classList.remove('copied');
+        element.classList.remove('is-copied');
       }, 1000);
     }
   }
@@ -370,7 +370,7 @@ class AnswersUI {
     const container = document.getElementById('answersContainer');
     if (container) {
       container.innerHTML = `
-        <div class="no-answers">
+        <div class="answers-view__empty">
           <i class="bi bi-inbox"></i>
           <p>暂无答案数据</p>
         </div>
@@ -484,56 +484,56 @@ class AnswersUI {
 
     // 创建模态框HTML
     const modalHtml = `
-      <div class="share-result-modal" id="shareResultModal">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h4><i class="bi bi-check-circle text-success"></i> 分享成功</h4>
-            <button class="close-btn" onclick="universalAnswerFeature.hideShareResultModal()">
+      <div class="modal--share" id="shareResultModal">
+        <div class="modal__content">
+          <div class="modal__header">
+            <h4><i class="bi bi-check-circle text--success"></i> 分享成功</h4>
+            <button class="btn--close" onclick="universalAnswerFeature.hideShareResultModal()">
               <i class="bi bi-x"></i>
             </button>
           </div>
-          <div class="modal-body">
-            <p class="share-info">答案已成功上传到服务器，您可以通过以下地址在线查看：</p>
-            <div class="url-section">
+          <div class="modal__body">
+            <p class="modal__info">答案已成功上传到服务器，您可以通过以下地址在线查看：</p>
+            <div class="modal__url-section">
               <label><i class="bi bi-link-45deg"></i> 主地址：</label>
-              <div class="url-input-group">
-                <input type="text" value="${mainUrlWithSort}" readonly class="url-input" id="mainUrl">
-                <button class="copy-url-btn" onclick="universalAnswerFeature.copyUrl('mainUrl')" title="复制主地址">
+              <div class="modal__url-input-group">
+                <input type="text" value="${mainUrlWithSort}" readonly class="modal__url-input" id="mainUrl">
+                <button class="btn--copy-url" onclick="universalAnswerFeature.copyUrl('mainUrl')" title="复制主地址">
                   <i class="bi bi-copy"></i>
                 </button>
-                <button class="open-url-btn" onclick="window.open('${mainUrlWithSort}', '_blank')" title="打开主地址">
+                <button class="btn--open-url" onclick="window.open('${mainUrlWithSort}', '_blank')" title="打开主地址">
                   <i class="bi bi-box-arrow-up-right"></i>
                 </button>
               </div>
             </div>
-            <div class="url-section">
+            <div class="modal__url-section">
               <label><i class="bi bi-link-45deg"></i> 备用地址：</label>
-              <div class="url-input-group">
-                <input type="text" value="${backupUrlWithSort}" readonly class="url-input" id="backupUrl">
-                <button class="copy-url-btn" onclick="universalAnswerFeature.copyUrl('backupUrl')" title="复制备用地址">
+              <div class="modal__url-input-group">
+                <input type="text" value="${backupUrlWithSort}" readonly class="modal__url-input" id="backupUrl">
+                <button class="btn--copy-url" onclick="universalAnswerFeature.copyUrl('backupUrl')" title="复制备用地址">
                   <i class="bi bi-copy"></i>
                 </button>
-                <button class="open-url-btn" onclick="window.open('${backupUrlWithSort}', '_blank')" title="打开备用地址">
+                <button class="btn--open-url" onclick="window.open('${backupUrlWithSort}', '_blank')" title="打开备用地址">
                   <i class="bi bi-box-arrow-up-right"></i>
                 </button>
               </div>
             </div>
-            <div class="sort-info">
+            <div class="modal__sort-info">
               <p><i class="bi bi-funnel"></i> 当前排序方式：${this.state.sortMode === 'pattern' ? '按题型排序' : '按文件排序'}</p>
             </div>
-            <div class="share-tips">
+            <div class="modal__tips">
               <p><i class="bi bi-info-circle"></i> 提示：如果主地址无法访问，请尝试使用备用地址。点击 <i class="bi bi-box-arrow-up-right"></i> 按钮可直接在浏览器中打开</p>
             </div>
-            <div class="modal-footer">
-              <button class="primary-btn" onclick="universalAnswerFeature.copyUrl('mainUrl')">
+            <div class="modal__footer">
+              <button class="btn--primary" onclick="universalAnswerFeature.copyUrl('mainUrl')">
                 <i class="bi bi-copy"></i>
                 复制主地址
               </button>
-              <button class="open-btn" onclick="window.open('${mainUrlWithSort}', '_blank')">
+              <button class="btn--open" onclick="window.open('${mainUrlWithSort}', '_blank')">
                 <i class="bi bi-box-arrow-up-right"></i>
                 打开查看
               </button>
-              <button class="secondary-btn" onclick="universalAnswerFeature.hideShareResultModal()">
+              <button class="btn--ghost" onclick="universalAnswerFeature.hideShareResultModal()">
                 关闭
               </button>
             </div>

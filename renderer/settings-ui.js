@@ -131,14 +131,14 @@ class SettingsUI {
     const resultDiv = document.getElementById('trafficLog');
 
     const confirmHtml = `
-      <div class="log-item warning">
+      <div class="log-item log-item--warning">
         <i class="bi bi-exclamation-triangle"></i>
         <span>确定要清理所有缓存吗？此操作将清理 Auto366 临时文件和天学网缓存，不可撤销。</span>
-        <div class="cache-buttons">
-          <button class="btn-small btn-cancel" id="cancelClearCacheBtn">取消</button>
-          <button class="btn-small btn-danger" id="confirmClearCacheBtn" style="position:relative;overflow:hidden">
+        <div class="log-item__actions">
+          <button class="btn--sm btn--cancel" id="cancelClearCacheBtn">取消</button>
+          <button class="btn--sm btn--danger" id="confirmClearCacheBtn" style="position:relative;overflow:hidden">
             <span>清理并重启</span>
-            <div class="cache-progress-bar"></div>
+            <div class="progress-bar"></div>
           </button>
         </div>
       </div>
@@ -152,7 +152,7 @@ class SettingsUI {
 
   // 确认清理缓存（保留供外部直接调用）
   async confirmClearCache() {
-    const confirmDialog = document.querySelector('.log-item.warning');
+    const confirmDialog = document.querySelector('.log-item--warning');
     if (confirmDialog) confirmDialog.remove();
     await this._performClearCache();
   }
@@ -172,7 +172,7 @@ class SettingsUI {
     btn.addEventListener('mouseup', (e) => this._onClearBtnMouseUp(e));
     btn.addEventListener('mouseleave', () => this._onClearBtnMouseLeave());
     btn.addEventListener('animationend', (e) => {
-      if (e.target.classList.contains('cache-progress-bar') && e.target.classList.contains('active')) {
+      if (e.target.classList.contains('progress-bar') && e.target.classList.contains('active')) {
         this._onClearProgressComplete();
       }
     });
@@ -182,7 +182,7 @@ class SettingsUI {
     if (e.button !== 0) return;
     const btn = document.getElementById('confirmClearCacheBtn');
     if (!btn) return;
-    if (btn.classList.contains('cache-closing')) return;
+    if (btn.classList.contains('btn__state-closing')) return;
 
     this._clearBtnMouseDown = true;
     this._clearBtnPressStartTime = Date.now();
@@ -239,10 +239,10 @@ class SettingsUI {
     if (!btn) return;
 
     this._clearBtnClosingState = true;
-    btn.classList.add('cache-closing');
+    btn.classList.add('btn__state-closing');
     btn.querySelector('span').textContent = '仅执行清理';
 
-    const bar = btn.querySelector('.cache-progress-bar');
+    const bar = btn.querySelector('.progress-bar');
     if (bar) {
       bar.classList.add('active');
     }
@@ -254,13 +254,13 @@ class SettingsUI {
 
     this._clearBtnClosingState = false;
 
-    const bar = btn.querySelector('.cache-progress-bar');
+    const bar = btn.querySelector('.progress-bar');
     if (bar) {
       bar.classList.remove('active');
       void bar.offsetWidth;
     }
 
-    btn.classList.remove('cache-closing');
+    btn.classList.remove('btn__state-closing');
     btn.querySelector('span').textContent = '清理并重启';
   }
 
@@ -270,12 +270,12 @@ class SettingsUI {
 
     this._clearBtnClosingState = false;
 
-    const bar = btn.querySelector('.cache-progress-bar');
+    const bar = btn.querySelector('.progress-bar');
     if (bar) {
       bar.classList.remove('active');
     }
 
-    btn.classList.add('cache-done');
+    btn.classList.add('btn__state-done');
 
     await this._performClearCache();
   }
@@ -299,7 +299,7 @@ class SettingsUI {
   }
 
   async _performClearCache() {
-    const dialog = document.querySelector('.log-item.warning');
+    const dialog = document.querySelector('.log-item--warning');
     if (dialog) dialog.remove();
 
     this.logManager.addInfoLog('正在清理缓存...');
@@ -394,38 +394,38 @@ class SettingsUI {
 
     const updatePanel = document.createElement('div');
     updatePanel.id = 'update-panel';
-    updatePanel.className = 'update-panel';
+    updatePanel.className = 'modal--update';
 
     updatePanel.innerHTML = `
-      <div class="update-panel-overlay"></div>
-      <div class="update-panel-content">
-        <div class="update-panel-header">
+      <div class="modal__overlay"></div>
+      <div class="modal__content">
+        <div class="modal__header">
           <h3>发现新版本</h3>
-          <button class="update-panel-close" onclick="this.closest('.update-panel').remove()">×</button>
+          <button class="btn--close" onclick="this.closest('.modal--update').remove()">×</button>
         </div>
-        <div class="update-panel-body">
-          <div class="update-version-info">
-            <div class="current-version">
-              <span class="version-label">当前版本:</span>
-              <span class="version-number">${currentVersion}</span>
+        <div class="modal__body">
+          <div class="modal__version-info">
+            <div class="modal__current-version">
+              <span class="modal__version-label">当前版本:</span>
+              <span class="modal__version-number">${currentVersion}</span>
             </div>
-            <div class="new-version">
-              <span class="version-label">最新版本:</span>
-              <span class="version-number highlight">${updateInfo.version}</span>
+            <div class="modal__new-version">
+              <span class="modal__version-label">最新版本:</span>
+              <span class="modal__version-number is-highlight">${updateInfo.version}</span>
             </div>
           </div>
-          <div class="update-changelog">
+          <div class="modal__changelog">
             <h4>更新内容:</h4>
-            <div class="changelog-content">
+            <div class="modal__changelog-content">
               ${updateInfo.releaseNotes || '• 性能优化和错误修复<br>• 改进用户体验<br>• 新增功能和特性'}
             </div>
           </div>
         </div>
-        <div class="update-panel-footer">
-          <button class="update-btn-cancel" onclick="this.closest('.update-panel').remove()">
+        <div class="modal__footer">
+          <button class="btn--cancel" onclick="this.closest('.modal--update').remove()">
             稍后提醒
           </button>
-          <button class="update-btn-download" onclick="universalAnswerFeature.startUpdateDownload('${updateInfo.version}')">
+          <button class="btn--primary" onclick="universalAnswerFeature.startUpdateDownload('${updateInfo.version}')">
             立即更新
           </button>
         </div>
@@ -500,25 +500,25 @@ class SettingsUI {
 
     const installDialog = document.createElement('div');
     installDialog.id = 'update-install-dialog';
-    installDialog.className = 'update-panel';
+    installDialog.className = 'modal--update';
 
     installDialog.innerHTML = `
-      <div class="update-panel-overlay"></div>
-      <div class="update-panel-content">
-        <div class="update-panel-header">
+      <div class="modal__overlay"></div>
+      <div class="modal__content">
+        <div class="modal__header">
           <h3>更新已下载完成</h3>
         </div>
-        <div class="update-panel-body">
-          <div class="update-install-message">
+        <div class="modal__body">
+          <div class="modal__install-message">
             <p>新版本已下载完成，是否立即重启应用进行安装？</p>
-            <p class="install-warning">安装过程中应用将会关闭，请确保已保存所有工作。</p>
+            <p class="modal__warning">安装过程中应用将会关闭，请确保已保存所有工作。</p>
           </div>
         </div>
-        <div class="update-panel-footer">
-          <button class="update-btn-cancel" onclick="this.closest('.update-panel').remove()">
+        <div class="modal__footer">
+          <button class="btn--cancel" onclick="this.closest('.modal--update').remove()">
             稍后安装
           </button>
-          <button class="update-btn-download" onclick="universalAnswerFeature.installUpdate()">
+          <button class="btn--primary" onclick="universalAnswerFeature.installUpdate()">
             立即安装
           </button>
         </div>

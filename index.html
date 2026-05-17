@@ -33,72 +33,72 @@
     </header>
 
     <div id="simple-home" class="simple-home">
-        <button type="button" id="update-notification-btn-simple" class="update-notification-btn"
+        <button type="button" id="update-notification-btn-simple" class="btn--update-notify"
             title="发现新版本">
-            <svg class="update-notification-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg class="btn--update-notify__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
                     fill="currentColor" />
             </svg>
-            <span class="update-notification-text">发现新版本</span>
+            <span class="btn--update-notify__text">发现新版本</span>
         </button>
 
-        <div class="container">
+        <div class="simple-home__container">
             <div id="simple-main-menu">
-                <div class="simple-logo-block">
-                    <img src="icon_black.png" alt="Auto366" class="simple-logo">
+                <div class="simple-home__logo">
+                    <img src="icon_black.png" alt="Auto366" class="simple-home__logo-img">
                 </div>
                 <h1>Auto366</h1>
                 <h2>天学网自动化工具</h2>
-                <p class="simple-lead">请选择已安装的功能(规则集)</p>
-                <div id="simple-ruleset-grid" class="feature-grid"></div>
-                <p id="simple-ruleset-empty" class="simple-ruleset-empty" hidden></p>
+                <p class="simple-home__lead">请选择已安装的功能(规则集)</p>
+                <div id="simple-ruleset-grid" class="simple-home__grid"></div>
+                <p id="simple-ruleset-empty" class="simple-home__empty" hidden></p>
             </div>
-            <div class="simple-home-bottom">
-            <div class="appreciation-wrapper">
-                <div class="appreciation-section">
-                    <div class="appreciation-icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
-                        <svg viewBox="0 0 1024 1024" class="heart-icon">
+            <div class="simple-home__footer">
+            <div class="appreciation">
+                <div class="appreciation__section">
+                    <div class="appreciation__icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
+                        <svg viewBox="0 0 1024 1024" class="appreciation__icon--heart">
                             <path
                                 d="M512 896c-12.8 0-25.6-4.8-35.2-14.4L89.6 494.4c-76.8-76.8-76.8-201.6 0-278.4 38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6L512 356.8l140.8-140.8c38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6c76.8 76.8 76.8 201.6 0 278.4L547.2 881.6c-9.6 9.6-22.4 14.4-35.2 14.4z" />
                         </svg>
-                        <span class="appreciation-text">赞赏</span>
-                        <div class="appreciation-popup">
-                            <div class="appreciation-content">
+                        <span class="appreciation__text">赞赏</span>
+                        <div class="appreciation__popup">
+                            <div class="appreciation__content">
                                 <h4>感谢您的支持！</h4>
-                                <div class="appreciation-qr-container">
-                                    <img src="resources/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
-                                    <img src="resources/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
+                                <div class="appreciation__qr-group">
+                                    <img src="resources/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation__qr">
+                                    <img src="resources/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation__qr">
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="appreciation-section">
-                    <div class="appreciation-icon" title="加入QQ群，获取更多帮助与支持">
-                        <svg class="heart-icon heart-icon--qq" xmlns="http://www.w3.org/2000/svg" width="32"
+                <div class="appreciation__section">
+                    <div class="appreciation__icon" title="加入QQ群，获取更多帮助与支持">
+                        <svg class="appreciation__icon--heart appreciation__icon--qq" xmlns="http://www.w3.org/2000/svg" width="32"
                             height="32" viewBox="0 0 32 32">
                             <path
                                 d="M29.11 26.278c-0.72 0.087-2.804-3.296-2.804-3.296 0 1.959-1.009 4.515-3.191 6.362 1.052 0.325 3.428 1.198 2.863 2.151-0.457 0.772-7.844 0.493-9.977 0.252-2.133 0.24-9.52 0.519-9.977-0.252-0.565-0.953 1.807-1.826 2.861-2.151-2.182-1.846-3.191-4.403-3.191-6.362 0 0-2.083 3.384-2.804 3.296-0.335-0.041-0.776-1.853 0.584-6.231 0.641-2.064 1.375-3.78 2.509-6.611-0.191-7.306 2.828-13.435 10.016-13.435 7.109 0.001 10.197 6.008 10.017 13.435 1.132 2.826 1.869 4.553 2.509 6.611 1.361 4.379 0.92 6.191 0.584 6.231z" />
                         </svg>
-                        <span class="appreciation-text">QQ群</span>
-                        <div class="appreciation-popup">
-                            <div class="appreciation-content">
+                        <span class="appreciation__text">QQ群</span>
+                        <div class="appreciation__popup">
+                            <div class="appreciation__content">
                                 <h4>加入QQ群，获取更多帮助与支持</h4>
-                                <h5 class="qq-group-line">群号：1003718088</h5>
-                                <div class="appreciation-qr-container">
-                                    <img src="resources/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
+                                <h5 class="appreciation__qq">群号：1003718088</h5>
+                                <div class="appreciation__qr-group">
+                                    <img src="resources/qq.jpg" alt="QQ群二维码" class="appreciation__qr">
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="simple-home-footer">
+            <div class="simple-home__footer">
                 <h4>使用 <strong>Ctrl+F12</strong> 打开开发者工具</h4>
                 <p><strong>免责声明</strong>：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</p>
                 <p><strong>版权声明</strong>：此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等！</p>
                 <p>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" rel="noopener noreferrer"
-                        class="simple-link">https://github.com/cyrilguocode/Auto366</a></p>
+                        class="simple-home__link">https://github.com/cyrilguocode/Auto366</a></p>
                 <p>许可证：GNU General Public License v3.0</p>
             </div>
             </div>
@@ -108,88 +108,88 @@
     <div id="app-shell" class="app-shell">
     <!-- 侧边栏 -->
     <div class="sidebar">
-        <div class="sidebar-header">
-            <img src="icon_black.png" alt="Auto366" class="app-icon">
-            <span class="app-title">Auto366</span>
+        <div class="sidebar__header">
+            <img src="icon_black.png" alt="Auto366" class="sidebar__app-icon">
+            <span class="sidebar__app-title">Auto366</span>
         </div>
 
-        <div class="sidebar-menu">
-            <div class="menu-item active" data-view="answers">
+        <div class="sidebar__menu">
+            <div class="sidebar__item is-active" data-view="answers">
                 <i class="bi bi-list-check"></i>
                 <span>答案获取</span>
             </div>
-            <div class="menu-item" data-view="rules">
+            <div class="sidebar__item" data-view="rules">
                 <i class="bi bi-list-ul"></i>
                 <span>规则管理</span>
             </div>
-            <div class="menu-item" data-view="community">
+            <div class="sidebar__item" data-view="community">
                 <i class="bi bi-cloud-download"></i>
                 <span>社区规则集</span>
             </div>
-            <div class="menu-item" data-view="settings">
+            <div class="sidebar__item" data-view="settings">
                 <i class="bi bi-gear"></i>
                 <span>设置</span>
             </div>
         </div>
 
-        <div class="sidebar-footer">
-            <button type="button" id="update-notification-btn" class="update-btn" title="发现新版本">
+        <div class="sidebar__footer">
+            <button type="button" id="update-notification-btn" class="btn--update" title="发现新版本">
                 <i class="bi bi-arrow-up-circle"></i>
             </button>
         </div>
     </div>
 
     <!-- 主界面容器 -->
-    <div class="main-container">
+    <div class="main">
         <!-- 控制面板 -->
         <div class="control-panel">
-            <div class="control-group cp-cluster cp-status">
-                <div class="status-group">
-                    <div class="status-item">
+            <div class="control-panel__group control-panel__cluster control-panel__cluster--status">
+                <div class="control-panel__status">
+                    <div class="control-panel__status-item">
                         <i class="bi bi-router"></i>
-                        <span class="status-label">代理状态:</span>
-                        <span id="proxyStatus" class="status-value stopped">未启动</span>
-                        <button type="button" id="changePortBtn" class="port-change-btn" aria-label="修改端口">
+                        <span class="control-panel__status-label">代理状态:</span>
+                        <span id="proxyStatus" class="control-panel__status-value badge--stopped">未启动</span>
+                        <button type="button" id="changePortBtn" class="btn--port-change" aria-label="修改端口">
                             <i class="bi bi-pencil-square"></i>
-                            <span class="simple-cp-caption">修改端口</span>
+                            <span class="simple__cp-caption">修改端口</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div class="control-group simple-app-only cp-cluster cp-simple-nav">
-                <div class="control-buttons">
+            <div class="control-panel__group simple__app-only control-panel__cluster control-panel__cluster--simple-nav">
+                <div class="control-panel__actions">
                     <button type="button" id="simple-back-home"
-                        class="secondary-btn simple-cp-btn--always-label" aria-label="主页">
+                        class="btn--ghost simple__cp-btn--always-label" aria-label="主页">
                         <i class="bi bi-house-door"></i>
                         <span>主页</span>
                     </button>
-                    <button type="button" id="simple-open-answers" class="secondary-btn" aria-label="答案获取">
+                    <button type="button" id="simple-open-answers" class="btn--ghost" aria-label="答案获取">
                         <i class="bi bi-file-earmark-arrow-down"></i>
                         <span>答案获取</span>
                     </button>
-                    <button type="button" id="simple-open-rules" class="secondary-btn" aria-label="规则集">
+                    <button type="button" id="simple-open-rules" class="btn--ghost" aria-label="规则集">
                         <i class="bi bi-collection"></i>
                         <span>规则集</span>
                     </button>
-                    <button type="button" id="simple-open-settings" class="secondary-btn" aria-label="设置">
+                    <button type="button" id="simple-open-settings" class="btn--ghost" aria-label="设置">
                         <i class="bi bi-gear"></i>
                         <span>设置</span>
                     </button>
                 </div>
             </div>
-            <div class="control-group cp-cluster cp-actions">
-                <div class="control-buttons">
-                    <button type="button" id="toggleProxyBtn" class="primary-btn" aria-label="启动或停止代理">
+            <div class="control-panel__group control-panel__cluster control-panel__cluster--actions">
+                <div class="control-panel__actions">
+                    <button type="button" id="toggleProxyBtn" class="btn--primary" aria-label="启动或停止代理">
                         <i class="bi bi-play-circle"></i>
                         <span>启动代理</span>
                     </button>
-                    <button type="button" id="openUp366Btn" class="action-btn" aria-label="一键打开天学网">
+                    <button type="button" id="openUp366Btn" class="btn--action" aria-label="一键打开天学网">
                         <i class="bi bi-box-arrow-up-right"></i>
                         <span>打开天学网</span>
-                        <div class="close-progress-bar"></div>
+                        <div class="btn__progress-bar"></div>
                     </button>
-                    <button type="button" id="clearCacheBtn" class="danger-btn" aria-label="清理缓存">
+                    <button type="button" id="clearCacheBtn" class="btn--danger" aria-label="清理缓存">
                         <i class="bi bi-trash"></i>
                         <span>清理缓存</span>
                     </button>
@@ -198,25 +198,25 @@
         </div>
 
         <!-- 内容区域 -->
-        <div class="content-area">
+        <div class="main__content">
             <!-- 左侧视图区域 -->
-            <div class="left-content" id="leftContent">
+            <div class="main__left" id="leftContent">
                 <!-- 答案获取侧边栏 -->
-                <div class="view-panel active" id="answers-view">
-                    <div class="panel-header">
+                <div class="view-panel is-active" id="answers-view">
+                    <div class="view-panel__header">
                         <h3>答案获取</h3>
-                        <div class="header-controls">
-                            <div class="answer-capture-toggle">
-                                <label class="toggle-switch">
+                        <div class="view-panel__controls">
+                            <div class="toggle-group">
+                                <label class="toggle">
                                     <input type="checkbox" id="answerCaptureEnabled" checked aria-label="答案获取开关">
-                                    <span class="toggle-slider"></span>
+                                    <span class="toggle__slider"></span>
                                 </label>
-                                <span class="toggle-label"></span>
+                                <span class="toggle__label"></span>
                             </div>
-                            <button id="clearAnswersBtn" class="clear-btn" title="清空提取结果">
+                            <button id="clearAnswersBtn" class="btn--clear" title="清空提取结果">
                                 <i class="bi bi-trash"></i>
                             </button>
-                            <div class="sort-mode-selector">
+                            <div class="sort-selector">
                                 <label for="sortMode">排序：</label>
                                 <select id="sortMode">
                                     <option value="file">按文件</option>
@@ -225,29 +225,29 @@
                             </div>
                         </div>
                     </div>
-                    <div class="answers-display">
-                        <div id="answersContainer" class="answers-container">
-                            <div class="no-answers">
+                    <div class="answers-view">
+                        <div id="answersContainer" class="answers-view__container">
+                            <div class="answers-view__empty">
                                 <i class="bi bi-inbox"></i>
                                 <p>暂无答案数据</p>
                             </div>
                         </div>
                     </div>
-                    <div class="import-export-section">
-                        <label for="importAnswer" id="importAnswerBtn" class="import-btn">
+                    <div class="answers-view__toolbar">
+                        <label for="importAnswer" id="importAnswerBtn" class="btn--import">
                             <i class="bi bi-download"></i>
                             <span>导入答案</span>
                         </label>
                         <input type="file" accept="json" id="importAnswer">
-                        <button id="shareAnswerBtn" class="share-btn" title="分享答案到服务器">
+                        <button id="shareAnswerBtn" class="btn--share" title="分享答案到服务器">
                             <i class="bi bi-share"></i>
                             <span>分享答案</span>
                         </button>
-                        <button id="exportAnswerBtn" class="export-btn" title="导出答案文件">
+                        <button id="exportAnswerBtn" class="btn--export" title="导出答案文件">
                             <i class="bi bi-upload"></i>
                             <span>导出答案</span>
                         </button>
-                        <button id="replaceAudioBtn" class="replace-audio-btn" title="替换音频文件">
+                        <button id="replaceAudioBtn" class="btn--replace-audio" title="替换音频文件">
                             <i class="bi bi-arrow-repeat"></i>
                             <span>替换音频</span>
                         </button>
@@ -256,52 +256,52 @@
 
                 <!-- 规则管理视图 -->
                 <div class="view-panel" id="rules-view">
-                    <div class="panel-header">
+                    <div class="view-panel__header">
                         <h3>规则管理</h3>
-                        <div class="header-controls">
-                            <button type="button" id="simple-open-community-from-rules" class="secondary-btn"
+                        <div class="view-panel__controls">
+                            <button type="button" id="simple-open-community-from-rules" class="btn--ghost"
                                 title="社区规则集">
                                 <i class="bi bi-cloud-download"></i>
                             </button>
-                            <button id="addRuleGroupBtn" class="primary-btn">
+                            <button id="addRuleGroupBtn" class="btn--primary">
                                 <i class="bi bi-plus"></i>
                                 <span>添加规则集</span>
                             </button>
                         </div>
                     </div>
                     <div class="rules-content">
-                        <div class="no-rules">
+                        <div class="rules-list__empty">
                             <i class="bi bi-collection"></i>
                             <p>暂无规则集配置</p>
-                            <p class="text-muted">点击上方按钮添加新规则集</p>
+                            <p class="text--muted">点击上方按钮添加新规则集</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- 社区规则集视图 -->
                 <div class="view-panel" id="community-view">
-                    <div class="panel-header">
+                    <div class="view-panel__header">
                         <h3>社区规则集</h3>
-                        <div class="header-controls">
-                            <button id="uploadRulesetBtn" class="primary-btn" title="上传规则集到社区">
+                        <div class="view-panel__controls">
+                            <button id="uploadRulesetBtn" class="btn--primary" title="上传规则集到社区">
                                 <i class="bi bi-cloud-upload"></i>
                                 <span>上传规则集</span>
                             </button>
-                            <button id="refreshRulesetsBtn" class="secondary-btn" title="刷新规则集列表">
+                            <button id="refreshRulesetsBtn" class="btn--ghost" title="刷新规则集列表">
                                 <i class="bi bi-arrow-clockwise"></i>
                                 <span>刷新</span>
                             </button>
                         </div>
                     </div>
-                    <div class="community-content">
-                        <div class="search-section">
-                            <div class="search-box">
+                    <div class="community-view">
+                        <div class="community-view__search">
+                            <div class="community-view__search-box">
                                 <input type="text" id="rulesetSearchInput" class="form-input" placeholder="搜索规则集...">
-                                <button id="searchRulesetsBtn" class="primary-btn" aria-label="搜索规则集">
+                                <button id="searchRulesetsBtn" class="btn--primary" aria-label="搜索规则集">
                                     <i class="bi bi-search"></i>
                                 </button>
                             </div>
-                            <div class="search-filters">
+                            <div class="community-view__filters">
                                 <select id="sortBySelect" class="form-input" aria-label="排序方式">
                                     <option value="created_at">按创建时间</option>
                                     <option value="downloads">按下载量</option>
@@ -313,19 +313,19 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="rulesets-container" id="rulesetsContainer">
-                            <div class="loading-state">
+                        <div class="community-view__list" id="rulesetsContainer">
+                            <div class="community-view__loading">
                                 <i class="bi bi-hourglass-split"></i>
                                 <p>正在加载规则集...</p>
                             </div>
                         </div>
-                        <div class="pagination-controls" id="paginationControls" style="display: none;">
-                            <button id="prevPageBtn" class="secondary-btn" disabled>
+                        <div class="community-view__pagination" id="paginationControls" style="display: none;">
+                            <button id="prevPageBtn" class="btn--ghost" disabled>
                                 <i class="bi bi-chevron-left"></i>
                                 <span>上一页</span>
                             </button>
-                            <span id="pageInfo" class="page-info">第 1 页</span>
-                            <button id="nextPageBtn" class="secondary-btn">
+                            <span id="pageInfo" class="community-view__page-info">第 1 页</span>
+                            <button id="nextPageBtn" class="btn--ghost">
                                 <span>下一页</span>
                                 <i class="bi bi-chevron-right"></i>
                             </button>
@@ -335,39 +335,39 @@
 
                 <!-- 设置视图 -->
                 <div class="view-panel" id="settings-view">
-                    <div class="panel-header">
+                    <div class="view-panel__header">
                         <h3>设置</h3>
                     </div>
                     <div class="settings-content">
-                        <div class="setting-group settings-ui-mode settings-ui-mode--professional">
+                        <div class="setting-group settings__mode--professional">
                             <h4>UI模式</h4>
                             <div class="setting-item">
-                                <button type="button" id="settings-switch-to-simple" class="secondary-btn">
+                                <button type="button" id="settings-switch-to-simple" class="btn--ghost">
                                     <i class="bi bi-grid-1x2"></i>
                                     <span>切换到简易模式</span>
                                 </button>
                             </div>
-                            <div class="setting-description">简化UI，适合普通人使用。</div>
+                            <div class="setting-item__description">简化UI，适合普通人使用。</div>
                         </div>
-                        <div class="setting-group settings-ui-mode settings-ui-mode--simple">
+                        <div class="setting-group settings__mode--simple">
                             <h4>UI模式</h4>
                             <div class="setting-item">
-                                <button type="button" id="settings-switch-to-professional" class="secondary-btn">
+                                <button type="button" id="settings-switch-to-professional" class="btn--ghost">
                                     <i class="bi bi-sliders"></i>
                                     <span>切换到专业模式</span>
                                 </button>
                             </div>
-                            <div class="setting-description">显示侧边栏与完整多视图界面，适合技术人员。</div>
+                            <div class="setting-item__description">显示侧边栏与完整多视图界面，适合技术人员。</div>
                         </div>
                         <div class="setting-group">
                             <h4>缓存路径</h4>
                             <div class="setting-item">
                                 <input type="text" id="cachePathInput" class="form-input" placeholder="选择缓存路径">
-                                <button id="browseCacheBtn" class="secondary-btn">
+                                <button id="browseCacheBtn" class="btn--ghost">
                                     <i class="bi bi-folder"></i>
                                     <span>浏览</span>
                                 </button>
-                                <button id="autoFindCacheBtn" class="secondary-btn">
+                                <button id="autoFindCacheBtn" class="btn--ghost">
                                     <i class="bi bi-search"></i>
                                     <span>自动寻找</span>
                                 </button>
@@ -402,12 +402,12 @@
                         <div class="setting-group">
                             <h4>缓存设置</h4>
                             <div class="setting-item">
-                                <div class="setting-item-content">
+                                <div class="setting-item__content">
                                     <label>
                                         <input type="checkbox" id="keepCacheFiles">
                                         <span>保留答案提取缓存文件</span>
                                     </label>
-                                    <div class="setting-description">
+                                    <div class="setting-item__description">
                                         启用后，答案提取过程中的临时文件将不会被自动删除，便于调试和查看
                                     </div>
                                 </div>
@@ -416,12 +416,12 @@
                         <div class="setting-group">
                             <h4>更新设置</h4>
                             <div class="setting-item">
-                                <div class="setting-item-content">
+                                <div class="setting-item__content">
                                     <label>
                                         <input type="checkbox" id="autoCheckUpdates">
                                         <span>启动时自动检查更新</span>
                                     </label>
-                                    <div class="setting-description">
+                                    <div class="setting-item__description">
                                         启用后，应用启动时会自动检查是否有新版本可用
                                     </div>
                                 </div>
@@ -433,43 +433,43 @@
                             <h6>免责声明：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</h6>
                             <h6>版权声明：此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等！</h6>
                             <h6>项目地址：<a href="https://github.com/cyrilguocode/Auto366" target="_blank" rel="noopener noreferrer"
-                                class="simple-link">https://github.com/cyrilguocode/Auto366</a></h6>
+                                class="simple-home__link">https://github.com/cyrilguocode/Auto366</a></h6>
                             <h6>许可证：GNU General Public License v3.0</h6>
                             <h5>支持</h5>
-                            <p class="settings-about-lead">若本工具对您有帮助，欢迎赞赏或加入 QQ 群交流。</p>
-                            <div class="appreciation-wrapper">
-                                <div class="appreciation-section">
-                                    <div class="appreciation-icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
-                                        <svg viewBox="0 0 1024 1024" class="heart-icon">
+                            <p class="settings__about-lead">若本工具对您有帮助，欢迎赞赏或加入 QQ 群交流。</p>
+                            <div class="appreciation">
+                                <div class="appreciation__section">
+                                    <div class="appreciation__icon" title="如果这个工具对您有帮助，欢迎赞赏支持">
+                                        <svg viewBox="0 0 1024 1024" class="appreciation__icon--heart">
                                             <path
                                                 d="M512 896c-12.8 0-25.6-4.8-35.2-14.4L89.6 494.4c-76.8-76.8-76.8-201.6 0-278.4 38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6L512 356.8l140.8-140.8c38.4-38.4 89.6-57.6 140.8-57.6s102.4 19.2 140.8 57.6c76.8 76.8 76.8 201.6 0 278.4L547.2 881.6c-9.6 9.6-22.4 14.4-35.2 14.4z" />
                                         </svg>
-                                        <span class="appreciation-text">赞赏</span>
-                                        <div class="appreciation-popup">
-                                            <div class="appreciation-content">
+                                        <span class="appreciation__text">赞赏</span>
+                                        <div class="appreciation__popup">
+                                            <div class="appreciation__content">
                                                 <h4>感谢您的支持！</h4>
-                                                <div class="appreciation-qr-container">
-                                                    <img src="resources/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation-qr">
-                                                    <img src="resources/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation-qr">
+                                                <div class="appreciation__qr-group">
+                                                    <img src="resources/Cyril_prize.jpg" alt="Cyril赞赏码" class="appreciation__qr">
+                                                    <img src="resources/Cyp_prize.jpg" alt="CYP赞赏码" class="appreciation__qr">
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="appreciation-section">
-                                    <div class="appreciation-icon" title="加入QQ群，获取更多帮助与支持">
-                                        <svg class="heart-icon heart-icon--qq" xmlns="http://www.w3.org/2000/svg" width="32"
+                                <div class="appreciation__section">
+                                    <div class="appreciation__icon" title="加入QQ群，获取更多帮助与支持">
+                                        <svg class="appreciation__icon--heart appreciation__icon--qq" xmlns="http://www.w3.org/2000/svg" width="32"
                                             height="32" viewBox="0 0 32 32">
                                             <path
                                                 d="M29.11 26.278c-0.72 0.087-2.804-3.296-2.804-3.296 0 1.959-1.009 4.515-3.191 6.362 1.052 0.325 3.428 1.198 2.863 2.151-0.457 0.772-7.844 0.493-9.977 0.252-2.133 0.24-9.52 0.519-9.977-0.252-0.565-0.953 1.807-1.826 2.861-2.151-2.182-1.846-3.191-4.403-3.191-6.362 0 0-2.083 3.384-2.804 3.296-0.335-0.041-0.776-1.853 0.584-6.231 0.641-2.064 1.375-3.78 2.509-6.611-0.191-7.306 2.828-13.435 10.016-13.435 7.109 0.001 10.197 6.008 10.017 13.435 1.132 2.826 1.869 4.553 2.509 6.611 1.361 4.379 0.92 6.191 0.584 6.231z" />
                                         </svg>
-                                        <span class="appreciation-text">QQ群</span>
-                                        <div class="appreciation-popup">
-                                            <div class="appreciation-content">
+                                        <span class="appreciation__text">QQ群</span>
+                                        <div class="appreciation__popup">
+                                            <div class="appreciation__content">
                                                 <h4>加入QQ群，获取更多帮助与支持</h4>
-                                                <h5 class="qq-group-line">群号：1003718088</h5>
-                                                <div class="appreciation-qr-container">
-                                                    <img src="resources/qq.jpg" alt="QQ群二维码" class="appreciation-qr">
+                                                <h5 class="appreciation__qq">群号：1003718088</h5>
+                                                <div class="appreciation__qr-group">
+                                                    <img src="resources/qq.jpg" alt="QQ群二维码" class="appreciation__qr">
                                                 </div>
                                             </div>
                                         </div>
@@ -482,45 +482,45 @@
             </div>
 
             <!-- 可拖动分隔条 -->
-            <div class="resizer" id="resizer">
-                <div class="resizer-line"></div>
+            <div class="main__resizer" id="resizer">
+                <div class="main__resizer-line"></div>
             </div>
 
             <!-- 右侧日志区域 -->
-            <div class="right-logs" id="rightLogs">
-                <div class="panel-header">
+            <div class="main__right" id="rightLogs">
+                <div class="view-panel__header">
                     <h3>监听日志</h3>
-                    <div class="panel-header-actions">
-                        <button id="searchLogsBtn" class="search-btn" title="搜索日志">
+                    <div class="view-panel__controls">
+                        <button id="searchLogsBtn" class="btn--search" title="搜索日志">
                             <i class="bi bi-search"></i>
                         </button>
-                        <button id="clearLogsBtn" class="clear-btn" title="清空日志">
+                        <button id="clearLogsBtn" class="btn--clear" title="清空日志">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
                 </div>
                 <!-- 日志搜索栏 -->
-                <div id="logSearchBar" class="log-search-bar" style="display: none;">
+                <div id="logSearchBar" class="logs-container__search" style="display: none;">
                     <div class="search-input-group">
                         <i class="bi bi-search search-icon"></i>
-                        <input type="text" id="logSearchInput" placeholder="搜索日志和请求详细信息..." class="log-search-input">
-                        <button id="logSearchCloseBtn" class="log-search-close" title="关闭搜索">
+                        <input type="text" id="logSearchInput" placeholder="搜索日志和请求详细信息..." class="logs-container__search-input">
+                        <button id="logSearchCloseBtn" class="logs-container__search-close" title="关闭搜索">
                             <i class="bi bi-x"></i>
                         </button>
                     </div>
-                    <div id="logSearchFilters" class="log-search-filters">
-                        <button class="filter-btn active" data-filter="all">全部</button>
-                        <button class="filter-btn" data-filter="request">请求</button>
-                        <button class="filter-btn" data-filter="success">成功</button>
-                        <button class="filter-btn" data-filter="error">错误</button>
-                        <button class="filter-btn" data-filter="info">信息</button>
+                    <div id="logSearchFilters" class="logs-container__filters">
+                        <button class="btn--filter is-active" data-filter="all">全部</button>
+                        <button class="btn--filter" data-filter="request">请求</button>
+                        <button class="btn--filter" data-filter="success">成功</button>
+                        <button class="btn--filter" data-filter="error">错误</button>
+                        <button class="btn--filter" data-filter="info">信息</button>
                     </div>
-                    <div id="logSearchStatus" class="log-search-status"></div>
+                    <div id="logSearchStatus" class="logs-container__search-status"></div>
                 </div>
                 <div class="logs-container">
-                    <div class="logs-main-area">
+                    <div class="logs-container__main">
                         <div class="traffic-monitor" id="trafficMonitor">
-                            <div id="trafficLog" class="traffic-log">
+                            <div id="trafficLog" class="traffic-monitor__log">
                                 <div class="log-item">
                                     <i class="bi bi-hourglass-split"></i>
                                     <span>等待网络请求...</span>
@@ -529,26 +529,26 @@
                         </div>
 
                         <!-- 日志详情分隔条 -->
-                        <div class="details-resizer" id="detailsResizer" style="display: none;">
-                            <div class="resizer-line"></div>
+                        <div class="logs-container__details-resizer" id="detailsResizer" style="display: none;">
+                            <div class="main__resizer-line"></div>
                         </div>
 
-                        <div class="request-details" id="requestDetails" style="display: none;">
-                            <div class="details-header">
+                        <div class="traffic-monitor__details" id="requestDetails" style="display: none;">
+                            <div class="log-detail__header">
                                 <h4>请求详情</h4>
-                                <button id="closeDetailsBtn" class="close-btn">
+                                <button id="closeDetailsBtn" class="btn--close">
                                     <i class="bi bi-x"></i>
                                 </button>
                             </div>
-                            <div class="details-content" id="detailsContent">
+                            <div class="log-detail__content" id="detailsContent">
                                 <!-- 详情内容将在这里显示 -->
                             </div>
                         </div>
                     </div>
 
                     <!-- 日志统计信息 - 固定在底部 -->
-                    <div class="logs-stats" id="logsStats">
-                        <div class="stats-item">
+                    <div class="logs-container__stats" id="logsStats">
+                        <div class="logs-container__stats-item">
                             <i class="bi bi-list-ul"></i>
                             <span>共 <span id="requestCount">0</span> 条信息</span>
                         </div>
@@ -561,14 +561,14 @@
 
     <!-- 规则集管理模态框 -->
     <div class="modal" id="ruleGroupModal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal__content">
+            <div class="modal__header">
                 <h3 id="ruleGroupModalTitle">添加规则集</h3>
-                <button class="close-btn" id="closeRuleGroupModal">
+                <button class="btn--close" id="closeRuleGroupModal">
                     <i class="bi bi-x"></i>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal__body">
                 <form id="ruleGroupForm">
                     <div class="form-group">
                         <label for="ruleGroupName">规则集名称</label>
@@ -598,27 +598,27 @@
                             <input type="checkbox" id="ruleGroupCompatible" checked>
                             <span>允许与其他规则集同时开启</span>
                         </label>
-                        <p class="form-help-text">关闭后，开启此规则集时将自动关闭其他规则集</p>
+                        <p class="form-group__help">关闭后，开启此规则集时将自动关闭其他规则集</p>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="secondary-btn" id="cancelRuleGroupBtn">取消</button>
-                <button type="submit" form="ruleGroupForm" class="primary-btn" id="saveRuleGroupBtn">保存规则集</button>
+            <div class="modal__footer">
+                <button type="button" class="btn--ghost" id="cancelRuleGroupBtn">取消</button>
+                <button type="submit" form="ruleGroupForm" class="btn--primary" id="saveRuleGroupBtn">保存规则集</button>
             </div>
         </div>
     </div>
 
     <!-- 规则管理模态框 -->
     <div class="modal" id="ruleModal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal__content">
+            <div class="modal__header">
                 <h3 id="ruleModalTitle">添加规则</h3>
-                <button class="close-btn" id="closeRuleModal">
+                <button class="btn--close" id="closeRuleModal">
                     <i class="bi bi-x"></i>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal__body">
                 <form id="ruleForm">
                     <div class="form-group">
                         <label for="ruleName">规则名称</label>
@@ -642,7 +642,7 @@
                     </div>
 
                     <!-- 内容修改规则字段 -->
-                    <div id="contentchangeFields" class="rule-fields" style="display: none;">
+                    <div id="contentchangeFields" class="rule-form__fields" style="display: none;">
                         <div class="form-group">
                             <label for="urlPattern">URL匹配模式</label>
                             <input type="text" id="urlPattern" class="form-input" placeholder="输入URL匹配模式">
@@ -669,13 +669,13 @@
                             <label for="contentChangeMaxTriggers">最大触发次数</label>
                             <input type="number" id="contentChangeMaxTriggers" class="form-input" placeholder="留空表示无限制"
                                 min="0">
-                            <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
-                            <small class="form-help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
+                            <small class="form-group__help">设置规则最多可触发的次数，0或留空表示无限制</small>
+                            <small class="form-group__help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
                         </div>
                     </div>
 
                     <!-- ZIP注入规则字段 -->
-                    <div id="zipimplantFields" class="rule-fields" style="display: none;">
+                    <div id="zipimplantFields" class="rule-form__fields" style="display: none;">
                         <div class="form-group">
                             <label for="urlFileinfo">文件信息URL匹配</label>
                             <input type="text" id="urlFileinfo" class="form-input"
@@ -689,13 +689,13 @@
                             <label for="targetFileName">目标注入文件名</label>
                             <input type="text" id="targetFileName" class="form-input"
                                 placeholder="输入目标文件名（如：jc*.zip）">
-                            <small class="form-help">只有当文件信息响应体中的文件名匹配此字段时才会进行注入</small>
+                            <small class="form-group__help">只有当文件信息响应体中的文件名匹配此字段时才会进行注入</small>
                         </div>
                         <div class="form-group">
                             <label for="zipImplant">注入ZIP文件路径</label>
-                            <div class="file-input-group">
+                            <div class="form-input-group">
                                 <input type="text" id="zipImplant" class="form-input" placeholder="选择ZIP文件" readonly>
-                                <button type="button" id="browseZipBtn" class="secondary-btn">
+                                <button type="button" id="browseZipBtn" class="btn--ghost">
                                     <i class="bi bi-folder"></i>
                                     <span>浏览</span>
                                 </button>
@@ -705,13 +705,13 @@
                             <label for="zipImplantMaxTriggers">最大触发次数</label>
                             <input type="number" id="zipImplantMaxTriggers" class="form-input" placeholder="留空表示无限制"
                                 min="0">
-                            <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
-                            <small class="form-help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
+                            <small class="form-group__help">设置规则最多可触发的次数，0或留空表示无限制</small>
+                            <small class="form-group__help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
                         </div>
                     </div>
 
                     <!-- 动态注入规则字段 -->
-                    <div id="zipimplantdynamicFields" class="rule-fields" style="display: none;">
+                    <div id="zipimplantdynamicFields" class="rule-form__fields" style="display: none;">
                         <div class="form-group">
                             <label for="dynUrlFileinfo">文件信息URL匹配</label>
                             <input type="text" id="dynUrlFileinfo" class="form-input" placeholder="输入文件信息URL匹配模式（如 *://fs.up366.cn/fileinfo/*）">
@@ -723,27 +723,27 @@
                         <div class="form-group">
                             <label for="dynTargetFileName">目标注入文件名</label>
                             <input type="text" id="dynTargetFileName" class="form-input" placeholder="输入目标文件名（如 Pc.zip）">
-                            <small class="form-help">只有当文件信息响应体中的文件名匹配此字段时才会进行注入</small>
+                            <small class="form-group__help">只有当文件信息响应体中的文件名匹配此字段时才会进行注入</small>
                         </div>
                         <div class="form-group">
                             <label for="dynInjectScript">注入脚本路径</label>
                             <input type="text" id="dynInjectScript" class="form-input" placeholder="留空则默认使用 rulesets/auto-listening/auto-listening.js">
-                            <small class="form-help">指定要注入到HTML中的JS文件路径</small>
+                            <small class="form-group__help">指定要注入到HTML中的JS文件路径</small>
                         </div>
                         <div class="form-group">
                             <label for="dynDownloadTimeout">下载超时时间（毫秒）</label>
                             <input type="number" id="dynDownloadTimeout" class="form-input" placeholder="默认30000（30秒）" min="5000" step="1000">
-                            <small class="form-help">下载原始ZIP的超时时间，单位毫秒</small>
+                            <small class="form-group__help">下载原始ZIP的超时时间，单位毫秒</small>
                         </div>
                         <div class="form-group">
                             <label for="dynMaxTriggers">最大触发次数</label>
                             <input type="number" id="dynMaxTriggers" class="form-input" placeholder="留空表示无限制" min="0">
-                            <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
+                            <small class="form-group__help">设置规则最多可触发的次数，0或留空表示无限制</small>
                         </div>
                     </div>
 
                     <!-- 答案上传规则字段 -->
-                    <div id="answeruploadFields" class="rule-fields" style="display: none;">
+                    <div id="answeruploadFields" class="rule-form__fields" style="display: none;">
                         <div class="form-group">
                             <label for="urlUpload">上传URL匹配</label>
                             <input type="text" id="urlUpload" class="form-input" placeholder="输入上传URL匹配模式">
@@ -763,8 +763,8 @@
                             <label for="answerUploadMaxTriggers">最大触发次数</label>
                             <input type="number" id="answerUploadMaxTriggers" class="form-input" placeholder="留空表示无限制"
                                 min="0">
-                            <small class="form-help">设置规则最多可触发的次数，0或留空表示无限制</small>
-                            <small class="form-help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
+                            <small class="form-group__help">设置规则最多可触发的次数，0或留空表示无限制</small>
+                            <small class="form-group__help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
                         </div>
                     </div>
 
@@ -776,30 +776,30 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="secondary-btn" id="cancelRuleBtn">取消</button>
-                <button type="submit" form="ruleForm" class="primary-btn" id="saveRuleBtn">保存规则</button>
+            <div class="modal__footer">
+                <button type="button" class="btn--ghost" id="cancelRuleBtn">取消</button>
+                <button type="submit" form="ruleForm" class="btn--primary" id="saveRuleBtn">保存规则</button>
             </div>
         </div>
     </div>
 
     <!-- 规则集详情模态框 -->
     <div class="modal" id="rulesetDetailModal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal__content">
+            <div class="modal__header">
                 <h3 id="rulesetDetailTitle">规则集详情</h3>
-                <button class="close-btn" id="closeRulesetDetailModal">
+                <button class="btn--close" id="closeRulesetDetailModal">
                     <i class="bi bi-x"></i>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal__body">
                 <div id="rulesetDetailContent">
                     <!-- 规则集详情内容将在这里显示 -->
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="secondary-btn" id="cancelRulesetDetailBtn">取消</button>
-                <button type="button" class="primary-btn" id="installRulesetBtn">
+            <div class="modal__footer">
+                <button type="button" class="btn--ghost" id="cancelRulesetDetailBtn">取消</button>
+                <button type="button" class="btn--primary" id="installRulesetBtn">
                     <i class="bi bi-download"></i>
                     <span>安装规则集</span>
                 </button>
@@ -809,14 +809,14 @@
 
     <!-- 上传规则集模态框 -->
     <div class="modal" id="uploadRulesetModal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal__content">
+            <div class="modal__header">
                 <h3>上传规则集到社区</h3>
-                <button class="close-btn" id="closeUploadRulesetModal">
+                <button class="btn--close" id="closeUploadRulesetModal">
                     <i class="bi bi-x"></i>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal__body">
                 <form id="uploadRulesetForm">
                     <div class="form-group">
                         <label for="uploadRulesetSelect">选择规则集</label>
@@ -850,15 +850,15 @@
 
                     <div class="upload-progress" id="uploadProgress" style="display: none;">
                         <div class="progress-bar">
-                            <div class="progress-fill" id="uploadProgressFill"></div>
+                            <div class="upload-progress__fill" id="uploadProgressFill"></div>
                         </div>
-                        <div class="progress-text" id="uploadProgressText">准备上传...</div>
+                        <div class="upload-progress__text" id="uploadProgressText">准备上传...</div>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="secondary-btn" id="cancelUploadRulesetBtn">取消</button>
-                <button type="submit" form="uploadRulesetForm" class="primary-btn" id="submitUploadRulesetBtn">
+            <div class="modal__footer">
+                <button type="button" class="btn--ghost" id="cancelUploadRulesetBtn">取消</button>
+                <button type="submit" form="uploadRulesetForm" class="btn--primary" id="submitUploadRulesetBtn">
                     <i class="bi bi-cloud-upload"></i>
                     <span>上传规则集</span>
                 </button>
@@ -868,29 +868,29 @@
 
     <!-- 新手教程模态框 -->
     <div class="modal" id="tutorialModal" style="display: none;">
-        <div class="modal-content tutorial-modal">
-            <div class="tutorial-body">
+        <div class="modal__content modal--tutorial">
+            <div class="modal__body">
                 <!-- 第1页：欢迎 -->
-                <div class="tutorial-page" data-page="0">
-                    <p class="tutorial-greeting">Hello!</p>
-                    <h2 class="tutorial-title">欢迎使用 Auto366</h2>
-                    <p class="tutorial-desc">本教程将帮助你快速了解和使用 Auto366 的核心功能。</p>
+                <div class="modal__page" data-page="0">
+                    <p class="modal__greeting">Hello!</p>
+                    <h2 class="modal__title">欢迎使用 Auto366</h2>
+                    <p class="modal__description">本教程将帮助你快速了解和使用 Auto366 的核心功能。</p>
                 </div>
 
                 <!-- 第2页：选择UI模式 -->
-                <div class="tutorial-page" data-page="1" style="display: none;">
-                    <h2 class="tutorial-title">选择操作界面</h2>
-                    <p class="tutorial-desc">你想以什么界面操作此软件？</p>
-                    <div class="tutorial-mode-options">
-                        <div class="tutorial-mode-card" data-mode="simple">
-                            <div class="mode-card-icon">
+                <div class="modal__page" data-page="1" style="display: none;">
+                    <h2 class="modal__title">选择操作界面</h2>
+                    <p class="modal__description">你想以什么界面操作此软件？</p>
+                    <div class="modal__mode-options">
+                        <div class="modal__mode-card" data-mode="simple">
+                            <div class="modal__mode-card-icon">
                                 <span class="bi bi-grid-1x2"></span>
                             </div>
                             <h3>简易模式</h3>
                             <p>简化UI，适合普通人使用。</p>
                         </div>
-                        <div class="tutorial-mode-card" data-mode="professional">
-                            <div class="mode-card-icon">
+                        <div class="modal__mode-card" data-mode="professional">
+                            <div class="modal__mode-card-icon">
                                 <span class="bi bi-sliders"></span>
                             </div>
                             <h3>专业模式</h3>
@@ -900,79 +900,79 @@
                 </div>
 
                 <!-- 第3页：设置天学网缓存 -->
-                <div class="tutorial-page" data-page="2" style="display: none;">
-                    <h2 class="tutorial-title">设置天学网缓存</h2>
-                    <p class="tutorial-desc" id="tutorialCacheDesc">正在自动寻找天学网缓存目录...</p>
-                    <div class="tutorial-finding-status">
-                        <div class="tutorial-spinner" id="tutorialCacheSpinner"></div>
+                <div class="modal__page" data-page="2" style="display: none;">
+                    <h2 class="modal__title">设置天学网缓存</h2>
+                    <p class="modal__description" id="tutorialCacheDesc">正在自动寻找天学网缓存目录...</p>
+                    <div class="modal__finding-status">
+                        <div class="modal__spinner" id="tutorialCacheSpinner"></div>
                         <span id="tutorialCacheStatus">正在搜索...</span>
                     </div>
-                    <div class="tutorial-cache-path-wrap" id="tutorialCachePathWrap" style="display: none;">
-                        <input type="text" id="tutorialCachePathInput" class="tutorial-cache-input" readonly>
-                        <button type="button" id="tutorialBrowseCacheBtn" class="tutorial-browse-btn">
+                    <div class="modal__cache-wrap" id="tutorialCachePathWrap" style="display: none;">
+                        <input type="text" id="tutorialCachePathInput" class="modal__cache-input" readonly>
+                        <button type="button" id="tutorialBrowseCacheBtn" class="modal__browse-btn">
                             <span>浏览</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- 第4页：代理设置 -->
-                <div class="tutorial-page" data-page="3" style="display: none;">
-                    <h2 class="tutorial-title">天学网代理设置</h2>
-                    <p class="tutorial-desc">请按照以下步骤设置天学网代理：</p>
-                    <ol class="tutorial-steps">
+                <div class="modal__page" data-page="3" style="display: none;">
+                    <h2 class="modal__title">天学网代理设置</h2>
+                    <p class="modal__description">请按照以下步骤设置天学网代理：</p>
+                    <ol class="modal__steps">
                         <li>打开天学网设置页面</li>
                         <li>选择 <strong>HTTP代理</strong></li>
                         <li>IP 地址填写：<code>127.0.0.1</code></li>
                         <li>端口填写：<code>5291</code></li>
                         <li>点击 <strong>保存</strong></li>
                     </ol>
-                    <div class="tutorial-hint">
+                    <div class="modal__hint">
                         <span class="bi bi-info-circle"></span>
                         <span>设置完成后，你可以点击"下一步"继续</span>
                     </div>
                 </div>
 
                 <!-- 第5页：规则集使用 -->
-                <div class="tutorial-page" data-page="4" style="display: none;">
-                    <h2 class="tutorial-title">规则集使用</h2>
-                    <div class="tutorial-text-content">
+                <div class="modal__page" data-page="4" style="display: none;">
+                    <h2 class="modal__title">规则集使用</h2>
+                    <div class="modal__text">
                         <p>规则集是 Auto366 实现各个功能的模块，我们内置了以下几个功能：</p>
-                        <ul class="tutorial-feature-list">
+                        <ul class="modal__features">
                             <li><strong>内置-答案获取</strong> - 用于答案获取功能不拦截任何请求</li>
                             <li><strong>内置-通用自动填空</strong> - 基于请求注入实现的自动填空</li>
                             <li><strong>内置-自动单词PK</strong> - 利用请求注入实现的自动单词PK</li>
                         </ul>
-                        <p class="tutorial-note">你可以在"规则管理"页面中启用或禁用这些规则集。</p>
-                        <p class="tutorial-note">要用哪个题型用哪个规则集，错误选择需要删除缓存并重启天学网，一次仅启用一个规则集(防止冲突)。</p>
+                        <p class="modal__note">你可以在"规则管理"页面中启用或禁用这些规则集。</p>
+                        <p class="modal__note">要用哪个题型用哪个规则集，错误选择需要删除缓存并重启天学网，一次仅启用一个规则集(防止冲突)。</p>
                     </div>
                 </div>
 
                 <!-- 第6页：教程完成 -->
-                <div class="tutorial-page" data-page="5" style="display: none;">
-                    <div class="tutorial-icon-wrap">
-                        <div class="tutorial-icon-circle success">
-                            <span class="tutorial-check-icon">
+                <div class="modal__page" data-page="5" style="display: none;">
+                    <div class="modal__icon-wrap">
+                        <div class="modal__icon-circle is-success">
+                            <span class="modal__check-icon">
                                 <span class="bi bi-check-lg"></span>
                             </span>
                         </div>
                     </div>
-                    <h2 class="tutorial-title">教程已完成</h2>
-                    <p class="tutorial-desc">你已了解 Auto366 的基本功能，现在可以开始使用了！</p>
+                    <h2 class="modal__title">教程已完成</h2>
+                    <p class="modal__description">你已了解 Auto366 的基本功能，现在可以开始使用了！</p>
                 </div>
             </div>
-            <div class="tutorial-footer">
-                <div class="tutorial-progress">
-                    <span class="progress-dot active" data-dot="0"></span>
-                    <span class="progress-dot" data-dot="1"></span>
-                    <span class="progress-dot" data-dot="2"></span>
-                    <span class="progress-dot" data-dot="3"></span>
-                    <span class="progress-dot" data-dot="4"></span>
-                    <span class="progress-dot" data-dot="5"></span>
+            <div class="modal__footer">
+                <div class="modal__progress">
+                    <span class="modal__progress-dot is-active" data-dot="0"></span>
+                    <span class="modal__progress-dot" data-dot="1"></span>
+                    <span class="modal__progress-dot" data-dot="2"></span>
+                    <span class="modal__progress-dot" data-dot="3"></span>
+                    <span class="modal__progress-dot" data-dot="4"></span>
+                    <span class="modal__progress-dot" data-dot="5"></span>
                 </div>
-                <div class="tutorial-actions">
-                    <button type="button" class="tutorial-btn-secondary" id="tutorialPrevBtn"
+                <div class="modal__actions">
+                    <button type="button" class="btn--ghost" id="tutorialPrevBtn"
                         style="display: none;">上一步</button>
-                    <button type="button" class="tutorial-btn-primary" id="tutorialNextBtn">下一步</button>
+                    <button type="button" class="btn--primary" id="tutorialNextBtn">下一步</button>
                 </div>
             </div>
         </div>

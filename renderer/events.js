@@ -53,7 +53,7 @@ class EventManager {
   // 初始化侧边栏
   initSidebar() {
     // 侧边栏菜单项点击事件
-    const menuItems = document.querySelectorAll('.menu-item');
+    const menuItems = document.querySelectorAll('.sidebar__item');
     menuItems.forEach(item => {
       item.addEventListener('click', () => {
         const view = item.getAttribute('data-view');
@@ -92,7 +92,7 @@ class EventManager {
     const resizer = document.getElementById('resizer');
     const leftContent = document.getElementById('leftContent');
     const rightLogs = document.getElementById('rightLogs');
-    const contentArea = document.querySelector('.content-area');
+    const contentArea = document.querySelector('.main__content');
 
     let isResizing = false;
     let startX = 0;
@@ -116,7 +116,7 @@ class EventManager {
       startLeftWidth = leftRect.width;
       startRightWidth = rightRect.width;
 
-      resizer.classList.add('resizing');
+      resizer.classList.add('is-resizing');
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
@@ -143,7 +143,7 @@ class EventManager {
     const finishResize = () => {
       if (isResizing) {
         isResizing = false;
-        resizer.classList.remove('resizing');
+        resizer.classList.remove('is-resizing');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
 
@@ -188,7 +188,7 @@ class EventManager {
       startMonitorWidth = monitorRect.width;
       startDetailsWidth = detailsRect.width;
 
-      detailsResizer.classList.add('resizing');
+      detailsResizer.classList.add('is-resizing');
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
@@ -234,7 +234,7 @@ class EventManager {
     const finishDetailsResize = () => {
       if (isDetailsResizing) {
         isDetailsResizing = false;
-        detailsResizer.classList.remove('resizing');
+        detailsResizer.classList.remove('is-resizing');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
 
@@ -326,7 +326,7 @@ class EventManager {
     const applyPin = (enabled) => {
       if (!pinBtn) return;
       const icon = pinBtn.querySelector('i');
-      pinBtn.classList.toggle('active', !!enabled);
+      pinBtn.classList.toggle('is-active', !!enabled);
       if (icon) {
         icon.className = enabled ? 'bi bi-pin-angle-fill' : 'bi bi-pin-angle';
       }

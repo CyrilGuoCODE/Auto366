@@ -215,7 +215,7 @@ class RulesUI {
     };
 
     // 隐藏所有规则字段
-    const allFields = document.querySelectorAll('.rule-fields');
+    const allFields = document.querySelectorAll('.rule-form__fields');
     allFields.forEach(field => {
       field.style.display = 'none';
     });
@@ -432,10 +432,10 @@ class RulesUI {
 
     if (!rules || rules.length === 0) {
       rulesContent.innerHTML = `
-        <div class="no-rules">
+        <div class="rules-list__empty">
           <i class="bi bi-collection"></i>
           <p>暂无规则集配置</p>
-          <p class="text-muted">点击上方按钮添加新规则集</p>
+          <p class="text--muted">点击上方按钮添加新规则集</p>
         </div>
       `;
       return;
@@ -445,27 +445,27 @@ class RulesUI {
       const ruleGroups = rules.filter(rule => rule.isGroup);
       if (ruleGroups.length === 0) {
         rulesContent.innerHTML = `
-          <div class="no-rules">
-            <i class="bi bi-collection"></i>
-            <p>暂无规则集</p>
-            <p class="text-muted">请到社区规则集安装</p>
+          <div class="rules-list__empty">
+          <i class="bi bi-collection"></i>
+          <p>暂无规则集</p>
+          <p class="text--muted">请到社区规则集安装</p>
           </div>
         `;
         return;
       }
       const html = ruleGroups.map(group => `
-        <div class="rule-group simple-clickable-group${group.enabled ? ' simple-group-enabled' : ''}" data-group-id="${group.id}" onclick="universalAnswerFeature.enterSimpleRuleset('${group.id}')">
-          <div class="rule-group-header">
-            <div class="rule-group-info">
-              <div class="rule-group-name">
+        <div class="rule-group rule-group--clickable${group.enabled ? ' rule-group--enabled' : ''}" data-group-id="${group.id}" onclick="universalAnswerFeature.enterSimpleRuleset('${group.id}')">
+          <div class="rule-group__header">
+            <div class="rule-group__info">
+              <div class="rule-group__name">
                 <i class="bi bi-collection"></i>
                 ${group.name || '未命名规则集'}
                 ${this.getCompatibleBadgeHtml(group)}
               </div>
-              ${group.description ? `<div class="rule-group-description">${group.description}</div>` : ''}
+              ${group.description ? `<div class="rule-group__description">${group.description}</div>` : ''}
             </div>
-            <div class="rule-group-actions">
-              <button class="rule-btn delete-btn" onclick="event.stopPropagation();universalAnswerFeature.deleteSimpleRuleset('${group.id}')" title="删除规则集">
+            <div class="rule-group__actions">
+              <button class="btn--rule btn--delete" onclick="event.stopPropagation();universalAnswerFeature.deleteSimpleRuleset('${group.id}')" title="删除规则集">
                 <i class="bi bi-trash"></i>
               </button>
             </div>
@@ -489,40 +489,40 @@ class RulesUI {
 
       html += `
         <div class="rule-group" data-group-id="${group.id}">
-          <div class="rule-group-header">
-            <div class="rule-group-info">
-              <div class="rule-group-name">
+          <div class="rule-group__header">
+            <div class="rule-group__info">
+              <div class="rule-group__name">
                 <i class="bi bi-collection"></i>
                 ${group.name || '未命名规则集'}
                 ${this.getCompatibleBadgeHtml(group)}
-                <label class="rule-toggle">
+                <label class="toggle">
                   <input type="checkbox" ${group.enabled ? 'checked' : ''} 
                          onchange="universalAnswerFeature.toggleRule('${group.id}', this.checked)">
-                  <span class="rule-toggle-slider"></span>
+                  <span class="toggle__slider"></span>
                 </label>
-                <span class="rule-count">(${groupRules.length} 个规则)</span>
+                <span class="rules-list__count">(${groupRules.length} 个规则)</span>
               </div>
-              ${group.description ? `<div class="rule-group-description">${group.description}</div>` : ''}
-              ${group.author ? `<div class="rule-group-author">作者: ${group.author}</div>` : ''}
+              ${group.description ? `<div class="rule-group__description">${group.description}</div>` : ''}
+              ${group.author ? `<div class="rule-group__author">作者: ${group.author}</div>` : ''}
             </div>
-            <div class="rule-group-actions">
-              <button class="rule-btn add-rule-btn" onclick="universalAnswerFeature.showRuleModal(null, '${group.id}')" title="添加规则">
+            <div class="rule-group__actions">
+              <button class="btn--rule btn--add-rule" onclick="universalAnswerFeature.showRuleModal(null, '${group.id}')" title="添加规则">
                 <i class="bi bi-plus"></i>
               </button>
-              <button class="rule-btn edit-btn" onclick="universalAnswerFeature.editRuleGroup('${group.id}')" title="编辑规则集">
+              <button class="btn--rule btn--edit" onclick="universalAnswerFeature.editRuleGroup('${group.id}')" title="编辑规则集">
                 <i class="bi bi-pencil"></i>
               </button>
               ${this.hasTriggersInGroup(groupRules) ? `
-              <button class="rule-btn reset-btn" onclick="universalAnswerFeature.resetRuleTriggers('${group.id}')" title="重置触发次数">
+              <button class="btn--rule btn--reset" onclick="universalAnswerFeature.resetRuleTriggers('${group.id}')" title="重置触发次数">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
               ` : ''}
-              <button class="rule-btn delete-btn" onclick="universalAnswerFeature.deleteRule('${group.id}')" title="删除规则集">
+              <button class="btn--rule btn--delete" onclick="universalAnswerFeature.deleteRule('${group.id}')" title="删除规则集">
                 <i class="bi bi-trash"></i>
               </button>
             </div>
           </div>
-          <div class="rule-group-content">
+          <div class="rule-group__content">
             ${this.generateGroupRulesHtml(groupRules, group.enabled)}
           </div>
         </div>
@@ -532,17 +532,17 @@ class RulesUI {
     // 显示独立规则
     if (independentRules.length > 0) {
       html += `
-        <div class="rule-group independent-rules">
-          <div class="rule-group-header">
-            <div class="rule-group-info">
-              <div class="rule-group-name">
+        <div class="rule-group rules-list--independent">
+          <div class="rule-group__header">
+            <div class="rule-group__info">
+              <div class="rule-group__name">
                 <i class="bi bi-list-ul"></i>
                 独立规则
-                <span class="rule-count">(${independentRules.length} 个规则)</span>
+                <span class="rules-list__count">(${independentRules.length} 个规则)</span>
               </div>
             </div>
           </div>
-          <div class="rule-group-content">
+          <div class="rule-group__content">
             ${this.generateGroupRulesHtml(independentRules, true)}
           </div>
         </div>
@@ -562,16 +562,16 @@ class RulesUI {
   getCompatibleBadgeHtml(group) {
     if (!group || group.compatible === undefined) return '';
     if (group.compatible) {
-      return '<span class="compatible-badge compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
+      return '<span class="badge--compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
     }
-    return '<span class="compatible-badge incompatible">不兼容其他规则</span>';
+    return '<span class="badge--incompatible">不兼容其他规则</span>';
   }
 
   // 生成规则组HTML
   generateGroupRulesHtml(rules, parentGroupEnabled = true) {
     if (!rules || rules.length === 0) {
       return `
-        <div class="no-group-rules">
+        <div class="rules-list__group-empty">
           <i class="bi bi-info-circle"></i>
           <span>暂无规则</span>
         </div>
@@ -589,36 +589,36 @@ class RulesUI {
       const isDisabledByParent = !parentGroupEnabled;
 
       html += `
-        <div class="rule-item ${statusClass}" data-rule-id="${rule.id}">
-          <div class="rule-header">
-            <div class="rule-info">
-              <div class="rule-name">
+        <div class="rule-item is-${statusClass}" data-rule-id="${rule.id}">
+          <div class="rule-item__header">
+            <div class="rule-item__info">
+              <div class="rule-item__name">
                 ${rule.name || '未命名规则'}
-                <label class="rule-toggle ${isDisabledByParent ? 'disabled-by-parent' : ''}">
+                <label class="toggle ${isDisabledByParent ? 'is-disabled' : ''}">
                   <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
                          ${isDisabledByParent ? 'disabled' : ''}
                          onchange="universalAnswerFeature.toggleRule('${rule.id}', this.checked)"
                          title="${isDisabledByParent ? '规则集已禁用，无法单独启用此规则' : ''}">
-                  <span class="rule-toggle-slider"></span>
+                  <span class="toggle__slider"></span>
                 </label>
               </div>
-              ${rule.description ? `<div class="rule-description">${rule.description}</div>` : ''}
+              ${rule.description ? `<div class="rule-item__description">${rule.description}</div>` : ''}
             </div>
-            <div class="rule-actions">
-              <button class="rule-btn edit-btn" onclick="universalAnswerFeature.editRule('${rule.id}')" title="编辑">
+            <div class="rule-item__actions">
+              <button class="btn--rule btn--edit" onclick="universalAnswerFeature.editRule('${rule.id}')" title="编辑">
                 <i class="bi bi-pencil"></i>
               </button>
               ${rule.maxTriggers ? `
-              <button class="rule-btn reset-btn" onclick="universalAnswerFeature.resetRuleTriggers('${rule.id}')" title="重置触发次数">
+              <button class="btn--rule btn--reset" onclick="universalAnswerFeature.resetRuleTriggers('${rule.id}')" title="重置触发次数">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
               ` : ''}
-              <button class="rule-btn delete-btn" onclick="universalAnswerFeature.deleteRule('${rule.id}')" title="删除">
+              <button class="btn--rule btn--delete" onclick="universalAnswerFeature.deleteRule('${rule.id}')" title="删除">
                 <i class="bi bi-trash"></i>
               </button>
             </div>
           </div>
-          <div class="rule-config">
+          <div class="rule-item__config">
             ${this.formatRuleConfig(rule)}
           </div>
         </div>
@@ -657,105 +657,105 @@ class RulesUI {
 
   // 格式化规则配置
   formatRuleConfig(rule) {
-    let html = '<div class="config-items">';
+    let html = '<div class="rule-item__config-items">';
 
     if (rule.type === 'content-change') {
       html += `
-        <div class="config-item">
-          <span class="config-label">URL匹配:</span>
-          <span class="config-value">${rule.urlPattern || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlPattern || '未设置'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">修改类型:</span>
-          <span class="config-value">${this.getChangeTypeLabel(rule.changeType)}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">修改类型:</span>
+          <span class="rule-item__config-value">${this.getChangeTypeLabel(rule.changeType)}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">原始内容:</span>
-          <span class="config-value">${rule.originalContent || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">原始内容:</span>
+          <span class="rule-item__config-value">${rule.originalContent || '未设置'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">新内容:</span>
-          <span class="config-value">${rule.newContent || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">新内容:</span>
+          <span class="rule-item__config-value">${rule.newContent || '未设置'}</span>
         </div>
         ${rule.maxTriggers ? `
-        <div class="config-item">
-          <span class="config-label">触发次数:</span>
-          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
         </div>
         ` : ''}
       `;
     } else if (rule.type === 'zip-implant') {
       html += `
-        <div class="config-item">
-          <span class="config-label">文件信息URL匹配:</span>
-          <span class="config-value">${rule.urlFileinfo || '未设置（匹配所有fileinfo请求）'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">文件信息URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlFileinfo || '未设置（匹配所有fileinfo请求）'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">ZIP URL匹配:</span>
-          <span class="config-value">${rule.urlZip || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">ZIP URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlZip || '未设置'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">目标文件名:</span>
-          <span class="config-value">${rule.targetFileName || '未设置（匹配所有文件）'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">目标文件名:</span>
+          <span class="rule-item__config-value">${rule.targetFileName || '未设置（匹配所有文件）'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">注入文件:</span>
-          <span class="config-value">${rule.zipImplant || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">注入文件:</span>
+          <span class="rule-item__config-value">${rule.zipImplant || '未设置'}</span>
         </div>
         ${rule.maxTriggers ? `
-        <div class="config-item">
-          <span class="config-label">触发次数:</span>
-          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
         </div>
         ` : ''}
       `;
     } else if (rule.type === 'zip-implant-dynamic') {
       html += `
-        <div class="config-item">
-          <span class="config-label">文件信息URL匹配:</span>
-          <span class="config-value">${rule.urlFileinfo || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">文件信息URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlFileinfo || '未设置'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">ZIP URL匹配:</span>
-          <span class="config-value">${rule.urlZip || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">ZIP URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlZip || '未设置'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">目标文件名:</span>
-          <span class="config-value">${rule.targetFileName || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">目标文件名:</span>
+          <span class="rule-item__config-value">${rule.targetFileName || '未设置'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">注入脚本:</span>
-          <span class="config-value">${rule.injectScript || '默认(auto-listening.js)'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">注入脚本:</span>
+          <span class="rule-item__config-value">${rule.injectScript || '默认(auto-listening.js)'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">下载超时:</span>
-          <span class="config-value">${rule.downloadTimeout ? rule.downloadTimeout + 'ms' : '30000ms(默认)'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">下载超时:</span>
+          <span class="rule-item__config-value">${rule.downloadTimeout ? rule.downloadTimeout + 'ms' : '30000ms(默认)'}</span>
         </div>
         ${rule.maxTriggers ? `
-        <div class="config-item">
-          <span class="config-label">触发次数:</span>
-          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
         </div>
         ` : ''}
       `;
     } else if (rule.type === 'answer-upload') {
       html += `
-        <div class="config-item">
-          <span class="config-label">上传URL匹配:</span>
-          <span class="config-value">${rule.urlUpload || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">上传URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlUpload || '未设置'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">上传类型:</span>
-          <span class="config-value">${rule.uploadType === 'original' ? '原始数据' : '提取的答案'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">上传类型:</span>
+          <span class="rule-item__config-value">${rule.uploadType === 'original' ? '原始数据' : '提取的答案'}</span>
         </div>
-        <div class="config-item">
-          <span class="config-label">服务器位置:</span>
-          <span class="config-value">${rule.serverLocate || '未设置'}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">服务器位置:</span>
+          <span class="rule-item__config-value">${rule.serverLocate || '未设置'}</span>
         </div>
         ${rule.maxTriggers ? `
-        <div class="config-item">
-          <span class="config-label">触发次数:</span>
-          <span class="config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
         </div>
         ` : ''}
       `;
@@ -875,7 +875,7 @@ class RulesUI {
         statusSpan.textContent = enabled ? '已启用' : '已禁用';
         statusSpan.className = `rule-status ${enabled ? 'enabled' : 'disabled'}`;
       }
-      ruleItem.className = `rule-item ${enabled ? 'enabled' : 'disabled'}`;
+      ruleItem.className = `rule-item ${enabled ? 'is-enabled' : 'is-disabled'}`;
     }
   }
 
@@ -976,11 +976,11 @@ class RulesUI {
       const name = Utils.escapeHtml(g.name || '未命名规则集');
       const desc = Utils.escapeHtml(g.description || '无描述');
       const gid = g.id;
-      const active = g.enabled ? ' feature-card--active' : '';
+      const active = g.enabled ? ' simple-home__card is-active' : '';
       const badge = this.getCompatibleBadgeHtml(g);
-      return `<div class="feature-card${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
+      return `<div class="simple-home__card${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
     }).join('');
-    grid.querySelectorAll('.feature-card').forEach((card) => {
+    grid.querySelectorAll('.simple-home__card').forEach((card) => {
       card.addEventListener('click', () => {
         const gid = card.getAttribute('data-group-id');
         if (gid) {
