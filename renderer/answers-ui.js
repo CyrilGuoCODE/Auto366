@@ -61,11 +61,11 @@ class AnswersUI {
     const sortByPatternBtn = document.getElementById('sortByPattern');
 
     if (sortByFileBtn) {
-      sortByFileBtn.classList.toggle('active', activeMode === 'file');
+      sortByFileBtn.classList.toggle('is-active', activeMode === 'file');
     }
 
     if (sortByPatternBtn) {
-      sortByPatternBtn.classList.toggle('active', activeMode === 'pattern');
+      sortByPatternBtn.classList.toggle('is-active', activeMode === 'pattern');
     }
   }
 

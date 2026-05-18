@@ -138,7 +138,7 @@ class SettingsUI {
           <button class="btn--sm btn--cancel" id="cancelClearCacheBtn">取消</button>
           <button class="btn--sm btn--danger" id="confirmClearCacheBtn" style="position:relative;overflow:hidden">
             <span>清理并重启</span>
-            <div class="progress-bar"></div>
+            <div class="btn__progress-bar"></div>
           </button>
         </div>
       </div>
@@ -172,7 +172,7 @@ class SettingsUI {
     btn.addEventListener('mouseup', (e) => this._onClearBtnMouseUp(e));
     btn.addEventListener('mouseleave', () => this._onClearBtnMouseLeave());
     btn.addEventListener('animationend', (e) => {
-      if (e.target.classList.contains('progress-bar') && e.target.classList.contains('active')) {
+      if (e.target.classList.contains('btn__progress-bar') && e.target.classList.contains('is-active')) {
         this._onClearProgressComplete();
       }
     });
@@ -242,9 +242,9 @@ class SettingsUI {
     btn.classList.add('btn__state-closing');
     btn.querySelector('span').textContent = '仅执行清理';
 
-    const bar = btn.querySelector('.progress-bar');
+    const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
-      bar.classList.add('active');
+      bar.classList.add('is-active');
     }
   }
 
@@ -254,9 +254,9 @@ class SettingsUI {
 
     this._clearBtnClosingState = false;
 
-    const bar = btn.querySelector('.progress-bar');
+    const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
-      bar.classList.remove('active');
+      bar.classList.remove('is-active');
       void bar.offsetWidth;
     }
 
@@ -270,9 +270,9 @@ class SettingsUI {
 
     this._clearBtnClosingState = false;
 
-    const bar = btn.querySelector('.progress-bar');
+    const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
-      bar.classList.remove('active');
+      bar.classList.remove('is-active');
     }
 
     btn.classList.add('btn__state-done');

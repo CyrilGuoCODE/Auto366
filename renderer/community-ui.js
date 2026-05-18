@@ -222,7 +222,7 @@ class CommunityUI {
           <i class="bi bi-exclamation-triangle"></i>
           <p>加载失败</p>
           <p class="community-view__error-text">${message}</p>
-          <button class="primary-btn" onclick="universalAnswerFeature.refreshRulesets()">
+          <button class="btn--primary" onclick="universalAnswerFeature.refreshRulesets()">
             重试
           </button>
         </div>

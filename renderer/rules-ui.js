@@ -485,7 +485,7 @@ class RulesUI {
     // 显示规则集
     ruleGroups.forEach(group => {
       const groupRules = rules.filter(rule => rule.groupId === group.id);
-      const statusClass = group.enabled ? 'enabled' : 'disabled';
+      const statusClass = group.enabled ? 'is-enabled' : 'is-disabled';
 
       html += `
         <div class="rule-group" data-group-id="${group.id}">
@@ -870,10 +870,10 @@ class RulesUI {
   updateRuleStatus(ruleId, enabled) {
     const ruleItem = document.querySelector(`input[onchange*="${ruleId}"]`)?.closest('.rule-item');
     if (ruleItem) {
-      const statusSpan = ruleItem.querySelector('.rule-status');
+      const statusSpan = ruleItem.querySelector('.badge--enabled, .badge--disabled');
       if (statusSpan) {
         statusSpan.textContent = enabled ? '已启用' : '已禁用';
-        statusSpan.className = `rule-status ${enabled ? 'enabled' : 'disabled'}`;
+        statusSpan.className = enabled ? 'badge--enabled' : 'badge--disabled';
       }
       ruleItem.className = `rule-item ${enabled ? 'is-enabled' : 'is-disabled'}`;
     }

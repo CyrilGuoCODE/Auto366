@@ -467,7 +467,7 @@ class ProxyUI {
     btn.addEventListener('mouseup', (e) => this._onUp366BtnMouseUp(e));
     btn.addEventListener('mouseleave', () => this._onUp366BtnMouseLeave());
     btn.addEventListener('animationend', (e) => {
-      if (e.target.classList.contains('btn__progress-bar') && e.target.classList.contains('active')) {
+      if (e.target.classList.contains('btn__progress-bar') && e.target.classList.contains('is-active')) {
         this._onCloseProgressComplete();
       }
     });
@@ -546,7 +546,7 @@ class ProxyUI {
 
     const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
-      bar.classList.add('active');
+      bar.classList.add('is-active');
     }
   }
 
@@ -558,7 +558,7 @@ class ProxyUI {
 
     const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
-      bar.classList.remove('active');
+      bar.classList.remove('is-active');
       void bar.offsetWidth;
     }
 
@@ -575,7 +575,7 @@ class ProxyUI {
 
     const bar = btn.querySelector('.btn__progress-bar');
     if (bar) {
-      bar.classList.remove('active');
+      bar.classList.remove('is-active');
     }
 
     btn.classList.add('is-done');

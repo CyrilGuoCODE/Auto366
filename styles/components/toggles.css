@@ -18,9 +18,9 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: var(--color-gray-400);
-    transition: background-color var(--transition-normal), var(--transition-normal);
-    border-radius: var(--radius-2xl);
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 24px;
 }
 
 .toggle__slider:before {
@@ -31,9 +31,9 @@
     left: 3px;
     bottom: 3px;
     background-color: var(--color-white);
-    transition: transform var(--transition-normal), background-color var(--transition-normal);
-    border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: .4s;
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
 }
 
 .toggle input:checked + .toggle__slider {
@@ -42,23 +42,6 @@
 
 .toggle input:checked + .toggle__slider:before {
     transform: translateX(20px);
-}
-
-.toggle.is-disabled {
-    opacity: 0.5;
-}
-
-.toggle.is-disabled input {
-    cursor: not-allowed;
-}
-
-.toggle.is-disabled .toggle__slider {
-    cursor: not-allowed;
-    background-color: var(--color-gray-400) !important;
-}
-
-.toggle.is-disabled .toggle__slider:before {
-    background-color: var(--color-gray-500) !important;
 }
 
 .toggle__label {
@@ -71,4 +54,21 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+}
+
+.toggle.is-disabled {
+    opacity: 0.5;
+}
+
+.toggle.is-disabled input {
+    cursor: not-allowed;
+}
+
+.toggle.is-disabled .toggle__slider {
+    cursor: not-allowed;
+    background-color: #ccc !important;
+}
+
+.toggle.is-disabled .toggle__slider:before {
+    background-color: #999 !important;
 }

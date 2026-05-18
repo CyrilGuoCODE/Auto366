@@ -39,7 +39,7 @@ class EventManager {
     const detailsContent = document.getElementById('detailsContent');
     if (detailsContent) {
       detailsContent.addEventListener('click', (e) => {
-        const downloadBtn = e.target.closest('.download-response-btn');
+        const downloadBtn = e.target.closest('.btn--download');
         if (downloadBtn) {
           const uuid = downloadBtn.dataset.downloadUuid;
           if (uuid && window.app) {

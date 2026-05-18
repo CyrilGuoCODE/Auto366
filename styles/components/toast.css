@@ -3,12 +3,12 @@
     bottom: 30px;
     left: 50%;
     transform: translateX(-50%);
-    background: var(--color-success-500);
+    background: var(--color-success);
     color: var(--color-white);
     padding: var(--space-md) var(--space-xl);
     border-radius: var(--radius-md);
-    box-shadow: var(--shadow-lg);
-    z-index: var(--z-toast);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: var(--z-titlebar);
     font-size: var(--text-lg);
     opacity: 0;
     transition: opacity var(--ease-slow);
@@ -22,9 +22,9 @@
 }
 
 .toast--error {
-    background: var(--color-danger-500);
+    background: var(--color-danger);
 }
 
-.toast--success {
-    background: var(--color-success-500);
+.toast i {
+    font-size: var(--text-xl);
 }

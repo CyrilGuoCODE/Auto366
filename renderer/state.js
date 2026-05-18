@@ -33,7 +33,7 @@ class StateManager {
     });
 
     // 更新左侧视图面板（右侧日志始终显示）
-    const viewPanels = document.querySelectorAll('.left-content .view-panel');
+    const viewPanels = document.querySelectorAll('.main__left .view-panel');
     viewPanels.forEach(panel => {
       panel.classList.remove('is-active');
     });

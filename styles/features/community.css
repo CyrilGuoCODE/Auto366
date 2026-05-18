@@ -1,4 +1,4 @@
-.community-view {
+.community-content {
     flex: 1;
     padding: var(--space-xl);
     overflow-y: auto;
@@ -6,53 +6,49 @@
     flex-direction: column;
 }
 
-.community-view__search {
+.search-section {
     margin-bottom: var(--space-xl);
     flex-shrink: 0;
 }
 
-.community-view__search-box {
+.search-box {
     display: flex;
     gap: var(--space-sm);
     margin-bottom: var(--space-md);
 }
 
-.community-view__search-box .form-input {
+.search-box .form-input {
     flex: 1;
 }
 
-.community-view__filters {
+.search-filters {
     display: flex;
     gap: var(--space-md);
 }
 
-.community-view__filters .form-input {
+.search-filters .form-input {
     width: 150px;
 }
 
-.community-view__list {
+.rulesets-container {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
 }
 
-.community-view__loading {
+.loading-state {
     text-align: center;
     color: var(--color-text-muted);
-    padding: var(--space-3xl) var(--space-xl);
+    padding: var(--space-4xl) var(--space-xl);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--space-md);
 }
 
-.community-view__loading i {
-    font-size: 48px;
+.loading-state i {
+    font-size: var(--text-5xl);
     opacity: 0.5;
-    animation: spin 2s linear infinite;
-}
-
-.community-view__spinner {
     animation: spin 2s linear infinite;
 }
 
@@ -60,42 +56,24 @@
     0% {
         transform: rotate(0deg);
     }
+
     100% {
         transform: rotate(360deg);
     }
 }
 
-.community-view__error {
-    text-align: center;
-    color: var(--color-danger);
-    padding: var(--space-3xl) var(--space-xl);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.community-view__error i {
-    font-size: 48px;
-    opacity: 0.5;
-}
-
-.community-view__error-text {
-    color: var(--color-danger);
-}
-
-.community-view__empty {
+.no-rulesets {
     text-align: center;
     color: var(--color-text-muted);
-    padding: var(--space-3xl) var(--space-xl);
+    padding: var(--space-4xl) var(--space-xl);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--space-md);
 }
 
-.community-view__empty i {
-    font-size: 48px;
+.no-rulesets i {
+    font-size: var(--text-5xl);
     opacity: 0.5;
 }
 
@@ -105,23 +83,23 @@
     border-radius: var(--radius-lg);
     margin-bottom: var(--space-lg);
     overflow: hidden;
-    transition: all var(--transition-fast);
-    box-shadow: var(--shadow-sm);
+    transition: all var(--ease-normal);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     cursor: pointer;
 }
 
 .ruleset-item:hover {
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     transform: translateY(-1px);
     border-color: var(--color-primary);
 }
 
-.ruleset-item.is-installed {
-    border-color: var(--color-success-500);
-    background: var(--color-success-50);
+.ruleset-item.installed {
+    border-color: var(--color-success);
+    background: #f8fff9;
 }
 
-.ruleset-item__header {
+.ruleset-header {
     padding: var(--space-lg) var(--space-xl);
     display: flex;
     align-items: flex-start;
@@ -129,47 +107,40 @@
     background: var(--color-bg-panel);
 }
 
-.ruleset-item__info {
+.ruleset-info {
     flex: 1;
     min-width: 0;
 }
 
-.ruleset-item__name {
+.ruleset-name {
     font-weight: var(--font-weight-semibold);
     color: var(--color-text);
     margin-bottom: var(--space-xs);
-    font-size: var(--text-2xl);
-    line-height: 1.3;
-}
-
-.ruleset-item__description {
-    color: var(--color-text-heading);
     font-size: var(--text-xl);
     line-height: var(--leading-normal);
-    margin-bottom: var(--space-md);
 }
 
-.ruleset-item__actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    flex-shrink: 0;
-}
-
-.ruleset-item__author {
+.ruleset-author {
     color: var(--color-text-muted);
     font-size: var(--text-base);
     margin-bottom: var(--space-sm);
 }
 
-.ruleset-item__meta {
+.ruleset-description {
+    color: var(--color-text-heading);
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
+    margin-bottom: var(--space-md);
+}
+
+.ruleset-meta {
     display: flex;
     align-items: center;
     gap: var(--space-lg);
     flex-wrap: wrap;
 }
 
-.ruleset-item__downloads {
+.ruleset-downloads {
     display: flex;
     align-items: center;
     gap: var(--space-xs);
@@ -177,19 +148,26 @@
     font-size: var(--text-sm);
 }
 
-.ruleset-item__date {
+.ruleset-date {
     color: var(--color-text-muted);
     font-size: var(--text-sm);
 }
 
-.ruleset-item__tags {
+.ruleset-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-shrink: 0;
+}
+
+.ruleset-tags {
     display: flex;
     gap: var(--space-xs);
     margin-top: var(--space-sm);
     flex-wrap: wrap;
 }
 
-.community-view__pagination {
+.pagination-controls {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -200,34 +178,49 @@
     flex-shrink: 0;
 }
 
-.community-view__page-info {
+.page-info {
     color: var(--color-text-muted);
-    font-size: var(--text-xl);
+    font-size: var(--text-lg);
     font-weight: var(--font-weight-medium);
+}
+
+.error-state {
+    text-align: center;
+    color: var(--color-danger);
+    padding: var(--space-4xl) var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.error-state i {
+    font-size: var(--text-5xl);
+    opacity: 0.5;
 }
 
 .upload-progress {
     margin-top: var(--space-xl);
 }
 
-.upload-progress__bar {
+.progress-bar {
     width: 100%;
-    height: 8px;
+    height: var(--space-sm);
     background: var(--color-border);
     border-radius: var(--radius-sm);
     overflow: hidden;
     margin-bottom: var(--space-sm);
 }
 
-.upload-progress__fill {
+.progress-fill {
     height: 100%;
     background: var(--color-primary);
     border-radius: var(--radius-sm);
-    transition: width 0.3s ease;
+    transition: width var(--ease-slow);
     width: 0%;
 }
 
-.upload-progress__text {
+.progress-text {
     text-align: center;
     color: var(--color-text-muted);
     font-size: var(--text-base);
