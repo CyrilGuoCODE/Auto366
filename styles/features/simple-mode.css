@@ -118,28 +118,28 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__
         padding-left 0.44s var(--simple-cp-ease) 0.08s;
 }
 
-html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn,
-html[data-ui="simple"][data-simple-page="app"] .control-panel .primary-btn,
-html[data-ui="simple"][data-simple-page="app"] .control-panel .danger-btn {
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--ghost,
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--primary,
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--danger {
     padding: var(--space-sm) 10px;
     min-width: 0;
     box-sizing: border-box;
 }
 
-html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__group .secondary-btn:hover,
-html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__group .primary-btn:hover,
-html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__group .danger-btn:hover {
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__group .btn--ghost:hover,
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__group .btn--primary:hover,
+html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__group .btn--danger:hover {
     transform: none;
     box-shadow: none;
 }
 
-html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn.simple__cp-active {
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--ghost.simple__cp-active {
     color: #2563eb;
     border-color: #93c5fd;
     background: #eff6ff;
 }
 
-html[data-ui="simple"][data-simple-page="app"] .control-panel .secondary-btn.simple__cp-active:hover {
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--ghost.simple__cp-active:hover {
     color: #1d4ed8;
     border-color: #60a5fa;
     background: #dbeafe;
@@ -293,7 +293,7 @@ html[data-ui="simple"][data-simple-page="menu"] #simple-main-menu {
     padding-bottom: 240px;
 }
 
-html[data-ui="simple"][data-simple-page="menu"] .simple-home-bottom {
+html[data-ui="simple"][data-simple-page="menu"] .simple-home__footer {
     position: fixed;
     left: var(--space-xl);
     right: var(--space-xl);
@@ -306,11 +306,11 @@ html[data-ui="simple"][data-simple-page="menu"] .simple-home-bottom {
     box-sizing: border-box;
 }
 
-html[data-ui="simple"][data-simple-page="menu"] #simple-home .simple-home-bottom .appreciation-wrapper {
+html[data-ui="simple"][data-simple-page="menu"] #simple-home .simple-home__footer .appreciation {
     margin: 0 0 var(--space-md);
 }
 
-html[data-ui="simple"][data-simple-page="menu"] #simple-home .simple-home-bottom .simple-home-footer {
+html[data-ui="simple"][data-simple-page="menu"] #simple-home .simple-home__footer .simple-home__footer {
     margin-top: 0;
     padding-top: var(--space-md);
     border-top: 1px solid var(--color-border);
@@ -329,7 +329,7 @@ html[data-ui="simple"] .settings__mode--professional {
         padding: var(--space-lg);
     }
 
-    #simple-home .feature-grid {
+    #simple-home .simple-home__grid {
         grid-template-columns: 1fr;
     }
 }

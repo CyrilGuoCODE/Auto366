@@ -83,12 +83,12 @@
     box-shadow: var(--shadow-md);
 }
 
-.simple-home .simple-logo-block {
+.simple-home .simple-home__logo {
     text-align: center;
     margin-bottom: var(--space-xl);
 }
 
-.simple-home .simple-logo {
+.simple-home .simple-home__logo-img {
     width: 87px;
     height: 87px;
 }
@@ -105,12 +105,12 @@
     margin: 0 0 var(--space-sm) 0;
 }
 
-.simple-home .simple-lead {
+.simple-home .simple-home__lead {
     color: var(--color-text);
     margin: 0 0 var(--space-xl) 0;
 }
 
-.simple-home .feature-grid {
+.simple-home .simple-home__grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: var(--space-xl);
@@ -118,7 +118,7 @@
     text-align: left;
 }
 
-.simple-home .feature-card {
+.simple-home .simple-home__card {
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-lg);
     padding: var(--space-xl);
@@ -126,25 +126,25 @@
     transition: border-color var(--ease-fast), box-shadow var(--ease-fast);
 }
 
-.simple-home .feature-card:hover {
+.simple-home .simple-home__card:hover {
     border-color: var(--color-primary);
     box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
 }
 
-.simple-home .feature-card h3 {
+.simple-home .simple-home__card h3 {
     margin: 0 0 var(--space-sm) 0;
     color: var(--color-text);
     font-size: 1.1rem;
 }
 
-.simple-home .feature-card p {
+.simple-home .simple-home__card p {
     margin: 0;
     color: var(--color-text-muted);
     font-size: var(--text-lg);
     line-height: 1.45;
 }
 
-.simple-home .feature-card--active {
+.simple-home .simple-home__card.is-active {
     border-color: var(--color-primary);
 }
 
@@ -154,7 +154,7 @@
     font-size: var(--text-lg);
 }
 
-.simple-home .simple-home-footer {
+.simple-home .simple-home__footer {
     margin-top: var(--space-3xl);
     padding-top: var(--space-xl);
     border-top: 1px solid var(--color-border);
@@ -163,16 +163,16 @@
     font-size: var(--text-sm);
 }
 
-.simple-home .simple-home-footer h3,
-.simple-home .simple-home-footer h4 {
+.simple-home .simple-home__footer h3,
+.simple-home .simple-home__footer h4 {
     font-weight: normal;
     margin: var(--space-sm) 0;
 }
 
-.simple-home .simple-home-footer p {
+.simple-home .simple-home__footer p {
     margin: var(--space-xs) 0;
 }
 
-.simple-home .simple-link {
+.simple-home .simple-home__link {
     color: var(--color-primary);
 }

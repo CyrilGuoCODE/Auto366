@@ -61,7 +61,7 @@
     margin: 0 0 var(--space-sm);
 }
 
-.modal--tutorial .modal__desc {
+.modal--tutorial .modal__description {
     font-size: var(--text-lg);
     color: #64748b;
     margin: 0;
@@ -187,25 +187,25 @@
     font-size: var(--text-xl);
 }
 
-.modal--tutorial .modal__text-content {
+.modal--tutorial .modal__text {
     text-align: left;
     margin-top: var(--space-xl);
 }
 
-.modal--tutorial .modal__text-content p {
+.modal--tutorial .modal__text p {
     font-size: var(--text-lg);
     color: #334155;
     line-height: 1.7;
     margin: 0 0 var(--space-sm);
 }
 
-.modal--tutorial .modal__feature-list {
+.modal--tutorial .modal__features {
     list-style: none;
     padding: 0;
     margin: var(--space-sm) 0;
 }
 
-.modal--tutorial .modal__feature-list li {
+.modal--tutorial .modal__features li {
     font-size: var(--text-lg);
     color: #334155;
     padding: var(--space-sm) 0 var(--space-sm) var(--space-xl);
@@ -213,11 +213,11 @@
     border-bottom: 1px solid #f1f5f9;
 }
 
-.modal--tutorial .modal__feature-list li:last-child {
+.modal--tutorial .modal__features li:last-child {
     border-bottom: none;
 }
 
-.modal--tutorial .modal__feature-list li::before {
+.modal--tutorial .modal__features li::before {
     content: '';
     position: absolute;
     left: 0;
@@ -235,7 +235,7 @@
     margin-top: var(--space-lg) !important;
 }
 
-.modal--tutorial .modal__cache-path-wrap {
+.modal--tutorial .modal__cache-wrap {
     display: none;
     gap: 10px;
     margin-top: var(--space-lg);
