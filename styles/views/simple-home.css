@@ -12,6 +12,15 @@
     min-height: calc(100vh - var(--titlebar-height, 36px));
 }
 
+.simple-home__container {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xl);
+}
+
 .simple-home .update-notification-btn {
     position: absolute;
     top: 30px;
@@ -148,7 +157,7 @@
     border-color: var(--color-primary);
 }
 
-.simple-home .simple-ruleset-empty {
+.simple-home .simple-home__empty {
     margin-top: var(--space-xl);
     color: var(--color-text-muted);
     font-size: var(--text-lg);

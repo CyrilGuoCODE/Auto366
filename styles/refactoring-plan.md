@@ -113,27 +113,42 @@ styles/
 ├── base.css                     # 全局基础样式（精简）
 ├── titlebar.css                 # 自定义标题栏
 ├── layout.css                   # 页面布局（从 base.css 拆分）
-├── components/                  # 可复用 UI 组件
-│   ├── buttons.css              # 所有按钮变体
-│   ├── modals.css               # 模态框系统
-│   ├── forms.css                # 表单元素
-│   ├── toggles.css              # 开关/滑块
-│   ├── cards.css                # 卡片容器
-│   ├── badges.css               # 状态徽章
-│   └── toast.css                # 提示浮层
-├── features/                    # 功能区域样式
+├── components/                  # 全局可复用 UI 组件（精简）
+│   ├── buttons.css              # 仅全局通用按钮变体
+│   ├── modals.css               # 模态框基础结构
+│   ├── forms.css                # 表单输入框等基础表单元素
+│   └── toggles.css              # 开关/滑块
+├── features/                    # 功能区域样式（主要目录）
 │   ├── control-panel.css        # 控制面板
-│   ├── answers.css              # 答案获取视图
-│   ├── rules.css                # 规则管理视图
-│   ├── community.css            # 社区规则集视图
-│   ├── settings.css             # 设置视图
-│   ├── logs.css                 # 日志监听区域
+│   ├── answers.css              # 答案获取视图（含答案专用按钮、徽章）
+│   ├── rules.css                # 规则管理视图（含规则专用按钮）
+│   ├── community.css            # 社区规则集视图（含社区专用按钮、徽章）
+│   ├── settings.css             # 设置视图（含设置专用按钮）
+│   ├── logs.css                 # 日志监听区域（含日志专用徽章）
 │   └── simple-mode.css          # Simple 模式专属覆盖
 └── views/                       # 页面级视图
     ├── simple-home.css          # 简易首页
     ├── appreciation.css         # 赞赏组件（统一一处）
     └── tutorial.css             # 新手教程
 ```
+
+### 3.1 组件化原则调整
+
+**原方案问题**：`components/` 目录过于臃肿，大量"组件"实际上只在特定 feature 中使用，造成：
+1. 按钮类爆炸（`btn--install`、`btn--view-details` 等仅用于单一功能）
+2. 样式重复定义（`features/` 和 `components/` 中重复定义 `.rule-item`、`.badge--count` 等）
+3. `cards.css` 几乎未被使用，各 feature 都在自己定义卡片样式
+
+**调整原则**：
+- **`components/`** 只放**真正全局复用**的基础组件：
+  - `btn--primary`、`btn--ghost`、`btn--danger` 等通用按钮
+  - 模态框基础结构（`.modal`、`.modal__content`、`.modal__header` 等）
+  - 表单输入框、select 等基础表单元素
+  - 开关/滑块组件
+- **`features/`** 放功能专属样式：
+  - 每个功能模块的完整样式（含该功能专用的按钮、徽章、卡片）
+  - 一个文件就是一个功能的完整样式，修改只需改一个文件
+- **`views/`** 放独立页面视图
 
 ---
 
@@ -972,16 +987,24 @@ renderAppreciation('#settings-view');
 
 ### Phase 2：拆分可复用组件
 
-**目标**：从 `ui.css` 中提取所有可复用组件，合并重复定义，使用新类名。
+**目标**：从 `ui.css` 中提取**真正全局复用**的组件，合并重复定义，使用新类名。
 
 **组件文件列表**：
-- `components/buttons.css` — 按钮系统
-- `components/modals.css` — 模态框系统
-- `components/forms.css` — 表单元素
-- `components/toggles.css` — 开关组件
-- `components/cards.css` — 卡片容器
-- `components/badges.css` — 状态徽章
-- `components/toast.css` — 提示浮层
+- `components/buttons.css` — 仅全局通用按钮（`btn--primary`、`btn--ghost`、`btn--danger`、`btn--action`、`btn--close`、`btn--sm`、`btn--cancel`、`btn--danger-solid`、`btn--retry`）
+- `components/modals.css` — 模态框基础结构（`.modal`、`.modal__content`、`.modal__header`、`.modal__body`、`.modal__footer`、`.modal__close`）
+- `components/forms.css` — 基础表单元素（`.form-input`、`.form-group`、`.form-input-group`）
+- `components/toggles.css` — 开关/滑块组件
+
+**功能专属组件移到对应 features/**：
+- `btn--install`、`btn--view-details` → `features/community.css`
+- `btn--download`、`btn--copy`、`btn--expand`、`btn--copy-absolute` → `features/answers.css`
+- `btn--add-rule`、`btn--rule` → `features/rules.css`
+- `btn--port-change`、`btn--settings`、`btn--update-notify` → `features/control-panel.css`
+- `badge--count`、`badge--type` → `features/answers.css`
+- `badge--method`、`badge--method--get`、`badge--method--post` → `features/logs.css`
+- `badge--compatible`、`badge--installed`、`badge--tag` → `features/community.css`
+- `badge--rule-type` → `features/rules.css`
+- `badge--running`、`badge--stopped`、`badge--processing`、`badge--enabled`、`badge--disabled` → `features/control-panel.css`
 
 ### Phase 3：拆分功能区域样式
 
@@ -1048,16 +1071,13 @@ renderAppreciation('#settings-view');
 @import "./titlebar.css";
 @import "./layout.css";
 
-/* 可复用组件 */
+/* 全局可复用组件 */
 @import "./components/buttons.css";
 @import "./components/modals.css";
 @import "./components/forms.css";
 @import "./components/toggles.css";
-@import "./components/cards.css";
-@import "./components/badges.css";
-@import "./components/toast.css";
 
-/* 功能区域 */
+/* 功能区域（含功能专属组件） */
 @import "./features/control-panel.css";
 @import "./features/answers.css";
 @import "./features/rules.css";
@@ -1153,7 +1173,7 @@ Phase 8 (app.css 更新)
 | 指标 | 重构前 | 重构后 |
 |------|--------|--------|
 | 样式文件总数 | 4 个 | 18 个 |
-| 最大单文件行数 | ~4530 行（ui.css） | ~400 行（最大组件文件） |
+| 最大单文件行数 | ~4530 行（ui.css） | ~400 行（最大 feature 文件） |
 | 重复定义数量 | ~15 处 | 0 处 |
 | Design Tokens 覆盖率 | <5% | >90% |
 | 硬编码颜色值 | ~300+ 处 | ~20 处（仅 tokens 定义） |

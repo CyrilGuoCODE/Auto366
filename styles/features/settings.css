@@ -101,6 +101,24 @@
     color: var(--color-danger);
 }
 
+.btn__state-closing {
+    position: relative;
+    overflow: hidden;
+    background: transparent;
+    color: var(--color-white);
+    border: 1px solid var(--color-danger);
+    cursor: pointer;
+}
+
+.btn__state-closing span {
+    position: relative;
+    z-index: 1;
+}
+
+.btn__state-done span {
+    color: var(--color-danger);
+}
+
 .progress-bar {
     position: absolute;
     top: 0;

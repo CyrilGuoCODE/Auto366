@@ -118,33 +118,38 @@
     border-bottom: none;
 }
 
-.log-item.important {
+.log-item--important {
     color: #fd7e14;
     font-weight: var(--font-weight-medium);
 }
 
-.log-item.success {
+.log-item--success {
     color: var(--color-success);
     font-weight: var(--font-weight-medium);
 }
 
-.log-item.error {
+.log-item--error {
     color: var(--color-danger);
     font-weight: var(--font-weight-medium);
 }
 
-.log-item.normal {
+.log-item--normal {
     color: var(--color-text-heading);
 }
 
-.log-item.rule-success {
+.log-item--rule-success {
     color: var(--color-info-500);
     font-weight: normal;
 }
 
-.log-item.rule-error {
+.log-item--rule-error {
     color: var(--color-danger);
     font-weight: normal;
+}
+
+.log-item--warning {
+    color: var(--color-warn-500);
+    font-weight: var(--font-weight-medium);
 }
 
 .log-item i {
@@ -243,6 +248,117 @@
 
 .logs-container__details-resizer.is-resizing {
     background: var(--color-primary);
+}
+
+.logs-container__search {
+    padding: var(--space-md) var(--space-lg);
+    background: var(--color-bg-muted);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.search-input-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-xs) var(--space-sm);
+}
+
+.search-icon {
+    color: var(--color-text-muted);
+    font-size: var(--text-base);
+}
+
+.logs-container__search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: var(--text-base);
+    color: var(--color-text);
+    padding: var(--space-xs);
+}
+
+.logs-container__search-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.logs-container__search-close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: var(--space-xs);
+    border-radius: var(--radius-sm);
+    transition: all var(--ease-normal);
+    font-size: var(--text-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logs-container__search-close:hover {
+    background: var(--color-border);
+    color: var(--color-text-heading);
+}
+
+.logs-container__filters {
+    display: flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.btn--filter {
+    background: var(--color-bg-panel);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    padding: var(--space-2xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--text-sm);
+    transition: all var(--ease-normal);
+    font-weight: var(--font-weight-medium);
+}
+
+.btn--filter:hover {
+    background: var(--color-bg-muted);
+    border-color: var(--color-gray-400);
+    color: var(--color-text-heading);
+}
+
+.btn--filter.is-active {
+    background: var(--color-primary);
+    color: var(--color-white);
+    border-color: var(--color-primary);
+}
+
+.btn--filter.is-active:hover {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+}
+
+.logs-container__search-status {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    min-height: var(--space-lg);
+}
+
+.logs-container__stats {
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--color-bg-muted);
+    border-top: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    gap: var(--space-md);
 }
 
 .logs-container__details-resizer .main__resizer-line {
@@ -349,19 +465,19 @@
     word-break: break-all;
 }
 
-.log-item.clickable {
+.log-item--clickable {
     cursor: pointer;
 }
 
-.log-item.clickable:hover {
+.log-item--clickable:hover {
     background: var(--color-primary-50);
 }
 
-.log-item.selected {
+.log-item--selected {
     background: var(--color-primary-100);
 }
 
-.logs-container .clear-btn {
+.logs-container .btn--clear-log {
     background: none;
     border: none;
     color: var(--color-danger);
@@ -372,7 +488,7 @@
     font-size: var(--text-lg);
 }
 
-.logs-container .clear-btn:hover {
+.logs-container .btn--clear-log:hover {
     background: #f5f5f5;
     color: var(--color-danger-hover);
 }

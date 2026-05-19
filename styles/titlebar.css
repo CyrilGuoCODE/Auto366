@@ -111,6 +111,29 @@ body {
     color: #fff;
 }
 
+.titlebar-pin-btn {
+    -webkit-app-region: no-drag;
+    width: 40px;
+    height: var(--titlebar-height);
+    min-height: var(--titlebar-height);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #374151;
+    font-size: 15px;
+    line-height: 1;
+    flex-shrink: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.titlebar-pin-btn:hover {
+    background: #e5e7eb;
+}
+
 .titlebar-pin-btn.active {
     color: #2563eb;
 }

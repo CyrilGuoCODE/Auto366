@@ -57,7 +57,7 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel .control-panel__cl
     max-width: 100%;
 }
 
-html[data-ui="simple"][data-simple-page="app"] .main-container {
+html[data-ui="simple"][data-simple-page="app"] .main {
     overflow-x: visible;
 }
 
