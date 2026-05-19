@@ -159,20 +159,6 @@
     animation: slideDown var(--ease-slow);
 }
 
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        max-height: 0;
-        transform: translateY(-10px);
-    }
-
-    to {
-        opacity: 1;
-        max-height: 500px;
-        transform: translateY(0);
-    }
-}
-
 .child-answer {
     background: var(--color-bg-muted);
     margin-bottom: var(--space-sm);
@@ -204,13 +190,6 @@
     background: var(--color-success);
     color: var(--color-white);
     border: none;
-    padding: var(--space-2xs) var(--space-xs);
-    border-radius: var(--radius-xs);
-    cursor: pointer;
-    font-size: var(--text-xs);
-    display: flex;
-    align-items: center;
-    transition: all var(--ease-normal);
     opacity: 0.8;
 }
 
@@ -224,12 +203,6 @@
     background: var(--color-info-500);
     color: var(--color-white);
     border: none;
-    border-radius: var(--radius-xs);
-    cursor: pointer;
-    transition: all var(--ease-normal);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
     font-weight: var(--font-weight-medium);
 }
 
@@ -242,14 +215,6 @@
     background: var(--color-info-500);
     color: var(--color-white);
     border: none;
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--text-sm);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
     opacity: 0.8;
 }
 
@@ -282,18 +247,8 @@
     background: var(--color-primary-50);
     color: #1976d2;
     border: 1px solid var(--color-primary-100);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--text-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
     margin: var(--space-sm) 0;
     width: 100%;
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--expand:hover {
@@ -311,15 +266,7 @@
     background: var(--color-primary);
     color: var(--color-white);
     border: none;
-    border-radius: var(--radius-xs);
-    padding: var(--space-xs) var(--space-sm);
-    font-size: var(--text-xs);
-    cursor: pointer;
-    transition: all var(--ease-normal);
     opacity: 0.8;
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
 }
 
 .btn--copy-absolute:hover {
@@ -461,16 +408,7 @@
 .btn--import {
     background: var(--color-success);
     color: var(--color-white);
-    padding: var(--space-sm) var(--space-lg);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: var(--text-base);
     border: none;
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--import:hover {
@@ -482,16 +420,7 @@
 .btn--share {
     background: var(--color-primary);
     color: var(--color-white);
-    padding: var(--space-sm) var(--space-lg);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: var(--text-base);
     border: 1px solid var(--color-primary);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--share:hover {
@@ -504,16 +433,7 @@
 .btn--export {
     background: var(--color-success);
     color: var(--color-white);
-    padding: var(--space-sm) var(--space-lg);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: var(--text-base);
     border: none;
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--export:hover {
@@ -525,16 +445,7 @@
 .btn--replace-audio {
     background: var(--color-primary);
     color: var(--color-white);
-    padding: var(--space-sm) var(--space-lg);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: var(--text-base);
     border: 1px solid var(--color-primary);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--replace-audio:hover {
@@ -546,16 +457,4 @@
 
 .answer-item {
     animation: fadeIn var(--ease-slow);
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }

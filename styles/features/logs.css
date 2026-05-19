@@ -45,12 +45,6 @@
     background: transparent;
     border: 1px solid var(--color-border-strong);
     color: var(--color-danger);
-    cursor: pointer;
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    transition: all var(--ease-normal);
-    display: flex;
-    align-items: center;
 }
 
 .view-panel__controls .btn--clear:hover {
@@ -508,18 +502,6 @@
 
 .log-item {
     animation: fadeIn var(--ease-normal);
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 .log-item--hidden {

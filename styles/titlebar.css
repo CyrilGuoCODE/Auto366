@@ -20,11 +20,11 @@ body {
     left: 0;
     right: 0;
     height: var(--titlebar-height);
-    z-index: 100000;
+    z-index: var(--z-titlebar);
     display: flex;
     align-items: center;
-    background: #f3f4f6;
-    border-bottom: 1px solid #e5e7eb;
+    background: var(--color-bg-muted);
+    border-bottom: 1px solid var(--color-border);
     -webkit-user-select: none;
     user-select: none;
 }
@@ -60,7 +60,7 @@ body {
 .titlebar-title {
     font-size: 13px;
     font-weight: 600;
-    color: #374151;
+    color: var(--color-gray-700);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -70,7 +70,7 @@ body {
 .titlebar-version {
     font-size: 12px;
     font-weight: 400;
-    color: #6b7280;
+    color: var(--color-gray-500);
     margin-left: 4px;
     white-space: nowrap;
 }
@@ -86,7 +86,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #374151;
+    color: var(--color-gray-700);
     font-size: 15px;
     line-height: 1;
     flex-shrink: 0;
@@ -103,12 +103,12 @@ body {
 }
 
 .titlebar-btn:hover {
-    background: #e5e7eb;
+    background: var(--color-gray-200);
 }
 
 .titlebar-btn.titlebar-close:hover {
-    background: #e81123;
-    color: #fff;
+    background: var(--color-danger);
+    color: var(--color-white);
 }
 
 .titlebar-pin-btn {
@@ -122,7 +122,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #374151;
+    color: var(--color-gray-700);
     font-size: 15px;
     line-height: 1;
     flex-shrink: 0;
@@ -131,13 +131,13 @@ body {
 }
 
 .titlebar-pin-btn:hover {
-    background: #e5e7eb;
+    background: var(--color-gray-200);
 }
 
 .titlebar-pin-btn.active {
-    color: #2563eb;
+    color: var(--color-primary);
 }
 
 .titlebar-pin-btn.active:hover {
-    background: #dbeafe;
+    background: var(--color-primary-100);
 }

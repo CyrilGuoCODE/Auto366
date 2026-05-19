@@ -117,9 +117,6 @@
     --sidebar-item-height: 48px;
     --panel-header-height: 45px;
     --resizer-width: 4px;
-
-    --transition-fast: 0.15s ease;
-    --transition-normal: 0.2s ease;
 }
 
 html[data-ui="simple"] {

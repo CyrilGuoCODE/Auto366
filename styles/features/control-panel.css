@@ -131,15 +131,6 @@
     background: var(--color-bg-panel);
     color: var(--color-text-muted);
     border: 1px solid var(--color-border-strong);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: var(--text-base);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--settings:hover {
@@ -187,15 +178,6 @@
     background: var(--color-warn-500);
     color: var(--color-gray-800);
     border: 1px solid var(--color-warn-500);
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--text-sm);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--update:hover {
@@ -209,15 +191,6 @@
     background: var(--color-primary);
     color: var(--color-white);
     border: none;
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--text-sm);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
-    transition: all var(--ease-normal);
-    font-weight: var(--font-weight-medium);
 }
 
 .btn--search:hover {
