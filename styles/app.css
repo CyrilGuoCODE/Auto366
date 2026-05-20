@@ -4,9 +4,11 @@
 @import "./global/layout.css";
 @import "./global/titlebar.css";
 @import "./global/simple-home.css";
+@import "./global/utilities.css";
 
 /* 可复用组件 */
 @import "./components/buttons.css";
+@import "./components/badges.css";
 @import "./components/modals.css";
 @import "./components/toggles.css";
 @import "./components/forms.css";
@@ -23,3 +25,6 @@
 /* 浮窗/弹窗/覆盖层 */
 @import "./overlay/appreciation.css";
 @import "./overlay/tutorial.css";
+@import "./overlay/modal-share.css";
+@import "./overlay/modal-update.css";
+@import "./overlay/modal-donation.css";

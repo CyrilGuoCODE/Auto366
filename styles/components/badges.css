@@ -1,0 +1,102 @@
+/* 徽章基础 */
+.badge {
+    display: inline-block;
+    padding: 3px var(--space-sm);
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* 状态徽章 */
+.badge--running {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.badge--stopped {
+    background: var(--color-error-bg);
+    color: var(--color-danger-700);
+}
+
+.badge--processing {
+    background: var(--color-warn-bg);
+    color: var(--color-warn-text);
+}
+
+.badge--success {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.badge--error {
+    background: var(--color-error-bg);
+    color: var(--color-danger-700);
+}
+
+.badge--enabled {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.badge--disabled {
+    background: var(--color-error-bg);
+    color: var(--color-danger-700);
+}
+
+/* 类型徽章 */
+.badge--count {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    font-size: var(--text-xs);
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+    margin-left: var(--space-xs);
+}
+
+.badge--type {
+    background: var(--color-info-bg);
+    color: var(--color-info-text);
+    font-size: var(--text-xs);
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+}
+
+/* 日志级别徽章 */
+.badge--log-info {
+    background: var(--color-info-bg);
+    color: var(--color-info-text);
+}
+
+.badge--log-warn {
+    background: var(--color-warn-bg);
+    color: var(--color-warn-text);
+}
+
+.badge--log-error {
+    background: var(--color-error-bg);
+    color: var(--color-danger-700);
+}
+
+.badge--log-debug {
+    background: var(--color-bg-muted);
+    color: var(--color-text-muted);
+}
+
+/* 圆点徽章 */
+.badge--dot {
+    display: inline-block;
+    width: var(--space-sm);
+    height: var(--space-sm);
+    border-radius: var(--radius-full);
+    margin-right: var(--space-sm);
+}
+
+.badge--dot.is-enabled {
+    background: var(--color-success);
+}
+
+.badge--dot.is-disabled {
+    background: var(--color-danger);
+}

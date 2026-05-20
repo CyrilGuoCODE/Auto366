@@ -138,7 +138,7 @@
     border-color: var(--color-gray-400);
     color: var(--color-text-heading);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-md);
 }
 
 .btn--update-notify {
@@ -157,10 +157,10 @@
 }
 
 .btn--update-notify:hover {
-    background: #e0a800;
-    border-color: #e0a800;
+    background: var(--color-warn-600);
+    border-color: var(--color-warn-600);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
+    box-shadow: var(--shadow-sm);
 }
 
 .btn--update-notify__icon {
@@ -181,10 +181,10 @@
 }
 
 .btn--update:hover {
-    background: #e0a800;
-    border-color: #e0a800;
+    background: var(--color-warn-600);
+    border-color: var(--color-warn-600);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(255, 193, 7, 0.3);
+    box-shadow: var(--shadow-sm);
 }
 
 .btn--search {
@@ -196,7 +196,7 @@
 .btn--search:hover {
     background: var(--color-primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    box-shadow: var(--shadow-primary);
 }
 
 .badge--running {
@@ -206,7 +206,7 @@
 
 .badge--stopped {
     background: var(--color-error-bg);
-    color: #721c24;
+    color: var(--color-danger-700);
 }
 
 .badge--processing {
@@ -221,7 +221,7 @@
 
 .badge--error {
     background: var(--color-error-bg);
-    color: #721c24;
+    color: var(--color-danger-700);
 }
 
 .badge--dot {
@@ -261,5 +261,5 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     background: var(--color-error-bg);
-    color: #721c24;
+    color: var(--color-danger-700);
 }

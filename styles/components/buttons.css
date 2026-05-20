@@ -64,7 +64,7 @@
     background: var(--color-primary-hover);
     border-color: var(--color-primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    box-shadow: var(--shadow-primary);
 }
 
 .btn--primary:disabled {
@@ -87,7 +87,7 @@
     border-color: var(--color-gray-400);
     color: var(--color-text-heading);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
 }
 
 .btn--ghost:disabled {
@@ -109,7 +109,7 @@
     background: var(--color-danger);
     color: var(--color-white);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    box-shadow: var(--shadow-danger);
 }
 
 /* 操作按钮 */
@@ -123,7 +123,7 @@
     background: var(--color-primary);
     color: var(--color-white);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(13, 202, 240, 0.3);
+    box-shadow: var(--shadow-primary);
 }
 
 .btn--action.is-restart {
@@ -136,7 +136,7 @@
     background: var(--color-danger);
     color: var(--color-white);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    box-shadow: var(--shadow-danger);
 }
 
 .btn--action.is-closing {
@@ -204,24 +204,24 @@
 .btn--cancel {
     background: var(--color-text-muted);
     color: var(--color-white);
-    border-color: #5a6268;
+    border-color: var(--color-gray-600);
 }
 
 .btn--cancel:hover {
-    background: #5a6268;
-    border-color: #545b62;
+    background: var(--color-gray-600);
+    border-color: var(--color-gray-700);
 }
 
 /* 危险实心按钮 */
 .btn--danger-solid {
     background: var(--color-danger);
     color: var(--color-white);
-    border-color: #bd2130;
+    border-color: var(--color-danger-700);
 }
 
 .btn--danger-solid:hover {
     background: var(--color-danger-hover);
-    border-color: var(--color-danger-700);
+    border-color: var(--color-danger-800);
 }
 
 /* 重试按钮 */
@@ -237,7 +237,7 @@
     background: var(--color-primary-hover);
     border-color: var(--color-primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    box-shadow: var(--shadow-primary);
 }
 
 /* 清空按钮 */
@@ -251,7 +251,7 @@
     background: var(--color-danger);
     color: var(--color-white);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+    box-shadow: var(--shadow-danger);
 }
 
 /* 关闭按钮 */
