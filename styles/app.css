@@ -1,15 +1,17 @@
-@import "./tokens.css";
-@import "./base.css";
-@import "./layout.css";
-@import "./titlebar.css";
+/* 全局基础 */
+@import "./global/tokens.css";
+@import "./global/base.css";
+@import "./global/layout.css";
+@import "./global/titlebar.css";
+@import "./global/simple-home.css";
 
-/* 全局可复用组件 */
+/* 可复用组件 */
 @import "./components/buttons.css";
 @import "./components/modals.css";
 @import "./components/toggles.css";
 @import "./components/forms.css";
 
-/* 功能区域（含功能专属组件） */
+/* 功能模块（仅作用于各自容器内部） */
 @import "./features/control-panel.css";
 @import "./features/answers.css";
 @import "./features/rules.css";
@@ -18,7 +20,6 @@
 @import "./features/logs.css";
 @import "./features/simple-mode.css";
 
-/* 页面视图 */
-@import "./views/simple-home.css";
-@import "./views/appreciation.css";
-@import "./views/tutorial.css";
+/* 浮窗/弹窗/覆盖层 */
+@import "./overlay/appreciation.css";
+@import "./overlay/tutorial.css";
