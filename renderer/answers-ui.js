@@ -484,7 +484,7 @@ class AnswersUI {
 
     // 创建模态框HTML
     const modalHtml = `
-      <div class="modal--share" id="shareResultModal">
+      <div class="modal modal--share" id="shareResultModal">
         <div class="modal__content">
           <div class="modal__header">
             <h4><i class="bi bi-check-circle text--success"></i> 分享成功</h4>

@@ -296,7 +296,7 @@ class Auto366App {
     if (newCount % 5 === 0) {
       const modal = document.createElement('div');
       modal.id = 'donation-modal';
-      modal.className = 'modal--donation';
+      modal.className = 'modal modal--donation';
 
       modal.innerHTML = `
         <div class="modal__content">

@@ -394,7 +394,7 @@ class SettingsUI {
 
     const updatePanel = document.createElement('div');
     updatePanel.id = 'update-panel';
-    updatePanel.className = 'modal--update';
+    updatePanel.className = 'modal modal--update';
 
     updatePanel.innerHTML = `
       <div class="modal__overlay"></div>
@@ -500,7 +500,7 @@ class SettingsUI {
 
     const installDialog = document.createElement('div');
     installDialog.id = 'update-install-dialog';
-    installDialog.className = 'modal--update';
+    installDialog.className = 'modal modal--update';
 
     installDialog.innerHTML = `
       <div class="modal__overlay"></div>
