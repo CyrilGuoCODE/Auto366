@@ -112,12 +112,19 @@ class Auto366App {
 
   // 绑定更新按钮点击事件
   bindUpdateButtons() {
-    const updateBtns = document.querySelectorAll('#update-notification-btn, #update-notification-btn-simple');
-    updateBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
+    const checkUpdateBtn = document.getElementById('check-update-btn');
+    if (checkUpdateBtn) {
+      checkUpdateBtn.addEventListener('click', () => {
         this.settingsUI.handleUpdateNotification();
       });
-    });
+    }
+
+    const simpleUpdateBtn = document.getElementById('update-notification-btn-simple');
+    if (simpleUpdateBtn) {
+      simpleUpdateBtn.addEventListener('click', () => {
+        this.settingsUI.handleUpdateNotification();
+      });
+    }
   }
 
   // 初始化UI模式

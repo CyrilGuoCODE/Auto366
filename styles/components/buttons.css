@@ -42,6 +42,7 @@
     transition: all var(--ease-fast);
     font-weight: var(--font-weight-medium);
     font-size: var(--text-base);
+    white-space: nowrap;
 }
 
 .btn--primary:disabled,
