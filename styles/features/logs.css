@@ -45,7 +45,7 @@
     background: var(--color-bg-panel);
     color: var(--color-text-muted);
     border: 1px solid var(--color-border-strong);
-    padding: var(--space-xs);
+    padding: 0;
     width: 32px;
     height: 32px;
 }
@@ -60,6 +60,8 @@
     background: transparent;
     border: 1px solid var(--color-border-strong);
     color: var(--color-danger);
+    padding: 0 var(--space-sm);
+    height: 32px;
 }
 
 .view-panel__controls .btn--clear:hover {
@@ -309,6 +311,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 28px;
+    height: 28px;
 }
 
 .logs-container__search-close:hover {
@@ -326,12 +330,13 @@
     background: var(--color-bg-panel);
     color: var(--color-text-muted);
     border: 1px solid var(--color-border);
-    padding: var(--space-2xs) var(--space-sm);
+    padding: 0 var(--space-sm);
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: var(--text-sm);
     transition: all var(--ease-normal);
     font-weight: var(--font-weight-medium);
+    height: 28px;
 }
 
 .btn--filter:hover {
@@ -404,9 +409,14 @@
     border: none;
     color: var(--color-text-muted);
     cursor: pointer;
-    padding: var(--space-xs);
+    padding: 0;
     border-radius: var(--radius-sm);
     transition: all var(--ease-normal);
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn--close:hover {

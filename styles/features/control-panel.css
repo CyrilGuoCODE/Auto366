@@ -1,35 +1,33 @@
 .control-panel {
-    min-height: 80px;
+    min-height: 60px;
     background: var(--color-bg-panel);
     border-bottom: 1px solid var(--color-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-lg) var(--space-xl);
+    padding: var(--space-md) var(--space-xl);
     box-shadow: var(--shadow-sm);
     flex-shrink: 0;
     overflow: hidden;
-    flex-wrap: wrap;
     gap: var(--space-lg);
 }
 
 .control-panel__group {
     display: flex;
     align-items: center;
+    gap: var(--space-md);
 }
 
 .control-panel__actions {
     display: flex;
     gap: var(--space-md);
     align-items: center;
-    flex-wrap: wrap;
 }
 
 .control-panel__status {
     display: flex;
     gap: var(--space-xl);
     align-items: center;
-    flex-wrap: wrap;
 }
 
 .control-panel__status-item {
@@ -37,6 +35,7 @@
     align-items: center;
     gap: var(--space-xs);
     font-size: var(--text-base);
+    white-space: nowrap;
 }
 
 .control-panel__status-item i {
@@ -47,6 +46,7 @@
 .control-panel__status-label {
     color: var(--color-text-muted);
     font-weight: var(--font-weight-medium);
+    white-space: nowrap;
 }
 
 .control-panel__status-value {
@@ -64,58 +64,21 @@
     gap: var(--space-md);
 }
 
-.control-panel__cluster--status {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.control-panel__cluster--raw {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.control-panel__cluster--bucket {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.control-panel__cluster--answer {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.control-panel__cluster--proxy {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.control-panel__cluster--actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-.control-panel__cluster--simple-nav {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
 .btn--port-change {
     background: transparent;
     border: none;
     color: var(--color-text-muted);
     cursor: pointer;
-    padding: var(--space-xs);
+    padding: 0;
     border-radius: var(--radius-sm);
     transition: all var(--ease-normal);
     font-size: var(--text-sm);
     margin-left: var(--space-xs);
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn--port-change:hover {
@@ -145,7 +108,7 @@
     background: var(--color-warn-500);
     color: var(--color-gray-800);
     border: 1px solid var(--color-warn-500);
-    padding: var(--space-sm) var(--space-md);
+    padding: 0 var(--space-md);
     border-radius: var(--radius-md);
     cursor: pointer;
     font-size: var(--text-base);
@@ -154,6 +117,7 @@
     gap: var(--space-xs);
     transition: all var(--ease-normal);
     font-weight: var(--font-weight-medium);
+    height: 36px;
 }
 
 .btn--update-notify:hover {

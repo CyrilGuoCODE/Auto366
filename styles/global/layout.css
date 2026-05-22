@@ -208,7 +208,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 var(--space-lg);
+    padding: 0 var(--space-xl);
     font-size: var(--text-lg);
     font-weight: var(--font-weight-semibold);
     flex-shrink: 0;
@@ -228,12 +228,14 @@
     color: var(--color-text-heading);
     display: flex;
     align-items: center;
+    white-space: nowrap;
 }
 
 .view-panel__controls {
     display: flex;
     align-items: center;
     gap: var(--space-md);
+    flex-shrink: 0;
 }
 
 .app-shell {
