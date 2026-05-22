@@ -3,7 +3,7 @@
 @import "./global/base.css";
 @import "./global/layout.css";
 @import "./global/titlebar.css";
-@import "./global/simple-home.css";
+@import "./global/simple-mode.css";
 @import "./global/utilities.css";
 
 /* 可复用组件 */
@@ -20,7 +20,6 @@
 @import "./features/community.css";
 @import "./features/settings.css";
 @import "./features/logs.css";
-@import "./features/simple-mode.css";
 
 /* 浮窗/弹窗/覆盖层 */
 @import "./overlay/appreciation.css";

@@ -852,10 +852,9 @@ class CommunityUI {
       const name = this.escapeHtml(g.name || '未命名规则集');
       const desc = this.escapeHtml(g.description || '无描述');
       const gid = g.id;
-      const active = g.enabled ? ' simple-home__card is-active' : '';
-      //添加徽章
+      const active = g.enabled ? ' simple-home__card is-active' : ' simple-home__card';
       const badge = this.getCompatibleBadgeHtml(g);
-      return `<div class="simple-home__card${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
+      return `<div class="${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
     }).join('');
     grid.querySelectorAll('.simple-home__card').forEach((card) => {
       card.addEventListener('click', () => {
