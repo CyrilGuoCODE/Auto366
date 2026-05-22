@@ -25,11 +25,11 @@ class FileManager {
   async getCachePath(mainWindow) {
     try {
       const cachePath = await mainWindow.webContents.executeJavaScript(`
-        localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles'
+        localStorage.getItem('cache-path') || ''
       `);
-      return cachePath;
+      return cachePath || null;
     } catch (error) {
-      console.error('获取缓存路径失败，使用默认值:', error);
+      console.error('获取缓存路径失败:', error);
       return null;
     }
   }

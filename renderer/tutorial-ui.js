@@ -62,6 +62,11 @@ class TutorialManager {
             if (window.electronAPI.setCachePath) {
               window.electronAPI.setCachePath(dirPath);
             }
+            // 同步更新设置页面的缓存路径输入框
+            const settingsCacheInput = document.getElementById('cachePathInput');
+            if (settingsCacheInput) {
+              settingsCacheInput.value = dirPath;
+            }
           }
         }
       });
@@ -185,6 +190,11 @@ class TutorialManager {
         localStorage.setItem('cache-path', result.path);
         if (window.electronAPI.setCachePath) {
           window.electronAPI.setCachePath(result.path);
+        }
+        // 同步更新设置页面的缓存路径输入框
+        const settingsCacheInput = document.getElementById('cachePathInput');
+        if (settingsCacheInput) {
+          settingsCacheInput.value = result.path;
         }
         this.showCachePathInput(result.path);
         if (statusEl) {

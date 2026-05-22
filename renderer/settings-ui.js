@@ -34,8 +34,11 @@ class SettingsUI {
       // 初始化缓存路径输入框
       const cachePathInput = document.getElementById('cachePathInput');
       if (cachePathInput) {
-        const cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
+        const cachePath = localStorage.getItem('cache-path') || '';
         cachePathInput.value = cachePath;
+        if (!cachePath) {
+          cachePathInput.placeholder = '请通过自动查找或手动浏览设置缓存路径';
+        }
         
         // 保存缓存路径变化
         cachePathInput.addEventListener('change', () => {
