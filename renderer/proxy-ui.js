@@ -336,7 +336,7 @@ class ProxyUI {
       const host = data.host || '127.0.0.1';
       const port = data.port || '5291';
       statusElement.textContent = `已开启在 ${host}:${port}`;
-      statusElement.className = 'badge--running';
+      statusElement.className = 'control-panel__status-value badge--running';
 
       if (toggleBtn) {
         toggleBtn.disabled = false;
@@ -348,7 +348,7 @@ class ProxyUI {
     } else {
       this.state.isProxyRunning = false;
       statusElement.textContent = '已停止';
-      statusElement.className = 'badge--stopped';
+      statusElement.className = 'control-panel__status-value badge--stopped';
 
       if (toggleBtn) {
         toggleBtn.disabled = false;
@@ -446,13 +446,13 @@ class ProxyUI {
 
     if (data.capturing) {
       statusElement.textContent = '监听中';
-      statusElement.className = 'badge--running';
+      statusElement.className = 'control-panel__status-value badge--running';
       if (startBtn) startBtn.disabled = true;
       if (stopBtn) stopBtn.disabled = false;
       this.logManager.addSuccessLog('网络监听已启动');
     } else {
       statusElement.textContent = '未开始';
-      statusElement.className = 'badge--stopped';
+      statusElement.className = 'control-panel__status-value badge--stopped';
       if (startBtn) startBtn.disabled = false;
       if (stopBtn) stopBtn.disabled = true;
       this.logManager.addInfoLog('网络监听已停止');

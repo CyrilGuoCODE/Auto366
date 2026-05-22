@@ -274,26 +274,7 @@
     box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
 }
 
-.badge--compatible-base {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    padding: var(--space-2xs) var(--space-sm);
-    border-radius: var(--radius-full);
-    font-size: var(--text-sm);
-    font-weight: var(--font-weight-medium);
-    margin-left: 15px;
-}
 
-.badge--compatible {
-    background: var(--color-success-bg);
-    color: var(--color-success-text);
-}
-
-.badge--incompatible {
-    background: var(--color-error-bg);
-    color: #721c24;
-}
 
 .badge--installed {
     display: inline-flex;

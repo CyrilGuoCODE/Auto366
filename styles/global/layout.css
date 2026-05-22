@@ -208,7 +208,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 var(--space-xl);
+    padding: 0 var(--space-lg);
     font-size: var(--text-lg);
     font-weight: var(--font-weight-semibold);
     flex-shrink: 0;

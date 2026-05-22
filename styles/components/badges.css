@@ -84,6 +84,17 @@
     color: var(--color-text-muted);
 }
 
+/* 兼容性徽章 */
+.badge--compatible {
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+.badge--incompatible {
+    background: var(--color-error-bg);
+    color: var(--color-danger-700);
+}
+
 /* 圆点徽章 */
 .badge--dot {
     display: inline-block;

@@ -562,9 +562,9 @@ class RulesUI {
   getCompatibleBadgeHtml(group) {
     if (!group || group.compatible === undefined) return '';
     if (group.compatible) {
-      return '<span class="badge--compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
+      return '<span class="badge badge--compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
     }
-    return '<span class="badge--incompatible">不兼容其他规则</span>';
+    return '<span class="badge badge--incompatible">不兼容其他规则</span>';
   }
 
   // 生成规则组HTML

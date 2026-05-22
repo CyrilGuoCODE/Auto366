@@ -1,11 +1,11 @@
 .control-panel {
-    min-height: 60px;
+    min-height: 52px;
     background: var(--color-bg-panel);
     border-bottom: 1px solid var(--color-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-md) var(--space-xl);
+    padding: var(--space-sm) var(--space-lg);
     box-shadow: var(--shadow-sm);
     flex-shrink: 0;
     overflow: hidden;

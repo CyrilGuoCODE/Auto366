@@ -83,6 +83,15 @@
     --color-info: var(--color-info-500);
     --color-info-hover: var(--color-info-600);
 
+    --color-success-bg: var(--color-success-50);
+    --color-success-text: var(--color-success-700);
+    --color-error-bg: var(--color-danger-50);
+    --color-error-text: var(--color-danger-700);
+    --color-warn-bg: var(--color-warn-50);
+    --color-warn-text: var(--color-warn-700);
+    --color-info-bg: var(--color-info-50);
+    --color-info-text: var(--color-info-700);
+
     --space-2xs: 2px;
     --space-xs: 4px;
     --space-sm: 8px;

@@ -393,12 +393,14 @@
 }
 
 .answers-view__toolbar {
-    padding: var(--space-lg);
+    padding: var(--space-sm) var(--space-lg);
     border-top: 1px solid var(--color-border);
     background: var(--color-bg-muted);
     display: flex;
     gap: var(--space-md);
     align-items: center;
+    min-height: 52px;
+    box-sizing: border-box;
 }
 
 #importAnswer {

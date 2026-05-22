@@ -8,6 +8,8 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    min-height: 52px;
+    box-sizing: border-box;
 }
 
 .logs-container__stats-item {
