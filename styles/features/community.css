@@ -86,19 +86,19 @@
     margin-bottom: var(--space-lg);
     overflow: hidden;
     transition: all var(--ease-normal);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px var(--shadow-color-black-10);
     cursor: pointer;
 }
 
 .ruleset-item:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 8px var(--shadow-color-black-15);
     transform: translateY(-1px);
     border-color: var(--color-primary);
 }
 
 .ruleset-item.is-installed {
     border-color: var(--color-success);
-    background: #f8fff9;
+    background: var(--color-installed-bg);
 }
 
 .ruleset-item__header {
@@ -239,7 +239,7 @@
     background: var(--color-success-600);
     border-color: var(--color-success-600);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+    box-shadow: 0 2px 4px var(--shadow-color-success-30);
 }
 
 .btn--install:disabled {
@@ -271,7 +271,7 @@
     background: var(--color-primary);
     color: var(--color-white);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    box-shadow: 0 2px 4px var(--shadow-color-primary-15);
 }
 
 

@@ -228,7 +228,7 @@
                             <i class="bi bi-download"></i>
                             <span>导入答案</span>
                         </label>
-                        <input type="file" accept="json" id="importAnswer">
+                        <input type="file" accept="json" id="importAnswer" class="file-input--hidden">
                         <button id="shareAnswerBtn" class="btn--share" title="分享答案到服务器">
                             <i class="bi bi-share"></i>
                             <span>分享答案</span>
@@ -324,7 +324,7 @@
                 </div>
 
                 <!-- 设置视图 -->
-                <div class="view-panel" id="settings-view">
+                <div class="view-panel view-panel--settings" id="settings-view">
                     <div class="view-panel__header">
                         <h3>设置</h3>
                     </div>
@@ -551,7 +551,7 @@
                     <div class="logs-container__stats" id="logsStats">
                         <div class="logs-container__stats-item">
                             <i class="bi bi-list-ul"></i>
-                            <span>共 <span id="requestCount">0</span> 条信息</span>
+                            <span>共 <span id="requestCount" class="logs-container__count">0</span> 条信息</span>
                         </div>
                     </div>
                 </div>

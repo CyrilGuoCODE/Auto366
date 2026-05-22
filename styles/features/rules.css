@@ -36,11 +36,11 @@
     margin-bottom: var(--space-lg);
     overflow: hidden;
     transition: all var(--ease-normal);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px var(--shadow-color-black-10);
 }
 
 .rule-item:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 8px var(--shadow-color-black-15);
     transform: translateY(-1px);
 }
 
@@ -130,11 +130,11 @@
     margin-bottom: var(--space-xl);
     overflow: hidden;
     transition: all var(--ease-normal);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px var(--shadow-color-black-10);
 }
 
 .rule-group:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 8px var(--shadow-color-black-15);
     transform: translateY(-1px);
 }
 
@@ -218,7 +218,7 @@
 }
 
 .rules-list--independent .rule-group__name i {
-    color: #1976d2;
+    color: var(--color-blue-accent);
 }
 
 .rule-group__content .rule-item {
@@ -378,7 +378,7 @@
 }
 
 .btn--rule.btn--delete:hover {
-    background: #ffebee;
+    background: var(--color-danger-50);
     color: var(--color-danger);
 }
 
@@ -399,7 +399,7 @@
 }
 
 .badge--rule-type--zip-implant {
-    background: #fd7e14;
+    background: var(--color-orange);
     color: var(--color-white);
 }
 

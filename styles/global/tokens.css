@@ -87,10 +87,35 @@
     --color-success-text: var(--color-success-700);
     --color-error-bg: var(--color-danger-50);
     --color-error-text: var(--color-danger-700);
+    --color-error: var(--color-danger-500);
+    --color-error-hover: var(--color-danger-600);
     --color-warn-bg: var(--color-warn-50);
     --color-warn-text: var(--color-warn-700);
     --color-info-bg: var(--color-info-50);
     --color-info-text: var(--color-info-700);
+
+    /* 阴影颜色 */
+    --shadow-color-black-10: rgba(0, 0, 0, 0.1);
+    --shadow-color-black-15: rgba(0, 0, 0, 0.15);
+    --shadow-color-primary-15: rgba(33, 150, 243, 0.15);
+    --shadow-color-success-30: rgba(40, 167, 69, 0.3);
+    --shadow-color-overlay: rgba(0, 0, 0, 0.5);
+    --shadow-color-white-20: rgba(255, 255, 255, 0.2);
+
+    /* 功能色 */
+    --color-orange: #fd7e14;
+    --color-orange-light: #fff3e0;
+    --color-blue-light: #e3f2fd;
+    --color-blue-accent: #1976d2;
+    --color-gray-600-custom: #5a6268;
+    --color-gray-700-custom: #545b62;
+    --color-gray-400-custom: #bd2130;
+    --color-border-tutorial: #d9e2ec;
+    --color-toggle-off: #ccc;
+    --color-toggle-off-dark: #999;
+    --color-focus-ring: rgba(33, 150, 243, 0.1);
+    --color-focus-ring-strong: rgba(33, 150, 243, 0.25);
+    --color-installed-bg: #f8fff9;
 
     --space-2xs: 2px;
     --space-xs: 4px;

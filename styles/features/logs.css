@@ -23,7 +23,7 @@
     color: var(--color-primary);
 }
 
-#requestCount {
+.logs-container__count {
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-heading);
 }
@@ -132,7 +132,7 @@
 }
 
 .log-item--important {
-    color: #fd7e14;
+    color: var(--color-orange);
     font-weight: var(--font-weight-medium);
 }
 

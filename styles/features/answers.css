@@ -403,7 +403,7 @@
     box-sizing: border-box;
 }
 
-#importAnswer {
+.file-input--hidden {
     display: none;
 }
 

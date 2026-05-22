@@ -7,8 +7,8 @@ body {
     flex-direction: column;
 }
 
-#simple-home,
-#app-shell {
+.simple-home,
+.app-shell {
     flex: 1;
     min-height: 0;
     min-width: 0;
@@ -134,10 +134,10 @@ body {
     background: var(--color-gray-200);
 }
 
-.titlebar-pin-btn.active {
+.titlebar-pin-btn.is-active {
     color: var(--color-primary);
 }
 
-.titlebar-pin-btn.active:hover {
+.titlebar-pin-btn.is-active:hover {
     background: var(--color-primary-100);
 }

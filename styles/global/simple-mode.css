@@ -1,7 +1,3 @@
-/* ============================================
-   Simple Mode - 全局简单模式样式
-   ============================================ */
-
 /* ---- 基础布局覆盖 ---- */
 html[data-ui="simple"] .sidebar {
     display: none !important;
@@ -336,15 +332,15 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel > .control-panel__
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--ghost.simple__cp-active {
-    color: #2563eb;
-    border-color: #93c5fd;
-    background: #eff6ff;
+    color: var(--color-primary-600);
+    border-color: var(--color-primary-200);
+    background: var(--color-primary-50);
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--ghost.simple__cp-active:hover {
-    color: #1d4ed8;
-    border-color: #60a5fa;
-    background: #dbeafe;
+    color: var(--color-primary-700);
+    border-color: var(--color-primary-300);
+    background: var(--color-primary-100);
 }
 
 html[data-ui="simple"][data-simple-page="app"] .control-panel .port-change-btn {

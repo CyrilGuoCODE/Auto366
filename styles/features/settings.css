@@ -69,18 +69,18 @@
 .btn--cancel {
     background: var(--color-text-muted);
     color: var(--color-white);
-    border-color: #5a6268;
+    border-color: var(--color-gray-600-custom);
 }
 
 .btn--cancel:hover {
-    background: #5a6268;
-    border-color: #545b62;
+    background: var(--color-gray-600-custom);
+    border-color: var(--color-gray-700-custom);
 }
 
 .btn--danger-solid {
     background: var(--color-danger);
     color: var(--color-white);
-    border-color: #bd2130;
+    border-color: var(--color-gray-400-custom);
 }
 
 .btn--danger-solid:hover {
@@ -145,13 +145,13 @@
     to   { width: 100%; }
 }
 
-#settings-view.view-panel {
+.view-panel--settings {
     overflow-y: auto;
     overflow-x: hidden;
     min-height: 0;
 }
 
-#settings-view .settings-content {
+.view-panel--settings .settings-content {
     overflow: visible;
 }
 

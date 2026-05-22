@@ -18,7 +18,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc;
+    background-color: var(--color-toggle-off);
     transition: .4s;
     border-radius: 24px;
 }
@@ -66,9 +66,9 @@
 
 .toggle.is-disabled .toggle__slider {
     cursor: not-allowed;
-    background-color: #ccc !important;
+    background-color: var(--color-toggle-off) !important;
 }
 
 .toggle.is-disabled .toggle__slider:before {
-    background-color: #999 !important;
+    background-color: var(--color-toggle-off-dark) !important;
 }

@@ -2,7 +2,7 @@
     max-width: 560px;
     padding: 0;
     border-radius: var(--radius-lg);
-    border: 1px solid #d9e2ec;
+    border: 1px solid var(--color-border-tutorial);
     box-shadow: var(--shadow-xl);
 }
 
