@@ -744,7 +744,7 @@
             if (pageWrap && !pageWrap.contains(el)) continue;
             try {
                 const text = (el.textContent || '').trim();
-                if (text === optionContent) {
+                if (normalizeQuotes(text) === normalizeQuotes(optionContent)) {
                     const tag = el.tagName.toLowerCase();
                     if (['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag)) {
                         const rect = el.getBoundingClientRect();
@@ -798,7 +798,7 @@
         const idx = state.autoFillIndex;
         fillOneAnswer(idx);
         state.autoFillIndex++;
-        setTimeout(() => autoFillNext(), 800);
+        setTimeout(() => autoFillNext(), 50);
     }
 
     function stopAutoFill() {
@@ -882,6 +882,12 @@
         document.addEventListener('mouseup', () => {
             if (isDragging) { isDragging = false; container.style.transition = ''; }
         });
+    }
+
+    function normalizeQuotes(str) {
+        return String(str)
+            .replace(/[\u2018\u2019]/g, "'")
+            .replace(/[\u201C\u201D]/g, '"');
     }
 
     function escapeHtml(str) {
