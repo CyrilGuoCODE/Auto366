@@ -60,6 +60,8 @@
 
 .modal--donation .modal__footer {
     padding: 0 var(--space-2xl) var(--space-2xl) var(--space-2xl);
+    justify-content: center;
+    border-top: 1px solid var(--color-border);
 }
 
 .modal--donation .modal__messages {

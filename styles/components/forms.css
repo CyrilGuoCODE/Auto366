@@ -95,6 +95,8 @@ select.form-input {
     font-size: var(--text-sm);
     cursor: pointer;
     transition: all var(--ease-normal);
+    height: var(--space-3xl);
+    line-height: 1;
 }
 
 .sort-selector select:hover {
