@@ -1,0 +1,110 @@
+.form-group {
+    margin-bottom: var(--space-xl);
+}
+
+.form-group label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    margin-bottom: var(--space-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text);
+    font-size: var(--text-lg);
+}
+
+.form-input {
+    width: 100%;
+    padding: 10px var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--text-lg);
+    background: var(--color-bg-panel);
+    transition: all var(--ease-normal);
+    box-sizing: border-box;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.form-input[readonly] {
+    background: var(--color-bg-muted);
+    color: var(--color-text-muted);
+}
+
+textarea.form-input {
+    resize: vertical;
+    min-height: 80px;
+    font-family: var(--font-mono);
+    font-size: var(--text-base);
+}
+
+select.form-input {
+    cursor: pointer;
+}
+
+.form-input-group {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.form-input-group .form-input {
+    flex: 1;
+}
+
+.rule-form__fields {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+    margin-top: var(--space-lg);
+    background: var(--color-bg-muted);
+}
+
+.form-group label input[type="checkbox"] {
+    margin-right: var(--space-sm);
+    transform: scale(1.1);
+}
+
+.form-group__help {
+    margin: var(--space-xs) 0 0 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+}
+
+.sort-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.sort-selector label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin: 0;
+    font-weight: var(--font-weight-medium);
+}
+
+.sort-selector select {
+    background: var(--color-bg-panel);
+    color: var(--color-text-heading);
+    border: 1px solid var(--color-border-strong);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--ease-normal);
+    height: 32px;
+    line-height: 1;
+}
+
+.sort-selector select:hover {
+    border-color: var(--color-gray-400);
+}
+
+.sort-selector select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-focus-ring-strong);
+}

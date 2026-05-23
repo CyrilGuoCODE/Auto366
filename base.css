@@ -1,0 +1,189 @@
+* {
+    box-sizing: border-box;
+}
+
+/* Bootstrap Icons 全局对齐修复 */
+.bi::before,
+[class^="bi-"]::before,
+[class*=" bi-"]::before {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+body {
+    font-family: var(--font-sans);
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg-page);
+    color: var(--color-text);
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-bg-muted);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gray-400);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        max-height: 500px;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes closeProgressFill {
+    from {
+        width: 0;
+    }
+
+    to {
+        width: 100%;
+    }
+}
+
+@keyframes cacheProgressFill {
+    from {
+        width: 0;
+    }
+
+    to {
+        width: 100%;
+    }
+}
+
+@keyframes tutorial-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes simple-update-pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.75;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.btn {
+    box-sizing: border-box;
+    font: inherit;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-white);
+    color: var(--color-text-heading);
+    cursor: pointer;
+    transition: all var(--ease-fast);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--text-base);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+html[data-ui="professional"] #simple-home {
+    display: none !important;
+}
+
+html[data-ui="professional"] #app-shell {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+html[data-ui="simple"][data-simple-page="menu"] #app-shell {
+    display: none !important;
+}
+
+html[data-ui="simple"][data-simple-page="app"] #simple-home {
+    display: none !important;
+}
+
+html[data-ui="simple"][data-simple-page="app"] #app-shell {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: visible;
+    overflow-y: hidden;
+}
+
+html[data-ui="simple"][data-simple-page="menu"] body {
+    background: var(--color-bg-page);
+    overflow: hidden;
+    min-width: 0;
+}
