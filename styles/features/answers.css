@@ -366,9 +366,9 @@
 }
 
 .answer-file-section__header,
-.answer-pattern-section__header {
+.answer-pattern-section__header.answers-view__header {
     background: var(--color-bg-muted);
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-sm) var(--space-xl);
     border-bottom: 1px solid var(--color-border);
     display: flex;
     justify-content: space-between;
@@ -393,11 +393,11 @@
 }
 
 .answers-view__toolbar {
-    padding: var(--space-sm) var(--space-lg);
+    padding: 0 var(--space-xl);
     border-top: 1px solid var(--color-border);
     background: var(--color-bg-muted);
     display: flex;
-    gap: var(--space-md);
+    gap: var(--space-sm);
     align-items: center;
     min-height: 52px;
     box-sizing: border-box;
