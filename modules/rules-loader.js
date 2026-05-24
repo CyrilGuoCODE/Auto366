@@ -90,7 +90,7 @@ class RulesLoader {
             ...rule,
             groupId: groupId,
             isBuiltin: true,
-            enabled: false,
+            enabled: true,
             createdAt: rule.createdAt || new Date().toISOString(),
             updatedAt: rule.updatedAt || new Date().toISOString()
           }));
@@ -105,7 +105,30 @@ class RulesLoader {
             continue;
           }
 
-          rulesManager.saveRules([...currentRules, rulesetGroup, ...rules]);
+          // 根据新规则集的 compatible 属性决定是否关闭其他规则集
+          let updatedRules = [...currentRules];
+          const isNewRulesetCompatible = rulesetInfo.compatible !== undefined ? rulesetInfo.compatible : false;
+
+          if (!isNewRulesetCompatible) {
+            // 如果新规则集不兼容，关闭其他不兼容的规则集
+            updatedRules = updatedRules.map(rule => {
+              if (!rule.isGroup) {
+                return rule;
+              }
+              // 如果是当前要导入的规则集，不做修改
+              if (rule.name === rulesetInfo.name) {
+                return rule;
+              }
+              // 如果该规则集也不兼容，且当前是开启状态，则关闭它
+              if (rule.compatible === false && rule.enabled) {
+                console.log(`关闭不兼容规则集: ${rule.name}`);
+                return { ...rule, enabled: false };
+              }
+              return rule;
+            });
+          }
+
+          rulesManager.saveRules([...updatedRules, rulesetGroup, ...rules]);
 
           console.log(`成功导入内置规则集: ${rulesetInfo.name} (${rules.length} 个规则)`);
         } catch (error) {
