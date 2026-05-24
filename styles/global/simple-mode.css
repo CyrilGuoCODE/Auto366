@@ -1,4 +1,4 @@
-/* ---- 基础布局覆盖 ---- */
+ /* ---- 基础布局覆盖 ---- */
 html[data-ui="simple"] .sidebar {
     display: none !important;
 }
@@ -7,6 +7,10 @@ html[data-ui="simple"] .control-panel {
     min-height: auto;
     padding: var(--space-sm) var(--space-md);
     gap: var(--space-sm) var(--space-md);
+}
+
+html[data-ui="simple"] .btn--port-change {
+    display: none !important;
 }
 
 /* ---- 简单模式首页容器 ---- */
