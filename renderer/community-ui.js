@@ -572,15 +572,25 @@ class CommunityUI {
       const communityRulesetId = ruleset.id;
       let rulesToSave = [];
 
+      // 自动检测兼容性：检查规则集中是否有注入规则
+      const allRules = Array.isArray(rulesData)
+        ? rulesData
+        : rulesData.rules
+          ? rulesData.rules
+          : rulesData.isGroup
+            ? [rulesData]
+            : [];
+      const hasInjection = allRules.some(r => r.type === 'zip-implant' || r.type === 'zip-implant-dynamic');
+      const autoCompatible = !hasInjection;
+
       if (Array.isArray(rulesData)) {
         // 纯JSON格式：直接是规则数组
         rulesToSave = rulesData.map(rule => {
           if (rule.isGroup) {
             return {
               ...rule,
-              //为社区规则集默认补充不兼容属性
               communityRulesetId: communityRulesetId,
-              compatible: rule.compatible !== undefined ? rule.compatible : false
+              compatible: rule.compatible !== undefined ? rule.compatible : autoCompatible
             };
           }
           return rule;
@@ -591,7 +601,7 @@ class CommunityUI {
             return {
               ...rule,
               communityRulesetId: communityRulesetId,
-              compatible: rule.compatible !== undefined ? rule.compatible : true
+              compatible: rule.compatible !== undefined ? rule.compatible : autoCompatible
             };
           }
           return rule;
@@ -600,7 +610,7 @@ class CommunityUI {
         rulesToSave = [{
           ...rulesData,
           communityRulesetId: communityRulesetId,
-          compatible: rulesData.compatible !== undefined ? rulesData.compatible : true
+          compatible: rulesData.compatible !== undefined ? rulesData.compatible : autoCompatible
         }];
       }
 

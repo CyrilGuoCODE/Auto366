@@ -57,6 +57,9 @@ class Auto366App {
       // 初始化更新设置
       this.settingsUI.initUpdateSettings();
       
+      // 初始化规则设置
+      this.settingsUI.initRulesSettings();
+      
       // 绑定更新按钮点击事件
       this.bindUpdateButtons();
       

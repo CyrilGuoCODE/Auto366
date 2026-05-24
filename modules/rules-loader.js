@@ -74,6 +74,17 @@ class RulesLoader {
           });
 
           const groupId = uuidv4();
+
+          // 自动检测兼容性：如果规则集中包含 zip-implant 或 zip-implant-dynamic 规则，则默认不兼容
+          // 但保留手动设置字段的优先级
+          const hasInjectionRules = rulesData.some(rule =>
+            rule.type === 'zip-implant' || rule.type === 'zip-implant-dynamic'
+          );
+          const autoCompatible = !hasInjectionRules;
+          const finalCompatible = rulesetInfo.compatible !== undefined
+            ? rulesetInfo.compatible
+            : autoCompatible;
+
           const rulesetGroup = {
             id: groupId,
             name: rulesetInfo.name,
@@ -81,7 +92,7 @@ class RulesLoader {
             isGroup: true,
             isBuiltin: true,
             enabled: false,
-            compatible: rulesetInfo.compatible !== undefined ? rulesetInfo.compatible : false,
+            compatible: finalCompatible,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
