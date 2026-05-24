@@ -1,6 +1,6 @@
 /* Donation Modal */
 .modal--donation {
-    z-index: var(--z-toast);
+    z-index: var(--z-max);
 }
 
 .modal--donation .modal__overlay {
@@ -12,15 +12,17 @@
     background: var(--shadow-color-overlay);
     -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
+    z-index: 1;
 }
 
 .modal--donation .modal__content {
     position: relative;
-    width: 480px;
+    width: 680px;
     max-width: 90vw;
     max-height: 80vh;
     overflow: visible;
     animation: donationModalSlideIn 0.3s var(--ease-out);
+    z-index: 2;
 }
 
 @keyframes donationModalSlideIn {
@@ -62,6 +64,22 @@
     padding: 0 var(--space-2xl) var(--space-2xl) var(--space-2xl);
     justify-content: center;
     border-top: 1px solid var(--color-border);
+    background: transparent;
+}
+
+.modal--donation .modal__footer .btn--ghost {
+    color: var(--color-text-heading);
+    border-color: var(--color-border-strong);
+    min-width: 160px;
+    background: var(--color-white);
+    white-space: nowrap;
+    height: 40px;
+}
+
+.modal--donation .modal__footer .btn--ghost:hover {
+    color: var(--color-text-heading);
+    border-color: var(--color-primary);
+    background: var(--color-primary-50);
 }
 
 .modal--donation .modal__messages {
@@ -130,26 +148,27 @@
 }
 
 .modal--donation .appreciation__popup {
-    position: absolute;
-    bottom: 50%;
+    position: fixed;
+    top: 50%;
     left: 50%;
-    transform: translate(-50%, 50%);
-    margin-bottom: 0;
-    background: transparent;
+    transform: translate(-50%, -50%);
+    background: var(--color-bg-panel);
     border-radius: var(--radius-xl);
-    box-shadow: none;
-    padding: 0;
-    min-width: 320px;
+    box-shadow: var(--shadow-2xl);
+    padding: var(--space-xl);
+    min-width: 480px;
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--ease-normal), visibility var(--ease-normal);
-    z-index: var(--z-modal);
-    border: none;
+    z-index: var(--z-max);
+    border: 1px solid var(--color-border-strong);
+    overflow: visible;
 }
 
 .modal--donation .appreciation__icon:hover .appreciation__popup {
     opacity: 1;
     visibility: visible;
+    pointer-events: auto;
 }
 
 .modal--donation .appreciation__content h4 {
@@ -166,27 +185,29 @@
 
 .modal--donation .appreciation__qr-group {
     display: flex;
-    gap: 65px;
+    gap: var(--space-xl);
     justify-content: center;
     align-items: center;
     flex-wrap: nowrap;
     width: 100%;
+    overflow: visible;
 }
 
 .modal--donation .appreciation__qr {
-    max-width: 220px;
-    max-height: 220px;
+    max-width: 200px;
+    max-height: 200px;
     width: auto;
     height: auto;
     border-radius: var(--radius-lg);
     border: 2px solid var(--color-primary);
-    box-shadow: var(--shadow-sm);
-    transition: transform var(--ease-slow);
-    transform: scale(1);
+    box-shadow: var(--shadow-md);
+    transition: transform var(--ease-slow), box-shadow var(--ease-slow);
+    cursor: pointer;
 }
 
-.modal--donation .appreciation__icon:hover .appreciation__qr {
-    transform: scale(1.28);
-    z-index: var(--z-modal);
+.modal--donation .appreciation__qr:hover {
+    transform: scale(1.35);
+    z-index: var(--z-max);
     position: relative;
+    box-shadow: var(--shadow-2xl);
 }
