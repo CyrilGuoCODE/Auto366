@@ -110,8 +110,25 @@ class RulesManager {
     }
   }
 
+  // 检查规则集是否包含注入规则（自动检测兼容性）
+  hasInjectionRules(groupId) {
+    return this.rules.some(r =>
+      r.groupId === groupId &&
+      (r.type === 'zip-implant' || r.type === 'zip-implant-dynamic')
+    );
+  }
+
+  // 获取规则集的实际兼容性（优先使用手动字段，否则自动检测）
+  getEffectiveCompatible(rule) {
+    if (!rule || !rule.isGroup) return true;
+    if (rule.compatible !== undefined && rule.compatible !== null) {
+      return rule.compatible;
+    }
+    return !this.hasInjectionRules(rule.id);
+  }
+
   // 切换规则启用状态
-  toggleRule(ruleId, enabled) {
+  toggleRule(ruleId, enabled, compatibilityProtectionEnabled = true) {
     try {
       const rule = this.rules.find(r => r.id === ruleId);
       if (rule) {
@@ -125,14 +142,25 @@ class RulesManager {
               childRule.currentTriggers = 0;
             }
           });
-          // 禁用不兼容的规则集
-          if (rule.compatible === false) {
+
+          // 获取当前规则集的实际兼容性
+          const isCurrentCompatible = this.getEffectiveCompatible(rule);
+
+          // 如果启用了兼容性保护且当前规则集不兼容
+          if (compatibilityProtectionEnabled && !isCurrentCompatible) {
+            const disabledGroups = [];
             this.rules.forEach(r => {
               if (r.isGroup && r.id !== ruleId && r.enabled) {
                 r.enabled = false;
                 r.updatedAt = new Date().toISOString();
+                disabledGroups.push(r.name || r.id);
               }
             });
+
+            if (disabledGroups.length > 0) {
+              this.saveRules();
+              return { success: true, disabledGroups };
+            }
           }
         }
 
@@ -140,7 +168,8 @@ class RulesManager {
           rule.currentTriggers = 0;
         }
 
-        return this.saveRules();
+        this.saveRules();
+        return { success: true };
       }
       return false;
     } catch (error) {
@@ -242,6 +271,15 @@ class RulesManager {
       return { success: this.saveRules(rules) };
     });
 
+    ipcMain.handle('get-effective-compat', (event, groupId) => {
+      const group = this.rules.find(r => r.id === groupId && r.isGroup);
+      if (!group) return { compatible: true };
+      return {
+        compatible: this.getEffectiveCompatible(group),
+        groupName: group.name
+      };
+    });
+
     ipcMain.handle('delete-response-rule', (event, ruleId) => {
       return { success: this.deleteRule(ruleId) };
     });
@@ -250,12 +288,12 @@ class RulesManager {
       return { success: this.deleteRule(ruleId) };
     });
 
-    ipcMain.handle('toggle-response-rule', (event, ruleId, enabled) => {
-      return { success: this.toggleRule(ruleId, enabled) };
+    ipcMain.handle('toggle-response-rule', (event, ruleId, enabled, compatibilityProtectionEnabled = true) => {
+      return this.toggleRule(ruleId, enabled, compatibilityProtectionEnabled);
     });
 
-    ipcMain.handle('toggle-rule', (event, { ruleId, enabled }) => {
-      return { success: this.toggleRule(ruleId, enabled) };
+    ipcMain.handle('toggle-rule', (event, { ruleId, enabled, compatibilityProtectionEnabled = true }) => {
+      return this.toggleRule(ruleId, enabled, compatibilityProtectionEnabled);
     });
 
     ipcMain.handle('reset-rule-triggers', (event, ruleId) => {

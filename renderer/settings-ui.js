@@ -129,6 +129,25 @@ class SettingsUI {
     }
   }
 
+  // 初始化规则设置
+  initRulesSettings() {
+    try {
+      const compatibilityProtectionCheckbox = document.getElementById('compatibilityProtection');
+      if (compatibilityProtectionCheckbox) {
+        const protectionEnabled = localStorage.getItem('compatibility-protection-enabled') !== 'false';
+        compatibilityProtectionCheckbox.checked = protectionEnabled;
+
+        compatibilityProtectionCheckbox.addEventListener('change', () => {
+          const newValue = compatibilityProtectionCheckbox.checked;
+          localStorage.setItem('compatibility-protection-enabled', newValue.toString());
+          this.logManager.addInfoLog(`规则集兼容性保护已${newValue ? '启用' : '禁用'}`);
+        });
+      }
+    } catch (error) {
+      console.error('初始化规则设置失败:', error);
+    }
+  }
+
   // 处理清理缓存
   handleClearCache() {
     const resultDiv = document.getElementById('trafficLog');

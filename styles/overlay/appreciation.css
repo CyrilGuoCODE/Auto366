@@ -53,26 +53,27 @@
 }
 
 .appreciation__popup {
-    position: absolute;
-    bottom: 100%;
+    position: fixed;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
-    margin-bottom: var(--space-md);
+    transform: translate(-50%, -50%);
     background: var(--color-bg-panel);
     border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-xl);
+    box-shadow: var(--shadow-2xl);
     padding: var(--space-xl);
-    min-width: 320px;
+    min-width: 480px;
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--ease-normal), visibility var(--ease-normal);
-    z-index: var(--z-titlebar);
-    border: 1px solid var(--color-border);
+    z-index: var(--z-max);
+    border: 1px solid var(--color-border-strong);
+    pointer-events: none;
 }
 
 .appreciation__icon:hover .appreciation__popup {
     opacity: 1;
     visibility: visible;
+    pointer-events: auto;
 }
 
 .appreciation__content h4 {
@@ -84,26 +85,29 @@
 
 .appreciation__qr-group {
     display: flex;
-    gap: var(--space-md);
+    gap: var(--space-xl);
     justify-content: center;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .appreciation__qr {
-    max-width: 220px;
-    max-height: 220px;
+    max-width: 200px;
+    max-height: 200px;
     width: auto;
     height: auto;
     border-radius: var(--radius-lg);
+    border: 2px solid var(--color-primary);
     box-shadow: var(--shadow-md);
-    transition: transform var(--ease-slow);
+    transition: transform var(--ease-slow), box-shadow var(--ease-slow);
+    cursor: pointer;
 }
 
 .appreciation__qr:hover {
-    transform: scale(1.28);
-    z-index: var(--z-modal);
+    transform: scale(1.35);
+    z-index: var(--z-max);
     position: relative;
+    box-shadow: var(--shadow-2xl);
 }
 
 #settings-view .appreciation {

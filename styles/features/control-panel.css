@@ -5,7 +5,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-sm) var(--space-xl);
     box-shadow: var(--shadow-sm);
     flex-shrink: 0;
     overflow: hidden;
@@ -61,7 +61,7 @@
 .control-panel__cluster {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: var(--space-sm);
 }
 
 .btn--port-change {

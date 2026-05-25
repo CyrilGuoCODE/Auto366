@@ -73,9 +73,10 @@
 }
 
 .logs-container {
+    flex: 1;
+    padding: 0 var(--space-xl);
     display: flex;
     flex-direction: column;
-    height: calc(100% - 45px);
     overflow: hidden;
     min-height: 0;
 }

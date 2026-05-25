@@ -475,7 +475,6 @@ class RulesUI {
               <div class="rule-group__name">
                 <i class="bi bi-collection"></i>
                 ${group.name || '未命名规则集'}
-                ${this.getCompatibleBadgeHtml(group)}
               </div>
               ${group.description ? `<div class="rule-group__description">${group.description}</div>` : ''}
             </div>
@@ -509,9 +508,8 @@ class RulesUI {
               <div class="rule-group__name">
                 <i class="bi bi-collection"></i>
                 ${group.name || '未命名规则集'}
-                ${this.getCompatibleBadgeHtml(group)}
                 <label class="toggle">
-                  <input type="checkbox" ${group.enabled ? 'checked' : ''} 
+                  <input type="checkbox" ${group.enabled ? 'checked' : ''}
                          onchange="universalAnswerFeature.toggleRule('${group.id}', this.checked)">
                   <span class="toggle__slider"></span>
                 </label>
@@ -571,15 +569,6 @@ class RulesUI {
   // 检查规则组是否有触发次数限制
   hasTriggersInGroup(rules) {
     return rules && rules.some(rule => rule.maxTriggers !== undefined && rule.maxTriggers > 0);
-  }
-
-  // 获取兼容性徽章HTML
-  getCompatibleBadgeHtml(group) {
-    if (!group || group.compatible === undefined) return '';
-    if (group.compatible) {
-      return '<span class="badge badge--compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
-    }
-    return '<span class="badge badge--incompatible">不兼容其他规则</span>';
   }
 
   // 生成规则组HTML
@@ -860,9 +849,18 @@ class RulesUI {
   // 切换规则状态
   async toggleRule(ruleId, enabled) {
     try {
-      const result = await window.electronAPI.toggleRule(ruleId, enabled);
+      // 读取兼容性保护设置
+      const compatibilityProtectionEnabled = localStorage.getItem('compatibility-protection-enabled') !== 'false';
+
+      const result = await window.electronAPI.toggleRule(ruleId, enabled, compatibilityProtectionEnabled);
       if (result.success) {
         this.logManager.addSuccessLog(`规则已${enabled ? '启用' : '禁用'}`);
+
+        // 如果有其他规则集被关闭，显示提示
+        if (enabled && result.disabledGroups && result.disabledGroups.length > 0) {
+          const names = result.disabledGroups.join('、');
+          this.logManager.addInfoLog(`已自动关闭不兼容规则集：${names}`);
+        }
 
         // 检查是否是规则集，如果是规则集则重新加载整个列表以更新子规则状态
         const rules = await window.electronAPI.getRules();
@@ -933,7 +931,22 @@ class RulesUI {
       this.logManager.addErrorLog('未找到该规则集');
       return;
     }
+
+    // 读取兼容性保护设置
+    const compatibilityProtectionEnabled = localStorage.getItem('compatibility-protection-enabled') !== 'false';
+
+    // 获取规则集的实际兼容性
+    let isCompatible = true;
+    if (target.compatible !== undefined && target.compatible !== null) {
+      isCompatible = target.compatible;
+    } else {
+      const groupRules = rules.filter(r => r.groupId === groupId);
+      const hasInjection = groupRules.some(r => r.type === 'zip-implant' || r.type === 'zip-implant-dynamic');
+      isCompatible = !hasInjection;
+    }
+
     let changed = false;
+    const disabledGroups = [];
     const updated = rules.map((r) => {
       if (!r.isGroup) {
         return r;
@@ -945,8 +958,9 @@ class RulesUI {
         }
         return r;
       }
-      if (target.compatible === false && r.enabled) {
+      if (compatibilityProtectionEnabled && !isCompatible && r.enabled) {
         changed = true;
+        disabledGroups.push(r.name || r.id);
         return { ...r, enabled: false };
       }
       return r;
@@ -958,6 +972,10 @@ class RulesUI {
         return;
       }
       this.logManager.addSuccessLog(`已启用规则集：${target.name || groupId}`);
+      if (disabledGroups.length > 0) {
+        const names = disabledGroups.join('、');
+        this.logManager.addInfoLog(`已自动关闭不兼容规则集：${names}`);
+      }
     }
     const ui = document.documentElement.getAttribute('data-ui');
     await this.renderSimpleHomeRulesets();
@@ -1004,8 +1022,7 @@ class RulesUI {
       const desc = Utils.escapeHtml(g.description || '无描述');
       const gid = g.id;
       const active = g.enabled ? ' simple-home__card is-active' : ' simple-home__card';
-      const badge = this.getCompatibleBadgeHtml(g);
-      return `<div class="${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
+      return `<div class="${active}" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`;
     }).join('');
     grid.querySelectorAll('.simple-home__card').forEach((card) => {
       card.addEventListener('click', () => {

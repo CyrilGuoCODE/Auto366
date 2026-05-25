@@ -572,15 +572,25 @@ class CommunityUI {
       const communityRulesetId = ruleset.id;
       let rulesToSave = [];
 
+      // 自动检测兼容性：检查规则集中是否有注入规则
+      const allRules = Array.isArray(rulesData)
+        ? rulesData
+        : rulesData.rules
+          ? rulesData.rules
+          : rulesData.isGroup
+            ? [rulesData]
+            : [];
+      const hasInjection = allRules.some(r => r.type === 'zip-implant' || r.type === 'zip-implant-dynamic');
+      const autoCompatible = !hasInjection;
+
       if (Array.isArray(rulesData)) {
         // 纯JSON格式：直接是规则数组
         rulesToSave = rulesData.map(rule => {
           if (rule.isGroup) {
             return {
               ...rule,
-              //为社区规则集默认补充不兼容属性
               communityRulesetId: communityRulesetId,
-              compatible: rule.compatible !== undefined ? rule.compatible : false
+              compatible: rule.compatible !== undefined ? rule.compatible : autoCompatible
             };
           }
           return rule;
@@ -591,7 +601,7 @@ class CommunityUI {
             return {
               ...rule,
               communityRulesetId: communityRulesetId,
-              compatible: rule.compatible !== undefined ? rule.compatible : true
+              compatible: rule.compatible !== undefined ? rule.compatible : autoCompatible
             };
           }
           return rule;
@@ -600,7 +610,7 @@ class CommunityUI {
         rulesToSave = [{
           ...rulesData,
           communityRulesetId: communityRulesetId,
-          compatible: rulesData.compatible !== undefined ? rulesData.compatible : true
+          compatible: rulesData.compatible !== undefined ? rulesData.compatible : autoCompatible
         }];
       }
 
@@ -853,8 +863,7 @@ class CommunityUI {
       const desc = this.escapeHtml(g.description || '无描述');
       const gid = g.id;
       const active = g.enabled ? ' simple-home__card is-active' : ' simple-home__card';
-      const badge = this.getCompatibleBadgeHtml(g);
-      return `<div class="${active}" data-group-id="${gid}"><h3>${name}${badge}</h3><p>${desc}</p></div>`;
+      return `<div class="${active}" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></div>`;
     }).join('');
     grid.querySelectorAll('.simple-home__card').forEach((card) => {
       card.addEventListener('click', () => {
@@ -889,6 +898,7 @@ class CommunityUI {
       return;
     }
     let changed = false;
+    const disabledGroups = [];
     const updated = rules.map((r) => {
       if (!r.isGroup) {
         return r;
@@ -900,12 +910,23 @@ class CommunityUI {
         }
         return r;
       }
-      if (target.compatible === false && r.enabled) {
+      if (r.enabled) {
         changed = true;
+        disabledGroups.push(r.name || r.id);
         return { ...r, enabled: false };
       }
       return r;
     });
+
+    // 同时开启目标规则集下的所有子规则
+    const childRules = updated.filter(r => r.groupId === groupId && r.isGroup === false);
+    childRules.forEach(r => {
+      if (!r.enabled) {
+        changed = true;
+        r.enabled = true;
+      }
+    });
+
     if (changed) {
       const res = await window.electronAPI.saveResponseRules(updated);
       if (!res || !res.success) {
@@ -913,6 +934,10 @@ class CommunityUI {
         return;
       }
       this.logManager.addSuccessLog(`已启用规则集：${target.name || groupId}`);
+      if (disabledGroups.length > 0) {
+        const names = disabledGroups.join('、');
+        this.logManager.addInfoLog(`已自动关闭其他规则集：${names}`);
+      }
     }
     const ui = document.documentElement.getAttribute('data-ui');
     await this.renderSimpleHomeRulesets();
@@ -950,15 +975,6 @@ class CommunityUI {
     } catch (error) {
       this.logManager.addErrorLog(`规则集删除失败: ${error.message}`);
     }
-  }
-
-  // 获取兼容性徽章HTML
-  getCompatibleBadgeHtml(group) {
-    if (!group || group.compatible === undefined) return '';
-    if (group.compatible) {
-      return '<span class="badge badge--compatible"><i class="bi bi-check-circle"></i> 兼容</span>';
-    }
-    return '<span class="badge badge--incompatible">不兼容其他规则</span>';
   }
 
   // HTML转义
