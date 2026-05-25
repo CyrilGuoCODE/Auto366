@@ -634,6 +634,7 @@
                             <option value="zip-implant">ZIP注入</option>
                             <option value="zip-implant-dynamic">动态注入</option>
                             <option value="answer-upload">答案上传</option>
+                            <option value="post-change-time">修改时间</option>
                         </select>
                     </div>
 
@@ -766,6 +767,21 @@
                                 min="0">
                             <small class="form-group__help">设置规则最多可触发的次数，0或留空表示无限制</small>
                             <small class="form-group__help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
+                        </div>
+                    </div>
+
+                    <div id="postchangetimeFields" class="rule-form__fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="pctUrlRequest">URL匹配模式</label>
+                            <input type="text" id="pctUrlRequest" class="form-input" placeholder="如 **task/score/submit**" value="http://study-api.up366.cn/client/task/score/submit/v2">
+                        </div>
+                        <div class="form-group">
+                            <label for="pctSalt">签名盐值 (salt)</label>
+                            <input type="text" id="pctSalt" class="form-input" placeholder="签名算法盐值" value="submitTaskToken-pc-987654">
+                        </div>
+                        <div class="form-group">
+                            <label for="pctTargetSeconds">目标秒数</label>
+                            <input type="number" id="pctTargetSeconds" class="form-input" placeholder="1212" value="1212">
                         </div>
                     </div>
 

@@ -211,7 +211,8 @@ class RulesUI {
       'content-change': 'contentchangeFields',
       'zip-implant': 'zipimplantFields',
       'zip-implant-dynamic': 'zipimplantdynamicFields',
-      'answer-upload': 'answeruploadFields'
+      'answer-upload': 'answeruploadFields',
+      'post-change-time': 'postchangetimeFields'
     };
 
     // 隐藏所有规则字段
@@ -260,6 +261,10 @@ class RulesUI {
       document.getElementById('urlUpload').value = rule.urlUpload || '';
       document.getElementById('uploadType').value = rule.uploadType || 'original';
       document.getElementById('serverLocate').value = rule.serverLocate || '';
+    } else if (rule.type === 'post-change-time') {
+      document.getElementById('pctUrlRequest').value = rule.urlRequest || '';
+      document.getElementById('pctSalt').value = rule.salt || '';
+      document.getElementById('pctTargetSeconds').value = rule.targetSeconds || 1212;
     }
 
     let maxTriggersInput;
@@ -364,6 +369,16 @@ class RulesUI {
 
       if (!rule.urlUpload) {
         this.logManager.addErrorLog('请输入上传URL匹配');
+        return;
+      }
+    } else if (rule.type === 'post-change-time') {
+      rule.urlRequest = document.getElementById('pctUrlRequest').value.trim();
+      rule.salt = document.getElementById('pctSalt').value.trim();
+      rule.targetSeconds = parseInt(document.getElementById('pctTargetSeconds').value) || 1212;
+      rule.method = 'POST';
+
+      if (!rule.urlRequest) {
+        this.logManager.addErrorLog('请输入URL匹配模式');
         return;
       }
     }
@@ -650,7 +665,8 @@ class RulesUI {
       'content-change': '内容修改',
       'zip-implant': 'ZIP注入',
       'zip-implant-dynamic': '动态注入',
-      'answer-upload': '答案上传'
+      'answer-upload': '答案上传',
+      'post-change-time': '修改时间'
     };
     return typeMap[type] || type || '未知类型';
   }
@@ -758,6 +774,17 @@ class RulesUI {
           <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
         </div>
         ` : ''}
+      `;
+    } else if (rule.type === 'post-change-time') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlRequest || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">目标秒数:</span>
+          <span class="rule-item__config-value">${rule.targetSeconds || 1212}</span>
+        </div>
       `;
     }
 

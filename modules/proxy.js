@@ -77,12 +77,32 @@ class ProxyServer {
         }
 
         let requestBody = [], responseBody = [];
+        const hasPostChangeTimeRule = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method).length > 0;
+
         ctx.onRequestData((ctx, chunk, callback) => {
           requestBody.push(chunk)
+          if (hasPostChangeTimeRule) return callback(null, null);
           return callback(null, chunk);
         })
         ctx.onRequestEnd((ctx, callback) => {
           let body = Buffer.concat(requestBody).toString()
+
+          if (hasPostChangeTimeRule) {
+            const rules = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method);
+            const rule = rules[0];
+            const modifiedBody = this.applyPostChangeTime(body, rule, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+            ctx.proxyToServerRequest.removeHeader('transfer-encoding');
+            ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
+            ctx.proxyToServerRequest.write(modifiedBody);
+            try {
+              const params = new URLSearchParams(modifiedBody);
+              requestInfo.requestBody = JSON.stringify(Object.fromEntries(params.entries()), null, 2);
+            } catch (e) {
+              requestInfo.requestBody = modifiedBody;
+            }
+            return callback();
+          }
+
           if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/json')) {
             try {
               body = JSON.stringify(JSON.parse(body), null, 2);
@@ -772,6 +792,75 @@ class ProxyServer {
       return [];
     }
     return l;
+  }
+
+  getPostChangeTimeRules(url, method) {
+    const rules = [];
+    for (const rule of this.rulesManager.getRules()) {
+      if (!this.isRuleEffective(rule) || rule.isGroup) continue;
+      if (rule.type !== 'post-change-time') continue;
+      if (rule.method && rule.method !== method) continue;
+      if (!this.urlMatchesPattern(url, rule.urlRequest)) continue;
+      rules.push(rule);
+    }
+    return rules;
+  }
+
+  applyPostChangeTime(bodyText, rule, url, contentType) {
+    if (!contentType || !contentType.includes('application/x-www-form-urlencoded')) {
+      return bodyText;
+    }
+
+    const formFields = [];
+    let tasksJsonRaw = null;
+
+    for (const pair of bodyText.split('&')) {
+      if (!pair.includes('=')) continue;
+      const eqIndex = pair.indexOf('=');
+      const key = pair.substring(0, eqIndex);
+      const value = pair.substring(eqIndex + 1);
+      if (key === 'tasksJson') {
+        tasksJsonRaw = decodeURIComponent(value);
+      } else if (key === 'ut') {
+      } else {
+        formFields.push([key, value]);
+      }
+    }
+
+    if (tasksJsonRaw === null) return bodyText;
+
+    const secondsMatch = tasksJsonRaw.match(/"seconds":(\d+)/);
+    const originalSeconds = secondsMatch ? secondsMatch[1] : '未找到';
+
+    const modifiedTasksJson = tasksJsonRaw.replace(
+      /"seconds":\d+/g,
+      `"seconds":${rule.targetSeconds}`
+    );
+    const newUt = this.calculateUt(modifiedTasksJson, rule.salt);
+
+    const parts = ['tasksJson=' + encodeURIComponent(modifiedTasksJson)];
+    for (const [k, v] of formFields) {
+      parts.push(k + '=' + v);
+    }
+    parts.push('ut=' + newUt);
+
+    this.safeIpcSend('rule-log', {
+      type: 'success',
+      message: `规则 "${rule.name}" 修改任务提交时间`,
+      ruleId: rule.id,
+      url,
+      details: `seconds: ${originalSeconds} → ${rule.targetSeconds}`
+    });
+
+    return parts.join('&');
+  }
+
+  calculateUt(tasksJsonRaw, salt) {
+    const timestampMs = String(Date.now());
+    const r = crypto.createHash('md5').update(timestampMs).digest('hex');
+    const i = crypto.createHash('md5').update(tasksJsonRaw).digest('hex');
+    const n = crypto.createHash('md5').update(i + salt + r).digest('hex');
+    return r.slice(0, 10) + n + r.slice(10);
   }
 
   fileNameMatchesPattern(fileName, pattern) {
