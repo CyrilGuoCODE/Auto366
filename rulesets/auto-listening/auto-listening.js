@@ -102,6 +102,7 @@
                         <input id="a366-search-input" type="text" placeholder="输入精确匹配的文本..." style="flex:1;padding:8px 10px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);background:var(--a366-bg);color:var(--a366-text);font-size:13px;outline:none;font-family:var(--a366-font);">
                         <button id="a366-search-btn" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">搜索</button>
                         <button id="a366-jiaojuan-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">交卷</button>
+                        <button id="a366-auto-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">自动</button>
                     </div>
                     <div style="font-size:11px;color:var(--a366-text-secondary);padding:2px 0;">匹配方式：文本精确 | 点击方式：原生 .click()</div>
                     <div id="a366-results" style="min-height:30px;max-height:200px;overflow-y:auto;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:6px;background:var(--a366-bg);"></div>
@@ -145,6 +146,7 @@
         document.getElementById('a366-search-btn').addEventListener('click', performSearch);
         inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') performSearch(); });
         document.getElementById('a366-jiaojuan-btn').addEventListener('click', submitExam);
+        document.getElementById('a366-auto-btn').addEventListener('click', executeAuto);
         document.getElementById('a366-minimize').addEventListener('click', toggleCollapse);
         document.getElementById('a366-fetch-answers').addEventListener('click', fetchAnswers);
         document.getElementById('a366-auto-fill-all').addEventListener('click', startAutoFillAll);
@@ -807,6 +809,61 @@
         document.getElementById('a366-stop-auto-fill').style.display = 'none';
         addLog('自动填答已停止', 'warn');
     }
+
+    async function executeAuto() {
+        addLog('━━━━━━━━ 自动流程开始 ━━━━━━━', 'info');
+
+        if (state.answerList.length === 0) {
+            await fetchAnswers();
+            if (state.answerList.length === 0) {
+                addLog('获取答案失败，自动流程终止', 'error');
+                return;
+            }
+        }
+
+        document.getElementById('a366-auto-fill-all').style.display = '';
+
+        await new Promise((resolve) => {
+            state.autoFillRunning = true;
+            state.autoFillIndex = 0;
+            document.getElementById('a366-auto-fill-all').style.display = 'none';
+            document.getElementById('a366-stop-auto-fill').style.display = '';
+
+            addLog(`开始一键自动填答，共 ${state.answerList.length} 题`, 'info');
+
+            function checkFillComplete() {
+                if (!state.autoFillRunning || state.autoFillIndex >= state.answerList.length) {
+                    state.autoFillRunning = false;
+                    document.getElementById('a366-auto-fill-all').style.display = '';
+                    document.getElementById('a366-stop-auto-fill').style.display = 'none';
+                    addLog('一键自动填答完毕', 'success');
+                    resolve();
+                    return;
+                }
+                setTimeout(checkFillComplete, 200);
+            }
+
+            autoFillNext();
+            checkFillComplete();
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        addLog('开始交卷流程', 'info');
+        submitExam();
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (state.testQueue.length > 0) {
+            addLog(`测试队列中有 ${state.testQueue.length} 个元素，开始逐个测试`, 'info');
+            testAll();
+        } else {
+            addLog('未找到交卷按钮，流程结束', 'warn');
+        }
+
+        addLog('━━━━━━━━ 自动流程结束 ━━━━━━━━', 'info');
+    }
+
 
     function addLog(message, type = 'info') {
         const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
