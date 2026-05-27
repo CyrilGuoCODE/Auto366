@@ -991,7 +991,42 @@ class ProxyServer {
 
           if (rule.uploadType === 'original') {
             try {
-              this.serverDatas[rule.serverLocate] = JSON.parse(responseBody.toString());
+              const newData = JSON.parse(responseBody.toString());
+              const existingData = this.serverDatas[rule.serverLocate];
+              
+              // 合并多个请求的词库数据（合并entryList中的词条）
+              if (rule.serverLocate === '/word-pk-answer' && 
+                  existingData && 
+                  Array.isArray(existingData.data) && 
+                  Array.isArray(newData.data)) {
+                // 收集已有的entryId
+                const existingEntryIds = new Set();
+                for (const dict of existingData.data) {
+                  if (Array.isArray(dict.entryList)) {
+                    for (const entry of dict.entryList) {
+                      existingEntryIds.add(entry.entryId);
+                    }
+                  }
+                }
+                // 合并新的词条到第一个词典
+                let newCount = 0;
+                for (const dict of newData.data) {
+                  if (Array.isArray(dict.entryList)) {
+                    for (const entry of dict.entryList) {
+                      if (!existingEntryIds.has(entry.entryId)) {
+                        existingData.data[0].entryList.push(entry);
+                        existingEntryIds.add(entry.entryId);
+                        newCount++;
+                      }
+                    }
+                  }
+                }
+                const totalCount = existingData.data[0].entryList.length;
+                this.safeIpcSend('rule-log', { type: 'success', message: `[词库合并] 新增 ${newCount} 个词条，总计 ${totalCount} 个` });
+              } else {
+                this.serverDatas[rule.serverLocate] = newData;
+                this.safeIpcSend('rule-log', { type: 'info', message: `[词库存储] 存储数据到 ${rule.serverLocate}` });
+              }
             }
             catch (error) {
               this.serverDatas[rule.serverLocate] = responseBody;
