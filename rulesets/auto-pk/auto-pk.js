@@ -1813,6 +1813,16 @@ var Loader = {
                             dataSource = '格式1 (contentList.entryList)';
                             UI.addLogMessage('使用格式1加载词库: contentList.entryList', 'info');
                         }
+                        else if (fullData && Array.isArray(fullData.data) && fullData.data.length > 0 && fullData.data[0].entryList) {
+                            // 合并所有词典的entryList
+                            for (var di = 0; di < fullData.data.length; di++) {
+                                if (fullData.data[di].entryList && Array.isArray(fullData.data[di].entryList)) {
+                                    entryList = entryList.concat(fullData.data[di].entryList);
+                                }
+                            }
+                            dataSource = '格式1.5 (data[*].entryList合并，共' + fullData.data.length + '本词典)';
+                            UI.addLogMessage('使用格式1.5加载词库: 合并 ' + fullData.data.length + ' 本词典', 'info');
+                        }
                         else if (fullData && fullData.data && fullData.data.words && Array.isArray(fullData.data.words)) {
                             entryList = fullData.data.words.map(function(wordItem) {
                                 return {
@@ -2318,6 +2328,10 @@ var UI = {
         delayInput.style.flex = '1';
         delayInput.style.marginLeft = '6px';
         delayInput.style.fontSize = '12px';
+        delayInput.style.background = 'rgba(255,255,255,0.2)';
+        delayInput.style.color = '#fff';
+        delayInput.style.border = '1px solid rgba(255,255,255,0.3)';
+        delayInput.style.borderRadius = '3px';
         delayInput.addEventListener('change', function() {
             var v = parseInt(delayInput.value, 10);
             if (Number.isFinite(v) && v > 0) {
@@ -2342,6 +2356,10 @@ var UI = {
         preset1.style.flex = '1';
         preset1.style.fontSize = '11px';
         preset1.style.padding = '4px';
+        preset1.style.background = 'rgba(255,255,255,0.25)';
+        preset1.style.color = '#fff';
+        preset1.style.border = '1px solid rgba(255,255,255,0.3)';
+        preset1.style.borderRadius = '3px';
         preset1.addEventListener('click', function() {
             State.autoPkDelay = 10;
             delayInput.value = '10';
@@ -2356,6 +2374,10 @@ var UI = {
         preset2.style.flex = '1';
         preset2.style.fontSize = '11px';
         preset2.style.padding = '4px';
+        preset2.style.background = 'rgba(255,255,255,0.25)';
+        preset2.style.color = '#fff';
+        preset2.style.border = '1px solid rgba(255,255,255,0.3)';
+        preset2.style.borderRadius = '3px';
         preset2.addEventListener('click', function() {
             State.autoPkDelay = 500;
             delayInput.value = '500';
@@ -2370,6 +2392,10 @@ var UI = {
         preset3.style.flex = '1';
         preset3.style.fontSize = '11px';
         preset3.style.padding = '4px';
+        preset3.style.background = 'rgba(255,255,255,0.25)';
+        preset3.style.color = '#fff';
+        preset3.style.border = '1px solid rgba(255,255,255,0.3)';
+        preset3.style.borderRadius = '3px';
         preset3.addEventListener('click', function() {
             State.autoPkDelay = 2000;
             delayInput.value = '2000';
@@ -2490,6 +2516,10 @@ var UI = {
         scRateInput.style.width = '45px';
         scRateInput.style.fontSize = '12px';
         scRateInput.style.textAlign = 'center';
+        scRateInput.style.background = 'rgba(255,255,255,0.2)';
+        scRateInput.style.color = '#fff';
+        scRateInput.style.border = '1px solid rgba(255,255,255,0.3)';
+        scRateInput.style.borderRadius = '3px';
         scRateInput.addEventListener('change', function() {
             var v = parseInt(scRateInput.value, 10);
             if (Number.isFinite(v) && v >= 0 && v <= 100) {
@@ -2596,6 +2626,10 @@ var UI = {
         aiThreshInput.style.width = '45px';
         aiThreshInput.style.fontSize = '12px';
         aiThreshInput.style.textAlign = 'center';
+        aiThreshInput.style.background = 'rgba(255,255,255,0.2)';
+        aiThreshInput.style.color = '#fff';
+        aiThreshInput.style.border = '1px solid rgba(255,255,255,0.3)';
+        aiThreshInput.style.borderRadius = '3px';
         aiThreshInput.addEventListener('change', function() {
             var v = parseInt(aiThreshInput.value, 10);
             if (Number.isFinite(v) && v >= 0 && v <= 100) {
@@ -2635,6 +2669,10 @@ var UI = {
         toggleBtn.textContent = '开始PK';
         toggleBtn.style.flex = '1';
         toggleBtn.style.fontSize = '12px';
+        toggleBtn.style.background = 'rgba(255,255,255,0.2)';
+        toggleBtn.style.color = '#fff';
+        toggleBtn.style.border = '1px solid rgba(255,255,255,0.3)';
+        toggleBtn.style.borderRadius = '3px';
         toggleBtn.addEventListener('click', function() {
             if (State.autoPkIntervalId) {
                 Scheduler.stop();
@@ -2647,6 +2685,10 @@ var UI = {
         reloadBtn.textContent = '重载词库';
         reloadBtn.style.flex = '1';
         reloadBtn.style.fontSize = '12px';
+        reloadBtn.style.background = 'rgba(255,255,255,0.2)';
+        reloadBtn.style.color = '#fff';
+        reloadBtn.style.border = '1px solid rgba(255,255,255,0.3)';
+        reloadBtn.style.borderRadius = '3px';
         reloadBtn.addEventListener('click', function() {
             State.bucketLoaded = false;
             State.bucketError = null;

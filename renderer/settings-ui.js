@@ -155,7 +155,7 @@ class SettingsUI {
     const confirmHtml = `
       <div class="log-item log-item--warning">
         <i class="bi bi-exclamation-triangle"></i>
-        <span>确定要清理所有缓存吗？此操作将清理 Auto366 临时文件和天学网缓存，不可撤销。</span>
+        <span style="color:var(--color-danger);">确定要清理所有缓存吗？此操作将清理 Auto366 临时文件和天学网缓存，不可撤销。</span>
         <div class="log-item__actions">
           <button class="btn--sm btn--cancel" id="cancelClearCacheBtn">取消</button>
           <button class="btn--sm btn--danger" id="confirmClearCacheBtn" style="position:relative;overflow:hidden">
