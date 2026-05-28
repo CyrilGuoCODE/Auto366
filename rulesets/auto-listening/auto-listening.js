@@ -506,8 +506,22 @@
     }
 
     function testAll() {
-        addLog('开始逐个测试队列中的所有元素...', 'info');
-        testNextInQueue(0);
+        return new Promise((resolve) => {
+            addLog('开始逐个测试队列中的所有元素...', 'info');
+            testNextInQueueWithResolve(0, resolve);
+        });
+    }
+
+    function testNextInQueueWithResolve(index, resolve) {
+        if (index >= state.testQueue.length) {
+            unlockScroll();
+            addLog('队列中所有元素测试完毕', 'success');
+            resolve();
+            return;
+        }
+        testOne(index, () => {
+            setTimeout(() => testNextInQueueWithResolve(index + 1, resolve), 400);
+        });
     }
 
     function testNextInQueue(index) {
@@ -810,8 +824,68 @@
         addLog('自动填答已停止', 'warn');
     }
 
+    function clickStartBtn() {
+        // 点击"去做题"按钮
+        // 方法1：通过 class 查找
+        let btn = document.querySelector('.start-btn-text');
+        if (btn) {
+            btn.click();
+            return true;
+        }
+        // 方法2：通过文本内容查找
+        const allElements = document.querySelectorAll('button, span, div, a');
+        for (const el of allElements) {
+            if (el === container || container.contains(el)) continue;
+            const text = (el.textContent || '').trim();
+            if (text === '去做题') {
+                el.click();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function clickConfirmSubmitBtn() {
+        // 在弹窗中查找"交卷"按钮
+        const popups = document.querySelectorAll('.u3compo-popup');
+        for (const popup of popups) {
+            const btnList = popup.querySelector('.u3-button-list.u3-button-double');
+            if (!btnList) continue;
+
+            const btns = btnList.querySelectorAll('.u3-button');
+            for (const btn of btns) {
+                if ((btn.textContent || '').trim() === '交卷') {
+                    btn.click();
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // 等待弹窗出现并点击确认交卷
+    async function waitAndClickConfirmSubmit(maxWait = 5000) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxWait) {
+            if (clickConfirmSubmitBtn()) {
+                return true;
+            }
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        return false;
+    }
+
     async function executeAuto() {
         addLog('━━━━━━━━ 自动流程开始 ━━━━━━━', 'info');
+
+        // 检查并点击"去做题"按钮（试题预览页）
+        const startBtnClicked = clickStartBtn();
+        if (startBtnClicked) {
+            addLog('检测到试题预览页，已点击「去做题」', 'success');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
 
         if (state.answerList.length === 0) {
             await fetchAnswers();
@@ -856,7 +930,16 @@
 
         if (state.testQueue.length > 0) {
             addLog(`测试队列中有 ${state.testQueue.length} 个元素，开始逐个测试`, 'info');
-            testAll();
+            await testAll();
+
+            // 等待弹窗出现并点击确认交卷
+            addLog('等待交卷确认弹窗...', 'info');
+            const confirmed = await waitAndClickConfirmSubmit(5000);
+            if (confirmed) {
+                addLog('已点击确认交卷按钮', 'success');
+            } else {
+                addLog('未检测到交卷确认弹窗', 'warn');
+            }
         } else {
             addLog('未找到交卷按钮，流程结束', 'warn');
         }
