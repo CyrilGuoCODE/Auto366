@@ -506,13 +506,24 @@
                 <div class="view-panel__header">
                     <h3>监听日志</h3>
                     <div class="view-panel__controls">
-                        <button id="searchLogsBtn" class="btn--search" title="搜索日志">
-                            <i class="bi bi-search"></i>
-                        </button>
-                        <button id="clearLogsBtn" class="btn--clear" title="清空日志">
-                            <i class="bi bi-trash"></i>
-                        </button>
+                        <button id="multiSelectLogsBtn" class="btn--search" title="多选导出"><i class="bi bi-check2-square"></i></button>
+                        <button id="searchLogsBtn" class="btn--search" title="搜索日志"><i class="bi bi-search"></i></button>
+                        <button id="clearLogsBtn" class="btn--clear" title="清空日志"><i class="bi bi-trash"></i></button>
                     </div>
+                </div>
+                <!-- 多选操作栏 -->
+                <div id="logMultiSelectBar" class="logs-container__search" style="display: none;">
+                    <div class="logs-container__filters" style="flex-wrap: wrap;">
+                        <button id="logMsSelectAllBtn" class="btn--filter">全选可见</button>
+                        <button id="logMsSelectRequestsBtn" class="btn--filter">仅选请求</button>
+                        <button id="logMsInvertBtn" class="btn--filter">反选</button>
+                        <button id="logMsClearBtn" class="btn--filter">清空选择</button>
+                        <button id="logMsExportBtn" class="btn--filter is-active" title="导出选中的请求为JSON">
+                            <i class="bi bi-download"></i> 导出选中
+                        </button>
+                        <button id="logMsCancelBtn" class="btn--filter">退出多选</button>
+                    </div>
+                    <div id="logMsStatus" class="logs-container__search-status">未选择</div>
                 </div>
                 <!-- 日志搜索栏 -->
                 <div id="logSearchBar" class="logs-container__search" style="display: none;">
@@ -648,6 +659,7 @@
                             <option value="zip-implant">ZIP注入</option>
                             <option value="zip-implant-dynamic">动态注入</option>
                             <option value="answer-upload">答案上传</option>
+                            <option value="post-change-time">修改时间</option>
                         </select>
                     </div>
 
@@ -780,6 +792,21 @@
                                 min="0">
                             <small class="form-group__help">设置规则最多可触发的次数，0或留空表示无限制</small>
                             <small class="form-group__help">注意非必要请勿修改此字段，出现问题可以找规则集作者</small>
+                        </div>
+                    </div>
+
+                    <div id="postchangetimeFields" class="rule-form__fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="pctUrlRequest">URL匹配模式</label>
+                            <input type="text" id="pctUrlRequest" class="form-input" placeholder="提交作答数据的URL" value="http://study-api.up366.cn/client/task/score/submit/v2">
+                        </div>
+                        <div class="form-group">
+                            <label for="pctSalt">签名盐值 (salt)</label>
+                            <input type="text" id="pctSalt" class="form-input" placeholder="签名算法盐值" value="submitTaskToken-pc-987654">
+                        </div>
+                        <div class="form-group">
+                            <label for="pctTargetSeconds">目标秒数</label>
+                            <input type="number" id="pctTargetSeconds" class="form-input" placeholder="建议设定合理的作答用时，单位秒" value="1212">
                         </div>
                     </div>
 

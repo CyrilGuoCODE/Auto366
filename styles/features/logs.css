@@ -43,33 +43,72 @@
     gap: var(--space-md);
 }
 
-.view-panel__controls .btn--search {
+.view-panel__controls .btn--search,
+.view-panel__controls .btn--clear {
     background: var(--color-bg-panel);
     color: var(--color-text-muted);
     border: 1px solid var(--color-border-strong);
-    padding: 0;
+    padding: 0 !important;
     width: 32px;
     height: 32px;
+    position: relative;
+    font-size: 18px;
+    line-height: 32px;
+    text-align: center;
 }
 
 .view-panel__controls .btn--search:hover {
-    background: var(--color-bg-muted);
-    border-color: var(--color-gray-400);
-    color: var(--color-text-heading);
+    background: var(--color-primary-light);
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-700);
 }
 
 .view-panel__controls .btn--clear {
     background: transparent;
-    border: 1px solid var(--color-border-strong);
+    border-color: var(--color-border-strong);
     color: var(--color-danger);
-    padding: 0 var(--space-sm);
-    height: 32px;
 }
 
 .view-panel__controls .btn--clear:hover {
     background: var(--color-bg-muted);
     border-color: var(--color-danger);
     color: var(--color-danger-hover);
+}
+
+.view-panel__controls .btn--search .bi,
+.view-panel__controls .btn--clear .bi {
+    display: none !important;
+}
+
+.view-panel__controls .btn--search::before,
+.view-panel__controls .btn--clear::before {
+    font-family: bootstrap-icons;
+    font-size: 18px;
+    line-height: 32px;
+}
+
+#multiSelectLogsBtn:hover {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-700);
+}
+
+#searchLogsBtn:hover {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-700);
+}
+
+#multiSelectLogsBtn::before {
+    content: "\f271";
+}
+
+#searchLogsBtn::before {
+    content: "\f52a";
+}
+
+#clearLogsBtn::before {
+    content: "\f5de";
 }
 
 .logs-container {
@@ -552,4 +591,27 @@
     max-width: 50%;
     overflow: hidden;
     height: 100%;
+}
+
+/* 多选模式 */
+.log-item__checkbox {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    cursor: pointer;
+    accent-color: var(--color-primary-500, #2196f3);
+    flex-shrink: 0;
+}
+
+.traffic-monitor__log.is-multiselect .log-item--clickable {
+    cursor: pointer;
+}
+
+.traffic-monitor__log.is-multiselect .log-item--checked {
+    background: var(--color-primary-50, rgba(33, 150, 243, 0.1));
+}
+
+#multiSelectLogsBtn.is-active {
+    background: var(--color-primary-500, #2196f3);
+    color: #fff;
 }
