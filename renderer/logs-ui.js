@@ -6,7 +6,11 @@ class LogManager {
     this.searchActive = false;
     this.currentSearchKeyword = '';
     this.currentFilter = 'all';
+    // 多选状态
+    this.multiSelectMode = false;
+    this.selectedRequestIds = new Set();
     this.initSearchEvents();
+    this.initMultiSelectEvents();
   }
 
   initSearchEvents() {
@@ -264,13 +268,33 @@ class LogManager {
       logItem.className = `log-item log-item--${type} log-item--clickable`;
       logItem.dataset.requestId = requestId;
 
+      const checkboxHtml = this.multiSelectMode
+        ? `<input type="checkbox" class="log-item__checkbox" data-ms-checkbox="${requestId}">`
+        : '';
+
       logItem.innerHTML = `
         <div class="log-item__time">${displayTimestamp}</div>
+        ${checkboxHtml}
         <i class="${iconClass}"></i>
         <span class="log-item__text">${text}</span>
       `;
 
-      logItem.addEventListener('click', () => {
+      // 如果该项之前在选择集合里，恢复勾选状态
+      if (this.multiSelectMode && this.selectedRequestIds.has(requestId)) {
+        const cb = logItem.querySelector('input[data-ms-checkbox]');
+        if (cb) cb.checked = true;
+        logItem.classList.add('log-item--checked');
+      }
+
+      logItem.addEventListener('click', (e) => {
+        // 多选模式：点击切换勾选，而非打开详情
+        if (this.multiSelectMode) {
+          // 如果直接点中 checkbox，让浏览器处理；其他位置由我们 toggle
+          if (e.target && e.target.matches('input[data-ms-checkbox]')) return;
+          this.toggleItemSelection(logItem, requestId);
+          return;
+        }
+
         this.showRequestDetails(requestId);
 
         if (this.state.selectedLogItem) {
@@ -279,6 +303,22 @@ class LogManager {
         logItem.classList.add('log-item--selected');
         this.state.selectedLogItem = logItem;
       });
+
+      // 在多选模式下，checkbox 本身的 change 事件同步状态
+      const cb = logItem.querySelector('input[data-ms-checkbox]');
+      if (cb) {
+        cb.addEventListener('click', (e) => e.stopPropagation()); // 防止冒泡到 logItem 又 toggle 一次
+        cb.addEventListener('change', () => {
+          if (cb.checked) {
+            this.selectedRequestIds.add(requestId);
+            logItem.classList.add('log-item--checked');
+          } else {
+            this.selectedRequestIds.delete(requestId);
+            logItem.classList.remove('log-item--checked');
+          }
+          this.updateMultiSelectStatus();
+        });
+      }
     } else {
       logItem.className = `log-item log-item--${type}`;
       logItem.innerHTML = `
@@ -300,6 +340,11 @@ class LogManager {
       const removedItem = logItems[0];
       if (removedItem.dataset.requestId) {
         this.state.requestDataMap.delete(removedItem.dataset.requestId);
+        // 同步清理多选集合
+        if (this.selectedRequestIds.has(removedItem.dataset.requestId)) {
+          this.selectedRequestIds.delete(removedItem.dataset.requestId);
+          if (this.multiSelectMode) this.updateMultiSelectStatus();
+        }
       }
       trafficLog.removeChild(removedItem);
     }
@@ -475,6 +520,12 @@ class LogManager {
     // 清空请求数据映射
     this.state.requestDataMap.clear();
 
+    // 清空多选状态（但保持多选模式）
+    this.selectedRequestIds.clear();
+    if (this.multiSelectMode) {
+      this.updateMultiSelectStatus();
+    }
+
     // 隐藏详情面板
     this.hideRequestDetails();
 
@@ -516,6 +567,265 @@ class LogManager {
     if (data.file) {
       this.addSuccessLog(`答案文件已保存到: ${data.file}`);
     }
+  }
+
+  // ==================== 多选模式 ====================
+
+  initMultiSelectEvents() {
+    const toggleBtn = document.getElementById('multiSelectLogsBtn');
+    const cancelBtn = document.getElementById('logMsCancelBtn');
+    const selectAllBtn = document.getElementById('logMsSelectAllBtn');
+    const selectReqBtn = document.getElementById('logMsSelectRequestsBtn');
+    const invertBtn = document.getElementById('logMsInvertBtn');
+    const clearBtn = document.getElementById('logMsClearBtn');
+    const exportBtn = document.getElementById('logMsExportBtn');
+
+    if (toggleBtn) toggleBtn.addEventListener('click', () => this.toggleMultiSelect());
+    if (cancelBtn) cancelBtn.addEventListener('click', () => this.exitMultiSelect());
+    if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.selectAllVisible(false));
+    if (selectReqBtn) selectReqBtn.addEventListener('click', () => this.selectAllVisible(true));
+    if (invertBtn) invertBtn.addEventListener('click', () => this.invertSelection());
+    if (clearBtn) clearBtn.addEventListener('click', () => this.clearSelection());
+    if (exportBtn) exportBtn.addEventListener('click', () => this.exportSelected());
+  }
+
+  toggleMultiSelect() {
+    if (this.multiSelectMode) {
+      this.exitMultiSelect();
+    } else {
+      this.enterMultiSelect();
+    }
+  }
+
+  enterMultiSelect() {
+    this.multiSelectMode = true;
+    this.selectedRequestIds.clear();
+
+    const bar = document.getElementById('logMultiSelectBar');
+    const btn = document.getElementById('multiSelectLogsBtn');
+    const trafficLog = document.getElementById('trafficLog');
+
+    if (bar) bar.style.display = 'block';
+    if (btn) btn.classList.add('is-active');
+    if (trafficLog) trafficLog.classList.add('is-multiselect');
+
+    // 隐藏详情面板（如果开着的话），多选模式下不需要
+    this.hideRequestDetails();
+
+    // 给所有已经存在的可点击日志项注入 checkbox
+    this.renderCheckboxesForExistingItems();
+    this.updateMultiSelectStatus();
+  }
+
+  exitMultiSelect() {
+    this.multiSelectMode = false;
+    this.selectedRequestIds.clear();
+
+    const bar = document.getElementById('logMultiSelectBar');
+    const btn = document.getElementById('multiSelectLogsBtn');
+    const trafficLog = document.getElementById('trafficLog');
+
+    if (bar) bar.style.display = 'none';
+    if (btn) btn.classList.remove('is-active');
+    if (trafficLog) trafficLog.classList.remove('is-multiselect');
+
+    // 移除所有 checkbox 和高亮
+    this.removeCheckboxesFromExistingItems();
+  }
+
+  renderCheckboxesForExistingItems() {
+    const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+    const items = trafficLog.querySelectorAll('.log-item--clickable');
+    items.forEach(item => {
+      if (item.querySelector('.log-item__checkbox')) return; // 已有
+      const reqId = item.dataset.requestId;
+      if (!reqId) return;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'log-item__checkbox';
+      cb.dataset.msCheckbox = reqId;
+      // 插到时间之后、图标之前
+      const timeEl = item.querySelector('.log-item__time');
+      if (timeEl && timeEl.nextSibling) {
+        item.insertBefore(cb, timeEl.nextSibling);
+      } else {
+        item.insertBefore(cb, item.firstChild);
+      }
+      cb.addEventListener('click', (e) => e.stopPropagation());
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          this.selectedRequestIds.add(reqId);
+          item.classList.add('log-item--checked');
+        } else {
+          this.selectedRequestIds.delete(reqId);
+          item.classList.remove('log-item--checked');
+        }
+        this.updateMultiSelectStatus();
+      });
+    });
+  }
+
+  removeCheckboxesFromExistingItems() {
+    const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+    trafficLog.querySelectorAll('.log-item__checkbox').forEach(cb => cb.remove());
+    trafficLog.querySelectorAll('.log-item--checked').forEach(it => it.classList.remove('log-item--checked'));
+  }
+
+  toggleItemSelection(logItem, requestId) {
+    const cb = logItem.querySelector('input[data-ms-checkbox]');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    if (cb.checked) {
+      this.selectedRequestIds.add(requestId);
+      logItem.classList.add('log-item--checked');
+    } else {
+      this.selectedRequestIds.delete(requestId);
+      logItem.classList.remove('log-item--checked');
+    }
+    this.updateMultiSelectStatus();
+  }
+
+  // mode=true 只选请求条目（有 requestId 的）；mode=false 全选可见可勾选项
+  // 由于不可点击的项压根没 checkbox，二者实际是一样的，只是 UI 措辞不同
+  selectAllVisible(onlyRequests = false) {
+    const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+    const items = trafficLog.querySelectorAll('.log-item--clickable');
+    items.forEach(item => {
+      if (item.classList.contains('log-item--hidden')) return;
+      const reqId = item.dataset.requestId;
+      if (!reqId) return;
+      const cb = item.querySelector('input[data-ms-checkbox]');
+      if (cb && !cb.checked) {
+        cb.checked = true;
+        this.selectedRequestIds.add(reqId);
+        item.classList.add('log-item--checked');
+      }
+    });
+    this.updateMultiSelectStatus();
+  }
+
+  invertSelection() {
+    const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+    const items = trafficLog.querySelectorAll('.log-item--clickable');
+    items.forEach(item => {
+      if (item.classList.contains('log-item--hidden')) return;
+      const reqId = item.dataset.requestId;
+      if (!reqId) return;
+      const cb = item.querySelector('input[data-ms-checkbox]');
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      if (cb.checked) {
+        this.selectedRequestIds.add(reqId);
+        item.classList.add('log-item--checked');
+      } else {
+        this.selectedRequestIds.delete(reqId);
+        item.classList.remove('log-item--checked');
+      }
+    });
+    this.updateMultiSelectStatus();
+  }
+
+  clearSelection() {
+    const trafficLog = document.getElementById('trafficLog');
+    if (!trafficLog) return;
+    trafficLog.querySelectorAll('input[data-ms-checkbox]').forEach(cb => { cb.checked = false; });
+    trafficLog.querySelectorAll('.log-item--checked').forEach(it => it.classList.remove('log-item--checked'));
+    this.selectedRequestIds.clear();
+    this.updateMultiSelectStatus();
+  }
+
+  updateMultiSelectStatus() {
+    const status = document.getElementById('logMsStatus');
+    if (!status) return;
+    const n = this.selectedRequestIds.size;
+    status.textContent = n === 0 ? '未选择' : `已选 ${n} 条`;
+  }
+
+  exportSelected() {
+    if (this.selectedRequestIds.size === 0) {
+      this.addErrorLog('未选择任何请求，无法导出');
+      return;
+    }
+
+    const arr = [];
+    this.selectedRequestIds.forEach(reqId => {
+      const data = this.state.requestDataMap.get(reqId);
+      if (!data) return;
+      // 收集最有用的字段，便于协议分析
+      arr.push({
+        timestamp: data.timestamp || null,
+        method: data.method || 'GET',
+        url: data.url || '',
+        statusCode: data.statusCode || data.status || null,
+        requestHeaders: data.requestHeaders || null,
+        requestBody: this.tryParseMaybeJson(data.requestBody),
+        responseHeaders: data.responseHeaders || null,
+        responseBody: this.tryParseMaybeJson(data.responseBody),
+        bodySize: data.bodySize || null,
+        uuid: data.uuid || null
+      });
+    });
+
+    // 按时间排序
+    arr.sort((a, b) => {
+      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return ta - tb;
+    });
+
+    const jsonStr = JSON.stringify(arr, null, 2);
+
+    // 一份扔剪贴板，一份触发文件下载
+    let clipboardOk = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(jsonStr)
+        .then(() => { clipboardOk = true; })
+        .catch(() => { /* 忽略，下载兜底 */ });
+    }
+
+    try {
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const fname = `auto366-logs-${this.timestampForFile()}.json`;
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      this.addSuccessLog(`已导出 ${arr.length} 条请求到 ${fname}${clipboardOk ? '（并已复制到剪贴板）' : ''}`);
+    } catch (e) {
+      this.addErrorLog('导出失败: ' + (e.message || e));
+    }
+  }
+
+  // 请求/响应体是字符串里包JSON很常见，尽量解析成对象，让导出的 JSON 直接可读、可被脚本处理
+  tryParseMaybeJson(body) {
+    if (body == null) return null;
+    if (typeof body === 'object') return body;
+    if (typeof body !== 'string') return String(body);
+    const trimmed = body.trim();
+    if (!trimmed) return '';
+    // 只在看起来像 JSON 时才解析
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (_) {
+        return body;
+      }
+    }
+    return body;
+  }
+
+  timestampForFile() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
   }
 }
 

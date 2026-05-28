@@ -506,13 +506,24 @@
                 <div class="view-panel__header">
                     <h3>监听日志</h3>
                     <div class="view-panel__controls">
-                        <button id="searchLogsBtn" class="btn--search" title="搜索日志">
-                            <i class="bi bi-search"></i>
-                        </button>
-                        <button id="clearLogsBtn" class="btn--clear" title="清空日志">
-                            <i class="bi bi-trash"></i>
-                        </button>
+                        <button id="multiSelectLogsBtn" class="btn--search" title="多选导出"><i class="bi bi-check2-square"></i></button>
+                        <button id="searchLogsBtn" class="btn--search" title="搜索日志"><i class="bi bi-search"></i></button>
+                        <button id="clearLogsBtn" class="btn--clear" title="清空日志"><i class="bi bi-trash"></i></button>
                     </div>
+                </div>
+                <!-- 多选操作栏 -->
+                <div id="logMultiSelectBar" class="logs-container__search" style="display: none;">
+                    <div class="logs-container__filters" style="flex-wrap: wrap;">
+                        <button id="logMsSelectAllBtn" class="btn--filter">全选可见</button>
+                        <button id="logMsSelectRequestsBtn" class="btn--filter">仅选请求</button>
+                        <button id="logMsInvertBtn" class="btn--filter">反选</button>
+                        <button id="logMsClearBtn" class="btn--filter">清空选择</button>
+                        <button id="logMsExportBtn" class="btn--filter is-active" title="导出选中的请求为JSON">
+                            <i class="bi bi-download"></i> 导出选中
+                        </button>
+                        <button id="logMsCancelBtn" class="btn--filter">退出多选</button>
+                    </div>
+                    <div id="logMsStatus" class="logs-container__search-status">未选择</div>
                 </div>
                 <!-- 日志搜索栏 -->
                 <div id="logSearchBar" class="logs-container__search" style="display: none;">
