@@ -180,13 +180,11 @@ class RulesUI {
     const form = document.getElementById('ruleForm');
 
     if (rule) {
-      // 编辑模式
       title.textContent = '编辑规则';
       this.state.currentEditingRule = rule;
-      this.state.currentRuleGroupId = rule.groupId || groupId;
+      this.state.currentRuleGroupId = groupId;
       this.populateRuleForm(rule);
     } else {
-      // 添加模式
       title.textContent = '添加规则';
       this.state.currentEditingRule = null;
       this.state.currentRuleGroupId = groupId;
@@ -441,11 +439,11 @@ class RulesUI {
   }
 
   // 显示规则
-  displayRules(rules) {
+  displayRules(rulesets) {
     const rulesContent = document.querySelector('#rules-view .rules-content');
     const isSimple = document.documentElement.getAttribute('data-ui') === 'simple';
 
-    if (!rules || rules.length === 0) {
+    if (!rulesets || rulesets.length === 0) {
       rulesContent.innerHTML = `
         <div class="rules-list__empty">
           <i class="bi bi-collection"></i>
@@ -457,8 +455,7 @@ class RulesUI {
     }
 
     if (isSimple) {
-      const ruleGroups = rules.filter(rule => rule.isGroup);
-      if (ruleGroups.length === 0) {
+      if (rulesets.length === 0) {
         rulesContent.innerHTML = `
           <div class="rules-list__empty">
           <i class="bi bi-collection"></i>
@@ -468,7 +465,7 @@ class RulesUI {
         `;
         return;
       }
-      const html = ruleGroups.map(group => `
+      const html = rulesets.map(group => `
         <div class="rule-group rule-group--clickable${group.enabled ? ' rule-group--enabled' : ''}" data-group-id="${group.id}" onclick="universalAnswerFeature.enterSimpleRuleset('${group.id}')">
           <div class="rule-group__header">
             <div class="rule-group__info">
@@ -490,15 +487,10 @@ class RulesUI {
       return;
     }
 
-    // 分离规则集和独立规则
-    const ruleGroups = rules.filter(rule => rule.isGroup);
-    const independentRules = rules.filter(rule => !rule.isGroup && !rule.groupId);
-
     let html = '<div class="rules-list">';
 
-    // 显示规则集
-    ruleGroups.forEach(group => {
-      const groupRules = rules.filter(rule => rule.groupId === group.id);
+    rulesets.forEach(group => {
+      const groupRules = group.rules || [];
       const statusClass = group.enabled ? 'is-enabled' : 'is-disabled';
 
       html += `
@@ -541,26 +533,6 @@ class RulesUI {
         </div>
       `;
     });
-
-    // 显示独立规则
-    if (independentRules.length > 0) {
-      html += `
-        <div class="rule-group rules-list--independent">
-          <div class="rule-group__header">
-            <div class="rule-group__info">
-              <div class="rule-group__name">
-                <i class="bi bi-list-ul"></i>
-                独立规则
-                <span class="rules-list__count">(${independentRules.length} 个规则)</span>
-              </div>
-            </div>
-          </div>
-          <div class="rule-group__content">
-            ${this.generateGroupRulesHtml(independentRules, true)}
-          </div>
-        </div>
-      `;
-    }
 
     html += '</div>';
     rulesContent.innerHTML = html;
@@ -635,8 +607,8 @@ class RulesUI {
   // 编辑规则集
   async editRuleGroup(groupId) {
     try {
-      const rules = await window.electronAPI.getRules();
-      const group = rules.find(r => r.id === groupId && r.isGroup);
+      const rulesets = await window.electronAPI.getRules();
+      const group = rulesets.find(rs => rs.id === groupId);
       if (group) {
         this.showRuleGroupModal(group);
       } else {
@@ -795,10 +767,19 @@ class RulesUI {
   // 编辑规则
   async editRule(ruleId) {
     try {
-      const rules = await window.electronAPI.getRules();
-      const rule = rules.find(r => r.id === ruleId);
+      const rulesets = await window.electronAPI.getRules();
+      let rule = null;
+      let groupId = null;
+      for (const rs of rulesets) {
+        const found = rs.rules.find(r => r.id === ruleId);
+        if (found) {
+          rule = found;
+          groupId = rs.id;
+          break;
+        }
+      }
       if (rule) {
-        this.showRuleModal(rule);
+        this.showRuleModal(rule, groupId);
       } else {
         this.logManager.addErrorLog('规则不存在');
       }
@@ -849,33 +830,27 @@ class RulesUI {
   // 切换规则状态
   async toggleRule(ruleId, enabled) {
     try {
-      // 读取兼容性保护设置
       const compatibilityProtectionEnabled = localStorage.getItem('compatibility-protection-enabled') !== 'false';
 
       const result = await window.electronAPI.toggleRule(ruleId, enabled, compatibilityProtectionEnabled);
       if (result.success) {
         this.logManager.addSuccessLog(`规则已${enabled ? '启用' : '禁用'}`);
 
-        // 如果有其他规则集被关闭，显示提示
         if (enabled && result.disabledGroups && result.disabledGroups.length > 0) {
           const names = result.disabledGroups.join('、');
           this.logManager.addInfoLog(`已自动关闭不兼容规则集：${names}`);
         }
 
-        // 检查是否是规则集，如果是规则集则重新加载整个列表以更新子规则状态
-        const rules = await window.electronAPI.getRules();
-        const toggledRule = rules.find(r => r.id === ruleId);
+        const rulesets = await window.electronAPI.getRules();
+        const isRuleset = rulesets.some(rs => rs.id === ruleId);
 
-        if (toggledRule && toggledRule.isGroup) {
-          // 如果是规则集，重新加载整个规则列表
+        if (isRuleset) {
           this.loadRules();
         } else {
-          // 如果是普通规则，只更新状态显示
           this.updateRuleStatus(ruleId, enabled);
         }
       } else {
         this.logManager.addErrorLog(`规则状态更新失败: ${result.error}`);
-        // 恢复开关状态
         const checkbox = document.querySelector(`input[onchange*="${ruleId}"]`);
         if (checkbox) {
           checkbox.checked = !enabled;
@@ -883,7 +858,6 @@ class RulesUI {
       }
     } catch (error) {
       this.logManager.addErrorLog(`规则状态更新失败: ${error.message}`);
-      // 恢复开关状态
       const checkbox = document.querySelector(`input[onchange*="${ruleId}"]`);
       if (checkbox) {
         checkbox.checked = !enabled;
@@ -919,51 +893,45 @@ class RulesUI {
 
   // 应用排他规则集
   async applyExclusiveRuleset(groupId) {
-    let rules;
+    let rulesets;
     try {
-      rules = await window.electronAPI.getRules();
+      rulesets = await window.electronAPI.getRules();
     } catch (e) {
       this.logManager.addErrorLog(`读取规则失败: ${e.message}`);
       return;
     }
-    const target = rules.find((r) => r.isGroup && r.id === groupId);
+    const target = rulesets.find(rs => rs.id === groupId);
     if (!target) {
       this.logManager.addErrorLog('未找到该规则集');
       return;
     }
 
-    // 读取兼容性保护设置
     const compatibilityProtectionEnabled = localStorage.getItem('compatibility-protection-enabled') !== 'false';
 
-    // 获取规则集的实际兼容性
     let isCompatible = true;
     if (target.compatible !== undefined && target.compatible !== null) {
       isCompatible = target.compatible;
     } else {
-      const groupRules = rules.filter(r => r.groupId === groupId);
-      const hasInjection = groupRules.some(r => r.type === 'zip-implant' || r.type === 'zip-implant-dynamic');
+      const hasInjection = (target.rules || []).some(r => r.type === 'zip-implant' || r.type === 'zip-implant-dynamic');
       isCompatible = !hasInjection;
     }
 
     let changed = false;
     const disabledGroups = [];
-    const updated = rules.map((r) => {
-      if (!r.isGroup) {
-        return r;
-      }
-      if (r.id === groupId) {
-        if (!r.enabled) {
+    const updated = rulesets.map(rs => {
+      if (rs.id === groupId) {
+        if (!rs.enabled) {
           changed = true;
-          return { ...r, enabled: true };
+          return { ...rs, enabled: true };
         }
-        return r;
+        return rs;
       }
-      if (compatibilityProtectionEnabled && !isCompatible && r.enabled) {
+      if (compatibilityProtectionEnabled && !isCompatible && rs.enabled) {
         changed = true;
-        disabledGroups.push(r.name || r.id);
-        return { ...r, enabled: false };
+        disabledGroups.push(rs.name || rs.id);
+        return { ...rs, enabled: false };
       }
-      return r;
+      return rs;
     });
     if (changed) {
       const res = await window.electronAPI.saveResponseRules(updated);
@@ -994,9 +962,9 @@ class RulesUI {
     if (!grid) {
       return;
     }
-    let rules;
+    let rulesets;
     try {
-      rules = await window.electronAPI.getRules();
+      rulesets = await window.electronAPI.getRules();
     } catch (e) {
       grid.innerHTML = '';
       if (emptyEl) {
@@ -1005,8 +973,7 @@ class RulesUI {
       }
       return;
     }
-    const groups = rules.filter((r) => r.isGroup);
-    if (groups.length === 0) {
+    if (rulesets.length === 0) {
       grid.innerHTML = '';
       if (emptyEl) {
         emptyEl.hidden = false;
@@ -1017,7 +984,7 @@ class RulesUI {
     if (emptyEl) {
       emptyEl.hidden = true;
     }
-    grid.innerHTML = groups.map((g) => {
+    grid.innerHTML = rulesets.map((g) => {
       const name = Utils.escapeHtml(g.name || '未命名规则集');
       const desc = Utils.escapeHtml(g.description || '无描述');
       const gid = g.id;

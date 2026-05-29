@@ -253,29 +253,19 @@ class CommunityUI {
   // 检查已安装状态
   async checkInstalledStatus() {
     try {
-      // 获取本地所有规则集
-      const localRules = await window.electronAPI.getRules();
-      const localRuleGroups = localRules.filter(rule => rule.isGroup);
+      const localRulesets = await window.electronAPI.getRules();
 
-      // 为每个社区规则集检查是否已安装
       this.state.communityRulesets.forEach(ruleset => {
-        // 通过多种方式匹配判断是否已安装
-        const isInstalled = localRuleGroups.some(localGroup => {
-          // 方式1: 通过社区规则集ID匹配（最准确）
+        const isInstalled = localRulesets.some(localGroup => {
           if (localGroup.communityRulesetId === ruleset.id) {
             return true;
           }
-
-          // 方式2: 通过名称和作者匹配
           if (localGroup.name === ruleset.name && localGroup.author === ruleset.author) {
             return true;
           }
-
-          // 方式3: 通过名称匹配（兼容旧数据）
           if (localGroup.name === ruleset.name) {
             return true;
           }
-
           return false;
         });
 
@@ -515,7 +505,6 @@ class CommunityUI {
       return;
     }
 
-    // 如果已安装，不允许重复安装
     if (ruleset.isInstalled) {
       this.logManager.addInfoLog(`规则集 "${ruleset.name}" 已经安装`);
       return;
@@ -524,7 +513,6 @@ class CommunityUI {
     try {
       this.logManager.addInfoLog(`开始安装规则集: ${ruleset.name}`);
 
-      // 下载规则文件
       const jsonUrl = ruleset.file_urls.find(url => url.includes('.json'));
       if (!jsonUrl) {
         throw new Error('未找到规则文件');
@@ -537,24 +525,19 @@ class CommunityUI {
 
       let rulesData = await response.json();
 
-      // 如果有注入文件，先下载并处理路径
       if (ruleset.has_injection_package) {
         const zipUrl = ruleset.file_urls.find(url => url.includes('.zip'));
         if (zipUrl) {
           try {
             const localZipPath = await this.downloadAndSaveInjectionPackage(zipUrl, ruleset.name);
 
-            // 更新规则数据中的ZIP路径
             let rulesToUpdate = [];
             if (Array.isArray(rulesData)) {
-              // 纯JSON格式：直接是规则数组
               rulesToUpdate = rulesData;
             } else if (rulesData.rules) {
-              // 包含rules的对象格式
               rulesToUpdate = rulesData.rules;
             }
 
-            // 替换ZIP路径
             rulesToUpdate.forEach(rule => {
               if (rule.type === 'zip-implant' && rule.zipImplant) {
                 rule.zipImplant = localZipPath;
@@ -563,75 +546,42 @@ class CommunityUI {
           } catch (error) {
             console.error('下载注入包失败:', error);
             this.logManager.addErrorLog(`注入包下载失败: ${error.message}`);
-            // 继续安装规则，但不包含注入包
           }
         }
       }
 
-      // 为规则集添加社区标识
       const communityRulesetId = ruleset.id;
-      let rulesToSave = [];
 
-      // 自动检测兼容性：检查规则集中是否有注入规则
       const allRules = Array.isArray(rulesData)
         ? rulesData
         : rulesData.rules
           ? rulesData.rules
-          : rulesData.isGroup
-            ? [rulesData]
-            : [];
+          : [];
       const hasInjection = allRules.some(r => r.type === 'zip-implant' || r.type === 'zip-implant-dynamic');
       const autoCompatible = !hasInjection;
 
-      if (Array.isArray(rulesData)) {
-        // 纯JSON格式：直接是规则数组
-        rulesToSave = rulesData.map(rule => {
-          if (rule.isGroup) {
-            return {
-              ...rule,
-              communityRulesetId: communityRulesetId,
-              compatible: rule.compatible !== undefined ? rule.compatible : autoCompatible
-            };
-          }
-          return rule;
-        });
-      } else if (rulesData.rules) {
-        rulesToSave = rulesData.rules.map(rule => {
-          if (rule.isGroup) {
-            return {
-              ...rule,
-              communityRulesetId: communityRulesetId,
-              compatible: rule.compatible !== undefined ? rule.compatible : autoCompatible
-            };
-          }
-          return rule;
-        });
-      } else if (rulesData.isGroup) {
-        rulesToSave = [{
-          ...rulesData,
-          communityRulesetId: communityRulesetId,
-          compatible: rulesData.compatible !== undefined ? rulesData.compatible : autoCompatible
-        }];
+      const group = {
+        name: ruleset.name,
+        description: ruleset.description,
+        author: ruleset.author,
+        communityRulesetId: communityRulesetId,
+        compatible: autoCompatible
+      };
+
+      const importData = {
+        group: group,
+        rules: allRules.filter(r => !r.isGroup)
+      };
+
+      const result = await window.electronAPI.importResponseRulesFromData(importData);
+      if (!result || !result.success) {
+        throw new Error(result?.error || '导入规则数据失败');
       }
 
-      // 保存规则到本地
-      for (const rule of rulesToSave) {
-        try {
-          const result = await window.electronAPI.saveRule(rule);
-          if (!result.success) {
-            this.logManager.addErrorLog(`保存规则失败: ${result.error}`);
-          }
-        } catch (error) {
-          this.logManager.addErrorLog(`保存规则失败: ${error.message}`);
-        }
-      }
-
-      // 重新检查安装状态
       await this.checkInstalledStatus();
       this.displayRulesets();
       this.logManager.addSuccessLog(`规则集 "${ruleset.name}" 安装成功`);
 
-      // 隐藏详情模态框
       this.hideRulesetDetailModal();
 
     } catch (error) {
@@ -671,13 +621,12 @@ class CommunityUI {
   // 显示上传规则集模态框
   async showUploadRulesetModal() {
     try {
-      const rules = await window.electronAPI.getRules();
-      const ruleGroups = rules.filter(rule => rule.isGroup);
+      const rulesets = await window.electronAPI.getRules();
 
       const select = document.getElementById('uploadRulesetSelect');
       if (select) {
         select.innerHTML = '<option value="">请选择要上传的规则集</option>';
-        ruleGroups.forEach(group => {
+        rulesets.forEach(group => {
           const option = document.createElement('option');
           option.value = group.id;
           option.textContent = `${group.name} (${group.author || '未知作者'})`;
@@ -730,16 +679,15 @@ class CommunityUI {
     }
 
     try {
-      const rules = await window.electronAPI.getRules();
-      const selectedGroup = rules.find(rule => rule.id === select.value);
-      const groupRules = rules.filter(rule => rule.groupId === select.value);
+      const rulesets = await window.electronAPI.getRules();
+      const selectedGroup = rulesets.find(rs => rs.id === select.value);
 
       if (selectedGroup) {
         if (nameInput) nameInput.value = selectedGroup.name || '';
         if (descInput) descInput.value = selectedGroup.description || '';
         if (authorInput) authorInput.value = selectedGroup.author || '';
 
-        const hasZipRules = groupRules.some(rule => rule.type === 'zip-implant');
+        const hasZipRules = (selectedGroup.rules || []).some(rule => rule.type === 'zip-implant');
         if (includeInjectionCheckbox) includeInjectionCheckbox.checked = hasZipRules;
       }
     } catch (error) {
@@ -777,9 +725,9 @@ class CommunityUI {
       progressText.textContent = '准备上传...';
       progressFill.style.width = '0%';
 
-      const rules = await window.electronAPI.getRules();
-      const selectedGroup = rules.find(rule => rule.id === rulesetId);
-      const groupRules = rules.filter(rule => rule.groupId === rulesetId);
+      const rulesets = await window.electronAPI.getRules();
+      const selectedGroup = rulesets.find(rs => rs.id === rulesetId);
+      const groupRules = selectedGroup ? (selectedGroup.rules || []) : [];
 
       if (!selectedGroup || groupRules.length === 0) {
         throw new Error('未找到规则集或规则集为空');
@@ -835,9 +783,9 @@ class CommunityUI {
     if (!grid) {
       return;
     }
-    let rules;
+    let rulesets;
     try {
-      rules = await window.electronAPI.getRules();
+      rulesets = await window.electronAPI.getRules();
     } catch (e) {
       grid.innerHTML = '';
       if (emptyEl) {
@@ -846,8 +794,7 @@ class CommunityUI {
       }
       return;
     }
-    const groups = rules.filter((r) => r.isGroup);
-    if (groups.length === 0) {
+    if (rulesets.length === 0) {
       grid.innerHTML = '';
       if (emptyEl) {
         emptyEl.hidden = false;
@@ -858,7 +805,7 @@ class CommunityUI {
     if (emptyEl) {
       emptyEl.hidden = true;
     }
-    grid.innerHTML = groups.map((g) => {
+    grid.innerHTML = rulesets.map((g) => {
       const name = this.escapeHtml(g.name || '未命名规则集');
       const desc = this.escapeHtml(g.description || '无描述');
       const gid = g.id;
@@ -885,46 +832,34 @@ class CommunityUI {
 
   // 应用独占规则集
   async applyExclusiveRuleset(groupId) {
-    let rules;
+    let rulesets;
     try {
-      rules = await window.electronAPI.getRules();
+      rulesets = await window.electronAPI.getRules();
     } catch (e) {
       this.logManager.addErrorLog(`读取规则失败: ${e.message}`);
       return;
     }
-    const target = rules.find((r) => r.isGroup && r.id === groupId);
+    const target = rulesets.find(rs => rs.id === groupId);
     if (!target) {
       this.logManager.addErrorLog('未找到该规则集');
       return;
     }
     let changed = false;
     const disabledGroups = [];
-    const updated = rules.map((r) => {
-      if (!r.isGroup) {
-        return r;
-      }
-      if (r.id === groupId) {
-        if (!r.enabled) {
+    const updated = rulesets.map(rs => {
+      if (rs.id === groupId) {
+        if (!rs.enabled) {
           changed = true;
-          return { ...r, enabled: true };
+          return { ...rs, enabled: true };
         }
-        return r;
+        return rs;
       }
-      if (r.enabled) {
+      if (rs.enabled) {
         changed = true;
-        disabledGroups.push(r.name || r.id);
-        return { ...r, enabled: false };
+        disabledGroups.push(rs.name || rs.id);
+        return { ...rs, enabled: false };
       }
-      return r;
-    });
-
-    // 同时开启目标规则集下的所有子规则
-    const childRules = updated.filter(r => r.groupId === groupId && r.isGroup === false);
-    childRules.forEach(r => {
-      if (!r.enabled) {
-        changed = true;
-        r.enabled = true;
-      }
+      return rs;
     });
 
     if (changed) {
@@ -942,7 +877,6 @@ class CommunityUI {
     const ui = document.documentElement.getAttribute('data-ui');
     await this.renderSimpleHomeRulesets();
     if (ui === 'simple' && this.state.currentView === 'rules') {
-      // Reload rules if in rules view
     }
   }
 

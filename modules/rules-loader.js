@@ -1,6 +1,10 @@
 const fs = require('fs-extra');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+
+function generateId(name) {
+  return crypto.createHash('md5').update(name).digest('hex');
+}
 
 class RulesLoader {
   constructor(appPath) {
@@ -10,26 +14,25 @@ class RulesLoader {
 
   async loadBuiltinRulesets(rulesManager) {
     try {
-      const existingRules = rulesManager.getRules();
-      const existingBuiltinGroup = existingRules.find(rule =>
-        rule.isGroup && rule.isBuiltin && rule.name === '内置-答案获取'
+      const existingRulesets = rulesManager.getRules();
+      const existingBuiltin = existingRulesets.find(rs =>
+        rs.isBuiltin && rs.name === '内置-答案获取'
       );
 
-      if (!existingBuiltinGroup) {
-        const answerGroupId = uuidv4();
-        const answerGroup = {
-          id: answerGroupId,
+      if (!existingBuiltin) {
+        const answerRuleset = {
+          id: generateId('内置-答案获取'),
           name: '内置-答案获取',
           description: '程序内置的空规则集，仅用于答案获取功能',
-          isGroup: true,
           isBuiltin: true,
           enabled: true,
           compatible: false,
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          rules: []
         };
 
-        rulesManager.saveRules([...existingRules, answerGroup]);
+        rulesManager.saveRules([...existingRulesets, answerRuleset]);
         console.log('成功导入内置规则集: 内置-答案获取 (0 个规则)');
       }
 
@@ -73,10 +76,6 @@ class RulesLoader {
             return rule;
           });
 
-          const groupId = uuidv4();
-
-          // 自动检测兼容性：如果规则集中包含 zip-implant 或 zip-implant-dynamic 规则，则默认不兼容
-          // 但保留手动设置字段的优先级
           const hasInjectionRules = rulesData.some(rule =>
             rule.type === 'zip-implant' || rule.type === 'zip-implant-dynamic'
           );
@@ -85,61 +84,59 @@ class RulesLoader {
             ? rulesetInfo.compatible
             : autoCompatible;
 
+          const rulesetId = generateId(rulesetInfo.name);
+
+          const rules = rulesData.map(rule => {
+            const { groupId, isGroup, ...ruleData } = rule;
+            return {
+              ...ruleData,
+              id: generateId(rule.name),
+              isBuiltin: true,
+              enabled: true,
+              createdAt: rule.createdAt || new Date().toISOString(),
+              updatedAt: rule.updatedAt || new Date().toISOString()
+            };
+          });
+
           const rulesetGroup = {
-            id: groupId,
+            id: rulesetId,
             name: rulesetInfo.name,
             description: rulesetInfo.description,
-            isGroup: true,
             isBuiltin: true,
             enabled: false,
             compatible: finalCompatible,
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            rules: rules
           };
 
-          const rules = rulesData.map(rule => ({
-            ...rule,
-            groupId: groupId,
-            isBuiltin: true,
-            enabled: true,
-            createdAt: rule.createdAt || new Date().toISOString(),
-            updatedAt: rule.updatedAt || new Date().toISOString()
-          }));
-
-          const currentRules = rulesManager.getRules();
-          const existingRulesetGroup = currentRules.find(rule =>
-            rule.isGroup && rule.isBuiltin && rule.name === rulesetInfo.name
+          const currentRulesets = rulesManager.getRules();
+          const existingRuleset = currentRulesets.find(rs =>
+            rs.isBuiltin && rs.name === rulesetInfo.name
           );
 
-          if (existingRulesetGroup) {
+          if (existingRuleset) {
             console.log(`内置规则集已存在，跳过: ${rulesetInfo.name}`);
             continue;
           }
 
-          // 根据新规则集的 compatible 属性决定是否关闭其他规则集
-          let updatedRules = [...currentRules];
+          let updatedRulesets = [...currentRulesets];
           const isNewRulesetCompatible = rulesetInfo.compatible !== undefined ? rulesetInfo.compatible : false;
 
           if (!isNewRulesetCompatible) {
-            // 如果新规则集不兼容，关闭其他不兼容的规则集
-            updatedRules = updatedRules.map(rule => {
-              if (!rule.isGroup) {
-                return rule;
+            updatedRulesets = updatedRulesets.map(rs => {
+              if (rs.name === rulesetInfo.name) {
+                return rs;
               }
-              // 如果是当前要导入的规则集，不做修改
-              if (rule.name === rulesetInfo.name) {
-                return rule;
+              if (rs.compatible === false && rs.enabled) {
+                console.log(`关闭不兼容规则集: ${rs.name}`);
+                return { ...rs, enabled: false };
               }
-              // 如果该规则集也不兼容，且当前是开启状态，则关闭它
-              if (rule.compatible === false && rule.enabled) {
-                console.log(`关闭不兼容规则集: ${rule.name}`);
-                return { ...rule, enabled: false };
-              }
-              return rule;
+              return rs;
             });
           }
 
-          rulesManager.saveRules([...updatedRules, rulesetGroup, ...rules]);
+          rulesManager.saveRules([...updatedRulesets, rulesetGroup]);
 
           console.log(`成功导入内置规则集: ${rulesetInfo.name} (${rules.length} 个规则)`);
         } catch (error) {

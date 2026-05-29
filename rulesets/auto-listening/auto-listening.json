@@ -1,6 +1,5 @@
 [
   {
-    "id": "a1b2c3d4-e5f6-7890-abcd-listening01",
     "name": "答案接口",
     "type": "answer-upload",
     "urlUpload": "http://cdn-ws.up366.cn/cn/files/xot",
@@ -8,7 +7,6 @@
     "serverLocate": "/listening-answer"
   },
   {
-    "id": "a1b2c3d4-e5f6-7890-abcd-listening02",
     "name": "动态注入",
     "type": "zip-implant-dynamic",
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",

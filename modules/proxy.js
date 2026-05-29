@@ -136,36 +136,35 @@ class ProxyServer {
 
           // 如果是文件下载请求且需要应用规则，修改响应头
           if (responseBodyRules.includes(2)) {
-            // 检查是否是文件下载请求
             const isFileDownloadRequest = this._isFileDownloadRequest(fullUrl);
 
             if (isFileDownloadRequest) {
-              // 获取匹配的规则并计算新文件的MD5
-              for (const rule of this.rulesManager.getRules()) {
-                if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant') continue;
+              for (const ruleset of this.rulesManager.getRules()) {
+                if (!ruleset.enabled) continue;
+                for (const rule of ruleset.rules) {
+                  if (!this.isRuleEffective(rule, ruleset) || rule.type !== 'zip-implant') continue;
 
-                const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
-                if (urlMatches && fs.existsSync(rule.zipImplant)) {
-                  const buffer = fs.readFileSync(rule.zipImplant);
-                  const md5 = crypto.createHash('md5').update(buffer).digest('hex');
-                  const md5Base64 = Buffer.from(md5, 'hex').toString('base64');
+                  const urlMatches = this.urlMatchesPattern(fullUrl, rule.urlZip);
+                  if (urlMatches && fs.existsSync(rule.zipImplant)) {
+                    const buffer = fs.readFileSync(rule.zipImplant);
+                    const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+                    const md5Base64 = Buffer.from(md5, 'hex').toString('base64');
 
-                  // 修改响应头
-                  ctx.serverToProxyResponse.headers['etag'] = md5;
-                  ctx.serverToProxyResponse.headers['content-md5'] = md5Base64;
-                  ctx.serverToProxyResponse.headers['content-length'] = buffer.length.toString();
+                    ctx.serverToProxyResponse.headers['etag'] = md5;
+                    ctx.serverToProxyResponse.headers['content-md5'] = md5Base64;
+                    ctx.serverToProxyResponse.headers['content-length'] = buffer.length.toString();
 
-                  // 发送响应头修改日志
-                  this.safeIpcSend('rule-log', {
-                    type: 'success',
-                    message: `规则 "${rule.name}" 修改响应头`,
-                    ruleId: rule.id,
-                    ruleName: rule.name,
-                    url: fullUrl,
-                    details: `ETag: ${md5}, Content-MD5: ${md5Base64}`
-                  });
+                    this.safeIpcSend('rule-log', {
+                      type: 'success',
+                      message: `规则 "${rule.name}" 修改响应头`,
+                      ruleId: rule.id,
+                      ruleName: rule.name,
+                      url: fullUrl,
+                      details: `ETag: ${md5}, Content-MD5: ${md5Base64}`
+                    });
 
-                  break;
+                    break;
+                  }
                 }
               }
             }
@@ -637,28 +636,15 @@ class ProxyServer {
     return regex.test(url);
   }
 
-  isRuleEffective(rule) {
+  isRuleEffective(rule, ruleset) {
     if (!rule.enabled) return false;
-
-    if (rule.isGroup) {
-      return rule.enabled;
-    }
-
-    if (rule.groupId) {
-      const ruleGroup = this.rulesManager.getRules().find(r => r.id === rule.groupId && r.isGroup);
-      if (ruleGroup && !ruleGroup.enabled) {
-        return false;
-      }
-    }
-
-    // 检查触发次数限制
+    if (ruleset && !ruleset.enabled) return false;
     if (rule.maxTriggers !== undefined && rule.maxTriggers > 0) {
       const currentTriggers = rule.currentTriggers || 0;
       if (currentTriggers >= rule.maxTriggers) {
         return false;
       }
     }
-
     return true;
   }
 
@@ -701,11 +687,13 @@ class ProxyServer {
     if (done) return;
 
     let migrated = false;
-    for (const rule of this.rulesManager.getRules()) {
-      if (rule.type === 'zip-implant' && rule.maxTriggers !== undefined && rule.maxTriggers > 0) {
-        rule.maxTriggers = Math.ceil(rule.maxTriggers / 3);
-        rule.currentTriggers = Math.floor((rule.currentTriggers || 0) / 3);
-        migrated = true;
+    for (const ruleset of this.rulesManager.getRules()) {
+      for (const rule of ruleset.rules) {
+        if (rule.type === 'zip-implant' && rule.maxTriggers !== undefined && rule.maxTriggers > 0) {
+          rule.maxTriggers = Math.ceil(rule.maxTriggers / 3);
+          rule.currentTriggers = Math.floor((rule.currentTriggers || 0) / 3);
+          migrated = true;
+        }
       }
     }
     if (migrated) {
@@ -721,69 +709,71 @@ class ProxyServer {
 
   // 检查是否有启用的zip注入规则
   hasEnabledZipImplantRules() {
-    return this.rulesManager.getRules().some(rule =>
-      this.isRuleEffective(rule) &&
-      !rule.isGroup &&
-      rule.type === 'zip-implant' &&
-      fs.existsSync(rule.zipImplant)
-    );
+    for (const ruleset of this.rulesManager.getRules()) {
+      if (!ruleset.enabled) continue;
+      for (const rule of ruleset.rules) {
+        if (this.isRuleEffective(rule, ruleset) &&
+          rule.type === 'zip-implant' &&
+          fs.existsSync(rule.zipImplant)
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   haveRules(url, type) {
     let l = [];
     try {
-      for (const rule of this.rulesManager.getRules()) {
-        if (!this.isRuleEffective(rule)) continue;
-        if (rule.isGroup) continue;
-        if (rule.type === 'content-change') {
-          if (!url.includes(rule.urlPattern)) continue;
-          if (type !== rule.changeType) continue;
-          l.push(1)
-        }
-        if (type === 'response-body' && rule.type === 'zip-implant') {
-          if (!fs.existsSync(rule.zipImplant)) {
-            continue;
+      for (const ruleset of this.rulesManager.getRules()) {
+        if (!ruleset.enabled) continue;
+        for (const rule of ruleset.rules) {
+          if (!this.isRuleEffective(rule, ruleset)) continue;
+          if (rule.type === 'content-change') {
+            if (!url.includes(rule.urlPattern)) continue;
+            if (type !== rule.changeType) continue;
+            l.push(1)
           }
+          if (type === 'response-body' && rule.type === 'zip-implant') {
+            if (!fs.existsSync(rule.zipImplant)) {
+              continue;
+            }
 
-          // 检查URL是否匹配规则中的ZIP URL模式（支持通配符）
-          const zipUrlMatches = this.urlMatchesPattern(url, rule.urlZip);
+            const zipUrlMatches = this.urlMatchesPattern(url, rule.urlZip);
 
-          // 检查URL是否匹配规则中的fileinfo URL模式（如果规则有定义的话）
-          const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
+            const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
 
-          // 支持文件信息请求的多种域名模式（更精确的判断）
-          const isFileInfoRequest = this._isFileInfoRequest(url);
+            const isFileInfoRequest = this._isFileInfoRequest(url);
 
-          // 支持文件下载请求的多种模式  
-          const isFileDownloadRequest = this._isFileDownloadRequest(url);
+            const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
-          // 对于文件信息请求，优先使用fileinfo URL模式匹配，如果没有设置则使用通用匹配
-          // 对于文件下载请求，使用ZIP URL模式匹配
-          if ((isFileInfoRequest && fileinfoUrlMatches) || (zipUrlMatches && isFileDownloadRequest)) {
-            l.push(2)
+            if ((isFileInfoRequest && fileinfoUrlMatches) || (zipUrlMatches && isFileDownloadRequest)) {
+              l.push(2)
+            }
           }
-        }
-        if (type === 'response-body' && rule.type === 'answer-upload') {
-          if (!url.includes(rule.urlUpload)) continue;
+          if (type === 'response-body' && rule.type === 'answer-upload') {
+            if (!url.includes(rule.urlUpload)) continue;
 
-          if (rule.maxTriggers !== undefined) {
-            rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-            this.rulesManager.saveRules();
+            if (rule.maxTriggers !== undefined) {
+              rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+              this.rulesManager.saveRules();
+            }
+
+            l.push(3)
           }
+          if (type === 'response-body' && rule.type === 'zip-implant-dynamic') {
+            const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
+            const isFileInfoRequest = this._isFileInfoRequest(url);
 
-          l.push(3)
-        }
-        if (type === 'response-body' && rule.type === 'zip-implant-dynamic') {
-          const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
-          const isFileInfoRequest = this._isFileInfoRequest(url);
+            const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
+            const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
-          const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
-          const isFileDownloadRequest = this._isFileDownloadRequest(url);
-
-          if (isFileInfoRequest && fileinfoUrlMatches) {
-            l.push(4);
-          } else if (zipUrlMatches && isFileDownloadRequest) {
-            l.push(4);
+            if (isFileInfoRequest && fileinfoUrlMatches) {
+              l.push(4);
+            } else if (zipUrlMatches && isFileDownloadRequest) {
+              l.push(4);
+            }
           }
         }
       }
@@ -796,12 +786,15 @@ class ProxyServer {
 
   getPostChangeTimeRules(url, method) {
     const rules = [];
-    for (const rule of this.rulesManager.getRules()) {
-      if (!this.isRuleEffective(rule) || rule.isGroup) continue;
-      if (rule.type !== 'post-change-time') continue;
-      if (rule.method && rule.method !== method) continue;
-      if (!this.urlMatchesPattern(url, rule.urlRequest)) continue;
-      rules.push(rule);
+    for (const ruleset of this.rulesManager.getRules()) {
+      if (!ruleset.enabled) continue;
+      for (const rule of ruleset.rules) {
+        if (!this.isRuleEffective(rule, ruleset)) continue;
+        if (rule.type !== 'post-change-time') continue;
+        if (rule.method && rule.method !== method) continue;
+        if (!this.urlMatchesPattern(url, rule.urlRequest)) continue;
+        rules.push(rule);
+      }
     }
     return rules;
   }
@@ -919,57 +912,52 @@ class ProxyServer {
   // 应用zip注入规则
   applyZipImplantRules(url, responseBody) {
     try {
-      for (const rule of this.rulesManager.getRules()) {
-        if (!this.isRuleEffective(rule)) continue;
-        if (rule.isGroup) continue;
-        if (rule.type === 'zip-implant') {
-          if (!fs.existsSync(rule.zipImplant)) {
-            continue;
-          }
+      for (const ruleset of this.rulesManager.getRules()) {
+        if (!ruleset.enabled) continue;
+        for (const rule of ruleset.rules) {
+          if (!this.isRuleEffective(rule, ruleset)) continue;
+          if (rule.type === 'zip-implant') {
+            if (!fs.existsSync(rule.zipImplant)) {
+              continue;
+            }
 
-          // 检查URL是否匹配规则中的ZIP URL模式（支持通配符）
-          const zipUrlMatches = this.urlMatchesPattern(url, rule.urlZip);
+            const zipUrlMatches = this.urlMatchesPattern(url, rule.urlZip);
 
-          // 检查URL是否匹配规则中的fileinfo URL模式（如果规则有定义的话）
-          const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
+            const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : true;
 
-          // 支持文件信息请求的多种域名模式（更精确的判断）
-          const isFileInfoRequest = this._isFileInfoRequest(url);
+            const isFileInfoRequest = this._isFileInfoRequest(url);
 
-          // 支持文件下载请求的多种模式  
-          const isFileDownloadRequest = this._isFileDownloadRequest(url);
+            const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
-          // 对于文件信息请求，优先使用fileinfo URL模式匹配，如果没有设置则使用通用匹配
-          // 对于文件下载请求，使用ZIP URL模式匹配
-          if (isFileInfoRequest && fileinfoUrlMatches) {
-            // 检查目标文件名匹配
-            if (rule.targetFileName) {
-              const extractedFileName = this.extractFileNameFromResponse(responseBody, url);
-              if (!extractedFileName || !this.fileNameMatchesPattern(extractedFileName, rule.targetFileName)) {
-                continue;
+            if (isFileInfoRequest && fileinfoUrlMatches) {
+              if (rule.targetFileName) {
+                const extractedFileName = this.extractFileNameFromResponse(responseBody, url);
+                if (!extractedFileName || !this.fileNameMatchesPattern(extractedFileName, rule.targetFileName)) {
+                  continue;
+                }
               }
+
+              const buffer = fs.readFileSync(rule.zipImplant);
+              const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+              const fileSize = buffer.length;
+
+              responseBody = this._replaceFileInfoFields(responseBody.toString(), md5, fileSize);
+
+              if (rule.maxTriggers !== undefined) {
+                rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+                this.rulesManager.saveRules();
+              }
+
+              return Buffer.from(responseBody);
             }
+            else if (zipUrlMatches && isFileDownloadRequest) {
+              if (rule.maxTriggers !== undefined) {
+                rule.currentTriggers = (rule.currentTriggers || 0) + 1;
+                this.rulesManager.saveRules();
+              }
 
-            const buffer = fs.readFileSync(rule.zipImplant);
-            const md5 = crypto.createHash('md5').update(buffer).digest('hex');
-            const fileSize = buffer.length;
-
-            responseBody = this._replaceFileInfoFields(responseBody.toString(), md5, fileSize);
-
-            if (rule.maxTriggers !== undefined) {
-              rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-              this.rulesManager.saveRules();
+              return fs.readFileSync(rule.zipImplant);
             }
-
-            return Buffer.from(responseBody);
-          }
-          else if (zipUrlMatches && isFileDownloadRequest) {
-            if (rule.maxTriggers !== undefined) {
-              rule.currentTriggers = (rule.currentTriggers || 0) + 1;
-              this.rulesManager.saveRules();
-            }
-
-            return fs.readFileSync(rule.zipImplant);
           }
         }
       }
@@ -983,57 +971,56 @@ class ProxyServer {
   // 应用答案上传规则
   applyAnswerUploadRules(url, responseBody, extracted_answers) {
     try {
-      for (const rule of this.rulesManager.getRules()) {
-        if (!this.isRuleEffective(rule)) continue;
-        if (rule.isGroup) continue;
-        if (rule.type === 'answer-upload') {
-          if (!url.includes(rule.urlUpload)) continue;
+      for (const ruleset of this.rulesManager.getRules()) {
+        if (!ruleset.enabled) continue;
+        for (const rule of ruleset.rules) {
+          if (!this.isRuleEffective(rule, ruleset)) continue;
+          if (rule.type === 'answer-upload') {
+            if (!url.includes(rule.urlUpload)) continue;
 
-          if (rule.uploadType === 'original') {
-            try {
-              const newData = JSON.parse(responseBody.toString());
-              const existingData = this.serverDatas[rule.serverLocate];
-              
-              // 合并多个请求的词库数据（合并entryList中的词条）
-              if (rule.serverLocate === '/word-pk-answer' && 
-                  existingData && 
-                  Array.isArray(existingData.data) && 
-                  Array.isArray(newData.data)) {
-                // 收集已有的entryId
-                const existingEntryIds = new Set();
-                for (const dict of existingData.data) {
-                  if (Array.isArray(dict.entryList)) {
-                    for (const entry of dict.entryList) {
-                      existingEntryIds.add(entry.entryId);
-                    }
-                  }
-                }
-                // 合并新的词条到第一个词典
-                let newCount = 0;
-                for (const dict of newData.data) {
-                  if (Array.isArray(dict.entryList)) {
-                    for (const entry of dict.entryList) {
-                      if (!existingEntryIds.has(entry.entryId)) {
-                        existingData.data[0].entryList.push(entry);
+            if (rule.uploadType === 'original') {
+              try {
+                const newData = JSON.parse(responseBody.toString());
+                const existingData = this.serverDatas[rule.serverLocate];
+                
+                if (rule.serverLocate === '/word-pk-answer' && 
+                    existingData && 
+                    Array.isArray(existingData.data) && 
+                    Array.isArray(newData.data)) {
+                  const existingEntryIds = new Set();
+                  for (const dict of existingData.data) {
+                    if (Array.isArray(dict.entryList)) {
+                      for (const entry of dict.entryList) {
                         existingEntryIds.add(entry.entryId);
-                        newCount++;
                       }
                     }
                   }
+                  let newCount = 0;
+                  for (const dict of newData.data) {
+                    if (Array.isArray(dict.entryList)) {
+                      for (const entry of dict.entryList) {
+                        if (!existingEntryIds.has(entry.entryId)) {
+                          existingData.data[0].entryList.push(entry);
+                          existingEntryIds.add(entry.entryId);
+                          newCount++;
+                        }
+                      }
+                    }
+                  }
+                  const totalCount = existingData.data[0].entryList.length;
+                  this.safeIpcSend('rule-log', { type: 'success', message: `[词库合并] 新增 ${newCount} 个词条，总计 ${totalCount} 个` });
+                } else {
+                  this.serverDatas[rule.serverLocate] = newData;
+                  this.safeIpcSend('rule-log', { type: 'info', message: `[词库存储] 存储数据到 ${rule.serverLocate}` });
                 }
-                const totalCount = existingData.data[0].entryList.length;
-                this.safeIpcSend('rule-log', { type: 'success', message: `[词库合并] 新增 ${newCount} 个词条，总计 ${totalCount} 个` });
-              } else {
-                this.serverDatas[rule.serverLocate] = newData;
-                this.safeIpcSend('rule-log', { type: 'info', message: `[词库存储] 存储数据到 ${rule.serverLocate}` });
+              }
+              catch (error) {
+                this.serverDatas[rule.serverLocate] = responseBody;
               }
             }
-            catch (error) {
-              this.serverDatas[rule.serverLocate] = responseBody;
+            else {
+              this.serverDatas[rule.serverLocate] = extracted_answers.answers;
             }
-          }
-          else {
-            this.serverDatas[rule.serverLocate] = extracted_answers.answers;
           }
         }
       }
@@ -1048,19 +1035,22 @@ class ProxyServer {
       const isFileInfoRequest = this._isFileInfoRequest(url);
       const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
-      for (const rule of this.rulesManager.getRules()) {
-        if (!this.isRuleEffective(rule) || rule.isGroup || rule.type !== 'zip-implant-dynamic') continue;
+      for (const ruleset of this.rulesManager.getRules()) {
+        if (!ruleset.enabled) continue;
+        for (const rule of ruleset.rules) {
+          if (!this.isRuleEffective(rule, ruleset) || rule.type !== 'zip-implant-dynamic') continue;
 
-        const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
-        const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
+          const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
+          const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
 
-        if (isFileInfoRequest && fileinfoUrlMatches) {
-          return await this.handleDynamicInjectFileInfo(url, responseBody, rule);
-        }
+          if (isFileInfoRequest && fileinfoUrlMatches) {
+            return await this.handleDynamicInjectFileInfo(url, responseBody, rule);
+          }
 
-        if (zipUrlMatches && isFileDownloadRequest) {
-          const result = await this.handleDynamicInjectZipDownload(url, rule);
-          if (result !== null) return result;
+          if (zipUrlMatches && isFileDownloadRequest) {
+            const result = await this.handleDynamicInjectZipDownload(url, rule);
+            if (result !== null) return result;
+          }
         }
       }
     } catch (error) {
@@ -2043,44 +2033,95 @@ class ProxyServer {
         } else {
           rules = rulesData;
         }
-        let rulesToImport = [];
+
         let groupToImport = null;
+        let rulesToImport = [];
+
         if (Array.isArray(rules)) {
-          rulesToImport = rules;
+          const hasOldFormat = rules.some(item => item.isGroup !== undefined || item.groupId !== undefined);
+          if (hasOldFormat) {
+            const groups = rules.filter(r => r.isGroup);
+            const childRules = rules.filter(r => !r.isGroup);
+            if (groups.length > 0) {
+              groupToImport = groups[0];
+              rulesToImport = childRules.filter(r => r.groupId === groupToImport.id);
+            } else {
+              rulesToImport = childRules;
+            }
+          } else if (rules.length > 0 && rules[0].rules !== undefined) {
+            const importedRuleset = rules[0];
+            groupToImport = { ...importedRuleset };
+            rulesToImport = importedRuleset.rules || [];
+            delete groupToImport.rules;
+          } else {
+            rulesToImport = rules;
+          }
         } else if (rules.group && rules.rules) {
           groupToImport = rules.group;
           rulesToImport = rules.rules;
         } else if (rules.rules && Array.isArray(rules.rules)) {
           rulesToImport = rules.rules;
+        } else if (rules.isGroup) {
+          groupToImport = rules;
         } else {
           return { success: false, error: '无效的规则数据格式' };
         }
-        const currentRules = this.rulesManager.getRules();
+
+        const currentRulesets = this.rulesManager.getRules();
+
         if (groupToImport) {
-          const existingGroupIndex = currentRules.findIndex(rule =>
-            rule.isGroup && (
-              rule.communityRulesetId === groupToImport.communityRulesetId ||
-              (rule.name === groupToImport.name && rule.author === groupToImport.author)
-            )
+          const crypto = require('crypto');
+          const generateId = (name) => crypto.createHash('md5').update(name).digest('hex');
+
+          const existingRulesetIndex = currentRulesets.findIndex(rs =>
+            rs.communityRulesetId === groupToImport.communityRulesetId ||
+            (rs.name === groupToImport.name && rs.author === groupToImport.author)
           );
-          if (existingGroupIndex !== -1) {
-            const existingGroup = currentRules[existingGroupIndex];
-            const groupId = existingGroup.id;
-            const allRules = this.rulesManager.getRules();
-            this.rulesManager.saveRules(allRules.filter(rule =>
-              rule.id !== groupId && rule.groupId !== groupId
-            ));
-            groupToImport.id = groupId;
-            rulesToImport.forEach(rule => {
-              rule.groupId = groupToImport.id;
-            });
+
+          const rulesetId = existingRulesetIndex !== -1
+            ? currentRulesets[existingRulesetIndex].id
+            : generateId(groupToImport.name);
+
+          const newRules = rulesToImport.map(rule => {
+            const { groupId, isGroup, ...ruleData } = rule;
+            return {
+              ...ruleData,
+              id: generateId(rule.name),
+            };
+          });
+
+          const newRuleset = {
+            id: rulesetId,
+            name: groupToImport.name,
+            description: groupToImport.description || '',
+            author: groupToImport.author || '',
+            isBuiltin: groupToImport.isBuiltin || false,
+            enabled: groupToImport.enabled !== undefined ? groupToImport.enabled : true,
+            compatible: groupToImport.compatible,
+            communityRulesetId: groupToImport.communityRulesetId,
+            createdAt: groupToImport.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            rules: newRules
+          };
+
+          if (existingRulesetIndex !== -1) {
+            const updatedRulesets = [...currentRulesets];
+            updatedRulesets[existingRulesetIndex] = newRuleset;
+            this.rulesManager.saveRules(updatedRulesets);
+          } else {
+            this.rulesManager.saveRules([...currentRulesets, newRuleset]);
           }
-          const allRules = this.rulesManager.getRules();
-          this.rulesManager.saveRules([...allRules, groupToImport, ...rulesToImport]);
         } else {
-          const existingRuleNames = currentRules
-            .filter(rule => !rule.isGroup && rule.name)
-            .map(rule => rule.name);
+          const crypto = require('crypto');
+          const generateId = (name) => crypto.createHash('md5').update(name).digest('hex');
+
+          const existingRuleNames = [];
+          for (const rs of currentRulesets) {
+            for (const r of rs.rules) {
+              if (r.name) existingRuleNames.push(r.name);
+            }
+          }
+
           const originalCount = rulesToImport.length;
           rulesToImport = rulesToImport.filter(rule => {
             if (rule.name && existingRuleNames.includes(rule.name)) {
@@ -2088,8 +2129,26 @@ class ProxyServer {
             }
             return true;
           });
-          const allRules = this.rulesManager.getRules();
-          this.rulesManager.saveRules([...allRules, ...rulesToImport]);
+
+          if (rulesToImport.length > 0) {
+            const defaultRuleset = {
+              id: generateId('导入的规则'),
+              name: '导入的规则',
+              description: '从外部导入的规则',
+              enabled: true,
+              compatible: true,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              rules: rulesToImport.map(rule => {
+                const { groupId, isGroup, ...ruleData } = rule;
+                return {
+                  ...ruleData,
+                  id: generateId(rule.name),
+                };
+              })
+            };
+            this.rulesManager.saveRules([...currentRulesets, defaultRuleset]);
+          }
         }
         return { success: true, count: rulesToImport.length };
       } catch (error) {
