@@ -7,6 +7,11 @@ class SettingsUI {
     this._clearBtnMouseDown = false;
     this._clearBtnPressStartTime = 0;
     this._clearBtnLongPressTriggered = false;
+    this._resetCertBtnLongPressTimer = null;
+    this._resetCertBtnClosingState = false;
+    this._resetCertBtnMouseDown = false;
+    this._resetCertBtnPressStartTime = 0;
+    this._resetCertBtnLongPressTriggered = false;
   }
 
   // 初始化缓存设置
@@ -336,6 +341,181 @@ class SettingsUI {
       this.logManager.addErrorLog(`缓存清理失败: ${result.error || '未知错误'}`);
     } else {
       this.logManager.addErrorLog('缓存清理失败');
+    }
+  }
+
+  handleResetCertificate() {
+    const resultDiv = document.getElementById('trafficLog');
+
+    const confirmHtml = `
+      <div class="log-item log-item--warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span style="color:var(--color-danger);">确定要清理Auto366代理证书吗？此操作将重新导入 Auto366 的代理证书，不可撤销。</span>
+        <div class="log-item__actions">
+          <button class="btn--sm btn--cancel" id="cancelResetCertBtn">取消</button>
+          <button class="btn--sm btn--danger" id="confirmResetCertBtn" style="position:relative;overflow:hidden">
+            <span>清理并重启</span>
+            <div class="btn__progress-bar"></div>
+          </button>
+        </div>
+      </div>
+    `;
+
+    resultDiv.insertAdjacentHTML('beforeend', confirmHtml);
+    resultDiv.scrollTop = resultDiv.scrollHeight;
+
+    setTimeout(() => this._initConfirmResetCertBtn(), 0);
+  }
+
+  _initConfirmResetCertBtn() {
+    const btn = document.getElementById('confirmResetCertBtn');
+    if (!btn) return;
+
+    const cancelBtn = document.getElementById('cancelResetCertBtn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        cancelBtn.parentElement.parentElement.remove();
+      });
+    }
+
+    btn.addEventListener('mousedown', (e) => this._onResetCertBtnMouseDown(e));
+    btn.addEventListener('mouseup', (e) => this._onResetCertBtnMouseUp(e));
+    btn.addEventListener('mouseleave', () => this._onResetCertBtnMouseLeave());
+    btn.addEventListener('animationend', (e) => {
+      if (e.target.classList.contains('btn__progress-bar') && e.target.classList.contains('is-active')) {
+        this._onResetCertProgressComplete();
+      }
+    });
+  }
+
+  _onResetCertBtnMouseDown(e) {
+    if (e.button !== 0) return;
+    const btn = document.getElementById('confirmResetCertBtn');
+    if (!btn) return;
+    if (btn.classList.contains('btn__state-closing')) return;
+
+    this._resetCertBtnMouseDown = true;
+    this._resetCertBtnPressStartTime = Date.now();
+    this._resetCertBtnLongPressTriggered = false;
+
+    this._resetCertBtnLongPressTimer = setTimeout(() => {
+      this._resetCertBtnLongPressTriggered = true;
+      this._enterResetCertOnlyState();
+    }, 300);
+  }
+
+  _onResetCertBtnMouseUp(e) {
+    const btn = document.getElementById('confirmResetCertBtn');
+    if (!btn) return;
+
+    this._clearResetCertLongPressTimer();
+
+    if (this._resetCertBtnLongPressTriggered || this._resetCertBtnClosingState) {
+      this._resetCertBtnMouseDown = false;
+      return;
+    }
+
+    if (this._resetCertBtnMouseDown) {
+      const pressDuration = Date.now() - this._resetCertBtnPressStartTime;
+      if (pressDuration >= 300) {
+        this._enterResetCertOnlyState();
+      } else {
+        this._handleResetCertAndRestart();
+      }
+    }
+
+    this._resetCertBtnMouseDown = false;
+  }
+
+  _onResetCertBtnMouseLeave() {
+    this._clearResetCertLongPressTimer();
+
+    if (this._resetCertBtnClosingState) {
+      this._cancelResetCertOnlyState();
+    }
+
+    this._resetCertBtnMouseDown = false;
+  }
+
+  _clearResetCertLongPressTimer() {
+    if (this._resetCertBtnLongPressTimer) {
+      clearTimeout(this._resetCertBtnLongPressTimer);
+      this._resetCertBtnLongPressTimer = null;
+    }
+  }
+
+  _enterResetCertOnlyState() {
+    const btn = document.getElementById('confirmResetCertBtn');
+    if (!btn) return;
+
+    this._resetCertBtnClosingState = true;
+    btn.classList.add('btn__state-closing');
+    btn.querySelector('span').textContent = '仅清理证书';
+
+    const bar = btn.querySelector('.btn__progress-bar');
+    if (bar) {
+      bar.classList.add('is-active');
+    }
+  }
+
+  _cancelResetCertOnlyState() {
+    const btn = document.getElementById('confirmResetCertBtn');
+    if (!btn) return;
+
+    this._resetCertBtnClosingState = false;
+
+    const bar = btn.querySelector('.btn__progress-bar');
+    if (bar) {
+      bar.classList.remove('is-active');
+      void bar.offsetWidth;
+    }
+
+    btn.classList.remove('btn__state-closing');
+    btn.querySelector('span').textContent = '清理并重启';
+  }
+
+  async _onResetCertProgressComplete() {
+    const btn = document.getElementById('confirmResetCertBtn');
+    if (!btn) return;
+
+    this._resetCertBtnClosingState = false;
+
+    const bar = btn.querySelector('.btn__progress-bar');
+    if (bar) {
+      bar.classList.remove('is-active');
+    }
+
+    btn.classList.add('btn__state-done');
+
+    await this._performResetCertificate();
+  }
+
+  async _handleResetCertAndRestart() {
+    await this._performResetCertificate();
+    this.logManager.addInfoLog('正在重启 Auto366...');
+    window.electronAPI.restartApp();
+  }
+
+  async _performResetCertificate() {
+    const dialog = document.querySelector('.log-item--warning');
+    if (dialog) dialog.remove();
+
+    this.logManager.addInfoLog('正在重置代理证书...');
+
+    const result = await window.electronAPI.resetCertificate();
+    if (result && result.success) {
+      if (result.deleted > 0) {
+        this.logManager.addSuccessLog(`已清理 ${result.deleted} 个旧证书`);
+      } else {
+        this.logManager.addInfoLog('未发现需要清理的旧证书');
+      }
+      this.logManager.addSuccessLog('代理证书已重新导入');
+    } else {
+      if (result.errors && result.errors.length > 0) {
+        result.errors.forEach(err => this.logManager.addErrorLog(err));
+      } else {
+        this.logManager.addErrorLog('证书重置失败');
+      }
     }
   }
 
