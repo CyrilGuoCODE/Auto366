@@ -22,11 +22,17 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 ### 新版本已完成
 
 - 重构项目底层UI架构(基本完成)
-- 加入听力自动化(仅选择)
+- 加入听力自动化Beta(仅选择题)
 - 添加动态ZIP注入规则功能(By Fish)
 - 增强天学网启停并添加监控天学网进程(By Fish)
 - 加入规则集兼容性功能并和未加密page1.js识别(By Fish)
 - 修复教程自动寻找缓存目录无效(By 五羰基)
+- 优化rules.json本地规则存储结构
+- 单词PK自动化全面重构，加入超多新功能(By Fish)
+- 加入多选请求并导出(By 五羰基)
+- 新增修改时间规则（By ゼロ）
+- auto-pk词王争霸支持（By ゼロ）
+- 添加版本化的内置规则集支持
 
 ### BUG问题
 
@@ -38,9 +44,10 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 - 深度UI更新
 - 深色模式UI支持
-- 优化rules.json规则存储
 - 加入Funny模式
 - 优化听力自动化
+- 单词PK秒交(wutangji)
+- Log日志系统与通知系统优化
 
 #### 长期更新
 
