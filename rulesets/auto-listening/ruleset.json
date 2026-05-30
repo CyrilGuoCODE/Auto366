@@ -1,5 +1,6 @@
 {
   "name": "内置-自动基础听力",
   "description": "基础听力自动化，目前仅支持自动选择题和一键交卷",
-  "compatible": false
+  "compatible": false,
+  "version": 1
 }

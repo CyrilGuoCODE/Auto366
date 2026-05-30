@@ -1,5 +1,6 @@
 {
   "name": "内置-自动单词PK",
   "description": "利用请求注入实现的自动单词PK",
-  "compatible": false
+  "compatible": false,
+  "version": 1
 }
