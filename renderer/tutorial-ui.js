@@ -4,7 +4,7 @@ class TutorialManager {
     this.logManager = logManager;
     this.currentPage = 0;
     this.totalPages = 6;
-    this.selectedMode = null;
+    this.selectedMode = 'simple';
   }
 
   init() {
