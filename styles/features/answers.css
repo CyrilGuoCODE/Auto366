@@ -460,3 +460,43 @@
 .answer-item {
     animation: fadeIn var(--ease-slow);
 }
+
+#leftContent .view-panel__controls .btn--clear {
+    background: transparent !important;
+    color: var(--color-danger) !important;
+    border: 1px solid var(--color-border-strong) !important;
+    border-radius: var(--radius-sm) !important;
+    padding: 0 !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    position: relative;
+    font-size: 18px;
+    line-height: 32px;
+    text-align: center;
+    gap: 0 !important;
+}
+
+#leftContent .view-panel__controls .btn--clear:hover {
+    background: var(--color-danger) !important;
+    border-color: var(--color-danger) !important;
+    color: var(--color-white) !important;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-danger);
+}
+
+#leftContent .view-panel__controls .btn--clear .bi {
+    display: none !important;
+}
+
+#leftContent .view-panel__controls .btn--clear::before {
+    font-family: bootstrap-icons !important;
+    font-size: 18px !important;
+    line-height: 32px !important;
+    content: "\F5DE" !important;
+    color: var(--color-danger) !important;
+}
+
+#leftContent .view-panel__controls .btn--clear:hover::before {
+    color: var(--color-white) !important;
+}
