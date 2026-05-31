@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Beta 自动基础听力
 // @namespace    http://tampermonkey.net/
-// @version      4.0
-// @description  精确文本匹配+原生点击，答案自动获取与填答，内嵌日志面板
+// @version      5.0
+// @description  自动获取答案与填答，开发者面板支持搜索测试与队列管理
 // @match        *://*/*
 // @grant        none
 // ==/UserScript==
@@ -44,20 +44,26 @@
         testQueue: [],
         logEntries: [],
         collapsed: false,
-        noScroll: false,
-        activeTab: 'search',
+        devPanelVisible: false,
         answerList: [],
         answerLoading: false,
         answerError: null,
         autoFillRunning: false,
         autoFillIndex: 0,
+        accuracyRate: 100,
+        _wrongIndices: null,
     };
 
     let container = null;
+    let devPanel = null;
     let inputEl = null;
     let resultsContainer = null;
     let answerListContainer = null;
     let logContent = null;
+
+    // ==========================================
+    // UI 创建
+    // ==========================================
 
     function createUI() {
         container = document.createElement('div');
@@ -66,8 +72,8 @@
             position: fixed;
             bottom: 20px;
             right: 20px;
-            width: 520px;
-            max-height: 680px;
+            width: 420px;
+            max-height: 480px;
             background: var(--a366-bg, #fff);
             color: var(--a366-text, #212529);
             border-radius: var(--a366-radius-lg, 8px);
@@ -86,41 +92,24 @@
             <div id="a366-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--a366-bg-secondary);border-radius:8px 8px 0 0;border-bottom:1px solid var(--a366-border);cursor:move;user-select:none;">
                 <span style="font-weight:600;font-size:14px;color:var(--a366-primary);">Beta 自动基础听力</span>
                 <div style="display:flex;gap:6px;align-items:center;">
-                    <label id="a366-no-scroll-label" style="display:flex;align-items:center;gap:3px;cursor:pointer;background:var(--a366-bg-tertiary);padding:3px 8px;border-radius:var(--a366-radius-sm);font-size:11px;color:var(--a366-text-secondary);border:1px solid var(--a366-border);">
-                        <input type="checkbox" id="a366-no-scroll" style="margin:0;accent-color:var(--a366-primary);"> 锁定滚动
-                    </label>
+                    <button id="a366-dev-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 10px;font-size:11px;cursor:pointer;font-weight:500;">Develop</button>
                     <button id="a366-minimize" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;">_</button>
                 </div>
             </div>
-            <div style="display:flex;border-bottom:1px solid var(--a366-border);background:var(--a366-bg-secondary);">
-                <button class="a366-tab active" data-tab="search" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-primary);border-bottom:2px solid var(--a366-primary);transition:all 0.15s;">搜索测试</button>
-                <button class="a366-tab" data-tab="answers" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-text-secondary);border-bottom:2px solid transparent;transition:all 0.15s;">答案列表</button>
-            </div>
             <div id="a366-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;">
-                <div id="a366-tab-search" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
-                    <div style="display:flex;gap:6px;">
-                        <input id="a366-search-input" type="text" placeholder="输入精确匹配的文本..." style="flex:1;padding:8px 10px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);background:var(--a366-bg);color:var(--a366-text);font-size:13px;outline:none;font-family:var(--a366-font);">
-                        <button id="a366-search-btn" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">搜索</button>
-                        <button id="a366-jiaojuan-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">交卷</button>
-                        <button id="a366-auto-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">自动</button>
+                <div id="a366-fill-section" style="padding:12px;display:flex;flex-direction:column;gap:10px;">
+                    <div style="font-size:12px;font-weight:500;color:var(--a366-text-secondary);">答案状态</div>
+                    <div id="a366-fill-status" style="padding:8px 10px;background:var(--a366-bg-secondary);border-radius:var(--a366-radius-md);border:1px solid var(--a366-border);min-height:40px;">
+                        <div style="color:var(--a366-text-muted);text-align:center;font-size:12px;">正在获取答案...</div>
                     </div>
-                    <div style="font-size:11px;color:var(--a366-text-secondary);padding:2px 0;">匹配方式：文本精确 | 点击方式：原生 .click()</div>
-                    <div id="a366-results" style="min-height:30px;max-height:200px;overflow-y:auto;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:6px;background:var(--a366-bg);"></div>
-                    <div id="a366-queue" style="min-height:30px;max-height:160px;overflow-y:auto;border:1px solid var(--a366-warning);border-radius:var(--a366-radius-md);padding:6px;background:var(--a366-bg);">
-                        <div style="color:var(--a366-warning);font-size:11px;margin-bottom:4px;">待测试队列</div>
-                        <div style="color:var(--a366-text-muted);text-align:center;padding:6px;font-size:11px;">队列为空</div>
-                    </div>
-                </div>
-                <div id="a366-tab-answers" style="padding:12px;display:none;flex-direction:column;gap:8px;">
-                    <div style="display:flex;gap:6px;align-items:center;">
-                        <button id="a366-fetch-answers" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">获取答案</button>
-                        <button id="a366-auto-fill-all" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">一键填答</button>
+                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                        <button id="a366-auto-fill-all" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">一键填答</button>
                         <button id="a366-stop-auto-fill" style="background:var(--a366-danger);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">停止</button>
-                        <span id="a366-answer-status" style="font-size:11px;color:var(--a366-text-secondary);"></span>
-                    </div>
-                    <div id="a366-answer-info" style="font-size:11px;color:var(--a366-text-secondary);display:none;padding:6px 8px;background:var(--a366-primary-light);border-radius:var(--a366-radius-sm);border:1px solid var(--a366-primary);"></div>
-                    <div id="a366-answer-list" style="flex:1;overflow-y:auto;max-height:320px;display:flex;flex-direction:column;gap:6px;">
-                        <div style="color:var(--a366-text-muted);text-align:center;padding:20px;font-size:12px;">点击「获取答案」从本地服务器加载答案</div>
+                        <button id="a366-jiaojuan-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">交卷</button>
+                        <div style="display:flex;align-items:stretch;">
+                            <button id="a366-auto-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md) 0 0 var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;border-right:1px solid rgba(255,255,255,0.3);">自动听力</button>
+                            <button id="a366-auto-settings" style="background:var(--a366-info);color:#fff;border:none;border-radius:0 var(--a366-radius-md) var(--a366-radius-md) 0;padding:8px 10px;font-size:14px;cursor:pointer;font-weight:500;display:flex;align-items:center;justify-content:center;" title="正确率设置">⚙</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -131,24 +120,22 @@
                 </div>
                 <div id="a366-log-content" style="height:120px;overflow-y:auto;padding:4px 10px 6px;font-size:11px;font-family:'Consolas','Courier New','PingFang SC',monospace;background:var(--a366-bg);">
                     <div style="color:var(--a366-success);">自动基础听力已就绪</div>
-                    <div style="color:var(--a366-text-secondary);">搜索测试 | 答案获取 | 自动填答</div>
+                    <div style="color:var(--a366-text-secondary);">填答 | 交卷 | 自动</div>
                 </div>
             </div>
         `;
 
         document.body.appendChild(container);
+        createAccuracyModal();
+        createDevPanel();
 
-        inputEl = document.getElementById('a366-search-input');
-        resultsContainer = document.getElementById('a366-results');
-        answerListContainer = document.getElementById('a366-answer-list');
         logContent = document.getElementById('a366-log-content');
 
-        document.getElementById('a366-search-btn').addEventListener('click', performSearch);
-        inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') performSearch(); });
+        document.getElementById('a366-dev-btn').addEventListener('click', toggleDevPanel);
+        document.getElementById('a366-minimize').addEventListener('click', toggleCollapse);
         document.getElementById('a366-jiaojuan-btn').addEventListener('click', submitExam);
         document.getElementById('a366-auto-btn').addEventListener('click', executeAuto);
-        document.getElementById('a366-minimize').addEventListener('click', toggleCollapse);
-        document.getElementById('a366-fetch-answers').addEventListener('click', fetchAnswers);
+        document.getElementById('a366-auto-settings').addEventListener('click', toggleAccuracySettings);
         document.getElementById('a366-auto-fill-all').addEventListener('click', startAutoFillAll);
         document.getElementById('a366-stop-auto-fill').addEventListener('click', stopAutoFill);
         document.getElementById('a366-log-clear').addEventListener('click', () => {
@@ -156,52 +143,197 @@
             logContent.innerHTML = '';
         });
 
-        document.getElementById('a366-no-scroll').addEventListener('change', (e) => {
-            state.noScroll = e.target.checked;
-            const label = document.getElementById('a366-no-scroll-label');
-            if (state.noScroll) {
-                label.style.background = 'var(--a366-danger-light)';
-                label.style.borderColor = 'var(--a366-danger)';
-                addLog('页面滚动已锁定', 'warn');
-            } else {
-                label.style.background = 'var(--a366-bg-tertiary)';
-                label.style.borderColor = 'var(--a366-border)';
-                addLog('页面滚动已解锁', 'info');
-            }
-            try { localStorage.setItem('a366_noscroll', state.noScroll ? '1' : ''); } catch(e) {}
-        });
-
-        container.querySelectorAll('.a366-tab').forEach(tab => {
-            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-        });
-
-        restoreScrollPref();
-        makeDraggable();
+        makeDraggable(container, document.getElementById('a366-header'));
+        autoFetchAnswers();
     }
 
-    function switchTab(tabName) {
-        state.activeTab = tabName;
-        container.querySelectorAll('.a366-tab').forEach(t => {
+    function createDevPanel() {
+        devPanel = document.createElement('div');
+        devPanel.id = 'a366-dev-panel';
+        devPanel.style.cssText = `
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 480px;
+            max-height: 600px;
+            background: var(--a366-bg, #fff);
+            color: var(--a366-text, #212529);
+            border-radius: var(--a366-radius-lg, 8px);
+            border: 1px solid var(--a366-border, #dee2e6);
+            box-shadow: var(--a366-shadow, 0 2px 12px rgba(0,0,0,0.12));
+            z-index: 1000000;
+            font-family: var(--a366-font, sans-serif);
+            font-size: 13px;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            ${CSS_VARS}
+        `;
+
+        devPanel.innerHTML = `
+            <div id="a366-dev-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--a366-bg-secondary);border-radius:8px 8px 0 0;border-bottom:1px solid var(--a366-border);cursor:move;user-select:none;">
+                <span style="font-weight:600;font-size:14px;color:var(--a366-info);">🔧 开发者面板</span>
+                <button id="a366-dev-close" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;">✕</button>
+            </div>
+            <div style="display:flex;border-bottom:1px solid var(--a366-border);background:var(--a366-bg-secondary);">
+                <button class="a366-dev-tab active" data-tab="dev-search" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-primary);border-bottom:2px solid var(--a366-primary);transition:all 0.15s;">搜索测试</button>
+                <button class="a366-dev-tab" data-tab="dev-answers" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-text-secondary);border-bottom:2px solid transparent;transition:all 0.15s;">答案列表</button>
+            </div>
+            <div id="a366-dev-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;">
+                <div id="a366-dev-tab-search" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
+                    <div style="display:flex;gap:6px;">
+                        <input id="a366-search-input" type="text" placeholder="输入精确匹配的文本..." style="flex:1;padding:8px 10px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);background:var(--a366-bg);color:var(--a366-text);font-size:13px;outline:none;font-family:var(--a366-font);">
+                        <button id="a366-search-btn" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">搜索</button>
+                    </div>
+                    <div style="font-size:11px;color:var(--a366-text-secondary);padding:2px 0;">匹配方式：文本精确 | 点击方式：原生 .click()</div>
+                    <div id="a366-results" style="min-height:30px;max-height:200px;overflow-y:auto;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:6px;background:var(--a366-bg);"></div>
+                    <div id="a366-queue" style="min-height:30px;max-height:160px;overflow-y:auto;border:1px solid var(--a366-warning);border-radius:var(--a366-radius-md);padding:6px;background:var(--a366-bg);">
+                        <div style="color:var(--a366-warning);font-size:11px;margin-bottom:4px;">待测试队列</div>
+                        <div style="color:var(--a366-text-muted);text-align:center;padding:6px;font-size:11px;">队列为空</div>
+                    </div>
+                </div>
+                <div id="a366-dev-tab-answers" style="padding:12px;display:none;flex-direction:column;gap:8px;">
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <button id="a366-fetch-answers" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">获取答案</button>
+                        <span id="a366-answer-status" style="font-size:11px;color:var(--a366-text-secondary);"></span>
+                    </div>
+                    <div id="a366-answer-info" style="font-size:11px;color:var(--a366-text-secondary);display:none;padding:6px 8px;background:var(--a366-primary-light);border-radius:var(--a366-radius-sm);border:1px solid var(--a366-primary);"></div>
+                    <div id="a366-answer-list" style="flex:1;overflow-y:auto;max-height:320px;display:flex;flex-direction:column;gap:6px;">
+                        <div style="color:var(--a366-text-muted);text-align:center;padding:20px;font-size:12px;">点击「获取答案」从本地服务器加载答案</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(devPanel);
+
+        inputEl = document.getElementById('a366-search-input');
+        resultsContainer = document.getElementById('a366-results');
+        answerListContainer = document.getElementById('a366-answer-list');
+
+        document.getElementById('a366-dev-close').addEventListener('click', toggleDevPanel);
+        document.getElementById('a366-search-btn').addEventListener('click', performSearch);
+        inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') performSearch(); });
+        document.getElementById('a366-fetch-answers').addEventListener('click', fetchAnswers);
+
+        devPanel.querySelectorAll('.a366-dev-tab').forEach(tab => {
+            tab.addEventListener('click', () => switchDevTab(tab.dataset.tab));
+        });
+
+        makeDraggable(devPanel, document.getElementById('a366-dev-header'));
+    }
+
+    // ==========================================
+    // 面板切换
+    // ==========================================
+
+    function toggleDevPanel() {
+        state.devPanelVisible = !state.devPanelVisible;
+        devPanel.style.display = state.devPanelVisible ? 'flex' : 'none';
+        if (state.devPanelVisible) {
+            addLog('开发者面板已打开', 'info');
+        }
+    }
+
+    function switchDevTab(tabName) {
+        devPanel.querySelectorAll('.a366-dev-tab').forEach(t => {
             const isActive = t.dataset.tab === tabName;
             t.style.color = isActive ? 'var(--a366-primary)' : 'var(--a366-text-secondary)';
             t.style.borderBottom = isActive ? '2px solid var(--a366-primary)' : '2px solid transparent';
             t.style.fontWeight = isActive ? '500' : '400';
         });
-        document.getElementById('a366-tab-search').style.display = tabName === 'search' ? 'flex' : 'none';
-        document.getElementById('a366-tab-answers').style.display = tabName === 'answers' ? 'flex' : 'none';
+        document.getElementById('a366-dev-tab-search').style.display = tabName === 'dev-search' ? 'flex' : 'none';
+        document.getElementById('a366-dev-tab-answers').style.display = tabName === 'dev-answers' ? 'flex' : 'none';
     }
 
+    function toggleCollapse() {
+        const body = document.getElementById('a366-body');
+        if (!body) return;
+        state.collapsed = !state.collapsed;
+        body.style.display = state.collapsed ? 'none' : 'flex';
+        container.style.maxHeight = state.collapsed ? 'auto' : '480px';
+    }
+
+    // ==========================================
+    // 主页填答状态
+    // ==========================================
+
+    function renderMainFillSection() {
+        const fillStatus = document.getElementById('a366-fill-status');
+        if (!fillStatus) return;
+
+        const list = state.answerList;
+        if (list.length === 0) {
+            fillStatus.innerHTML = `<div style="color:var(--a366-text-muted);text-align:center;font-size:12px;">${state.answerError ? escapeHtml(state.answerError) : '未获取答案'}</div>`;
+            document.getElementById('a366-auto-fill-all').style.display = 'none';
+            document.getElementById('a366-stop-auto-fill').style.display = 'none';
+            return;
+        }
+
+        const filledCount = list.filter(a => a._fillStatus === 'filled').length;
+        const failedCount = list.filter(a => a._fillStatus === 'failed').length;
+
+        let badges = '';
+        list.forEach((ans) => {
+            const status = ans._fillStatus || 'pending';
+            if (status === 'filled' && ans._fillMode === 'wrong') {
+                badges += '<span style="color:var(--a366-danger);font-weight:600;">✗</span>';
+            } else if (status === 'filled') {
+                badges += '<span style="color:var(--a366-success);font-weight:600;">✓</span>';
+            } else if (status === 'filling') {
+                badges += '<span style="color:var(--a366-warning);font-weight:600;">●</span>';
+            } else if (status === 'failed') {
+                badges += '<span style="color:var(--a366-danger);font-weight:600;">✕</span>';
+            } else {
+                badges += '<span style="color:var(--a366-text-muted);">○</span>';
+            }
+        });
+
+        fillStatus.innerHTML = `
+            <div style="font-size:12px;color:var(--a366-text);margin-bottom:6px;">
+                已获取 <b>${list.length}</b> 条答案 | 已填答 <b style="color:var(--a366-success);">${filledCount}</b>/${list.length}${failedCount > 0 ? ' | <span style="color:var(--a366-danger);">失败 ' + failedCount + '</span>' : ''}
+            </div>
+            <div style="font-size:15px;letter-spacing:2px;word-break:break-all;line-height:1.8;">${badges}</div>
+        `;
+
+        const fillAllBtn = document.getElementById('a366-auto-fill-all');
+        const stopBtn = document.getElementById('a366-stop-auto-fill');
+        if (state.autoFillRunning) {
+            fillAllBtn.style.display = 'none';
+            stopBtn.style.display = '';
+        } else {
+            fillAllBtn.style.display = filledCount < list.length ? '' : 'none';
+            stopBtn.style.display = 'none';
+        }
+    }
+
+    // ==========================================
+    // 自动获取答案
+    // ==========================================
+
+    async function autoFetchAnswers() {
+        addLog('正在自动获取答案...', 'info');
+        await fetchAnswers();
+    }
+
+    // ==========================================
+    // 搜索测试（开发者面板）
+    // ==========================================
+
     function performSearch() {
+        if (!inputEl) return;
         const keyword = inputEl.value.trim();
         if (!keyword) { addLog('请输入搜索内容', 'warn'); return; }
 
-        addLog(`搜索: "${keyword}"（文本精确匹配）`, 'info');
+        addLog(`搜索: "${escapeHtml(keyword)}"（文本精确匹配）`, 'info');
 
         const allElements = document.querySelectorAll('body *');
         const matchedResults = [];
 
         allElements.forEach(el => {
             if (el === container || container.contains(el) || el.contains(container)) return;
+            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) return;
             try {
                 if ((el.textContent || '').trim() === keyword) {
                     matchedResults.push(buildElementInfo(el, '文本精确匹配'));
@@ -212,7 +344,7 @@
         state.currentResults = matchedResults;
 
         if (matchedResults.length === 0) {
-            addLog(`未找到文本精确匹配 "${keyword}" 的元素`, 'warn');
+            addLog(`未找到文本精确匹配 "${escapeHtml(keyword)}" 的元素`, 'warn');
             resultsContainer.innerHTML = `<div style="color:var(--a366-text-muted);text-align:center;padding:12px;font-size:12px;">未找到匹配元素</div>`;
         } else {
             addLog(`共匹配到 ${matchedResults.length} 个元素`, 'success');
@@ -234,7 +366,9 @@
 
         if (submitBtns.length === 0) {
             addLog('未找到任何提交按钮元素', 'warn');
-            resultsContainer.innerHTML = `<div style="color:var(--a366-warning);text-align:center;padding:12px;font-size:12px;">未找到提交按钮元素</div>`;
+            if (resultsContainer) {
+                resultsContainer.innerHTML = `<div style="color:var(--a366-warning);text-align:center;padding:12px;font-size:12px;">未找到提交按钮元素</div>`;
+            }
             return;
         }
 
@@ -248,16 +382,16 @@
             state.currentResults.push(info);
         });
 
-        renderResults(state.currentResults);
+        if (resultsContainer) renderResults(state.currentResults);
 
         submitBtns.forEach((el, i) => {
             const info = state.currentResults[i];
             state.testQueue.push(info);
-            addLog(`${selectorName} #${i + 1} 已加入测试队列`, 'queue');
+            addLog(`${escapeHtml(selectorName)} #${i + 1} 已加入测试队列`, 'queue');
         });
 
         renderQueue();
-        addLog(`共 ${submitBtns.length} 个 ${selectorName} 已加入队列，点击「全部测试」开始交卷`, 'info');
+        addLog(`共 ${submitBtns.length} 个 ${escapeHtml(selectorName)} 已加入队列`, 'info');
     }
 
     function buildElementInfo(el, strategyName) {
@@ -287,6 +421,7 @@
     }
 
     function renderResults(results) {
+        if (!resultsContainer) return;
         let html = `<div style="font-size:11px;color:var(--a366-primary);margin-bottom:4px;">匹配结果 (${results.length})</div>`;
         results.forEach((info, i) => {
             const visColor = info.visible ? 'var(--a366-success)' : 'var(--a366-danger)';
@@ -334,7 +469,7 @@
         }
 
         el.style.outline = '3px solid var(--a366-info)';
-        if (!state.noScroll) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setTimeout(() => { el.style.outline = ''; }, 1500);
 
         addLog(`━━━━━━━━━━━━━━━━━━━━━━`, 'info');
@@ -390,18 +525,18 @@
             return '/' + parts.join('/');
         };
 
-        addLog(`  标签: &lt;${info.tag}&gt;`, 'info');
-        if (info.id) addLog(`  id: ${info.id}`, 'info');
-        if (info.className) addLog(`  class: ${info.className}`, 'info');
-        if (info.type) addLog(`  type: ${info.type}`, 'info');
-        if (info.name) addLog(`  name: ${info.name}`, 'info');
-        if (info.title) addLog(`  title: ${info.title}`, 'info');
-        if (info.href) addLog(`  href: ${info.href}`, 'info');
-        if (info.role) addLog(`  role: ${info.role}`, 'info');
-        if (info.ariaLabel) addLog(`  aria-label: ${info.ariaLabel}`, 'info');
+        addLog(`  标签: &lt;${escapeHtml(info.tag)}&gt;`, 'info');
+        if (info.id) addLog(`  id: ${escapeHtml(info.id)}`, 'info');
+        if (info.className) addLog(`  class: ${escapeHtml(info.className)}`, 'info');
+        if (info.type) addLog(`  type: ${escapeHtml(info.type)}`, 'info');
+        if (info.name) addLog(`  name: ${escapeHtml(info.name)}`, 'info');
+        if (info.title) addLog(`  title: ${escapeHtml(info.title)}`, 'info');
+        if (info.href) addLog(`  href: ${escapeHtml(info.href)}`, 'info');
+        if (info.role) addLog(`  role: ${escapeHtml(info.role)}`, 'info');
+        if (info.ariaLabel) addLog(`  aria-label: ${escapeHtml(info.ariaLabel)}`, 'info');
         addLog(`  可见: ${info.visible ? '是' : '否'} | 禁用: ${info.disabled ? '是' : '否'}`, 'info');
         addLog(`  尺寸: ${info.size} | 位置: ${info.position}`, 'info');
-        if (info.zIndex) addLog(`  z-index: ${info.zIndex}`, 'info');
+        if (info.zIndex) addLog(`  z-index: ${escapeHtml(info.zIndex)}`, 'info');
 
         const allAttrs = Array.from(el.attributes);
         if (allAttrs.length > 0) {
@@ -420,7 +555,7 @@
             }
         });
         if (styleParts.length > 0) {
-            addLog(`  关键样式: ${styleParts.join('; ')}`, 'info');
+            addLog(`  关键样式: ${escapeHtml(styleParts.join('; '))}`, 'info');
         }
 
         const parentChain = [];
@@ -435,7 +570,7 @@
             depth++;
         }
         if (parentChain.length > 0) {
-            addLog(`  父级链(${parentChain.length}层): ${parentChain.join(' -> ')}`, 'info');
+            addLog(`  父级链(${parentChain.length}层): ${escapeHtml(parentChain.join(' -> '))}`, 'info');
         }
 
         addLog(`  子元素数: ${el.children.length}`, 'info');
@@ -445,23 +580,28 @@
             addLog(`  父级中第 ${myIdx + 1}/${siblings.length} 个子元素`, 'info');
         }
 
-        addLog(`  CSS路径: ${buildCSSPath(el)}`, 'info');
-        addLog(`  XPath: ${buildXPath(el)}`, 'info');
-        addLog(`  匹配策略: ${info.strategy}`, 'info');
+        addLog(`  CSS路径: ${escapeHtml(buildCSSPath(el))}`, 'info');
+        addLog(`  XPath: ${escapeHtml(buildXPath(el))}`, 'info');
+        addLog(`  匹配策略: ${escapeHtml(info.strategy)}`, 'info');
         addLog(`  innerHTML预览: ${escapeHtml((el.innerHTML || '').substring(0, 200))}`, 'info');
         addLog(`━━━━━━━━━━━━━━━━━━━━━━`, 'info');
     }
+
+    // ==========================================
+    // 测试队列（开发者面板）
+    // ==========================================
 
     function addToQueue(resultIndex) {
         const info = state.currentResults[resultIndex];
         if (!info) return;
         state.testQueue.push(info);
-        addLog(`元素 #${resultIndex + 1} (&lt;${info.tag}&gt;) 已加入测试队列 (队列共 ${state.testQueue.length} 项)`, 'queue');
+        addLog(`元素 #${resultIndex + 1} (&lt;${escapeHtml(info.tag)}&gt;) 已加入测试队列 (队列共 ${state.testQueue.length} 项)`, 'queue');
         renderQueue();
     }
 
     function renderQueue() {
         const q = document.getElementById('a366-queue');
+        if (!q) return;
         if (state.testQueue.length === 0) {
             q.innerHTML = `<div style="color:var(--a366-warning);font-size:11px;margin-bottom:4px;">待测试队列</div><div style="color:var(--a366-text-muted);text-align:center;padding:6px;font-size:11px;">队列为空</div>`;
             return;
@@ -484,12 +624,12 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span><b>#${i + 1}</b> &lt;${info.tag}&gt; ${escapeHtml(info.text.substring(0, 30))}</span>
                     <span>
-                        ${tested ? `<span style="font-size:10px;color:${info._success ? 'var(--a366-success)' : 'var(--a366-danger)'};">${info._success ? '成功' : '失败'} ${info._clickMethod || ''}</span>` : ''}
+                        ${tested ? `<span style="font-size:10px;color:${info._success ? 'var(--a366-success)' : 'var(--a366-danger)'};">${info._success ? '成功' : '失败'} ${escapeHtml(info._clickMethod || '')}</span>` : ''}
                         <button class="a366-test-one" data-queue="${i}" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:1px 6px;font-size:10px;cursor:pointer;">测试</button>
                         <button class="a366-remove-queue" data-queue="${i}" style="background:var(--a366-text-muted);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:1px 6px;font-size:10px;cursor:pointer;">x</button>
                     </span>
                 </div>
-                ${tested && info._log ? `<div style="color:var(--a366-text-secondary);font-size:10px;">${info._log}</div>` : ''}
+                ${tested && info._log ? `<div style="color:var(--a366-text-secondary);font-size:10px;">${escapeHtml(info._log)}</div>` : ''}
             </div>`;
         });
 
@@ -505,13 +645,17 @@
                 if (idx >= 0 && idx < state.testQueue.length) {
                     const info = state.testQueue[idx];
                     state.testQueue.splice(idx, 1);
-                    addLog(`从队列移除: &lt;${info.tag}&gt; "${info.text.substring(0, 30)}"`, 'info');
+                    addLog(`从队列移除: &lt;${escapeHtml(info.tag)}&gt; "${escapeHtml(info.text.substring(0, 30))}"`, 'info');
                     renderQueue();
                 }
                 e.stopPropagation();
             });
         });
     }
+
+    // ==========================================
+    // 测试执行
+    // ==========================================
 
     function testAll() {
         return new Promise((resolve) => {
@@ -522,7 +666,6 @@
 
     function testNextInQueueWithResolve(index, resolve) {
         if (index >= state.testQueue.length) {
-            unlockScroll();
             addLog('队列中所有元素测试完毕', 'success');
             resolve();
             return;
@@ -532,20 +675,9 @@
         });
     }
 
-    function testNextInQueue(index) {
-        if (index >= state.testQueue.length) {
-            unlockScroll();
-            addLog('队列中所有元素测试完毕', 'success');
-            return;
-        }
-        testOne(index, () => {
-            setTimeout(() => testNextInQueue(index + 1), 400);
-        });
-    }
-
     function testOne(queueIndex, callback) {
         const info = state.testQueue[queueIndex];
-        if (!info) return;
+        if (!info) { if (callback) callback(); return; }
 
         const el = info.element;
         if (!el || !document.contains(el)) {
@@ -559,19 +691,17 @@
             return;
         }
 
-        lockScroll();
-
         el.style.outline = '3px solid var(--a366-primary)';
-        if (!state.noScroll) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
         setTimeout(() => {
             let clicked = false;
             try {
                 el.click();
                 clicked = true;
-                addLog(`队列 #${queueIndex + 1}: 原生.click() -> &lt;${info.tag}&gt; "${info.text.substring(0, 40)}"`, 'click');
+                addLog(`队列 #${queueIndex + 1}: 原生.click() -> &lt;${escapeHtml(info.tag)}&gt; "${escapeHtml(info.text.substring(0, 40))}"`, 'click');
             } catch(e) {
-                addLog(`队列 #${queueIndex + 1}: 原生.click() 异常: ${e.message}`, 'error');
+                addLog(`队列 #${queueIndex + 1}: 原生.click() 异常: ${escapeHtml(e.message)}`, 'error');
             }
 
             info._tested = true;
@@ -585,21 +715,15 @@
         }, 200);
     }
 
-    function lockScroll() {
-        if (state.noScroll) return;
-        document.body.style.overflow = 'hidden';
-    }
-
-    function unlockScroll() {
-        if (state.noScroll) return;
-        document.body.style.overflow = '';
-    }
+    // ==========================================
+    // 答案获取与列表（开发者面板）
+    // ==========================================
 
     async function fetchAnswers() {
         const statusEl = document.getElementById('a366-answer-status');
         const fetchBtn = document.getElementById('a366-fetch-answers');
-        statusEl.textContent = '正在获取...';
-        fetchBtn.disabled = true;
+        if (statusEl) statusEl.textContent = '正在获取...';
+        if (fetchBtn) fetchBtn.disabled = true;
         state.answerLoading = true;
         state.answerError = null;
 
@@ -630,38 +754,45 @@
             state.answerList = filtered;
 
             const infoEl = document.getElementById('a366-answer-info');
-            infoEl.style.display = 'block';
-            infoEl.innerHTML = `原始答案 ${rawAnswers.length} 条 | 筛选「听后选择」${filtered.length} 条 | 端口: ${BUCKET_URL.replace('http://127.0.0.1:', '')}`;
+            if (infoEl) {
+                infoEl.style.display = 'block';
+                infoEl.innerHTML = `原始答案 ${rawAnswers.length} 条 | 筛选「听后选择」${filtered.length} 条 | 端口: ${BUCKET_URL.replace('http://127.0.0.1:', '')}`;
+            }
 
             if (filtered.length > 0) {
-                document.getElementById('a366-auto-fill-all').style.display = '';
                 addLog(`获取答案成功：${filtered.length} 条听后选择题`, 'success');
             } else {
-                document.getElementById('a366-auto-fill-all').style.display = 'none';
                 addLog(`获取到 ${rawAnswers.length} 条答案，但无听后选择题`, 'warn');
             }
 
             renderAnswerList();
-            statusEl.textContent = '';
+            renderMainFillSection();
+            if (statusEl) statusEl.textContent = '';
 
         } catch(e) {
             state.answerError = e.message;
-            statusEl.textContent = '';
+            if (statusEl) statusEl.textContent = '';
             const isNetworkError = e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('fetch');
             if (isNetworkError) {
                 addLog(`获取答案失败: 无法连接服务器，请确认代理服务器已启动`, 'error');
-                answerListContainer.innerHTML = `<div style="color:var(--a366-danger);text-align:center;padding:20px;font-size:12px;">无法连接服务器<br><span style="color:var(--a366-text-muted);">请确认主程序代理服务器已启动 (${BUCKET_URL})</span></div>`;
+                if (answerListContainer) {
+                    answerListContainer.innerHTML = `<div style="color:var(--a366-danger);text-align:center;padding:20px;font-size:12px;">无法连接服务器<br><span style="color:var(--a366-text-muted);">请确认主程序代理服务器已启动 (${escapeHtml(BUCKET_URL)})</span></div>`;
+                }
             } else {
-                addLog(`获取答案失败: ${e.message}`, 'error');
-                answerListContainer.innerHTML = `<div style="color:var(--a366-danger);text-align:center;padding:20px;font-size:12px;">${escapeHtml(e.message)}<br><span style="color:var(--a366-text-muted);">请在主程序中启动代理捕获答案后重试</span></div>`;
+                addLog(`获取答案失败: ${escapeHtml(e.message)}`, 'error');
+                if (answerListContainer) {
+                    answerListContainer.innerHTML = `<div style="color:var(--a366-danger);text-align:center;padding:20px;font-size:12px;">${escapeHtml(e.message)}<br><span style="color:var(--a366-text-muted);">请在主程序中启动代理捕获答案后重试</span></div>`;
+                }
             }
+            renderMainFillSection();
         } finally {
             state.answerLoading = false;
-            fetchBtn.disabled = false;
+            if (fetchBtn) fetchBtn.disabled = false;
         }
     }
 
     function renderAnswerList() {
+        if (!answerListContainer) return;
         const list = state.answerList;
         if (list.length === 0) {
             answerListContainer.innerHTML = `<div style="color:var(--a366-text-muted);text-align:center;padding:20px;font-size:12px;">暂无答案数据</div>`;
@@ -678,11 +809,13 @@
 
             let statusBadge = '';
             if (fillStatus === 'filling') statusBadge = `<span style="color:var(--a366-warning);font-size:10px;">填答中</span>`;
+            else if (fillStatus === 'filled' && ans._fillMode === 'wrong') statusBadge = `<span style="color:var(--a366-danger);font-size:10px;">故意错</span>`;
             else if (fillStatus === 'filled') statusBadge = `<span style="color:var(--a366-success);font-size:10px;">已填答</span>`;
             else if (fillStatus === 'failed') statusBadge = `<span style="color:var(--a366-danger);font-size:10px;">失败</span>`;
 
+            const borderLeft = fillStatus === 'filled' && ans._fillMode === 'wrong' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'filled' ? 'border-left:3px solid var(--a366-success);' : fillStatus === 'failed' ? 'border-left:3px solid var(--a366-danger);' : '';
             html += `
-            <div style="border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:8px 10px;background:var(--a366-bg);${fillStatus === 'filled' ? 'border-left:3px solid var(--a366-success);' : fillStatus === 'failed' ? 'border-left:3px solid var(--a366-danger);' : ''}">
+            <div style="border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:8px 10px;background:var(--a366-bg);${borderLeft}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                     <div style="display:flex;align-items:center;gap:6px;">
                         <span style="font-weight:600;color:var(--a366-text);font-size:12px;">#${i + 1}</span>
@@ -727,35 +860,64 @@
                 addLog(`已复制答案 #${idx + 1}`, 'success');
             });
         } catch(e) {
-            addLog(`复制失败: ${e.message}`, 'error');
+            addLog(`复制失败: ${escapeHtml(e.message)}`, 'error');
         }
     }
 
-    function fillOneAnswer(idx) {
+    // ==========================================
+    // 填答逻辑
+    // ==========================================
+
+    function fillOneAnswer(idx, forceWrong = false) {
         const ans = state.answerList[idx];
         if (!ans) return;
 
         ans._fillStatus = 'filling';
         renderAnswerList();
-        addLog(`开始填答 #${idx + 1}: ${escapeHtml((ans.questionText || '').substring(0, 40))}`, 'info');
+        renderMainFillSection();
 
         const answerText = ans.answer || '';
         const dotIndex = answerText.indexOf('.');
         const optionId = dotIndex > 0 ? answerText.substring(0, dotIndex).trim() : '';
         const optionContent = dotIndex >= 0 ? answerText.substring(dotIndex + 1).trim() : answerText.trim();
 
-        addLog(`  匹配文本: "${escapeHtml(optionContent)}"`, 'info');
+        if (forceWrong) {
+            addLog(`开始填答 #${idx + 1}（故意选错）: ${escapeHtml((ans.questionText || '').substring(0, 40))}`, 'info');
+            addLog(`  正确答案: "${escapeHtml(optionContent)}"`, 'info');
 
-        const found = findAndClickOption(optionId, optionContent, ans);
-
-        if (found) {
-            ans._fillStatus = 'filled';
-            addLog(`#${idx + 1} 填答成功`, 'success');
+            const found = findAndClickWrongOption(optionId, optionContent, ans);
+            if (found) {
+                ans._fillStatus = 'filled';
+                ans._fillMode = 'wrong';
+                addLog(`#${idx + 1} 已选择错误选项`, 'success');
+            } else {
+                addLog(`#${idx + 1} 选择错误选项失败，回退到选择正确答案`, 'warn');
+                const fallbackFound = findAndClickOption(optionId, optionContent, ans);
+                if (fallbackFound) {
+                    ans._fillStatus = 'filled';
+                    ans._fillMode = 'correct';
+                    addLog(`#${idx + 1} 回退填答成功（正确答案）`, 'success');
+                } else {
+                    ans._fillStatus = 'failed';
+                    addLog(`#${idx + 1} 填答失败`, 'error');
+                }
+            }
         } else {
-            ans._fillStatus = 'failed';
-            addLog(`#${idx + 1} 未找到匹配选项`, 'error');
+            addLog(`开始填答 #${idx + 1}: ${escapeHtml((ans.questionText || '').substring(0, 40))}`, 'info');
+            addLog(`  匹配文本: "${escapeHtml(optionContent)}"`, 'info');
+
+            const found = findAndClickOption(optionId, optionContent, ans);
+            if (found) {
+                ans._fillStatus = 'filled';
+                ans._fillMode = 'correct';
+                addLog(`#${idx + 1} 填答成功`, 'success');
+            } else {
+                ans._fillStatus = 'failed';
+                addLog(`#${idx + 1} 未找到匹配选项`, 'error');
+            }
         }
         renderAnswerList();
+        renderMainFillSection();
     }
 
     function findAndClickOption(optionId, optionContent, answerObj) {
@@ -765,6 +927,7 @@
 
         for (const el of allElements) {
             if (el === container || container.contains(el) || el.contains(container)) continue;
+            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) continue;
             if (pageWrap && !pageWrap.contains(el)) continue;
             try {
                 const text = (el.textContent || '').trim();
@@ -792,10 +955,95 @@
         }
 
         target.style.outline = '3px solid var(--a366-success)';
-        if (!state.noScroll) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setTimeout(() => { target.style.outline = ''; }, 1500);
         target.click();
         return true;
+    }
+
+    function findAndClickWrongOption(optionId, optionContent, answerObj) {
+        const allElements = document.querySelectorAll('body *');
+        const pageWrap = document.getElementById('page-wrap');
+        let correctEl = null;
+
+        for (const el of allElements) {
+            if (el === container || container.contains(el) || el.contains(container)) continue;
+            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) continue;
+            if (pageWrap && !pageWrap.contains(el)) continue;
+            try {
+                const text = (el.textContent || '').trim();
+                if (normalizeQuotes(text) === normalizeQuotes(optionContent)) {
+                    const tag = el.tagName.toLowerCase();
+                    if (['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag)) {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            correctEl = el;
+                            break;
+                        }
+                    }
+                }
+            } catch(e) {}
+        }
+
+        if (!correctEl) {
+            addLog('  未找到正确选项元素，无法选择错误选项', 'warn');
+            return false;
+        }
+
+        let optionsContainer = correctEl.parentElement;
+        let allOptions = [];
+        let maxDepth = 5;
+
+        while (optionsContainer && maxDepth > 0) {
+            allOptions = Array.from(optionsContainer.children).filter(child => {
+                const tag = child.tagName.toLowerCase();
+                const rect = child.getBoundingClientRect();
+                return ['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag) && rect.width > 0 && rect.height > 0;
+            });
+
+            if (allOptions.length >= 3) break;
+            optionsContainer = optionsContainer.parentElement;
+            maxDepth--;
+        }
+
+        if (allOptions.length < 2) {
+            addLog(`  未找到足够的选项（仅 ${allOptions.length} 个），回退到随机选择`, 'warn');
+            return false;
+        }
+
+        const wrongOptions = allOptions.filter(opt => opt !== correctEl);
+        if (wrongOptions.length === 0) {
+            addLog('  所有选项均匹配正确答案，无法选择错误选项', 'warn');
+            return false;
+        }
+
+        const target = wrongOptions[0];
+        addLog(`  选择错误选项: 共 ${allOptions.length} 个选项，排除正确选项后选择第 1 个错误选项`, 'click');
+
+        target.style.outline = '3px solid var(--a366-danger)';
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => { target.style.outline = ''; }, 1500);
+        target.click();
+        return true;
+    }
+
+    // ==========================================
+    // 自动填答
+    // ==========================================
+
+    function buildWrongIndices(total, accuracyRate) {
+        const correctCount = Math.ceil(total * accuracyRate / 100);
+        const wrongCount = total - correctCount;
+
+        if (wrongCount === 0) return new Set();
+
+        const indices = Array.from({ length: total }, (_, i) => i);
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+
+        return new Set(indices.slice(0, wrongCount));
     }
 
     function startAutoFillAll() {
@@ -803,10 +1051,15 @@
         state.autoFillRunning = true;
         state.autoFillIndex = 0;
 
+        const wrongSet = buildWrongIndices(state.answerList.length, state.accuracyRate);
+        state._wrongIndices = wrongSet;
+
+        const correctCount = state.answerList.length - wrongSet.size;
+        addLog(`开始一键自动填答，共 ${state.answerList.length} 题（正确率 ${state.accuracyRate}%：答对 ${correctCount} 题，答错 ${wrongSet.size} 题）`, 'info');
+
         document.getElementById('a366-auto-fill-all').style.display = 'none';
         document.getElementById('a366-stop-auto-fill').style.display = '';
 
-        addLog(`开始一键自动填答，共 ${state.answerList.length} 题`, 'info');
         autoFillNext();
     }
 
@@ -820,7 +1073,8 @@
         }
 
         const idx = state.autoFillIndex;
-        fillOneAnswer(idx);
+        const forceWrong = state._wrongIndices && state._wrongIndices.has(idx);
+        fillOneAnswer(idx, forceWrong);
         state.autoFillIndex++;
         setTimeout(() => autoFillNext(), 50);
     }
@@ -829,21 +1083,24 @@
         state.autoFillRunning = false;
         document.getElementById('a366-auto-fill-all').style.display = '';
         document.getElementById('a366-stop-auto-fill').style.display = 'none';
+        renderMainFillSection();
         addLog('自动填答已停止', 'warn');
     }
 
+    // ==========================================
+    // 交卷与自动流程
+    // ==========================================
+
     function clickStartBtn() {
-        // 点击"去做题"按钮
-        // 方法1：通过 class 查找
         let btn = document.querySelector('.start-btn-text');
         if (btn) {
             btn.click();
             return true;
         }
-        // 方法2：通过文本内容查找
         const allElements = document.querySelectorAll('button, span, div, a');
         for (const el of allElements) {
             if (el === container || container.contains(el)) continue;
+            if (devPanel && (el === devPanel || devPanel.contains(el))) continue;
             const text = (el.textContent || '').trim();
             if (text === '去做题') {
                 el.click();
@@ -855,7 +1112,6 @@
     }
 
     function clickConfirmSubmitBtn() {
-        // 在弹窗中查找"交卷"按钮
         const popups = document.querySelectorAll('.u3compo-popup');
         for (const popup of popups) {
             const btnList = popup.querySelector('.u3-button-list.u3-button-double');
@@ -873,7 +1129,6 @@
         return false;
     }
 
-    // 等待弹窗出现并点击确认交卷
     async function waitAndClickConfirmSubmit(maxWait = 5000) {
         const startTime = Date.now();
         while (Date.now() - startTime < maxWait) {
@@ -888,7 +1143,6 @@
     async function executeAuto() {
         addLog('━━━━━━━━ 自动流程开始 ━━━━━━━', 'info');
 
-        // 检查并点击"去做题"按钮（试题预览页）
         const startBtnClicked = clickStartBtn();
         if (startBtnClicked) {
             addLog('检测到试题预览页，已点击「去做题」', 'success');
@@ -903,22 +1157,25 @@
             }
         }
 
-        document.getElementById('a366-auto-fill-all').style.display = '';
+        document.getElementById('a366-auto-fill-all').style.display = 'none';
+        document.getElementById('a366-stop-auto-fill').style.display = '';
 
         await new Promise((resolve) => {
             state.autoFillRunning = true;
             state.autoFillIndex = 0;
-            document.getElementById('a366-auto-fill-all').style.display = 'none';
-            document.getElementById('a366-stop-auto-fill').style.display = '';
 
-            addLog(`开始一键自动填答，共 ${state.answerList.length} 题`, 'info');
+            const wrongSet = buildWrongIndices(state.answerList.length, state.accuracyRate);
+            state._wrongIndices = wrongSet;
+
+            const correctCount = state.answerList.length - wrongSet.size;
+            addLog(`开始自动填答，共 ${state.answerList.length} 题（正确率 ${state.accuracyRate}%：答对 ${correctCount} 题，答错 ${wrongSet.size} 题）`, 'info');
 
             function checkFillComplete() {
                 if (!state.autoFillRunning || state.autoFillIndex >= state.answerList.length) {
                     state.autoFillRunning = false;
                     document.getElementById('a366-auto-fill-all').style.display = '';
                     document.getElementById('a366-stop-auto-fill').style.display = 'none';
-                    addLog('一键自动填答完毕', 'success');
+                    addLog('自动填答完毕', 'success');
                     resolve();
                     return;
                 }
@@ -940,7 +1197,6 @@
             addLog(`测试队列中有 ${state.testQueue.length} 个元素，开始逐个测试`, 'info');
             await testAll();
 
-            // 等待弹窗出现并点击确认交卷
             addLog('等待交卷确认弹窗...', 'info');
             const confirmed = await waitAndClickConfirmSubmit(5000);
             if (confirmed) {
@@ -955,6 +1211,9 @@
         addLog('━━━━━━━━ 自动流程结束 ━━━━━━━━', 'info');
     }
 
+    // ==========================================
+    // 日志
+    // ==========================================
 
     function addLog(message, type = 'info') {
         const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -981,54 +1240,215 @@
         logContent.scrollTop = logContent.scrollHeight;
     }
 
-    function toggleCollapse() {
-        const body = document.getElementById('a366-body');
-        if (!body) return;
-        state.collapsed = !state.collapsed;
-        body.style.display = state.collapsed ? 'none' : 'flex';
-        container.style.maxHeight = state.collapsed ? 'auto' : '680px';
-    }
+    // ==========================================
+    // 正确率设置
+    // ==========================================
 
-    function restoreScrollPref() {
+    function restoreAccuracyRate() {
         try {
-            const val = localStorage.getItem('a366_noscroll');
-            if (val === '1') {
-                state.noScroll = true;
-                const cb = document.getElementById('a366-no-scroll');
-                const label = document.getElementById('a366-no-scroll-label');
-                if (cb) cb.checked = true;
-                if (label) { label.style.background = 'var(--a366-danger-light)'; label.style.borderColor = 'var(--a366-danger)'; }
+            const val = localStorage.getItem('a366_accuracy_rate');
+            if (val !== null) {
+                const rate = parseInt(val);
+                if (!isNaN(rate) && rate >= 0 && rate <= 100) {
+                    state.accuracyRate = rate;
+                }
             }
         } catch(e) {}
     }
 
-    function makeDraggable() {
-        const header = document.getElementById('a366-header');
-        if (!header) return;
+    function saveAccuracyRate(rate) {
+        state.accuracyRate = rate;
+        try {
+            localStorage.setItem('a366_accuracy_rate', rate.toString());
+        } catch(e) {}
+    }
+
+    function createAccuracyModal() {
+        restoreAccuracyRate();
+
+        const modal = document.createElement('div');
+        modal.id = 'a366-accuracy-modal';
+        modal.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000001;
+            background: rgba(0,0,0,0.5);
+            font-family: var(--a366-font, sans-serif);
+        `;
+
+        modal.innerHTML = `
+            <div id="a366-accuracy-panel" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#ffffff;border-radius:8px;border:1px solid #dee2e6;box-shadow:0 8px 32px rgba(0,0,0,0.2);width:380px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8f9fa;border-bottom:1px solid #dee2e6;">
+                    <span style="font-weight:600;font-size:14px;color:#212529;">正确率设置</span>
+                    <button id="a366-accuracy-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#6c757d;padding:0 4px;line-height:1;">✕</button>
+                </div>
+                <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+                    <div>
+                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">快捷设置</div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="a366-accuracy-quick" data-rate="70" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">70%</button>
+                            <button class="a366-accuracy-quick" data-rate="80" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">80%</button>
+                            <button class="a366-accuracy-quick" data-rate="90" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">90%</button>
+                            <button class="a366-accuracy-quick" data-rate="100" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">100%</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">自定义正确率 (0-100%)</div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input id="a366-accuracy-input" type="number" min="0" max="100" value="${state.accuracyRate}" style="flex:1;padding:8px 10px;border:1px solid #dee2e6;border-radius:6px;background:#ffffff;color:#212529;font-size:13px;outline:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;text-align:center;box-sizing:border-box;">
+                            <span style="font-size:14px;color:#6c757d;font-weight:500;">%</span>
+                        </div>
+                    </div>
+                    <div id="a366-accuracy-preview" style="font-size:11px;color:#6c757d;padding:8px 10px;background:#e9ecef;border-radius:4px;line-height:1.6;">
+                        正确率：${state.accuracyRate}%<br>
+                        <span style="color:#17a2b8;">获取答案后将自动计算正确/错误题数</span>
+                    </div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button id="a366-accuracy-cancel" style="padding:8px 20px;background:#e9ecef;color:#6c757d;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;">取消</button>
+                        <button id="a366-accuracy-save" style="padding:8px 20px;background:#007bff;color:#ffffff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;">确定</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const input = document.getElementById('a366-accuracy-input');
+
+        const quickBtns = modal.querySelectorAll('.a366-accuracy-quick');
+        quickBtns.forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = '#e7f1ff';
+                btn.style.borderColor = '#007bff';
+                btn.style.color = '#007bff';
+            });
+            btn.addEventListener('mouseleave', () => {
+                if (parseInt(input.value) !== parseInt(btn.dataset.rate)) {
+                    btn.style.background = '#e9ecef';
+                    btn.style.borderColor = '#dee2e6';
+                    btn.style.color = '#212529';
+                }
+            });
+            btn.addEventListener('click', () => {
+                const rate = parseInt(btn.dataset.rate);
+                input.value = rate;
+                updateAccuracyPreview(rate);
+                highlightQuickBtn(rate);
+            });
+        });
+
+        input.addEventListener('input', () => {
+            let val = parseInt(input.value);
+            if (isNaN(val)) val = 100;
+            val = Math.max(0, Math.min(100, val));
+            updateAccuracyPreview(val);
+            highlightQuickBtn(val);
+        });
+
+        document.getElementById('a366-accuracy-close').addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        document.getElementById('a366-accuracy-cancel').addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        document.getElementById('a366-accuracy-save').addEventListener('click', () => {
+            let val = parseInt(input.value);
+            if (isNaN(val)) val = 100;
+            val = Math.max(0, Math.min(100, val));
+            saveAccuracyRate(val);
+            modal.style.display = 'none';
+            addLog(`正确率已设置为 ${val}%`, 'success');
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        highlightQuickBtn(state.accuracyRate);
+    }
+
+    function updateAccuracyPreview(rate) {
+        const preview = document.getElementById('a366-accuracy-preview');
+        if (!preview) return;
+        const total = state.answerList.length;
+        if (total === 0) {
+            preview.innerHTML = `正确率：${rate}%<br><span style="color:#17a2b8;">获取答案后将自动计算正确/错误题数</span>`;
+        } else {
+            const correctCount = Math.ceil(total * rate / 100);
+            const wrongCount = total - correctCount;
+            preview.innerHTML = `正确率：${rate}%<br>总题数：${total} 题<br>答对：<span style="color:#28a745;">${correctCount} 题</span> | 答错：<span style="color:#dc3545;">${wrongCount} 题</span>`;
+        }
+    }
+
+    function highlightQuickBtn(activeRate) {
+        const quickBtns = document.querySelectorAll('.a366-accuracy-quick');
+        quickBtns.forEach(btn => {
+            const rate = parseInt(btn.dataset.rate);
+            if (rate === activeRate) {
+                btn.style.background = '#007bff';
+                btn.style.borderColor = '#007bff';
+                btn.style.color = '#ffffff';
+            } else {
+                btn.style.background = '#e9ecef';
+                btn.style.borderColor = '#dee2e6';
+                btn.style.color = '#212529';
+            }
+        });
+    }
+
+    function toggleAccuracySettings() {
+        const modal = document.getElementById('a366-accuracy-modal');
+        if (!modal) return;
+        const isVisible = modal.style.display !== 'none';
+        if (isVisible) {
+            modal.style.display = 'none';
+        } else {
+            const input = document.getElementById('a366-accuracy-input');
+            if (input) input.value = state.accuracyRate;
+            updateAccuracyPreview(state.accuracyRate);
+            highlightQuickBtn(state.accuracyRate);
+            modal.style.display = 'block';
+        }
+    }
+
+    // ==========================================
+    // 工具函数
+    // ==========================================
+
+    function makeDraggable(targetEl, handleEl) {
+        if (!handleEl || !targetEl) return;
         let isDragging = false, startX, startY, initialLeft, initialTop;
 
-        header.addEventListener('mousedown', (e) => {
+        handleEl.addEventListener('mousedown', (e) => {
             if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
             isDragging = true;
             startX = e.clientX;
             startY = e.clientY;
-            const rect = container.getBoundingClientRect();
+            const rect = targetEl.getBoundingClientRect();
             initialLeft = rect.left;
             initialTop = rect.top;
-            container.style.transition = 'none';
+            targetEl.style.transition = 'none';
             e.preventDefault();
         });
 
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
-            container.style.right = 'auto';
-            container.style.bottom = 'auto';
-            container.style.left = (initialLeft + e.clientX - startX) + 'px';
-            container.style.top = (initialTop + e.clientY - startY) + 'px';
+            targetEl.style.right = 'auto';
+            targetEl.style.bottom = 'auto';
+            targetEl.style.left = (initialLeft + e.clientX - startX) + 'px';
+            targetEl.style.top = (initialTop + e.clientY - startY) + 'px';
         });
 
         document.addEventListener('mouseup', () => {
-            if (isDragging) { isDragging = false; container.style.transition = ''; }
+            if (isDragging) { isDragging = false; targetEl.style.transition = ''; }
         });
     }
 
@@ -1041,6 +1461,10 @@
     function escapeHtml(str) {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+
+    // ==========================================
+    // 初始化
+    // ==========================================
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', createUI);
