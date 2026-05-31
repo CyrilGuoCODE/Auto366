@@ -146,8 +146,7 @@ class RulesUI {
       author: document.getElementById('ruleGroupAuthor').value.trim(),
       enabled: document.getElementById('ruleGroupEnabled').checked,
       compatible: document.getElementById('ruleGroupCompatible').checked,
-      isGroup: true,
-      rules: this.state.currentEditingRuleGroup?.rules || []
+      isGroup: true
     };
 
     // 验证必填字段
@@ -164,6 +163,7 @@ class RulesUI {
         this.logManager.addSuccessLog(this.state.currentEditingRuleGroup ? '规则集更新成功' : '规则集添加成功');
         this.hideRuleGroupModal();
         this.loadRules();
+        this.renderSimpleHomeRulesets().catch(() => {});
       } else {
         this.logManager.addErrorLog('保存规则集失败: ' + (result ? result.error : '未知错误'));
       }
@@ -399,25 +399,19 @@ class RulesUI {
     if (maxTriggersValue && parseInt(maxTriggersValue) > 0) {
       rule.maxTriggers = parseInt(maxTriggersValue);
       rule.currentTriggers = 0;
-      console.log('设置触发次数限制:', rule.maxTriggers);
     } else {
-      delete rule.maxTriggers;
-      delete rule.currentTriggers;
-      console.log('移除触发次数限制');
+      rule.maxTriggers = null;
+      rule.currentTriggers = null;
     }
 
-    console.log('准备保存规则:', rule);
-
     try {
-      // 调用后端API保存规则
       const result = await window.electronAPI.saveRule(rule);
-
-      console.log('保存规则结果:', result);
 
       if (result && result.success) {
         this.logManager.addSuccessLog(this.state.currentEditingRule ? '规则更新成功' : '规则添加成功');
         this.hideRuleModal();
         this.loadRules();
+        this.renderSimpleHomeRulesets().catch(() => {});
       } else {
         this.logManager.addErrorLog('保存规则失败: ' + (result ? result.error : '未知错误'));
       }
@@ -819,6 +813,7 @@ class RulesUI {
       if (result.success) {
         this.logManager.addSuccessLog('触发次数重置成功');
         this.loadRules();
+        this.renderSimpleHomeRulesets().catch(() => {});
       } else {
         this.logManager.addErrorLog(`触发次数重置失败: ${result.error}`);
       }
@@ -841,14 +836,8 @@ class RulesUI {
           this.logManager.addInfoLog(`已自动关闭不兼容规则集：${names}`);
         }
 
-        const rulesets = await window.electronAPI.getRules();
-        const isRuleset = rulesets.some(rs => rs.id === ruleId);
-
-        if (isRuleset) {
-          this.loadRules();
-        } else {
-          this.updateRuleStatus(ruleId, enabled);
-        }
+        this.loadRules();
+        this.renderSimpleHomeRulesets().catch(() => {});
       } else {
         this.logManager.addErrorLog(`规则状态更新失败: ${result.error}`);
         const checkbox = document.querySelector(`input[onchange*="${ruleId}"]`);
@@ -865,20 +854,6 @@ class RulesUI {
     }
   }
 
-  // 更新规则状态显示
-  updateRuleStatus(ruleId, enabled) {
-    const ruleItem = document.querySelector(`input[onchange*="${ruleId}"]`)?.closest('.rule-item');
-    if (ruleItem) {
-      const statusSpan = ruleItem.querySelector('.badge--enabled, .badge--disabled');
-      if (statusSpan) {
-        statusSpan.textContent = enabled ? '已启用' : '已禁用';
-        statusSpan.className = enabled ? 'badge--enabled' : 'badge--disabled';
-      }
-      ruleItem.className = `rule-item ${enabled ? 'is-enabled' : 'is-disabled'}`;
-    }
-  }
-
-  // 浏览ZIP文件
   browseZipFile() {
     window.electronAPI.openImplantZipChoosing();
   }

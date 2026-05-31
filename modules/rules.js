@@ -173,10 +173,9 @@ class RulesManager {
           updatedAt: new Date().toISOString()
         };
         delete updated.isGroup;
+        delete updated.rules;
 
-        if (!updated.rules) {
-          updated.rules = existing.rules || [];
-        }
+        updated.rules = existing.rules || [];
 
         this.rulesets[existingIndex] = updated;
       } else {
@@ -191,7 +190,7 @@ class RulesManager {
           id: generateId(ruleset.name),
           createdAt: ruleset.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          rules: ruleset.rules || []
+          rules: []
         };
         delete newRuleset.isGroup;
         this.rulesets.push(newRuleset);
@@ -222,6 +221,15 @@ class RulesManager {
 
       const existingIndex = ruleset.rules.findIndex(r => r.id === rule.id);
 
+      const COMMON_FIELDS = new Set(['id', 'name', 'type', 'description', 'enabled', 'isBuiltin', 'createdAt', 'updatedAt', 'maxTriggers', 'currentTriggers']);
+      const TYPE_FIELDS = {
+        'content-change': ['urlPattern', 'changeType', 'originalContent', 'newContent', 'action', 'modifyRules'],
+        'zip-implant': ['urlFileinfo', 'urlZip', 'targetFileName', 'zipImplant'],
+        'zip-implant-dynamic': ['urlFileinfo', 'urlZip', 'targetFileName', 'injectScript', 'downloadTimeout'],
+        'answer-upload': ['urlUpload', 'uploadType', 'serverLocate'],
+        'post-change-time': ['urlRequest', 'salt', 'targetSeconds', 'method']
+      };
+
       if (existingIndex !== -1) {
         const newName = rule.name;
         const newId = generateId(newName);
@@ -234,16 +242,26 @@ class RulesManager {
           return false;
         }
 
-        const updated = {
-          ...ruleset.rules[existingIndex],
-          ...rule,
-          id: newId,
-          updatedAt: new Date().toISOString()
-        };
-        delete updated.groupId;
-        delete updated.isGroup;
+        const existingRule = ruleset.rules[existingIndex];
+        const allowedFields = new Set([...COMMON_FIELDS, ...(TYPE_FIELDS[rule.type] || [])]);
 
-        ruleset.rules[existingIndex] = updated;
+        const cleaned = { id: newId };
+        for (const key of Object.keys(existingRule)) {
+          if (allowedFields.has(key)) {
+            cleaned[key] = existingRule[key];
+          }
+        }
+        for (const key of Object.keys(rule)) {
+          if (key === 'groupId' || key === 'isGroup') continue;
+          if (rule[key] === null) {
+            delete cleaned[key];
+          } else {
+            cleaned[key] = rule[key];
+          }
+        }
+        cleaned.updatedAt = new Date().toISOString();
+
+        ruleset.rules[existingIndex] = cleaned;
       } else {
         const nameConflict = ruleset.rules.find(r => r.name === rule.name);
         if (nameConflict) {
@@ -251,14 +269,18 @@ class RulesManager {
           return false;
         }
 
-        const newRule = {
-          ...rule,
-          id: generateId(rule.name),
-          createdAt: rule.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        delete newRule.groupId;
-        delete newRule.isGroup;
+        const allowedFields = new Set([...COMMON_FIELDS, ...(TYPE_FIELDS[rule.type] || [])]);
+
+        const newRule = { id: generateId(rule.name) };
+        for (const key of Object.keys(rule)) {
+          if (key === 'groupId' || key === 'isGroup') continue;
+          if (rule[key] === null) continue;
+          if (allowedFields.has(key)) {
+            newRule[key] = rule[key];
+          }
+        }
+        newRule.createdAt = rule.createdAt || new Date().toISOString();
+        newRule.updatedAt = new Date().toISOString();
 
         ruleset.rules.push(newRule);
       }
