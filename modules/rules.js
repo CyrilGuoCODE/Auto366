@@ -124,7 +124,13 @@ class RulesManager {
     return this.rulesets.find(rs => rs.id === rulesetId);
   }
 
-  findRuleById(ruleId) {
+  findRuleById(ruleId, rulesetId = null) {
+    if (rulesetId) {
+      const rs = this.rulesets.find(rs => rs.id === rulesetId);
+      if (!rs) return null;
+      const rule = rs.rules.find(r => r.id === ruleId);
+      return rule ? { ruleset: rs, rule } : null;
+    }
     for (const rs of this.rulesets) {
       const rule = rs.rules.find(r => r.id === ruleId);
       if (rule) return { ruleset: rs, rule };
@@ -293,12 +299,25 @@ class RulesManager {
     }
   }
 
-  deleteRule(ruleId) {
+  deleteRule(ruleId, rulesetId = null) {
     try {
       const rulesetIndex = this.rulesets.findIndex(rs => rs.id === ruleId);
       if (rulesetIndex !== -1) {
         this.rulesets.splice(rulesetIndex, 1);
         return this.saveRules();
+      }
+
+      if (rulesetId) {
+        const ruleset = this.rulesets.find(rs => rs.id === rulesetId);
+        if (ruleset) {
+          const ruleIndex = ruleset.rules.findIndex(r => r.id === ruleId);
+          if (ruleIndex !== -1) {
+            ruleset.rules.splice(ruleIndex, 1);
+            ruleset.updatedAt = new Date().toISOString();
+            return this.saveRules();
+          }
+        }
+        return false;
       }
 
       for (const ruleset of this.rulesets) {
@@ -333,7 +352,7 @@ class RulesManager {
     return !this.hasInjectionRules(ruleset.id);
   }
 
-  toggleRule(ruleId, enabled, compatibilityProtectionEnabled = true) {
+  toggleRule(ruleId, enabled, compatibilityProtectionEnabled = true, rulesetId = null) {
     try {
       const ruleset = this.getRulesetById(ruleId);
       if (ruleset) {
@@ -370,7 +389,7 @@ class RulesManager {
         return { success: true };
       }
 
-      const found = this.findRuleById(ruleId);
+      const found = this.findRuleById(ruleId, rulesetId);
       if (found) {
         found.rule.enabled = enabled;
         found.rule.updatedAt = new Date().toISOString();
@@ -391,7 +410,7 @@ class RulesManager {
     }
   }
 
-  resetRuleTriggers(ruleId) {
+  resetRuleTriggers(ruleId, rulesetId = null) {
     try {
       const ruleset = this.getRulesetById(ruleId);
       if (ruleset) {
@@ -404,7 +423,7 @@ class RulesManager {
         return this.saveRules();
       }
 
-      const found = this.findRuleById(ruleId);
+      const found = this.findRuleById(ruleId, rulesetId);
       if (found) {
         found.rule.updatedAt = new Date().toISOString();
         if (found.rule.maxTriggers !== undefined) {
@@ -501,24 +520,24 @@ class RulesManager {
       };
     });
 
-    ipcMain.handle('delete-response-rule', (event, ruleId) => {
-      return { success: this.deleteRule(ruleId) };
+    ipcMain.handle('delete-response-rule', (event, ruleId, rulesetId = null) => {
+      return { success: this.deleteRule(ruleId, rulesetId) };
     });
 
-    ipcMain.handle('delete-rule', (event, ruleId) => {
-      return { success: this.deleteRule(ruleId) };
+    ipcMain.handle('delete-rule', (event, ruleId, rulesetId = null) => {
+      return { success: this.deleteRule(ruleId, rulesetId) };
     });
 
-    ipcMain.handle('toggle-response-rule', (event, ruleId, enabled, compatibilityProtectionEnabled = true) => {
-      return this.toggleRule(ruleId, enabled, compatibilityProtectionEnabled);
+    ipcMain.handle('toggle-response-rule', (event, ruleId, enabled, compatibilityProtectionEnabled = true, rulesetId = null) => {
+      return this.toggleRule(ruleId, enabled, compatibilityProtectionEnabled, rulesetId);
     });
 
-    ipcMain.handle('toggle-rule', (event, { ruleId, enabled, compatibilityProtectionEnabled = true }) => {
-      return this.toggleRule(ruleId, enabled, compatibilityProtectionEnabled);
+    ipcMain.handle('toggle-rule', (event, { ruleId, enabled, compatibilityProtectionEnabled = true, rulesetId = null }) => {
+      return this.toggleRule(ruleId, enabled, compatibilityProtectionEnabled, rulesetId);
     });
 
-    ipcMain.handle('reset-rule-triggers', (event, ruleId) => {
-      return { success: this.resetRuleTriggers(ruleId) };
+    ipcMain.handle('reset-rule-triggers', (event, ruleId, rulesetId = null) => {
+      return { success: this.resetRuleTriggers(ruleId, rulesetId) };
     });
 
     ipcMain.handle('export-response-rules', async () => {

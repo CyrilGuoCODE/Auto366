@@ -522,7 +522,7 @@ class RulesUI {
             </div>
           </div>
           <div class="rule-group__content">
-            ${this.generateGroupRulesHtml(groupRules, group.enabled)}
+            ${this.generateGroupRulesHtml(groupRules, group.enabled, group.id)}
           </div>
         </div>
       `;
@@ -538,7 +538,7 @@ class RulesUI {
   }
 
   // 生成规则组HTML
-  generateGroupRulesHtml(rules, parentGroupEnabled = true) {
+  generateGroupRulesHtml(rules, parentGroupEnabled = true, groupId = '') {
     if (!rules || rules.length === 0) {
       return `
         <div class="rules-list__group-empty">
@@ -559,7 +559,7 @@ class RulesUI {
       const isDisabledByParent = !parentGroupEnabled;
 
       html += `
-        <div class="rule-item is-${statusClass}" data-rule-id="${rule.id}">
+        <div class="rule-item is-${statusClass}" data-rule-id="${rule.id}" data-ruleset-id="${parentGroupEnabled ? '' : ''}">
           <div class="rule-item__header">
             <div class="rule-item__info">
               <div class="rule-item__name">
@@ -567,7 +567,7 @@ class RulesUI {
                 <label class="toggle ${isDisabledByParent ? 'is-disabled' : ''}">
                   <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
                          ${isDisabledByParent ? 'disabled' : ''}
-                         onchange="universalAnswerFeature.toggleRule('${rule.id}', this.checked)"
+                         onchange="universalAnswerFeature.toggleRule('${rule.id}', this.checked, '${groupId}')"
                          title="${isDisabledByParent ? '规则集已禁用，无法单独启用此规则' : ''}">
                   <span class="toggle__slider"></span>
                 </label>
@@ -575,15 +575,15 @@ class RulesUI {
               ${rule.description ? `<div class="rule-item__description">${rule.description}</div>` : ''}
             </div>
             <div class="rule-item__actions">
-              <button class="btn--rule btn--edit" onclick="universalAnswerFeature.editRule('${rule.id}')" title="编辑">
+              <button class="btn--rule btn--edit" onclick="universalAnswerFeature.editRule('${rule.id}', '${groupId}')" title="编辑">
                 <i class="bi bi-pencil"></i>
               </button>
               ${rule.maxTriggers ? `
-              <button class="btn--rule btn--reset" onclick="universalAnswerFeature.resetRuleTriggers('${rule.id}')" title="重置触发次数">
+              <button class="btn--rule btn--reset" onclick="universalAnswerFeature.resetRuleTriggers('${rule.id}', '${groupId}')" title="重置触发次数">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
               ` : ''}
-              <button class="btn--rule btn--delete" onclick="universalAnswerFeature.deleteRule('${rule.id}')" title="删除">
+              <button class="btn--rule btn--delete" onclick="universalAnswerFeature.deleteRule('${rule.id}', '${groupId}')" title="删除">
                 <i class="bi bi-trash"></i>
               </button>
             </div>
@@ -759,17 +759,24 @@ class RulesUI {
   }
 
   // 编辑规则
-  async editRule(ruleId) {
+  async editRule(ruleId, rulesetId = null) {
     try {
       const rulesets = await window.electronAPI.getRules();
       let rule = null;
-      let groupId = null;
-      for (const rs of rulesets) {
-        const found = rs.rules.find(r => r.id === ruleId);
-        if (found) {
-          rule = found;
-          groupId = rs.id;
-          break;
+      let groupId = rulesetId;
+      if (rulesetId) {
+        const rs = rulesets.find(rs => rs.id === rulesetId);
+        if (rs) {
+          rule = rs.rules.find(r => r.id === ruleId);
+        }
+      } else {
+        for (const rs of rulesets) {
+          const found = rs.rules.find(r => r.id === ruleId);
+          if (found) {
+            rule = found;
+            groupId = rs.id;
+            break;
+          }
         }
       }
       if (rule) {
@@ -783,16 +790,16 @@ class RulesUI {
   }
 
   // 删除规则
-  async deleteRule(ruleId) {
+  async deleteRule(ruleId, rulesetId = null) {
     if (!confirm('确定要删除这个规则吗？此操作不可撤销。')) {
       return;
     }
 
     try {
-      const result = await window.electronAPI.deleteRule(ruleId);
+      const result = await window.electronAPI.deleteRule(ruleId, rulesetId);
       if (result.success) {
         this.logManager.addSuccessLog('规则删除成功');
-        this.loadRules(); // 重新加载规则列表
+        this.loadRules();
         this.renderSimpleHomeRulesets().catch(() => {})
       } else {
         this.logManager.addErrorLog(`规则删除失败: ${result.error}`);
@@ -803,13 +810,13 @@ class RulesUI {
   }
 
   // 重置规则触发次数
-  async resetRuleTriggers(ruleId) {
+  async resetRuleTriggers(ruleId, rulesetId = null) {
     if (!confirm('确定要重置此规则的触发次数吗？')) {
       return;
     }
 
     try {
-      const result = await window.electronAPI.resetRuleTriggers(ruleId);
+      const result = await window.electronAPI.resetRuleTriggers(ruleId, rulesetId);
       if (result.success) {
         this.logManager.addSuccessLog('触发次数重置成功');
         this.loadRules();
@@ -823,11 +830,11 @@ class RulesUI {
   }
 
   // 切换规则状态
-  async toggleRule(ruleId, enabled) {
+  async toggleRule(ruleId, enabled, rulesetId = null) {
     try {
       const compatibilityProtectionEnabled = localStorage.getItem('compatibility-protection-enabled') !== 'false';
 
-      const result = await window.electronAPI.toggleRule(ruleId, enabled, compatibilityProtectionEnabled);
+      const result = await window.electronAPI.toggleRule(ruleId, enabled, compatibilityProtectionEnabled, rulesetId);
       if (result.success) {
         this.logManager.addSuccessLog(`规则已${enabled ? '启用' : '禁用'}`);
 
