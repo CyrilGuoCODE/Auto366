@@ -107,5 +107,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
     return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);
   },
-  downloadRuleFile: (url) => ipcRenderer.invoke('download-rule-file', url)
+  downloadRuleFile: (url) => ipcRenderer.invoke('download-rule-file', url),
+  openUrl: (url) => ipcRenderer.invoke('open-url', url)
 })

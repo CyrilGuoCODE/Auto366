@@ -6,29 +6,6 @@ class AnswersUI {
 
   // 初始化答案UI
   initAnswersUI() {
-    // 排序模式切换
-    const sortByFileBtn = document.getElementById('sortByFile');
-    const sortByPatternBtn = document.getElementById('sortByPattern');
-
-    if (sortByFileBtn) {
-      sortByFileBtn.addEventListener('click', () => {
-        this.state.setSortMode('file');
-        this.updateSortButtons('file');
-        if (this.state.lastAnswersData) {
-          this.displayAnswers(this.state.lastAnswersData);
-        }
-      });
-    }
-
-    if (sortByPatternBtn) {
-      sortByPatternBtn.addEventListener('click', () => {
-        this.state.setSortMode('pattern');
-        this.updateSortButtons('pattern');
-        if (this.state.lastAnswersData) {
-          this.displayAnswers(this.state.lastAnswersData);
-        }
-      });
-    }
 
     // 清空答案按钮
     const clearAnswersBtn = document.getElementById('clearAnswersBtn');
@@ -55,20 +32,6 @@ class AnswersUI {
     }
   }
 
-  // 更新排序按钮状态
-  updateSortButtons(activeMode) {
-    const sortByFileBtn = document.getElementById('sortByFile');
-    const sortByPatternBtn = document.getElementById('sortByPattern');
-
-    if (sortByFileBtn) {
-      sortByFileBtn.classList.toggle('is-active', activeMode === 'file');
-    }
-
-    if (sortByPatternBtn) {
-      sortByPatternBtn.classList.toggle('is-active', activeMode === 'pattern');
-    }
-  }
-
   // 显示答案
   displayAnswers(data) {
     const container = document.getElementById('answersContainer');
@@ -86,28 +49,16 @@ class AnswersUI {
       return;
     }
 
-    // 根据排序模式组织数据
+    // 按文件组织数据
     let organizedData = {};
 
-    if (this.state.sortMode === 'file') {
-      // 按文件分组
-      data.answers.forEach(answer => {
-        const fileName = answer.file || '未知文件';
-        if (!organizedData[fileName]) {
-          organizedData[fileName] = [];
-        }
-        organizedData[fileName].push(answer);
-      });
-    } else {
-      // 按题型分组
-      data.answers.forEach(answer => {
-        const pattern = answer.pattern || '未知题型';
-        if (!organizedData[pattern]) {
-          organizedData[pattern] = [];
-        }
-        organizedData[pattern].push(answer);
-      });
-    }
+    data.answers.forEach(answer => {
+      const fileName = answer.file || '未知文件';
+      if (!organizedData[fileName]) {
+        organizedData[fileName] = [];
+      }
+      organizedData[fileName].push(answer);
+    });
 
     // 生成HTML
     let html = '';
@@ -203,20 +154,11 @@ class AnswersUI {
         return;
       }
 
-      // 根据排序模式找到对应的答案
-      let targetAnswer = null;
-
-      if (this.state.sortMode === 'file') {
-        const groupAnswers = this.state.lastAnswersData.answers.filter(answer =>
-          (answer.file || '未知文件') === groupName
-        );
-        targetAnswer = groupAnswers[answerIndex];
-      } else {
-        const groupAnswers = this.state.lastAnswersData.answers.filter(answer =>
-          (answer.pattern || '未知题型') === groupName
-        );
-        targetAnswer = groupAnswers[answerIndex];
-      }
+      // 按文件分组找到对应的答案
+      const groupAnswers = this.state.lastAnswersData.answers.filter(answer =>
+        (answer.file || '未知文件') === groupName
+      );
+      const targetAnswer = groupAnswers[answerIndex];
 
       if (!targetAnswer) {
         this.showCopyToast('找不到对应的答案', 'error');
@@ -405,17 +347,15 @@ class AnswersUI {
       if (result && result.success) {
         const downloadUrl = result.downloadUrl;
         const viewerUrl = `https://366.cyril.qzz.io/answer-viewer?url=${encodeURIComponent(downloadUrl)}`;
-        const sortParam = this.state.sortMode === 'pattern' ? '&sort=pattern' : '';
-        const finalViewerUrl = viewerUrl + sortParam;
 
-        this.logManager.addSuccessLog(`答案已分享成功！查看地址: ${finalViewerUrl}`);
+        this.logManager.addSuccessLog(`答案已分享成功！查看地址: ${viewerUrl}`);
 
         // 显示分享结果小窗口
         this.showShareResultModal(downloadUrl);
 
         // 复制查看地址到剪贴板
         if (navigator.clipboard) {
-          await navigator.clipboard.writeText(finalViewerUrl);
+          await navigator.clipboard.writeText(viewerUrl);
           this.logManager.addInfoLog('查看地址已复制到剪贴板');
         }
       } else {
@@ -473,16 +413,9 @@ class AnswersUI {
 
   // 显示分享结果模态框
   showShareResultModal(downloadUrl) {
-    // 生成查看器地址
     const mainUrl = `https://366.cyril.qzz.io/answer-viewer?url=${encodeURIComponent(downloadUrl)}`;
     const backupUrl = `https://a366.netlify.app/answer-viewer?url=${encodeURIComponent(downloadUrl)}`;
 
-    // 根据当前排序模式添加sort参数
-    const sortParam = this.state.sortMode === 'pattern' ? '&sort=pattern' : '';
-    const mainUrlWithSort = mainUrl + sortParam;
-    const backupUrlWithSort = backupUrl + sortParam;
-
-    // 创建模态框HTML
     const modalHtml = `
       <div class="modal modal--share" id="shareResultModal">
         <div class="modal__content">
@@ -497,11 +430,11 @@ class AnswersUI {
             <div class="modal__url-section">
               <label><i class="bi bi-link-45deg"></i> 主地址：</label>
               <div class="modal__url-input-group">
-                <input type="text" value="${mainUrlWithSort}" readonly class="modal__url-input" id="mainUrl">
+                <input type="text" value="${mainUrl}" readonly class="modal__url-input" id="mainUrl">
                 <button class="btn--copy-url" onclick="universalAnswerFeature.copyUrl('mainUrl')" title="复制主地址">
                   <i class="bi bi-copy"></i>
                 </button>
-                <button class="btn--open-url" onclick="window.open('${mainUrlWithSort}', '_blank')" title="打开主地址">
+                <button class="btn--open-url" onclick="electronAPI.openUrl('${mainUrl}')" title="打开主地址">
                   <i class="bi bi-box-arrow-up-right"></i>
                 </button>
               </div>
@@ -509,17 +442,14 @@ class AnswersUI {
             <div class="modal__url-section">
               <label><i class="bi bi-link-45deg"></i> 备用地址：</label>
               <div class="modal__url-input-group">
-                <input type="text" value="${backupUrlWithSort}" readonly class="modal__url-input" id="backupUrl">
+                <input type="text" value="${backupUrl}" readonly class="modal__url-input" id="backupUrl">
                 <button class="btn--copy-url" onclick="universalAnswerFeature.copyUrl('backupUrl')" title="复制备用地址">
                   <i class="bi bi-copy"></i>
                 </button>
-                <button class="btn--open-url" onclick="window.open('${backupUrlWithSort}', '_blank')" title="打开备用地址">
+                <button class="btn--open-url" onclick="electronAPI.openUrl('${backupUrl}')" title="打开备用地址">
                   <i class="bi bi-box-arrow-up-right"></i>
                 </button>
               </div>
-            </div>
-            <div class="modal__sort-info">
-              <p><i class="bi bi-funnel"></i> 当前排序方式：${this.state.sortMode === 'pattern' ? '按题型排序' : '按文件排序'}</p>
             </div>
             <div class="modal__tips">
               <p><i class="bi bi-info-circle"></i> 提示：如果主地址无法访问，请尝试使用备用地址。点击 <i class="bi bi-box-arrow-up-right"></i> 按钮可直接在浏览器中打开</p>
@@ -529,7 +459,7 @@ class AnswersUI {
                 <i class="bi bi-copy"></i>
                 复制主地址
               </button>
-              <button class="btn--open" onclick="window.open('${mainUrlWithSort}', '_blank')">
+              <button class="btn--open" onclick="electronAPI.openUrl('${mainUrl}')">
                 <i class="bi bi-box-arrow-up-right"></i>
                 打开查看
               </button>

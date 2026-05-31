@@ -5,7 +5,6 @@ class StateManager {
     this.isCapturing = false;
     this.requestDataMap = new Map();
     this.lastAnswersData = null;
-    this.sortMode = 'file'; // 'file' 或 'pattern'
     this.simpleViewHistory = ['answers'];
     this.lastProgressPercent = 0;
     this.currentEditingRuleGroup = null;
@@ -114,11 +113,6 @@ class StateManager {
       return;
     }
     this.setSimplePage('menu');
-  }
-
-  // 设置排序模式
-  setSortMode(mode) {
-    this.sortMode = mode;
   }
 
   // 记录答案数据

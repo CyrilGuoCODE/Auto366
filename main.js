@@ -1,4 +1,4 @@
-const { app, ipcMain, dialog, BrowserWindow } = require('electron');
+const { app, ipcMain, dialog, BrowserWindow, shell } = require('electron');
 const { createClient } = require('@supabase/supabase-js');
 
 const WindowManager = require('./modules/window');
@@ -106,6 +106,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('restart-app', () => {
     app.relaunch();
     app.exit(0);
+  });
+
+  ipcMain.handle('open-url', (event, url) => {
+    shell.openExternal(url);
   });
 
   await rulesLoader.loadBuiltinRulesets(rulesManager);

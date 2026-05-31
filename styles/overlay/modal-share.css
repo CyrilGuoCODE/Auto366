@@ -99,26 +99,6 @@
     background: var(--color-success-600);
 }
 
-.modal--share .modal__sort-info {
-    margin: var(--space-lg) 0;
-    padding: var(--space-sm);
-    background: var(--color-primary-light);
-    border-radius: var(--radius-sm);
-    border-left: 3px solid var(--color-primary);
-}
-
-.modal--share .modal__sort-info p {
-    margin: 0;
-    color: var(--color-primary-600);
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-}
-
-.modal--share .modal__sort-info i {
-    color: var(--color-primary);
-    margin-right: var(--space-xs);
-}
-
 .modal--share .modal__footer {
     padding-top: var(--space-lg);
     margin-top: var(--space-lg);
