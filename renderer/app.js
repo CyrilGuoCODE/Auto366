@@ -128,6 +128,13 @@ class Auto366App {
         this.settingsUI.handleUpdateNotification();
       });
     }
+
+    const resetCertBtn = document.getElementById('resetCertificateBtn');
+    if (resetCertBtn) {
+      resetCertBtn.addEventListener('click', () => {
+        this.settingsUI.handleResetCertificate();
+      });
+    }
   }
 
   // 初始化UI模式
@@ -442,6 +449,7 @@ class Auto366App {
       // 设置管理
       handleClearCache: () => this.settingsUI.handleClearCache(),
       confirmClearCache: () => this.settingsUI.confirmClearCache(),
+      handleResetCertificate: () => this.settingsUI.handleResetCertificate(),
       handleOpenUp366: () => this.settingsUI.handleOpenUp366(),
       handleUpdateNotification: () => this.settingsUI.handleUpdateNotification(),
       startUpdateDownload: (version) => this.settingsUI.startUpdateDownload(version),

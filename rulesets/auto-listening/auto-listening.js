@@ -221,22 +221,30 @@
     }
 
     function submitExam() {
-        addLog('开始交卷：搜索 .submit-btn 元素', 'info');
+        addLog('开始交卷：搜索提交按钮元素', 'info');
 
-        const submitBtns = document.querySelectorAll('.submit-btn');
+        let submitBtns = document.querySelectorAll('.submit-btn');
+        let selectorName = '.submit-btn';
+
         if (submitBtns.length === 0) {
-            addLog('未找到任何 .submit-btn 元素', 'warn');
-            resultsContainer.innerHTML = `<div style="color:var(--a366-warning);text-align:center;padding:12px;font-size:12px;">未找到 .submit-btn 元素</div>`;
+            addLog('未找到 .submit-btn，尝试 .submit-btn-test', 'info');
+            submitBtns = document.querySelectorAll('.submit-btn-test');
+            selectorName = '.submit-btn-test';
+        }
+
+        if (submitBtns.length === 0) {
+            addLog('未找到任何提交按钮元素', 'warn');
+            resultsContainer.innerHTML = `<div style="color:var(--a366-warning);text-align:center;padding:12px;font-size:12px;">未找到提交按钮元素</div>`;
             return;
         }
 
-        addLog(`找到 ${submitBtns.length} 个 .submit-btn 元素`, 'success');
+        addLog(`找到 ${submitBtns.length} 个 ${selectorName} 元素`, 'success');
 
         state.currentResults = [];
         state.testQueue = [];
 
         submitBtns.forEach((el, i) => {
-            const info = buildElementInfo(el, '.submit-btn类匹配');
+            const info = buildElementInfo(el, `${selectorName}类匹配`);
             state.currentResults.push(info);
         });
 
@@ -245,11 +253,11 @@
         submitBtns.forEach((el, i) => {
             const info = state.currentResults[i];
             state.testQueue.push(info);
-            addLog(`.submit-btn #${i + 1} 已加入测试队列`, 'queue');
+            addLog(`${selectorName} #${i + 1} 已加入测试队列`, 'queue');
         });
 
         renderQueue();
-        addLog(`共 ${submitBtns.length} 个 .submit-btn 已加入队列，点击「全部测试」开始交卷`, 'info');
+        addLog(`共 ${submitBtns.length} 个 ${selectorName} 已加入队列，点击「全部测试」开始交卷`, 'info');
     }
 
     function buildElementInfo(el, strategyName) {

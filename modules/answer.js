@@ -12,6 +12,7 @@ class AnswerExtractor {
   static get QTYPE_SPEAKING() { return 237; }     // 口语跟读题
   static get QTYPE_READING() { return 449; }      // 朗读题
   static get QTYPE_FILL_BLANK() { return 503; }   // 听力填空题
+  static get QTYPE_ORAL_QUESTION() { return 531; } // 口语问答题
   static get QTYPE_RETELL() { return 554; }       // 故事复述题
 
   constructor(logCallback = null) {
@@ -256,12 +257,26 @@ class AnswerExtractor {
   extractFromPage1(pageConfig) {
     const answers = [];
     try {
-      if (!pageConfig || !pageConfig.slides) return answers;
+      if (!pageConfig) return answers;
 
-      for (const slide of pageConfig.slides) {
-        const questionList = slide.questionList || [];
+      // 收集所有题目列表（兼容两种数据结构）
+      const allQuestionLists = [];
 
-        for (const question of questionList) {
+      // 结构1: pageConfig.questionList（直接层级，如口语问答题型）
+      if (pageConfig.questionList && Array.isArray(pageConfig.questionList)) {
+        allQuestionLists.push(...pageConfig.questionList);
+      }
+
+      // 结构2: pageConfig.slides[].questionList（嵌套层级，如选择题题型）
+      if (pageConfig.slides && Array.isArray(pageConfig.slides)) {
+        for (const slide of pageConfig.slides) {
+          if (slide.questionList && Array.isArray(slide.questionList)) {
+            allQuestionLists.push(...slide.questionList);
+          }
+        }
+      }
+
+      for (const question of allQuestionLists) {
           const qtypeId = question.qtype_id;
 
           // 选择题（已有逻辑）
@@ -319,6 +334,36 @@ class AnswerExtractor {
                   mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
                 });
               }
+            }
+          }
+
+          // 口语问答题（qtype_id = 531）
+          if (qtypeId === AnswerExtractor.QTYPE_ORAL_QUESTION && question.record_speak && question.record_speak.length > 0) {
+            const speakList = question.record_speak;
+            const validAnswers = speakList
+              .filter(item => item.work === "1" && item.show === "1")
+              .map(item => this.cleanHtmlText(item.content?.trim() || ''))
+              .filter(Boolean);
+
+            if (validAnswers.length > 0) {
+              const rawQuestion = question.analysis || question.question_text || '';
+              const questionText = this.cleanHtmlText(rawQuestion);
+
+              // 使用 children 格式，与 parseAnswerQuestions 一致，UI 可展示"展开全部答案"
+              answers.push({
+                question: questionText || '口语问答',
+                answer: validAnswers[0],
+                content: `点击展开全部回答 (共${validAnswers.length}种)`,
+                questionText: questionText || '口语问答',
+                pattern: '口语问答',
+                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || ''),
+                children: validAnswers.map((ans, i) => ({
+                  question: `第${i + 1}个答案`,
+                  answer: ans,
+                  content: `请回答: ${ans}`,
+                  pattern: '口语问答'
+                }))
+              });
             }
           }
 
@@ -392,7 +437,6 @@ class AnswerExtractor {
                   }
                 }
               }
-            }
           }
         }
       }

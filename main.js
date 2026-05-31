@@ -95,6 +95,19 @@ app.whenReady().then(async () => {
   fileManager.registerIpcHandlers(mainWindow);
   processMonitor.registerIpcHandlers(mainWindow);
 
+  ipcMain.handle('reset-certificate', async () => {
+    try {
+      return await certManager.resetCertificate();
+    } catch (error) {
+      return { success: false, deleted: 0, imported: false, errors: [error.message] };
+    }
+  });
+
+  ipcMain.handle('restart-app', () => {
+    app.relaunch();
+    app.exit(0);
+  });
+
   await rulesLoader.loadBuiltinRulesets(rulesManager);
 
   app.on('activate', () => {

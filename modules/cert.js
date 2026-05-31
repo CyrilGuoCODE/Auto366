@@ -224,7 +224,50 @@ class CertificateManager {
     }
   }
 
-  // 获取证书路径
+  async resetCertificate() {
+    const results = { deleted: 0, imported: false, errors: [] };
+
+    try {
+      const deleteNodeMitm = await this._deleteCertificatesByName('NodeMITMProxyCA');
+      results.deleted += deleteNodeMitm.deleted;
+      if (deleteNodeMitm.error) results.errors.push(deleteNodeMitm.error);
+
+      const deleteNodeMitmCA = await this._deleteCertificatesByName('node-mitmproxy CA');
+      results.deleted += deleteNodeMitmCA.deleted;
+      if (deleteNodeMitmCA.error) results.errors.push(deleteNodeMitmCA.error);
+
+      const importResult = await this.forceImportCertificate();
+      results.imported = importResult.success;
+      if (!importResult.success) {
+        results.errors.push(importResult.error);
+      }
+
+      return {
+        success: results.imported,
+        deleted: results.deleted,
+        imported: results.imported,
+        errors: results.errors
+      };
+    } catch (error) {
+      console.error('重置证书失败:', error);
+      return { success: false, deleted: results.deleted, imported: false, errors: [error.message] };
+    }
+  }
+
+  async _deleteCertificatesByName(name) {
+    return new Promise((resolve) => {
+      const command = `certutil -delstore Root "${name}"`;
+      exec(command, { timeout: 15000 }, (error, stdout) => {
+        if (error) {
+          resolve({ deleted: 0, error: `删除 ${name} 失败: ${error.message}` });
+          return;
+        }
+        const deleted = (stdout.match(/证书/g) || []).length || (stdout.match(/Certificate/gi) || []).length;
+        resolve({ deleted });
+      });
+    });
+  }
+
   getCertificatePaths() {
     return {
       certPath: this.certPath
