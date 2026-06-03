@@ -53,10 +53,10 @@
 }
 
 .appreciation__popup {
-    position: fixed;
-    top: 50%;
+    position: absolute;
+    bottom: calc(100% + var(--space-md));
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     background: var(--color-bg-panel);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-2xl);
@@ -68,12 +68,25 @@
     z-index: var(--z-max);
     border: 1px solid var(--color-border-strong);
     pointer-events: none;
+    overflow: visible;
 }
 
-.appreciation__icon:hover .appreciation__popup {
+/* 鼠标从按钮移到浮窗时保持显示 */
+.appreciation__icon:hover .appreciation__popup,
+.appreciation__popup:hover {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
+}
+
+/* 用伪元素填充按钮与浮窗之间的间隙，防止 hover 中断 */
+.appreciation__popup::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: var(--space-md);
 }
 
 .appreciation__content h4 {
@@ -101,12 +114,12 @@
     box-shadow: var(--shadow-md);
     transition: transform var(--ease-slow), box-shadow var(--ease-slow);
     cursor: pointer;
+    position: relative;
 }
 
 .appreciation__qr:hover {
     transform: scale(1.35);
-    z-index: var(--z-max);
-    position: relative;
+    z-index: calc(var(--z-max) + 1);
     box-shadow: var(--shadow-2xl);
 }
 
