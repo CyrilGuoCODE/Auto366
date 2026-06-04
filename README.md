@@ -33,6 +33,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - 新增修改时间规则（By ゼロ）
 - auto-pk词王争霸支持（By ゼロ）
 - 添加版本化的内置规则集支持
+- 加入遥测数据分析上传
 
 ### BUG问题
 

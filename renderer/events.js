@@ -259,6 +259,9 @@ class EventManager {
         await window.electronAPI.switchUiMode('simple');
         document.documentElement.setAttribute('data-ui', 'simple');
         document.documentElement.setAttribute('data-simple-page', 'menu');
+        if (window.electronAPI.captureEvent) {
+          window.electronAPI.captureEvent('ui_mode_switched', { mode: 'simple' });
+        }
         if (window.app && window.app.communityUI) {
           await window.app.communityUI.renderSimpleHomeRulesets();
         }
@@ -277,6 +280,9 @@ class EventManager {
         await window.electronAPI.switchUiMode('professional');
         document.documentElement.setAttribute('data-ui', 'professional');
         document.documentElement.removeAttribute('data-simple-page');
+        if (window.electronAPI.captureEvent) {
+          window.electronAPI.captureEvent('ui_mode_switched', { mode: 'professional' });
+        }
         if (window.app && window.app.rulesUI) {
           await window.app.rulesUI.loadRules();
         }

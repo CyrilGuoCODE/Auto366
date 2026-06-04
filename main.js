@@ -9,6 +9,7 @@ const FileManager = require('./modules/file');
 const UpdateManager = require('./modules/update');
 const RulesLoader = require('./modules/rules-loader');
 const ProcessMonitor = require('./modules/process-monitor');
+const AnalyticsManager = require('./modules/analytics');
 
 const SUPABASE_URL = 'https://myenzpblosjnrtvicdor.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU';
@@ -23,6 +24,7 @@ let fileManager;
 let updateManager;
 let rulesLoader;
 let processMonitor;
+let analyticsManager;
 
 process.on('uncaughtException', (error) => {
   if (error.code === 'ECONNRESET') {
@@ -76,24 +78,38 @@ ipcMain.on('open-implant-zip-choosing', async () => {
 });
 
 app.whenReady().then(async () => {
+  // 初始化数据分析
+  analyticsManager = new AnalyticsManager();
+  analyticsManager.init();
+  analyticsManager.registerIpcHandlers();
+  analyticsManager.capture('app_launched');
+
   windowManager = new WindowManager();
   mainWindow = windowManager.createWindow();
-  
+
   updateManager = new UpdateManager(mainWindow);
   updateManager.checkForUpdatesOnStartup();
-  
+
   const certManager = new CertificateManager();
   rulesManager = new RulesManager();
-  proxyServer = new ProxyServer(certManager, rulesManager);
+  proxyServer = new ProxyServer(certManager, rulesManager, analyticsManager);
   fileManager = new FileManager(app.getAppPath());
   rulesLoader = new RulesLoader(app.getAppPath());
   processMonitor = new ProcessMonitor();
-  
+
   windowManager.registerIpcHandlers();
   rulesManager.registerIpcHandlers();
   proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, rulesManager);
   fileManager.registerIpcHandlers(mainWindow);
   processMonitor.registerIpcHandlers(mainWindow);
+
+  // 注册代理启动/停止的分析追踪
+  ipcMain.on('start-answer-proxy', () => {
+    analyticsManager.capture('proxy_started');
+  });
+  ipcMain.on('stop-answer-proxy', () => {
+    analyticsManager.capture('proxy_stopped');
+  });
 
   ipcMain.handle('reset-certificate', async () => {
     try {
@@ -119,6 +135,13 @@ app.whenReady().then(async () => {
       mainWindow = windowManager.createWindow();
     }
   });
+});
+
+app.on('before-quit', async () => {
+  if (analyticsManager) {
+    analyticsManager.capture('app_closed');
+    await analyticsManager.shutdown();
+  }
 });
 
 app.on('window-all-closed', () => {

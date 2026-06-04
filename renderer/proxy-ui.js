@@ -246,6 +246,10 @@ class ProxyUI {
       toggleBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>启动中...</span>';
     }
 
+    if (window.electronAPI && window.electronAPI.captureEvent) {
+      window.electronAPI.captureEvent('proxy_start_requested');
+    }
+
     window.electronAPI.startAnswerProxy();
     this.logManager.addInfoLog('正在启动代理服务器...');
 

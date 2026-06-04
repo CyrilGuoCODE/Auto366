@@ -108,5 +108,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);
   },
   downloadRuleFile: (url) => ipcRenderer.invoke('download-rule-file', url),
-  openUrl: (url) => ipcRenderer.invoke('open-url', url)
+  openUrl: (url) => ipcRenderer.invoke('open-url', url),
+
+  // 数据分析API
+  getAnalyticsEnabled: () => ipcRenderer.invoke('get-analytics-enabled'),
+  setAnalyticsEnabled: (enabled) => ipcRenderer.invoke('set-analytics-enabled', enabled),
+  captureEvent: (eventName, properties) => ipcRenderer.invoke('capture-event', eventName, properties),
 })

@@ -29,63 +29,66 @@ class Auto366App {
     try {
       // 暴露方法到全局（必须在最前面，因为HTML中的onclick依赖这些方法）
       this.exposeMethods();
-      
+
       // 初始化全局设置（缓存路径等）
       this.initGlobalSettings();
-      
+
       // 初始化事件监听器
       this.eventManager.initEventListeners();
-      
+
       // 初始化代理控制
       this.proxyUI.initProxyControl();
-      
+
       // 初始化答案UI
       this.answersUI.initAnswersUI();
 
       // 初始化文件管理UI
       this.fileUI.initFileUI();
-      
+
       // 初始化规则事件监听器
       this.rulesUI.initRuleEventListeners();
-      
+
       // 初始化社区规则集
       this.communityUI.initCommunityRulesets();
-      
+
       // 初始化缓存设置
       this.settingsUI.initCacheSettings();
-      
+
       // 初始化更新设置
       this.settingsUI.initUpdateSettings();
-      
+
       // 初始化规则设置
       this.settingsUI.initRulesSettings();
-      
+
+      // 初始化数据分析设置
+      this.settingsUI.initAnalyticsSettings();
+
       // 绑定更新按钮点击事件
       this.bindUpdateButtons();
-      
+
       // 初始化IPC监听器
       this.initIpcListeners();
-      
+
       // 初始化UI模式
       await this.initUIMode();
-      
+
       // 尝试加载规则
       try {
         await this.rulesUI.loadRules();
       } catch (error) {
         console.error('加载规则失败:', error);
       }
-      
+
       // 尝试加载社区规则集
       try {
         await this.communityUI.loadCommunityRulesets();
       } catch (error) {
         console.error('加载社区规则集失败:', error);
       }
-      
+
       // 显示赞赏弹窗
       this.showDonationModal();
-      
+
       // 自动启动代理
       setTimeout(() => {
         this.proxyUI.startProxy();
@@ -95,10 +98,13 @@ class Auto366App {
       if (window.electronAPI.startProcessMonitor) {
         window.electronAPI.startProcessMonitor();
       }
-      
+
       // 初始化新手教程
       this.tutorialUI.init();
-      
+
+      // 追踪应用启动完成
+      this.captureEvent('app_initialized');
+
     } catch (error) {
       console.error('应用初始化失败:', error);
       this.logManager.addErrorLog('应用初始化失败: ' + error.message);
@@ -110,6 +116,13 @@ class Auto366App {
     const cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
     if (window.electronAPI && window.electronAPI.setCachePath) {
       window.electronAPI.setCachePath(cachePath);
+    }
+  }
+
+  // 发送分析事件
+  captureEvent(eventName, properties = {}) {
+    if (window.electronAPI && window.electronAPI.captureEvent) {
+      window.electronAPI.captureEvent(eventName, properties);
     }
   }
 

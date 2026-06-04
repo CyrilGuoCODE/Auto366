@@ -24,6 +24,7 @@
     "http-mitm-proxy": "^1.1.0",
     "node-stream-zip": "^1.15.0",
     "path": "^0.12.7",
+    "posthog-node": "^5.21.2",
     "supabase-js": "^0.0.1-security",
     "uuid": "^11.1.0",
     "ws": "^8.14.2"

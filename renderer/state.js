@@ -50,6 +50,11 @@ class StateManager {
       }
     }
 
+    // 追踪视图切换
+    if (window.electronAPI && window.electronAPI.captureEvent) {
+      window.electronAPI.captureEvent('view_switched', { view: viewName, ui_mode: ui });
+    }
+
     // 如果切换到规则管理视图，加载规则列表
     if (viewName === 'rules') {
       // 由 rules-ui 模块处理

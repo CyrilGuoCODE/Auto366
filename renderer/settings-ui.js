@@ -153,6 +153,31 @@ class SettingsUI {
     }
   }
 
+  // 初始化数据分析设置
+  async initAnalyticsSettings() {
+    try {
+      const analyticsCheckbox = document.getElementById('analyticsEnabled');
+      if (analyticsCheckbox) {
+        // 从主进程获取当前状态
+        const isEnabled = await window.electronAPI.getAnalyticsEnabled();
+        analyticsCheckbox.checked = isEnabled;
+
+        analyticsCheckbox.addEventListener('change', async () => {
+          const enabled = analyticsCheckbox.checked;
+          try {
+            await window.electronAPI.setAnalyticsEnabled(enabled);
+            this.logManager.addInfoLog(`使用统计数据收集已${enabled ? '启用' : '禁用'}`);
+          } catch (error) {
+            this.logManager.addErrorLog(`设置数据分析开关失败: ${error.message}`);
+            analyticsCheckbox.checked = !enabled;
+          }
+        });
+      }
+    } catch (error) {
+      console.error('初始化数据分析设置失败:', error);
+    }
+  }
+
   // 处理清理缓存
   handleClearCache() {
     const resultDiv = document.getElementById('trafficLog');

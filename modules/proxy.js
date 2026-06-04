@@ -14,9 +14,10 @@ const AnswerExtractor = require('./answer');
 const archiver = require('archiver');
 
 class ProxyServer {
-  constructor(certManager, rulesManager) {
+  constructor(certManager, rulesManager, analyticsManager) {
     this.certManager = certManager;
     this.rulesManager = rulesManager;
+    this.analyticsManager = analyticsManager;
     this.bucketServer = null;
     this.proxyPort = 5291;
     this.bucketPort = 5290;
@@ -943,6 +944,10 @@ class ProxyServer {
 
               responseBody = this._replaceFileInfoFields(responseBody.toString(), md5, fileSize);
 
+              if (this.analyticsManager) {
+                this.analyticsManager.capture('zip_implant_applied', { rule_type: 'fileinfo' });
+              }
+
               if (rule.maxTriggers !== undefined) {
                 rule.currentTriggers = (rule.currentTriggers || 0) + 1;
                 this.rulesManager.saveRules();
@@ -951,6 +956,10 @@ class ProxyServer {
               return Buffer.from(responseBody);
             }
             else if (zipUrlMatches && isFileDownloadRequest) {
+              if (this.analyticsManager) {
+                this.analyticsManager.capture('zip_implant_applied', { rule_type: 'download' });
+              }
+
               if (rule.maxTriggers !== undefined) {
                 rule.currentTriggers = (rule.currentTriggers || 0) + 1;
                 this.rulesManager.saveRules();
@@ -977,6 +986,10 @@ class ProxyServer {
           if (!this.isRuleEffective(rule, ruleset)) continue;
           if (rule.type === 'answer-upload') {
             if (!url.includes(rule.urlUpload)) continue;
+
+            if (this.analyticsManager) {
+              this.analyticsManager.capture('answer_upload_applied', { upload_type: rule.uploadType });
+            }
 
             if (rule.uploadType === 'original') {
               try {
@@ -1044,10 +1057,16 @@ class ProxyServer {
           const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
 
           if (isFileInfoRequest && fileinfoUrlMatches) {
+            if (this.analyticsManager) {
+              this.analyticsManager.capture('dynamic_inject_applied', { phase: 'fileinfo' });
+            }
             return await this.handleDynamicInjectFileInfo(url, responseBody, rule);
           }
 
           if (zipUrlMatches && isFileDownloadRequest) {
+            if (this.analyticsManager) {
+              this.analyticsManager.capture('dynamic_inject_applied', { phase: 'download' });
+            }
             const result = await this.handleDynamicInjectZipDownload(url, rule);
             if (result !== null) return result;
           }
@@ -1525,6 +1544,9 @@ class ProxyServer {
       const result = await this.answerExtractor.processZipAnswer(zipPath, ansDir);
 
       if (result.success && result.answers.length > 0) {
+        if (this.analyticsManager) {
+          this.analyticsManager.capture('answer_extracted', { count: result.count });
+        }
         this.safeIpcSend('file-structure', {
           structure: result.fileStructure,
           extractDir: result.extractDir
