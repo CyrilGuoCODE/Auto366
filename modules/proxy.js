@@ -85,46 +85,66 @@ class ProxyServer {
           if (hasPostChangeTimeRule) return callback(null, null);
           return callback(null, chunk);
         })
-        ctx.onRequestEnd((ctx, callback) => {
-          let body = Buffer.concat(requestBody).toString()
+        ctx.onRequestEnd(async (ctx, callback) => {
+          try {
+            let bodyBuffer = Buffer.concat(requestBody);
+            const reqEncoding = ctx.clientToProxyRequest.headers['content-encoding'];
 
-          if (hasPostChangeTimeRule) {
-            const rules = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method);
-            const rule = rules[0];
-            const modifiedBody = this.applyPostChangeTime(body, rule, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
-            ctx.proxyToServerRequest.removeHeader('transfer-encoding');
-            ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
-            ctx.proxyToServerRequest.write(modifiedBody);
-            try {
-              const params = new URLSearchParams(modifiedBody);
-              requestInfo.requestBody = JSON.stringify(Object.fromEntries(params.entries()), null, 2);
-            } catch (e) {
-              requestInfo.requestBody = modifiedBody;
+            // 解压请求体（如果客户端发送了压缩数据）
+            let body;
+            if (reqEncoding) {
+              const { text, decompressFailed } = await this.decompressBuffer(bodyBuffer, reqEncoding);
+              if (decompressFailed) {
+                requestInfo.requestBody = text;
+                return callback();
+              }
+              body = text;
+            } else {
+              body = bodyBuffer.toString();
             }
+
+            if (hasPostChangeTimeRule) {
+              const rules = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method);
+              const rule = rules[0];
+              const modifiedBody = this.applyPostChangeTime(body, rule, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+              ctx.proxyToServerRequest.removeHeader('transfer-encoding');
+              ctx.proxyToServerRequest.removeHeader('content-encoding');
+              ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
+              ctx.proxyToServerRequest.write(modifiedBody);
+              try {
+                const params = new URLSearchParams(modifiedBody);
+                requestInfo.requestBody = JSON.stringify(Object.fromEntries(params.entries()), null, 2);
+              } catch (e) {
+                requestInfo.requestBody = modifiedBody;
+              }
+              return callback();
+            }
+
+            if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/json')) {
+              try {
+                body = JSON.stringify(JSON.parse(body), null, 2);
+              } catch (error) {
+                console.error('解析请求体失败:', error)
+              }
+            }
+            else if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/x-www-form-urlencoded')) {
+              try {
+                const params = new URLSearchParams(body);
+                const result = Object.fromEntries(params.entries());
+                body = JSON.stringify(result, null, 2);
+              } catch (error) {
+                console.error('解析请求体失败:', error)
+              }
+            }
+            else if (ctx.clientToProxyRequest.headers['content-type']) {
+              console.log('未知请求体类型', ctx.clientToProxyRequest.headers['content-type'])
+            }
+            requestInfo.requestBody = body
+            return callback();
+          } catch (error) {
+            console.error('处理请求体失败:', error);
             return callback();
           }
-
-          if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/json')) {
-            try {
-              body = JSON.stringify(JSON.parse(body), null, 2);
-            } catch (error) {
-              console.error('解析请求体失败:', error)
-            }
-          }
-          else if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/x-www-form-urlencoded')) {
-            try {
-              const params = new URLSearchParams(body);
-              const result = Object.fromEntries(params.entries());
-              body = JSON.stringify(result, null, 2);
-            } catch (error) {
-              console.error('解析请求体失败:', error)
-            }
-          }
-          else if (ctx.clientToProxyRequest.headers['content-type']) {
-            console.log('未知请求体类型', ctx.clientToProxyRequest.headers['content-type'])
-          }
-          requestInfo.requestBody = body
-          return callback();
         })
         let responseBodyRules = this.haveRules(fullUrl, 'response-body');
         ctx.onResponse((ctx, callback) => {
@@ -185,7 +205,7 @@ class ProxyServer {
           else return callback(null, chunk);
         })
         ctx.onResponseEnd(async (ctx, callback) => {
-          let { buffer, text } = await this.decompressResponse(Buffer.concat(responseBody), ctx.serverToProxyResponse.headers['content-encoding']);
+          let { buffer, text, decompressFailed } = await this.decompressBuffer(Buffer.concat(responseBody), ctx.serverToProxyResponse.headers['content-encoding']);
           if (responseBodyRules.includes(2)) {
             buffer = this.applyZipImplantRules(fullUrl, buffer);
             ctx.proxyToClientResponse.write(buffer);
@@ -196,7 +216,10 @@ class ProxyServer {
           }
           const isJson = /application\/json/.test(requestInfo.contentType);
           const isFile = /application\/octet-stream|image/.test(requestInfo.contentType);
-          if (isJson) {
+          if (decompressFailed) {
+            requestInfo.responseBody = text;
+          }
+          else if (isJson) {
             try {
               requestInfo.responseBody = JSON.stringify(JSON.parse(text), null, 2);
             } catch (e) {
@@ -1444,7 +1467,7 @@ class ProxyServer {
   }
 
   // 响应体解压缩工具函数
-  decompressResponse(buffer, encoding) {
+  decompressBuffer(buffer, encoding) {
     return new Promise((resolve, reject) => {
       try {
         if (!encoding || encoding === 'identity') {
@@ -1460,10 +1483,10 @@ class ProxyServer {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
               console.error('Gzip解压失败:', err);
-              // 解压失败时返回原始内容
               resolve({
                 buffer: buffer,
-                text: buffer.toString('utf8')
+                text: `[压缩数据 - gzip解压失败，原始大小: ${buffer.length}字节]`,
+                decompressFailed: true
               });
             } else {
               resolve({
@@ -1478,7 +1501,8 @@ class ProxyServer {
               console.error('Deflate解压失败:', err);
               resolve({
                 buffer: buffer,
-                text: buffer.toString('utf8')
+                text: `[压缩数据 - deflate解压失败，原始大小: ${buffer.length}字节]`,
+                decompressFailed: true
               });
             } else {
               resolve({
@@ -1494,7 +1518,8 @@ class ProxyServer {
               console.error('Brotli解压失败:', err);
               resolve({
                 buffer: buffer,
-                text: buffer.toString('utf8')
+                text: `[压缩数据 - brotli解压失败，原始大小: ${buffer.length}字节]`,
+                decompressFailed: true
               });
             } else {
               resolve({
@@ -1504,18 +1529,20 @@ class ProxyServer {
             }
           });
         } else {
-          // 未知压缩格式，直接返回
+          // 未知压缩格式
           console.log('未知压缩格式:', encoding)
           resolve({
             buffer: buffer,
-            text: buffer.toString('utf8')
+            text: `[压缩数据 - 未知编码: ${encoding}，原始大小: ${buffer.length}字节]`,
+            decompressFailed: true
           });
         }
       } catch (error) {
         console.error('解压缩过程中出错:', error);
         resolve({
           buffer: buffer,
-          text: buffer.toString('utf8')
+          text: `[压缩数据 - 解压异常，原始大小: ${buffer.length}字节]`,
+          decompressFailed: true
         });
       }
     });
