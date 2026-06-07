@@ -291,8 +291,20 @@ var State = {
     aiApiKey: '',
     aiEnabled: localStorage.getItem('aiEnabled') === 'true',
     aiThreshold: parseInt(localStorage.getItem('aiThreshold'), 10) || 50,
-    aiWaiting: false
+    aiWaiting: false,
+    // ===== 炸鱼时间修改（隶属"通用自动PK"，可关可开的子规则）=====
+    fishTimeEnabled: localStorage.getItem('fishTimeEnabled') === 'true',
+    // 秒数：未设置时为 null，面板显示 "-"；int32 全范围
+    fishTimeSeconds: (function() {
+        var raw = localStorage.getItem('fishTimeSeconds');
+        if (raw === null || raw === '') return null;
+        var v = parseInt(raw, 10);
+        return Number.isFinite(v) ? v : null;
+    })()
 };
+
+var INT32_MIN = -2147483648;
+var INT32_MAX = 2147483647;
 
 var MatcherFull = {
     standardizeEntry: function(rawEntry) {
@@ -2647,6 +2659,102 @@ var UI = {
         aiEnableRow.appendChild(aiThreshSuffix);
         UI.autoPkPanel.appendChild(aiEnableRow);
 
+        // ===== 炸鱼时间修改（通用自动PK 的子规则）=====
+        var ftDivider = document.createElement('div');
+        ftDivider.style.borderTop = '1px solid rgba(255,255,255,0.2)';
+        ftDivider.style.margin = '8px 0 4px 0';
+        ftDivider.style.paddingTop = '6px';
+        ftDivider.style.fontSize = '14px';
+        ftDivider.style.fontWeight = 'bold';
+        ftDivider.style.color = '#fff';
+        ftDivider.textContent = '炸鱼时间修改';
+        UI.autoPkPanel.appendChild(ftDivider);
+
+        var ftRow = document.createElement('div');
+        ftRow.style.display = 'flex';
+        ftRow.style.alignItems = 'center';
+        ftRow.style.marginBottom = '4px';
+
+        var ftCheckbox = document.createElement('input');
+        ftCheckbox.type = 'checkbox';
+        ftCheckbox.checked = State.fishTimeEnabled;
+        ftCheckbox.style.marginRight = '6px';
+        ftCheckbox.style.cursor = 'pointer';
+
+        var ftSecInput = document.createElement('input');
+        // 秒数输入：未填显示占位 "-"；启用前禁用
+        ftSecInput.type = 'number';
+        ftSecInput.step = '1';
+        ftSecInput.min = String(INT32_MIN);
+        ftSecInput.max = String(INT32_MAX);
+        ftSecInput.placeholder = '-';
+        ftSecInput.value = (State.fishTimeSeconds === null || State.fishTimeSeconds === undefined)
+            ? '' : String(State.fishTimeSeconds);
+        ftSecInput.style.width = '70px';
+        ftSecInput.style.fontSize = '12px';
+        ftSecInput.style.textAlign = 'center';
+        ftSecInput.style.background = 'rgba(255,255,255,0.2)';
+        ftSecInput.style.color = '#fff';
+        ftSecInput.style.border = '1px solid rgba(255,255,255,0.3)';
+        ftSecInput.style.borderRadius = '3px';
+        ftSecInput.disabled = !State.fishTimeEnabled;
+        ftSecInput.style.opacity = State.fishTimeEnabled ? '1' : '0.5';
+
+        ftCheckbox.addEventListener('change', function() {
+            State.fishTimeEnabled = ftCheckbox.checked;
+            localStorage.setItem('fishTimeEnabled', String(State.fishTimeEnabled));
+            ftSecInput.disabled = !State.fishTimeEnabled;
+            ftSecInput.style.opacity = State.fishTimeEnabled ? '1' : '0.5';
+            UI.addLogMessage('[炸鱼时间] ' + (State.fishTimeEnabled ? '已启用' : '已禁用')
+                + (State.fishTimeEnabled && State.fishTimeSeconds === null ? '（秒数未填，提交不会被修改）' : ''), 'info');
+            FishTime.push();
+        });
+
+        ftSecInput.addEventListener('change', function() {
+            var raw = ftSecInput.value.trim();
+            if (raw === '') {
+                State.fishTimeSeconds = null;
+                localStorage.removeItem('fishTimeSeconds');
+                UI.addLogMessage('[炸鱼时间] 秒数已清空（提交不会被修改）', 'info');
+                FishTime.push();
+                return;
+            }
+            var v = parseInt(raw, 10);
+            if (!Number.isFinite(v)) {
+                ftSecInput.value = (State.fishTimeSeconds === null ? '' : String(State.fishTimeSeconds));
+                return;
+            }
+            if (v < INT32_MIN) v = INT32_MIN;
+            if (v > INT32_MAX) v = INT32_MAX;
+            ftSecInput.value = String(v);
+            State.fishTimeSeconds = v;
+            localStorage.setItem('fishTimeSeconds', String(v));
+            UI.addLogMessage('[炸鱼时间] 提交用时设为 ' + v + ' 秒（duration=' + (v * 1000) + 'ms）', 'info');
+            FishTime.push();
+        });
+
+        var ftEnableLabel = document.createElement('span');
+        ftEnableLabel.textContent = '启用';
+        ftEnableLabel.style.fontSize = '12px';
+        ftEnableLabel.style.marginRight = '8px';
+
+        var ftSecLabel = document.createElement('span');
+        ftSecLabel.textContent = '秒数:';
+        ftSecLabel.style.fontSize = '12px';
+        ftSecLabel.style.marginRight = '4px';
+
+        var ftSecSuffix = document.createElement('span');
+        ftSecSuffix.textContent = '秒';
+        ftSecSuffix.style.fontSize = '12px';
+        ftSecSuffix.style.marginLeft = '2px';
+
+        ftRow.appendChild(ftCheckbox);
+        ftRow.appendChild(ftEnableLabel);
+        ftRow.appendChild(ftSecLabel);
+        ftRow.appendChild(ftSecInput);
+        ftRow.appendChild(ftSecSuffix);
+        UI.autoPkPanel.appendChild(ftRow);
+
         var statsRow = document.createElement('div');
         statsRow.style.fontSize = '11px';
         statsRow.style.marginBottom = '6px';
@@ -2891,9 +2999,62 @@ var Scheduler = {
     }
 };
 
+// ============================================================
+// 炸鱼时间修改 —— 网络层 Hook（fetch + XHR）
+// 本规则集靠 DOM 点击答题，原本不碰 submit 请求；这里新增 hook，
+// 拦截两类提交并改写 submitJson.duration（毫秒）+ wordInfos[].answerTime。
+//   普通PK : .../wordsbtl/student/submit
+//   词王争霸: .../word-king/submit
+// duration 单位为毫秒：用户填的是“秒”，落库时 ×1000。
+// ============================================================
+var FishTime = {
+    // 改包逻辑已移到代理层(modules/proxy.js)，因为 submit 是 Electron 客户端的
+    // 网络请求，不经过本注入页的 fetch/XHR——页面层 hook 永远拦不到。
+    // 这里只负责把"启用/秒数"状态经本地 bucket server 推给代理层。
+    bucketBase: function() {
+        var port = localStorage.getItem('bucket-port') || '5290';
+        return 'http://127.0.0.1:' + port;
+    },
+
+    push: function() {
+        var payload = {
+            enabled: State.fishTimeEnabled === true,
+            seconds: (State.fishTimeSeconds === null || State.fishTimeSeconds === undefined)
+                ? null : State.fishTimeSeconds
+        };
+        try {
+            fetch(FishTime.bucketBase() + '/fish-time', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                cache: 'no-cache'
+            }).then(function(r) { return r.json(); })
+              .then(function(res) {
+                  if (res && res.success) {
+                      UI.addLogMessage('[炸鱼时间] 状态已同步到代理层 | 启用='
+                          + payload.enabled + ' 秒数=' + (payload.seconds === null ? '-' : payload.seconds), 'success');
+                  } else {
+                      UI.addLogMessage('[炸鱼时间] 同步失败(代理层返回异常)', 'warning');
+                  }
+              })
+              .catch(function(e) {
+                  UI.addLogMessage('[炸鱼时间] 同步失败：连不上本地服务(' + e.message + ')，确认代理已开启', 'warning');
+              });
+        } catch (e) {
+            UI.addLogMessage('[炸鱼时间] 同步异常：' + e.message, 'warning');
+        }
+    },
+
+    // 初始化：把面板当前状态推一次，保证代理层与面板一致
+    install: function() {
+        FishTime.push();
+    }
+};
+
 function init() {
     UI.createAutoPkPanel();
     UI.createLogPanel();
+    FishTime.install();
     UI.addLogMessage('系统初始化完成', 'success');
     Loader.loadBucketFromServer();
 }

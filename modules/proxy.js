@@ -25,6 +25,9 @@ class ProxyServer {
     this.isCapturing = false;
     this.answerCaptureEnabled = true;
     this.aiApiKey = '';
+    // ===== 炸鱼时间修改（"通用自动PK"子规则，状态由PK面板经 /fish-time 推送）=====
+    // 代理层读不到注入页 localStorage，故经本地 bucket server 同步开关/秒数到此。
+    this.fishTime = { enabled: false, seconds: null };
     this.mainWindow = null;
     this.trafficCache = new Map();
     this.serverDatas = {};
@@ -79,10 +82,13 @@ class ProxyServer {
 
         let requestBody = [], responseBody = [];
         const hasPostChangeTimeRule = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method).length > 0;
+        const hasFishTime = this.shouldApplyFishTime(fullUrl, ctx.clientToProxyRequest.method);
+        // 需要拦截改写 body 的任一情形：post-change-time 规则 或 炸鱼时间命中submit
+        const needBufferBody = hasPostChangeTimeRule || hasFishTime;
 
         ctx.onRequestData((ctx, chunk, callback) => {
           requestBody.push(chunk)
-          if (hasPostChangeTimeRule) return callback(null, null);
+          if (needBufferBody) return callback(null, null);
           return callback(null, chunk);
         })
         ctx.onRequestEnd(async (ctx, callback) => {
@@ -107,6 +113,22 @@ class ProxyServer {
               const rules = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method);
               const rule = rules[0];
               const modifiedBody = this.applyPostChangeTime(body, rule, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+              ctx.proxyToServerRequest.removeHeader('transfer-encoding');
+              ctx.proxyToServerRequest.removeHeader('content-encoding');
+              ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
+              ctx.proxyToServerRequest.write(modifiedBody);
+              try {
+                const params = new URLSearchParams(modifiedBody);
+                requestInfo.requestBody = JSON.stringify(Object.fromEntries(params.entries()), null, 2);
+              } catch (e) {
+                requestInfo.requestBody = modifiedBody;
+              }
+              return callback();
+            }
+
+            // ===== 炸鱼时间：改写 submit 提交用时 =====
+            if (hasFishTime) {
+              const modifiedBody = this.applyFishTime(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
               ctx.proxyToServerRequest.removeHeader('transfer-encoding');
               ctx.proxyToServerRequest.removeHeader('content-encoding');
               ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
@@ -352,6 +374,46 @@ class ProxyServer {
             res.end(JSON.stringify({ success: false, error: e.message }));
           }
         });
+        return;
+      }
+
+      // ===== 炸鱼时间：PK面板推送开关/秒数 =====
+      if (req.method === 'POST' && req.url === '/fish-time') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            const enabled = data.enabled === true;
+            let seconds = null;
+            if (data.seconds !== null && data.seconds !== undefined && data.seconds !== '') {
+              const v = parseInt(data.seconds, 10);
+              if (Number.isFinite(v)) {
+                seconds = Math.max(-2147483648, Math.min(2147483647, v));
+              }
+            }
+            this.fishTime = { enabled, seconds };
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: true, fishTime: this.fishTime }));
+          } catch (e) {
+            res.writeHead(500, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: false, error: e.message }));
+          }
+        });
+        return;
+      }
+      if (req.method === 'GET' && url.parse(req.url).pathname === '/fish-time') {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify(this.fishTime));
         return;
       }
 
@@ -878,6 +940,105 @@ class ProxyServer {
     const i = crypto.createHash('md5').update(tasksJsonRaw).digest('hex');
     const n = crypto.createHash('md5').update(i + salt + r).digest('hex');
     return r.slice(0, 10) + n + r.slice(10);
+  }
+
+  // ===== 炸鱼时间：是否命中 submit 提交接口 =====
+  // 普通PK : wordsbtl/student/submit   词王争霸: word-king/submit
+  // 仅当：子规则开启 且 秒数已填(非null)
+  shouldApplyFishTime(url, method) {
+    if (!this.fishTime || this.fishTime.enabled !== true) return false;
+    if (this.fishTime.seconds === null || this.fishTime.seconds === undefined) return false;
+    if (method && method !== 'POST') return false;
+    if (url.indexOf('word-king/submit') !== -1) return true;
+    // 普通PK submit，排除 submit/practice 等非PK提交
+    if (url.indexOf('wordsbtl/student/submit') !== -1
+        && url.indexOf('/submit/practice') === -1) return true;
+    return false;
+  }
+
+  fishKindOf(url) {
+    return url.indexOf('word-king/submit') !== -1 ? '词王争霸' : '普通PK';
+  }
+
+  // 改写表单里的 submitJson.duration(毫秒=秒数×1000) 与拟真 answerTime
+  applyFishTime(bodyText, url, contentType) {
+    if (!contentType || !contentType.includes('application/x-www-form-urlencoded')) {
+      this.safeIpcSend('rule-log', {
+        type: 'warning',
+        message: `[炸鱼时间] 命中${this.fishKindOf(url)}，但content-type非表单(${contentType||'无'})，原样放行`,
+        url
+      });
+      return bodyText;
+    }
+
+    let targetSeconds = this.fishTime.seconds;
+    targetSeconds = Math.max(-2147483648, Math.min(2147483647, targetSeconds));
+    const targetMs = targetSeconds * 1000;
+
+    let params;
+    try {
+      params = new URLSearchParams(bodyText);
+    } catch (e) {
+      this.safeIpcSend('rule-log', { type: 'warning', message: `[炸鱼时间] body解析失败，原样放行`, url });
+      return bodyText;
+    }
+    if (!params.has('submitJson')) {
+      const keys = [];
+      for (const k of params.keys()) keys.push(k);
+      this.safeIpcSend('rule-log', {
+        type: 'warning',
+        message: `[炸鱼时间] body无submitJson字段，原样放行 | 实际字段:[${keys.join(', ')}]`,
+        url
+      });
+      return bodyText;
+    }
+
+    const rawSj = params.get('submitJson');
+    let decoded = false;
+    let sj;
+    try {
+      sj = JSON.parse(rawSj);
+    } catch (e1) {
+      try {
+        sj = JSON.parse(decodeURIComponent(rawSj));
+        decoded = true;
+      } catch (e2) {
+        this.safeIpcSend('rule-log', { type: 'warning', message: `[炸鱼时间] submitJson解析失败，原样放行`, url });
+        return bodyText;
+      }
+    }
+
+    const oldDuration = sj.duration;
+    sj.duration = targetMs;
+
+    const n = Array.isArray(sj.wordInfos) ? sj.wordInfos.length : 0;
+    if (n > 0) {
+      const spanMs = targetMs > 0 ? targetMs : 0;
+      const baseStart = Date.now() - spanMs;
+      const gap = n > 1 ? spanMs / (n - 1) : 0;
+      let prev = -Infinity;
+      for (let i = 0; i < n; i++) {
+        const wi = sj.wordInfos[i];
+        if (!wi || typeof wi !== 'object') continue;
+        let t = Math.round(baseStart + gap * i);
+        if (gap > 40) t += Math.floor((Math.random() - 0.5) * Math.min(gap * 0.3, 200));
+        if (t <= prev) t = prev + 1;
+        prev = t;
+        if (typeof wi.answerTime !== 'undefined') wi.answerTime = t;
+      }
+    }
+
+    const newSj = JSON.stringify(sj);
+    params.set('submitJson', decoded ? encodeURIComponent(newSj) : newSj);
+
+    this.safeIpcSend('rule-log', {
+      type: 'success',
+      message: `[炸鱼时间] ${this.fishKindOf(url)} 提交时间已修改 ✓`,
+      url,
+      details: `duration: ${oldDuration} → ${targetMs}ms (${targetSeconds}s) | 题数:${n}${decoded ? ' | IOS编码' : ''}`
+    });
+
+    return params.toString();
   }
 
   fileNameMatchesPattern(fileName, pattern) {
