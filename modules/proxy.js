@@ -25,7 +25,7 @@ class ProxyServer {
     this.isCapturing = false;
     this.answerCaptureEnabled = true;
     this.aiApiKey = '';
-    // ===== 炸鱼时间修改（"通用自动PK"子规则，状态由PK面板经 /fish-time 推送）=====
+    // ===== 时间修改修改（"通用自动PK"子规则，状态由PK面板经 /fish-time 推送）=====
     // 代理层读不到注入页 localStorage，故经本地 bucket server 同步开关/秒数到此。
     this.fishTime = { enabled: false, seconds: null };
     this.mainWindow = null;
@@ -83,7 +83,7 @@ class ProxyServer {
         let requestBody = [], responseBody = [];
         const hasPostChangeTimeRule = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method).length > 0;
         const hasFishTime = this.shouldApplyFishTime(fullUrl, ctx.clientToProxyRequest.method);
-        // 需要拦截改写 body 的任一情形：post-change-time 规则 或 炸鱼时间命中submit
+        // 需要拦截改写 body 的任一情形：post-change-time 规则 或 时间修改命中submit
         const needBufferBody = hasPostChangeTimeRule || hasFishTime;
 
         ctx.onRequestData((ctx, chunk, callback) => {
@@ -126,7 +126,7 @@ class ProxyServer {
               return callback();
             }
 
-            // ===== 炸鱼时间：改写 submit 提交用时 =====
+            // ===== 时间修改：改写 submit 提交用时 =====
             if (hasFishTime) {
               const modifiedBody = this.applyFishTime(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
               ctx.proxyToServerRequest.removeHeader('transfer-encoding');
@@ -377,7 +377,7 @@ class ProxyServer {
         return;
       }
 
-      // ===== 炸鱼时间：PK面板推送开关/秒数 =====
+      // ===== 时间修改：PK面板推送开关/秒数 =====
       if (req.method === 'POST' && req.url === '/fish-time') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -942,7 +942,7 @@ class ProxyServer {
     return r.slice(0, 10) + n + r.slice(10);
   }
 
-  // ===== 炸鱼时间：是否命中 submit 提交接口 =====
+  // ===== 时间修改：是否命中 submit 提交接口 =====
   // 普通PK : wordsbtl/student/submit   词王争霸: word-king/submit
   // 仅当：子规则开启 且 秒数已填(非null)
   shouldApplyFishTime(url, method) {
@@ -965,7 +965,7 @@ class ProxyServer {
     if (!contentType || !contentType.includes('application/x-www-form-urlencoded')) {
       this.safeIpcSend('rule-log', {
         type: 'warning',
-        message: `[炸鱼时间] 命中${this.fishKindOf(url)}，但content-type非表单(${contentType||'无'})，原样放行`,
+        message: `[时间修改] 命中${this.fishKindOf(url)}，但content-type非表单(${contentType||'无'})，原样放行`,
         url
       });
       return bodyText;
@@ -979,7 +979,7 @@ class ProxyServer {
     try {
       params = new URLSearchParams(bodyText);
     } catch (e) {
-      this.safeIpcSend('rule-log', { type: 'warning', message: `[炸鱼时间] body解析失败，原样放行`, url });
+      this.safeIpcSend('rule-log', { type: 'warning', message: `[时间修改] body解析失败，原样放行`, url });
       return bodyText;
     }
     if (!params.has('submitJson')) {
@@ -987,7 +987,7 @@ class ProxyServer {
       for (const k of params.keys()) keys.push(k);
       this.safeIpcSend('rule-log', {
         type: 'warning',
-        message: `[炸鱼时间] body无submitJson字段，原样放行 | 实际字段:[${keys.join(', ')}]`,
+        message: `[时间修改] body无submitJson字段，原样放行 | 实际字段:[${keys.join(', ')}]`,
         url
       });
       return bodyText;
@@ -1003,7 +1003,7 @@ class ProxyServer {
         sj = JSON.parse(decodeURIComponent(rawSj));
         decoded = true;
       } catch (e2) {
-        this.safeIpcSend('rule-log', { type: 'warning', message: `[炸鱼时间] submitJson解析失败，原样放行`, url });
+        this.safeIpcSend('rule-log', { type: 'warning', message: `[时间修改] submitJson解析失败，原样放行`, url });
         return bodyText;
       }
     }
@@ -1033,7 +1033,7 @@ class ProxyServer {
 
     this.safeIpcSend('rule-log', {
       type: 'success',
-      message: `[炸鱼时间] ${this.fishKindOf(url)} 提交时间已修改 ✓`,
+      message: `[时间修改] ${this.fishKindOf(url)} 提交时间已修改 ✓`,
       url,
       details: `duration: ${oldDuration} → ${targetMs}ms (${targetSeconds}s) | 题数:${n}${decoded ? ' | IOS编码' : ''}`
     });
