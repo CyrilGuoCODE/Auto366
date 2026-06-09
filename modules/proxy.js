@@ -13,6 +13,10 @@ const { ipcMain, app, BrowserWindow } = require('electron');
 const AnswerExtractor = require('./answer');
 const archiver = require('archiver');
 
+// 时间修改秒数取值范围（int32）
+const INT32_MIN = -2147483648;
+const INT32_MAX = 2147483647;
+
 class ProxyServer {
   constructor(certManager, rulesManager, analyticsManager) {
     this.certManager = certManager;
@@ -25,9 +29,13 @@ class ProxyServer {
     this.isCapturing = false;
     this.answerCaptureEnabled = true;
     this.aiApiKey = '';
-    // ===== 时间修改修改（"通用自动PK"子规则，状态由PK面板经 /fish-time 推送）=====
+    // ===== 时间修改（"通用自动PK"子规则，状态由PK面板经 /pk-time 推送）=====
     // 代理层读不到注入页 localStorage，故经本地 bucket server 同步开关/秒数到此。
-    this.fishTime = { enabled: false, seconds: null };
+    this.pkTimeMod = { enabled: false, seconds: null };
+    // ===== 听力时间修改（"内置-自动基础听力"子规则，状态由听力面板经 /listen-time 推送）=====
+    // 改 task/score/submit 的 tasksJson.seconds 并重算 ut 签名（salt 固定）。
+    this.listenTime = { enabled: false, seconds: null };
+    this.LISTEN_TIME_SALT = 'submitTaskToken-pc-987654';
     this.mainWindow = null;
     this.trafficCache = new Map();
     this.serverDatas = {};
@@ -82,9 +90,10 @@ class ProxyServer {
 
         let requestBody = [], responseBody = [];
         const hasPostChangeTimeRule = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method).length > 0;
-        const hasFishTime = this.shouldApplyFishTime(fullUrl, ctx.clientToProxyRequest.method);
-        // 需要拦截改写 body 的任一情形：post-change-time 规则 或 时间修改命中submit
-        const needBufferBody = hasPostChangeTimeRule || hasFishTime;
+        const hasPkTimeMod = this.shouldApplyPkTimeMod(fullUrl, ctx.clientToProxyRequest.method);
+        const hasListenTime = this.shouldApplyListenTime(fullUrl, ctx.clientToProxyRequest.method);
+        // 需要拦截改写 body 的任一情形：post-change-time 规则 或 PK时间修改 或 听力时间修改
+        const needBufferBody = hasPostChangeTimeRule || hasPkTimeMod || hasListenTime;
 
         ctx.onRequestData((ctx, chunk, callback) => {
           requestBody.push(chunk)
@@ -113,32 +122,21 @@ class ProxyServer {
               const rules = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method);
               const rule = rules[0];
               const modifiedBody = this.applyPostChangeTime(body, rule, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
-              ctx.proxyToServerRequest.removeHeader('transfer-encoding');
-              ctx.proxyToServerRequest.removeHeader('content-encoding');
-              ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
-              ctx.proxyToServerRequest.write(modifiedBody);
-              try {
-                const params = new URLSearchParams(modifiedBody);
-                requestInfo.requestBody = JSON.stringify(Object.fromEntries(params.entries()), null, 2);
-              } catch (e) {
-                requestInfo.requestBody = modifiedBody;
-              }
+              this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
               return callback();
             }
 
             // ===== 时间修改：改写 submit 提交用时 =====
-            if (hasFishTime) {
-              const modifiedBody = this.applyFishTime(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
-              ctx.proxyToServerRequest.removeHeader('transfer-encoding');
-              ctx.proxyToServerRequest.removeHeader('content-encoding');
-              ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
-              ctx.proxyToServerRequest.write(modifiedBody);
-              try {
-                const params = new URLSearchParams(modifiedBody);
-                requestInfo.requestBody = JSON.stringify(Object.fromEntries(params.entries()), null, 2);
-              } catch (e) {
-                requestInfo.requestBody = modifiedBody;
-              }
+            if (hasPkTimeMod) {
+              const modifiedBody = this.applyPkTimeMod(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+              this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
+              return callback();
+            }
+
+            // ===== 听力时间修改：改写听力作业提交用时 =====
+            if (hasListenTime) {
+              const modifiedBody = this.applyListenTime(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+              this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
               return callback();
             }
 
@@ -378,7 +376,7 @@ class ProxyServer {
       }
 
       // ===== 时间修改：PK面板推送开关/秒数 =====
-      if (req.method === 'POST' && req.url === '/fish-time') {
+      if (req.method === 'POST' && req.url === '/pk-time') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
@@ -389,15 +387,15 @@ class ProxyServer {
             if (data.seconds !== null && data.seconds !== undefined && data.seconds !== '') {
               const v = parseInt(data.seconds, 10);
               if (Number.isFinite(v)) {
-                seconds = Math.max(-2147483648, Math.min(2147483647, v));
+                seconds = Math.max(INT32_MIN, Math.min(INT32_MAX, v));
               }
             }
-            this.fishTime = { enabled, seconds };
+            this.pkTimeMod = { enabled, seconds };
             res.writeHead(200, {
               'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*'
             });
-            res.end(JSON.stringify({ success: true, fishTime: this.fishTime }));
+            res.end(JSON.stringify({ success: true, pkTimeMod: this.pkTimeMod }));
           } catch (e) {
             res.writeHead(500, {
               'Content-Type': 'application/json',
@@ -408,12 +406,52 @@ class ProxyServer {
         });
         return;
       }
-      if (req.method === 'GET' && url.parse(req.url).pathname === '/fish-time') {
+      if (req.method === 'GET' && url.parse(req.url).pathname === '/pk-time') {
         res.writeHead(200, {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         });
-        res.end(JSON.stringify(this.fishTime));
+        res.end(JSON.stringify(this.pkTimeMod));
+        return;
+      }
+
+      // ===== 听力时间修改：听力面板推送开关/秒数 =====
+      if (req.method === 'POST' && req.url === '/listen-time') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            const enabled = data.enabled === true;
+            let seconds = null;
+            if (data.seconds !== null && data.seconds !== undefined && data.seconds !== '') {
+              const v = parseInt(data.seconds, 10);
+              if (Number.isFinite(v)) {
+                seconds = Math.max(INT32_MIN, Math.min(INT32_MAX, v));
+              }
+            }
+            this.listenTime = { enabled, seconds };
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: true, listenTime: this.listenTime }));
+          } catch (e) {
+            res.writeHead(500, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: false, error: e.message }));
+          }
+        });
+        return;
+      }
+      if (req.method === 'GET' && url.parse(req.url).pathname === '/listen-time') {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify(this.listenTime));
         return;
       }
 
@@ -942,12 +980,103 @@ class ProxyServer {
     return r.slice(0, 10) + n + r.slice(10);
   }
 
+  // ===== 听力时间修改：是否命中听力作业提交接口 =====
+  // 接口: .../client/task/score/submit (含 /v2)；改 tasksJson.seconds 并重算 ut。
+  // 仅当：子规则开启 且 秒数已填(非null)。
+  shouldApplyListenTime(url, method) {
+    if (!this.listenTime || this.listenTime.enabled !== true) return false;
+    if (this.listenTime.seconds === null || this.listenTime.seconds === undefined) return false;
+    if (method && method !== 'POST') return false;
+    return url.indexOf('task/score/submit') !== -1;
+  }
+
+  // 改写 tasksJson.seconds，用固定 salt 重算 ut（复用 calculateUt）
+  applyListenTime(bodyText, url, contentType) {
+    if (!contentType || !contentType.includes('application/x-www-form-urlencoded')) {
+      this.safeIpcSend('rule-log', {
+        type: 'warning',
+        message: `[听力时间] 命中提交，但content-type非表单(${contentType || '无'})，原样放行`,
+        url
+      });
+      return bodyText;
+    }
+
+    let targetSeconds = this.listenTime.seconds;
+    targetSeconds = Math.max(INT32_MIN, Math.min(INT32_MAX, targetSeconds));
+
+    const formFields = [];
+    let tasksJsonRaw = null;
+    for (const pair of bodyText.split('&')) {
+      if (!pair.includes('=')) continue;
+      const eqIndex = pair.indexOf('=');
+      const key = pair.substring(0, eqIndex);
+      const value = pair.substring(eqIndex + 1);
+      if (key === 'tasksJson') {
+        tasksJsonRaw = decodeURIComponent(value);
+      } else if (key === 'ut') {
+        // 丢弃旧 ut，下面重算
+      } else {
+        formFields.push([key, value]);
+      }
+    }
+
+    if (tasksJsonRaw === null) {
+      this.safeIpcSend('rule-log', {
+        type: 'warning',
+        message: `[听力时间] body无tasksJson字段，原样放行`,
+        url
+      });
+      return bodyText;
+    }
+
+    const secondsMatch = tasksJsonRaw.match(/"seconds":(\d+)/);
+    const originalSeconds = secondsMatch ? secondsMatch[1] : '未找到';
+
+    const modifiedTasksJson = tasksJsonRaw.replace(
+      /"seconds":\d+/g,
+      `"seconds":${targetSeconds}`
+    );
+    const newUt = this.calculateUt(modifiedTasksJson, this.LISTEN_TIME_SALT);
+
+    const parts = ['tasksJson=' + encodeURIComponent(modifiedTasksJson)];
+    for (const [k, v] of formFields) {
+      parts.push(k + '=' + v);
+    }
+    parts.push('ut=' + newUt);
+
+    this.safeIpcSend('rule-log', {
+      type: 'success',
+      message: `[听力时间] 听力提交时间已修改 ✓`,
+      url,
+      details: `seconds: ${originalSeconds} → ${targetSeconds} | ut已重算`
+    });
+
+    return parts.join('&');
+  }
+
   // ===== 时间修改：是否命中 submit 提交接口 =====
   // 普通PK : wordsbtl/student/submit   词王争霸: word-king/submit
   // 仅当：子规则开启 且 秒数已填(非null)
-  shouldApplyFishTime(url, method) {
-    if (!this.fishTime || this.fishTime.enabled !== true) return false;
-    if (this.fishTime.seconds === null || this.fishTime.seconds === undefined) return false;
+  // 把改写后的表单 body 写回上游请求，并更新流量日志里的 requestBody。
+  // 供 post-change-time / PK时间修改 / 听力时间修改 三处复用。
+  writeModifiedFormBody(ctx, modifiedBody, requestInfo) {
+    ctx.proxyToServerRequest.removeHeader('transfer-encoding');
+    ctx.proxyToServerRequest.removeHeader('content-encoding');
+    ctx.proxyToServerRequest.setHeader('content-length', Buffer.byteLength(modifiedBody));
+    ctx.proxyToServerRequest.write(modifiedBody);
+    if (requestInfo) {
+      try {
+        const params = new URLSearchParams(modifiedBody);
+        requestInfo.requestBody = JSON.stringify(Object.fromEntries(params.entries()), null, 2);
+      } catch (e) {
+        requestInfo.requestBody = modifiedBody;
+      }
+    }
+  }
+
+  shouldApplyPkTimeMod(url, method) {
+    if (!this.pkTimeMod || this.pkTimeMod.enabled !== true) return false;
+    if (this.pkTimeMod.seconds === null || this.pkTimeMod.seconds === undefined) return false;
     if (method && method !== 'POST') return false;
     if (url.indexOf('word-king/submit') !== -1) return true;
     // 普通PK submit，排除 submit/practice 等非PK提交
@@ -956,23 +1085,23 @@ class ProxyServer {
     return false;
   }
 
-  fishKindOf(url) {
+  pkTimeModKindOf(url) {
     return url.indexOf('word-king/submit') !== -1 ? '词王争霸' : '普通PK';
   }
 
   // 改写表单里的 submitJson.duration(毫秒=秒数×1000) 与拟真 answerTime
-  applyFishTime(bodyText, url, contentType) {
+  applyPkTimeMod(bodyText, url, contentType) {
     if (!contentType || !contentType.includes('application/x-www-form-urlencoded')) {
       this.safeIpcSend('rule-log', {
         type: 'warning',
-        message: `[时间修改] 命中${this.fishKindOf(url)}，但content-type非表单(${contentType||'无'})，原样放行`,
+        message: `[时间修改] 命中${this.pkTimeModKindOf(url)}，但content-type非表单(${contentType||'无'})，原样放行`,
         url
       });
       return bodyText;
     }
 
-    let targetSeconds = this.fishTime.seconds;
-    targetSeconds = Math.max(-2147483648, Math.min(2147483647, targetSeconds));
+    let targetSeconds = this.pkTimeMod.seconds;
+    targetSeconds = Math.max(INT32_MIN, Math.min(INT32_MAX, targetSeconds));
     const targetMs = targetSeconds * 1000;
 
     let params;
@@ -1033,7 +1162,7 @@ class ProxyServer {
 
     this.safeIpcSend('rule-log', {
       type: 'success',
-      message: `[时间修改] ${this.fishKindOf(url)} 提交时间已修改 ✓`,
+      message: `[时间修改] ${this.pkTimeModKindOf(url)} 提交时间已修改 ✓`,
       url,
       details: `duration: ${oldDuration} → ${targetMs}ms (${targetSeconds}s) | 题数:${n}${decoded ? ' | IOS编码' : ''}`
     });

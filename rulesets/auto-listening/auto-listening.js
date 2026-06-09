@@ -52,6 +52,14 @@
         autoFillIndex: 0,
         accuracyRate: 100,
         _wrongIndices: null,
+        // ===== 听力时间修改（"内置-自动基础听力"子规则）=====
+        listenTimeEnabled: localStorage.getItem('a366_listentime_enabled') === 'true',
+        listenTimeSeconds: (function() {
+            var raw = localStorage.getItem('a366_listentime_seconds');
+            if (raw === null || raw === '') return null;
+            var v = parseInt(raw, 10);
+            return Number.isFinite(v) ? v : null;
+        })(),
     };
 
     let container = null;
@@ -113,6 +121,14 @@
                     </div>
                 </div>
             </div>
+            <div style="border-top:1px solid var(--a366-border);padding:8px 10px;display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                <span style="font-size:12px;font-weight:600;color:var(--a366-text);">时间修改</span>
+                <input type="checkbox" id="a366-listentime-enable" style="margin:0 4px 0 2px;cursor:pointer;">
+                <input type="number" id="a366-listentime-min" step="1" placeholder="-" style="width:50px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>
+                <span style="font-size:12px;color:var(--a366-text-secondary);">分</span>
+                <input type="number" id="a366-listentime-sec" step="1" placeholder="-" style="width:50px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>
+                <span style="font-size:12px;color:var(--a366-text-secondary);">秒</span>
+            </div>
             <div style="border-top:1px solid var(--a366-border);background:var(--a366-bg-secondary);display:flex;flex-direction:column;flex-shrink:0;">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 10px;">
                     <span style="font-size:11px;font-weight:500;color:var(--a366-text-secondary);">操作日志</span>
@@ -143,8 +159,100 @@
             logContent.innerHTML = '';
         });
 
+        // ===== 时间修改 UI 绑定（分+秒，换算成总秒数）=====
+        const ltEnable = document.getElementById('a366-listentime-enable');
+        const ltMin = document.getElementById('a366-listentime-min');
+        const ltSec = document.getElementById('a366-listentime-sec');
+        if (ltEnable && ltMin && ltSec) {
+            const ltSetDisabled = (dis) => {
+                ltMin.disabled = dis; ltSec.disabled = dis;
+                ltMin.style.opacity = dis ? '0.5' : '1';
+                ltSec.style.opacity = dis ? '0.5' : '1';
+            };
+            const ltFillFromTotal = () => {
+                if (state.listenTimeSeconds === null || state.listenTimeSeconds === undefined) {
+                    ltMin.value = ''; ltSec.value = ''; return;
+                }
+                const total = state.listenTimeSeconds;
+                const sign = total < 0 ? -1 : 1;
+                const abs = Math.abs(total);
+                ltMin.value = String(Math.floor(abs / 60) * sign);
+                ltSec.value = String((abs % 60) * sign);
+            };
+            const ltCommit = () => {
+                const mRaw = ltMin.value.trim();
+                const sRaw = ltSec.value.trim();
+                if (mRaw === '' && sRaw === '') {
+                    state.listenTimeSeconds = null;
+                    localStorage.removeItem('a366_listentime_seconds');
+                    addLog('[时间修改] 时间已清空（提交不会被修改）', 'info');
+                    pushListenTime();
+                    return;
+                }
+                let m = mRaw === '' ? 0 : parseInt(mRaw, 10);
+                let s = sRaw === '' ? 0 : parseInt(sRaw, 10);
+                if (!Number.isFinite(m)) m = 0;
+                if (!Number.isFinite(s)) s = 0;
+                let total = m * 60 + s;
+                if (total < -2147483648) total = -2147483648;
+                if (total > 2147483647) total = 2147483647;
+                state.listenTimeSeconds = total;
+                localStorage.setItem('a366_listentime_seconds', String(total));
+                ltFillFromTotal();
+                addLog('[时间修改] 听力提交用时设为 ' + m + '分' + s + '秒 = ' + total + '秒', 'info');
+                pushListenTime();
+            };
+
+            ltEnable.checked = state.listenTimeEnabled;
+            ltSetDisabled(!state.listenTimeEnabled);
+            ltFillFromTotal();
+
+            ltEnable.addEventListener('change', () => {
+                state.listenTimeEnabled = ltEnable.checked;
+                localStorage.setItem('a366_listentime_enabled', String(state.listenTimeEnabled));
+                ltSetDisabled(!state.listenTimeEnabled);
+                addLog('[时间修改] ' + (state.listenTimeEnabled ? '已启用' : '已禁用')
+                    + (state.listenTimeEnabled && state.listenTimeSeconds === null ? '（时间未填，提交不会被修改）' : ''),
+                    'info');
+                pushListenTime();
+            });
+            ltMin.addEventListener('change', ltCommit);
+            ltSec.addEventListener('change', ltCommit);
+        }
+
         makeDraggable(container, document.getElementById('a366-header'));
         autoFetchAnswers();
+        pushListenTime();
+    }
+
+    // 把"启用/秒数"状态经本地 bucket server 推给代理层（代理层据此改 tasksJson.seconds 并重算 ut）
+    function pushListenTime() {
+        const payload = {
+            enabled: state.listenTimeEnabled === true,
+            seconds: (state.listenTimeSeconds === null || state.listenTimeSeconds === undefined)
+                ? null : state.listenTimeSeconds
+        };
+        try {
+            fetch(BUCKET_URL + '/listen-time', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                cache: 'no-cache'
+            }).then(r => r.json())
+              .then(res => {
+                  if (res && res.success) {
+                      addLog('[时间修改] 状态已同步到代理层 | 启用=' + payload.enabled
+                          + ' 秒数=' + (payload.seconds === null ? '-' : payload.seconds), 'success');
+                  } else {
+                      addLog('[时间修改] 同步失败(代理层返回异常)', 'warning');
+                  }
+              })
+              .catch(e => {
+                  addLog('[时间修改] 同步失败：连不上本地服务(' + e.message + ')，确认代理已开启', 'warning');
+              });
+        } catch (e) {
+            addLog('[时间修改] 同步异常：' + e.message, 'warning');
+        }
     }
 
     function createDevPanel() {

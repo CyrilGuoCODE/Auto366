@@ -293,10 +293,10 @@ var State = {
     aiThreshold: parseInt(localStorage.getItem('aiThreshold'), 10) || 50,
     aiWaiting: false,
     // ===== 时间修改修改（隶属"通用自动PK"，可关可开的子规则）=====
-    fishTimeEnabled: localStorage.getItem('fishTimeEnabled') === 'true',
+    pkTimeModEnabled: localStorage.getItem('pkTimeModEnabled') === 'true',
     // 秒数：未设置时为 null，面板显示 "-"；int32 全范围
-    fishTimeSeconds: (function() {
-        var raw = localStorage.getItem('fishTimeSeconds');
+    pkTimeModSeconds: (function() {
+        var raw = localStorage.getItem('pkTimeModSeconds');
         if (raw === null || raw === '') return null;
         var v = parseInt(raw, 10);
         return Number.isFinite(v) ? v : null;
@@ -2660,100 +2660,127 @@ var UI = {
         UI.autoPkPanel.appendChild(aiEnableRow);
 
         // ===== 时间修改修改（通用自动PK 的子规则）=====
-        var ftDivider = document.createElement('div');
-        ftDivider.style.borderTop = '1px solid rgba(255,255,255,0.2)';
-        ftDivider.style.margin = '8px 0 4px 0';
-        ftDivider.style.paddingTop = '6px';
-        ftDivider.style.fontSize = '14px';
-        ftDivider.style.fontWeight = 'bold';
-        ftDivider.style.color = '#fff';
-        ftDivider.textContent = '时间修改';
-        UI.autoPkPanel.appendChild(ftDivider);
+        var ptDivider = document.createElement('div');
+        ptDivider.style.borderTop = '1px solid rgba(255,255,255,0.2)';
+        ptDivider.style.margin = '8px 0 4px 0';
+        ptDivider.style.paddingTop = '6px';
+        ptDivider.style.fontSize = '14px';
+        ptDivider.style.fontWeight = 'bold';
+        ptDivider.style.color = '#fff';
+        ptDivider.textContent = '时间修改';
+        UI.autoPkPanel.appendChild(ptDivider);
 
-        var ftRow = document.createElement('div');
-        ftRow.style.display = 'flex';
-        ftRow.style.alignItems = 'center';
-        ftRow.style.marginBottom = '4px';
+        var ptRow = document.createElement('div');
+        ptRow.style.display = 'flex';
+        ptRow.style.alignItems = 'center';
+        ptRow.style.marginBottom = '4px';
 
-        var ftCheckbox = document.createElement('input');
-        ftCheckbox.type = 'checkbox';
-        ftCheckbox.checked = State.fishTimeEnabled;
-        ftCheckbox.style.marginRight = '6px';
-        ftCheckbox.style.cursor = 'pointer';
+        var ptCheckbox = document.createElement('input');
+        ptCheckbox.type = 'checkbox';
+        ptCheckbox.checked = State.pkTimeModEnabled;
+        ptCheckbox.style.marginRight = '6px';
+        ptCheckbox.style.cursor = 'pointer';
 
-        var ftSecInput = document.createElement('input');
-        // 秒数输入：未填显示占位 "-"；启用前禁用
-        ftSecInput.type = 'number';
-        ftSecInput.step = '1';
-        ftSecInput.min = String(INT32_MIN);
-        ftSecInput.max = String(INT32_MAX);
-        ftSecInput.placeholder = '-';
-        ftSecInput.value = (State.fishTimeSeconds === null || State.fishTimeSeconds === undefined)
-            ? '' : String(State.fishTimeSeconds);
-        ftSecInput.style.width = '70px';
-        ftSecInput.style.fontSize = '12px';
-        ftSecInput.style.textAlign = 'center';
-        ftSecInput.style.background = 'rgba(255,255,255,0.2)';
-        ftSecInput.style.color = '#fff';
-        ftSecInput.style.border = '1px solid rgba(255,255,255,0.3)';
-        ftSecInput.style.borderRadius = '3px';
-        ftSecInput.disabled = !State.fishTimeEnabled;
-        ftSecInput.style.opacity = State.fishTimeEnabled ? '1' : '0.5';
+        // 分 + 秒 两个输入框（总秒数 = 分×60 + 秒，存入 State.pkTimeModSeconds）
+        function ptMakeNumInput() {
+            var el = document.createElement('input');
+            el.type = 'number';
+            el.step = '1';
+            el.min = String(INT32_MIN);
+            el.max = String(INT32_MAX);
+            el.placeholder = '-';
+            el.style.width = '52px';
+            el.style.fontSize = '12px';
+            el.style.textAlign = 'center';
+            el.style.background = 'rgba(255,255,255,0.2)';
+            el.style.color = '#fff';
+            el.style.border = '1px solid rgba(255,255,255,0.3)';
+            el.style.borderRadius = '3px';
+            el.disabled = !State.pkTimeModEnabled;
+            el.style.opacity = State.pkTimeModEnabled ? '1' : '0.5';
+            return el;
+        }
+        var ptMinInput = ptMakeNumInput();
+        var ptSecInput = ptMakeNumInput();
 
-        ftCheckbox.addEventListener('change', function() {
-            State.fishTimeEnabled = ftCheckbox.checked;
-            localStorage.setItem('fishTimeEnabled', String(State.fishTimeEnabled));
-            ftSecInput.disabled = !State.fishTimeEnabled;
-            ftSecInput.style.opacity = State.fishTimeEnabled ? '1' : '0.5';
-            UI.addLogMessage('[时间修改] ' + (State.fishTimeEnabled ? '已启用' : '已禁用')
-                + (State.fishTimeEnabled && State.fishTimeSeconds === null ? '（秒数未填，提交不会被修改）' : ''), 'info');
-            FishTime.push();
-        });
-
-        ftSecInput.addEventListener('change', function() {
-            var raw = ftSecInput.value.trim();
-            if (raw === '') {
-                State.fishTimeSeconds = null;
-                localStorage.removeItem('fishTimeSeconds');
-                UI.addLogMessage('[时间修改] 秒数已清空（提交不会被修改）', 'info');
-                FishTime.push();
+        // 用总秒数回填分秒框（保留符号：负总秒显示为 -分/-秒里的分钟带号）
+        function ptFillFromTotal() {
+            if (State.pkTimeModSeconds === null || State.pkTimeModSeconds === undefined) {
+                ptMinInput.value = '';
+                ptSecInput.value = '';
                 return;
             }
-            var v = parseInt(raw, 10);
-            if (!Number.isFinite(v)) {
-                ftSecInput.value = (State.fishTimeSeconds === null ? '' : String(State.fishTimeSeconds));
+            var total = State.pkTimeModSeconds;
+            var sign = total < 0 ? -1 : 1;
+            var abs = Math.abs(total);
+            var mins = Math.floor(abs / 60) * sign;
+            var secs = (abs % 60) * sign;
+            ptMinInput.value = String(mins);
+            ptSecInput.value = String(secs);
+        }
+        ptFillFromTotal();
+
+        // 从分秒框读出总秒数并写入 State + 同步
+        function ptCommitFromInputs() {
+            var mRaw = ptMinInput.value.trim();
+            var sRaw = ptSecInput.value.trim();
+            if (mRaw === '' && sRaw === '') {
+                State.pkTimeModSeconds = null;
+                localStorage.removeItem('pkTimeModSeconds');
+                UI.addLogMessage('[时间修改] 时间已清空（提交不会被修改）', 'info');
+                PkTimeMod.push();
                 return;
             }
-            if (v < INT32_MIN) v = INT32_MIN;
-            if (v > INT32_MAX) v = INT32_MAX;
-            ftSecInput.value = String(v);
-            State.fishTimeSeconds = v;
-            localStorage.setItem('fishTimeSeconds', String(v));
-            UI.addLogMessage('[时间修改] 提交用时设为 ' + v + ' 秒（duration=' + (v * 1000) + 'ms）', 'info');
-            FishTime.push();
+            var m = mRaw === '' ? 0 : parseInt(mRaw, 10);
+            var s = sRaw === '' ? 0 : parseInt(sRaw, 10);
+            if (!Number.isFinite(m)) m = 0;
+            if (!Number.isFinite(s)) s = 0;
+            var total = m * 60 + s;
+            if (total < INT32_MIN) total = INT32_MIN;
+            if (total > INT32_MAX) total = INT32_MAX;
+            State.pkTimeModSeconds = total;
+            localStorage.setItem('pkTimeModSeconds', String(total));
+            ptFillFromTotal();
+            UI.addLogMessage('[时间修改] 提交用时设为 ' + m + '分' + s + '秒 = ' + total + '秒（duration=' + (total * 1000) + 'ms）', 'info');
+            PkTimeMod.push();
+        }
+
+        ptCheckbox.addEventListener('change', function() {
+            State.pkTimeModEnabled = ptCheckbox.checked;
+            localStorage.setItem('pkTimeModEnabled', String(State.pkTimeModEnabled));
+            ptMinInput.disabled = !State.pkTimeModEnabled;
+            ptSecInput.disabled = !State.pkTimeModEnabled;
+            ptMinInput.style.opacity = State.pkTimeModEnabled ? '1' : '0.5';
+            ptSecInput.style.opacity = State.pkTimeModEnabled ? '1' : '0.5';
+            UI.addLogMessage('[时间修改] ' + (State.pkTimeModEnabled ? '已启用' : '已禁用')
+                + (State.pkTimeModEnabled && State.pkTimeModSeconds === null ? '（时间未填，提交不会被修改）' : ''), 'info');
+            PkTimeMod.push();
         });
+        ptMinInput.addEventListener('change', ptCommitFromInputs);
+        ptSecInput.addEventListener('change', ptCommitFromInputs);
 
-        var ftEnableLabel = document.createElement('span');
-        ftEnableLabel.textContent = '启用';
-        ftEnableLabel.style.fontSize = '12px';
-        ftEnableLabel.style.marginRight = '8px';
+        var ptEnableLabel = document.createElement('span');
+        ptEnableLabel.textContent = '启用';
+        ptEnableLabel.style.fontSize = '12px';
+        ptEnableLabel.style.marginRight = '8px';
 
-        var ftSecLabel = document.createElement('span');
-        ftSecLabel.textContent = '秒数:';
-        ftSecLabel.style.fontSize = '12px';
-        ftSecLabel.style.marginRight = '4px';
+        var ptMinSuffix = document.createElement('span');
+        ptMinSuffix.textContent = '分';
+        ptMinSuffix.style.fontSize = '12px';
+        ptMinSuffix.style.margin = '0 4px 0 2px';
 
-        var ftSecSuffix = document.createElement('span');
-        ftSecSuffix.textContent = '秒';
-        ftSecSuffix.style.fontSize = '12px';
-        ftSecSuffix.style.marginLeft = '2px';
+        var ptSecSuffix = document.createElement('span');
+        ptSecSuffix.textContent = '秒';
+        ptSecSuffix.style.fontSize = '12px';
+        ptSecSuffix.style.marginLeft = '2px';
 
-        ftRow.appendChild(ftCheckbox);
-        ftRow.appendChild(ftEnableLabel);
-        ftRow.appendChild(ftSecLabel);
-        ftRow.appendChild(ftSecInput);
-        ftRow.appendChild(ftSecSuffix);
-        UI.autoPkPanel.appendChild(ftRow);
+        ptRow.appendChild(ptCheckbox);
+        ptRow.appendChild(ptEnableLabel);
+        ptRow.appendChild(ptMinInput);
+        ptRow.appendChild(ptMinSuffix);
+        ptRow.appendChild(ptSecInput);
+        ptRow.appendChild(ptSecSuffix);
+        UI.autoPkPanel.appendChild(ptRow);
 
         var statsRow = document.createElement('div');
         statsRow.style.fontSize = '11px';
@@ -3007,7 +3034,7 @@ var Scheduler = {
 //   词王争霸: .../word-king/submit
 // duration 单位为毫秒：用户填的是“秒”，落库时 ×1000。
 // ============================================================
-var FishTime = {
+var PkTimeMod = {
     // 改包逻辑已移到代理层(modules/proxy.js)，因为 submit 是 Electron 客户端的
     // 网络请求，不经过本注入页的 fetch/XHR——页面层 hook 永远拦不到。
     // 这里只负责把"启用/秒数"状态经本地 bucket server 推给代理层。
@@ -3018,12 +3045,12 @@ var FishTime = {
 
     push: function() {
         var payload = {
-            enabled: State.fishTimeEnabled === true,
-            seconds: (State.fishTimeSeconds === null || State.fishTimeSeconds === undefined)
-                ? null : State.fishTimeSeconds
+            enabled: State.pkTimeModEnabled === true,
+            seconds: (State.pkTimeModSeconds === null || State.pkTimeModSeconds === undefined)
+                ? null : State.pkTimeModSeconds
         };
         try {
-            fetch(FishTime.bucketBase() + '/fish-time', {
+            fetch(PkTimeMod.bucketBase() + '/pk-time', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -3047,14 +3074,14 @@ var FishTime = {
 
     // 初始化：把面板当前状态推一次，保证代理层与面板一致
     install: function() {
-        FishTime.push();
+        PkTimeMod.push();
     }
 };
 
 function init() {
     UI.createAutoPkPanel();
     UI.createLogPanel();
-    FishTime.install();
+    PkTimeMod.install();
     UI.addLogMessage('系统初始化完成', 'success');
     Loader.loadBucketFromServer();
 }
