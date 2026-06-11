@@ -23,15 +23,35 @@ class RulesManager {
   }
 
   migrateFromOldFormat(oldRules) {
-    const groups = oldRules.filter(r => r.isGroup);
-    const rules = oldRules.filter(r => !r.isGroup);
+    // 使用与 saveRule 一致的逻辑判断规则集：isGroup=true 或 (无type且无groupId)
+    const isRuleset = (item) => item.isGroup || (!item.type && !item.groupId);
+
+    const groups = oldRules.filter(r => isRuleset(r));
+    const rules = oldRules.filter(r => !isRuleset(r));
+
+    const assignedRuleIds = new Set();
 
     const result = groups.map(group => {
       const groupRules = rules.filter(r => r.groupId === group.id);
+      groupRules.forEach(r => assignedRuleIds.add(r.id));
+
       const { isGroup, groupId, ...rulesetData } = group;
+
+      // 根据是否包含注入规则计算 compatible
+      const hasInjectionRules = groupRules.some(r =>
+        r.type === 'zip-implant' || r.type === 'zip-implant-dynamic'
+      );
+      const autoCompatible = !hasInjectionRules;
+      const compatible = rulesetData.compatible !== undefined
+        ? rulesetData.compatible
+        : autoCompatible;
+
       const ruleset = {
         ...rulesetData,
         id: group.name ? generateId(group.name) : group.id,
+        compatible,
+        createdAt: rulesetData.createdAt || new Date().toISOString(),
+        updatedAt: rulesetData.updatedAt || new Date().toISOString(),
         rules: groupRules.map(rule => {
           const { groupId: gId, isGroup: isGrp, ...ruleData } = rule;
           return {
@@ -43,7 +63,8 @@ class RulesManager {
       return ruleset;
     });
 
-    const independentRules = rules.filter(r => !r.groupId);
+    // 孤儿规则：有 groupId 但对应分组不存在，或无 groupId 的独立规则
+    const independentRules = rules.filter(r => !assignedRuleIds.has(r.id));
     if (independentRules.length > 0) {
       result.push({
         id: generateId('独立规则'),
@@ -453,14 +474,34 @@ class RulesManager {
         const importedData = JSON.parse(content);
 
         if (Array.isArray(importedData)) {
+          let toImport;
           if (importedData.length > 0 && (importedData[0].isGroup !== undefined || importedData[0].groupId !== undefined)) {
-            const migrated = this.migrateFromOldFormat(importedData);
-            this.rulesets = [...this.rulesets, ...migrated];
+            toImport = this.migrateFromOldFormat(importedData);
           } else if (importedData.length > 0 && importedData[0].rules !== undefined) {
-            this.rulesets = [...this.rulesets, ...importedData];
+            toImport = importedData;
           } else {
-            this.rulesets = [...this.rulesets, ...importedData];
+            toImport = importedData;
           }
+
+          // 合并"独立规则"规则集，避免产生重复
+          const independentId = generateId('独立规则');
+          const existingIndependent = this.rulesets.find(rs => rs.id === independentId);
+          const importedIndependent = toImport.find(rs => rs.id === independentId);
+          const otherImported = toImport.filter(rs => rs.id !== independentId);
+
+          if (importedIndependent) {
+            if (existingIndependent) {
+              // 合并到已有的独立规则集
+              existingIndependent.rules = [...existingIndependent.rules, ...importedIndependent.rules];
+              existingIndependent.updatedAt = new Date().toISOString();
+              this.rulesets = [...this.rulesets, ...otherImported];
+            } else {
+              this.rulesets = [...this.rulesets, ...toImport];
+            }
+          } else {
+            this.rulesets = [...this.rulesets, ...toImport];
+          }
+
           this.saveRules();
           return { success: true, count: importedData.length };
         }

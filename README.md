@@ -30,7 +30,8 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - 优化rules.json本地规则存储结构
 - 单词PK自动化全面重构，加入超多新功能(By Fish)
 - 加入多选请求并导出(By 五羰基)
-- 新增修改时间规则（By ゼロ）
+- 新增听力修改时间（By ゼロ 五羰基）
+- 新增PK修改时间（By 五羰基）
 - auto-pk词王争霸支持（By ゼロ）
 - 添加版本化的内置规则集支持
 - 加入遥测数据分析上传
@@ -47,7 +48,6 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - 深色模式UI支持
 - 加入Funny模式
 - 优化听力自动化
-- 单词PK秒交(wutangji)
 - Log日志系统与通知系统优化
 
 #### 长期更新
