@@ -9,6 +9,7 @@ import CommunityUI from './community-ui.js';
 import SettingsUI from './settings-ui.js';
 import FileUI from './file-ui.js';
 import TutorialManager from './tutorial-ui.js';
+import AgreementUI from './agreement-ui.js';
 
 class Auto366App {
   constructor() {
@@ -22,6 +23,7 @@ class Auto366App {
     this.settingsUI = new SettingsUI(this.state, this.logManager);
     this.fileUI = new FileUI(this.state, this.logManager);
     this.tutorialUI = new TutorialManager(this.state, this.logManager);
+    this.agreementUI = new AgreementUI();
   }
 
   // 初始化应用
@@ -101,6 +103,10 @@ class Auto366App {
 
       // 初始化新手教程
       this.tutorialUI.init();
+
+      // 初始化协议检查（必须在教程之前，协议未同意则不能使用）
+      this.agreementUI.initEventListeners();
+      await this.agreementUI.checkAndShow();
 
       // 追踪应用启动完成
       this.captureEvent('app_initialized');

@@ -603,6 +603,43 @@
     </div>
     </div>
 
+    <!-- 用户协议浮层 -->
+    <div class="agreement-overlay" id="agreement-overlay">
+        <div class="agreement-overlay__card">
+            <div class="agreement-overlay__header">
+                <h2 class="agreement-overlay__title">用户协议与隐私政策</h2>
+                <p class="agreement-overlay__subtitle">请阅读以下协议后继续使用本软件</p>
+                <p class="agreement-overlay__updated" id="agreement-updated-at" style="display: none;"></p>
+            </div>
+            <div class="agreement-overlay__notice" id="agreement-cache-notice" style="display: none;">
+                <i class="bi bi-wifi-off"></i>
+                <span>网络错误，当前为缓存模式</span>
+            </div>
+            <div class="agreement-overlay__tabs">
+                <button type="button" class="agreement-overlay__tab is-active" id="agreement-tab-privacy">隐私协议</button>
+                <button type="button" class="agreement-overlay__tab" id="agreement-tab-terms">使用协议</button>
+            </div>
+            <div class="agreement-overlay__body">
+                <div class="agreement-overlay__panel is-active" id="agreement-panel-privacy">
+                    <div id="agreement-privacy-content"></div>
+                </div>
+                <div class="agreement-overlay__panel" id="agreement-panel-terms">
+                    <div id="agreement-terms-content"></div>
+                </div>
+            </div>
+            <div class="agreement-overlay__footer">
+                <div class="agreement-overlay__checkbox-wrap">
+                    <input type="checkbox" id="agreement-checkbox">
+                    <label for="agreement-checkbox">我已阅读并同意以上协议</label>
+                </div>
+                <div class="agreement-overlay__actions">
+                    <button type="button" class="btn--ghost" id="agreement-reject-btn">拒绝并退出</button>
+                    <button type="button" class="btn--primary" id="agreement-accept-btn" disabled>同意并继续</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 规则集管理模态框 -->
     <div class="modal" id="ruleGroupModal" style="display: none;">
         <div class="modal__content">

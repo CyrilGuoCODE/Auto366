@@ -114,4 +114,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAnalyticsEnabled: () => ipcRenderer.invoke('get-analytics-enabled'),
   setAnalyticsEnabled: (enabled) => ipcRenderer.invoke('set-analytics-enabled', enabled),
   captureEvent: (eventName, properties) => ipcRenderer.invoke('capture-event', eventName, properties),
+
+  // 协议相关API
+  getAgreementContent: () => ipcRenderer.invoke('get-agreement-content'),
+  acceptAgreement: (version) => ipcRenderer.invoke('accept-agreement', version),
+  rejectAgreement: () => ipcRenderer.invoke('reject-agreement'),
 })
