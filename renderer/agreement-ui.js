@@ -99,34 +99,222 @@ export default class AgreementUI {
 
   renderMarkdown(text) {
     if (!text) return '';
-    let html = text
-      // 标题
-      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      // 粗体
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      // 斜体
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      // 链接
-      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    
+    // 预处理：标准化换行符
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    let html = '';
+    const lines = text.split('\n');
+    let i = 0;
+    let inList = false;
+    let listType = '';
+    let inParagraph = false;
+    
+    while (i < lines.length) {
+      const line = lines[i];
+      
+      // 代码块
+      if (line.startsWith('```')) {
+        if (inParagraph) {
+          html += '</p>';
+          inParagraph = false;
+        }
+        if (inList) {
+          html += listType === 'ul' ? '</ul>' : '</ol>';
+          inList = false;
+        }
+        const lang = line.slice(3).trim();
+        let code = '';
+        i++;
+        while (i < lines.length && !lines[i].startsWith('```')) {
+          code += this.escapeHtml(lines[i]) + '\n';
+          i++;
+        }
+        html += `<pre><code class="language-${lang}">${code}</code></pre>`;
+        i++;
+        continue;
+      }
+      
+      // 表格
+      if (line.includes('|') && line.trim().startsWith('|')) {
+        if (inParagraph) {
+          html += '</p>';
+          inParagraph = false;
+        }
+        if (inList) {
+          html += listType === 'ul' ? '</ul>' : '</ol>';
+          inList = false;
+        }
+        
+        let tableHtml = '<table>';
+        let isHeader = true;
+        
+        while (i < lines.length && lines[i].includes('|') && lines[i].trim().startsWith('|')) {
+          const tableLine = lines[i].trim();
+          
+          // 跳过分隔行（如 |------|------| 或 |:---|---:|）
+          const splitCells = tableLine.split('|').filter(cell => cell.trim() !== '');
+          const isSeparator = splitCells.length > 0 && splitCells.every(cell => /^[\s\-:]+$/.test(cell) && cell.includes('-'));
+          if (isSeparator) {
+            i++;
+            continue;
+          }
+          
+          const cells = tableLine.split('|').slice(1, -1).map(cell => cell.trim());
+          
+          if (isHeader) {
+            tableHtml += '<thead><tr>';
+            cells.forEach(cell => {
+              tableHtml += `<th>${this.renderInline(cell)}</th>`;
+            });
+            tableHtml += '</tr></thead><tbody>';
+            isHeader = false;
+          } else {
+            tableHtml += '<tr>';
+            cells.forEach(cell => {
+              tableHtml += `<td>${this.renderInline(cell)}</td>`;
+            });
+            tableHtml += '</tr>';
+          }
+          i++;
+        }
+        
+        tableHtml += '</tbody></table>';
+        html += tableHtml;
+        continue;
+      }
+      
       // 水平线
-      .replace(/^---$/gm, '<hr>')
+      if (line.match(/^---+$/) || line.match(/^\*\*\*+$/) || line.match(/^___+$/)) {
+        if (inParagraph) {
+          html += '</p>';
+          inParagraph = false;
+        }
+        if (inList) {
+          html += listType === 'ul' ? '</ul>' : '</ol>';
+          inList = false;
+        }
+        html += '<hr>';
+        i++;
+        continue;
+      }
+      
+      // 标题
+      const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headingMatch) {
+        if (inParagraph) {
+          html += '</p>';
+          inParagraph = false;
+        }
+        if (inList) {
+          html += listType === 'ul' ? '</ul>' : '</ol>';
+          inList = false;
+        }
+        const level = headingMatch[1].length;
+        const content = this.renderInline(headingMatch[2]);
+        html += `<h${level}>${content}</h${level}>`;
+        i++;
+        continue;
+      }
+      
       // 无序列表
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      const ulMatch = line.match(/^[\*\-\+]\s+(.+)$/);
+      if (ulMatch) {
+        if (inParagraph) {
+          html += '</p>';
+          inParagraph = false;
+        }
+        if (!inList || listType !== 'ul') {
+          if (inList) {
+            html += listType === 'ul' ? '</ul>' : '</ol>';
+          }
+          html += '<ul>';
+          inList = true;
+          listType = 'ul';
+        }
+        html += `<li>${this.renderInline(ulMatch[1])}</li>`;
+        i++;
+        continue;
+      }
+      
       // 有序列表
-      .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-      // 段落（连续非空行）
-      .replace(/\n\n/g, '</p><p>')
-      // 换行
-      .replace(/\n/g, '<br>');
-
-    // 包裹列表项
-    html = html.replace(/(<li>.*?<\/li>(<br>)?)+/g, (match) => {
-      return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
-    });
-
+      const olMatch = line.match(/^\d+\.\s+(.+)$/);
+      if (olMatch) {
+        if (inParagraph) {
+          html += '</p>';
+          inParagraph = false;
+        }
+        if (!inList || listType !== 'ol') {
+          if (inList) {
+            html += listType === 'ul' ? '</ul>' : '</ol>';
+          }
+          html += '<ol>';
+          inList = true;
+          listType = 'ol';
+        }
+        html += `<li>${this.renderInline(olMatch[1])}</li>`;
+        i++;
+        continue;
+      }
+      
+      // 空行
+      if (line.trim() === '') {
+        if (inParagraph) {
+          html += '</p>';
+          inParagraph = false;
+        }
+        if (inList) {
+          html += listType === 'ul' ? '</ul>' : '</ol>';
+          inList = false;
+        }
+        i++;
+        continue;
+      }
+      
+      // 普通段落
+      if (!inParagraph) {
+        html += '<p>';
+        inParagraph = true;
+      } else {
+        html += '<br>';
+      }
+      html += this.renderInline(line);
+      i++;
+    }
+    
+    // 关闭未关闭的标签
+    if (inParagraph) {
+      html += '</p>';
+    }
+    if (inList) {
+      html += listType === 'ul' ? '</ul>' : '</ol>';
+    }
+    
     return html;
+  }
+  
+  renderInline(text) {
+    // 行内代码
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // 粗体
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    // 斜体
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    text = text.replace(/_(.+?)_/g, '<em>$1</em>');
+    // 链接
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    
+    return text;
+  }
+  
+  escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   async handleAccept() {

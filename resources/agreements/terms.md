@@ -50,4 +50,4 @@
 ---
 
 **许可证**：GNU General Public License v3.0  
-**项目地址**：https://github.com/cyrilguocode/Auto366
+**项目地址**：[GitHub 仓库](https://github.com/cyrilguocode/Auto366)

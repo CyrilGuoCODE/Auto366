@@ -52,10 +52,14 @@ class AgreementManager {
   async fetchRemoteAgreements() {
     return new Promise((resolve) => {
       const req = https.get(AGREEMENTS_API, (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        // 使用 Buffer 数组收集数据，避免 UTF-8 多字节字符被截断
+        const chunks = [];
+        res.on('data', (chunk) => { chunks.push(chunk); });
         res.on('end', () => {
           try {
+            // 合并所有 Buffer 后一次性转换为 UTF-8 字符串
+            const buffer = Buffer.concat(chunks);
+            const data = buffer.toString('utf-8');
             const parsed = JSON.parse(data);
             if (parsed.version && parsed.privacyPolicy && parsed.termsOfService) {
               resolve(parsed);
