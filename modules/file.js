@@ -85,13 +85,24 @@ class FileManager {
       if (cachePath && fs.existsSync(cachePath)) {
         const subDirs = ['flipbooks', 'homework', 'resources'];
         for (const subDir of subDirs) {
-          const dirPath = path.join(cachePath, subDir);
-          if (fs.existsSync(dirPath)) {
-            const count = this.countItems(dirPath);
+          const itemPath = path.join(cachePath, subDir);
+          if (!fs.existsSync(itemPath)) continue;
+
+          const stat = fs.statSync(itemPath);
+          if (stat.isDirectory()) {
+            const count = this.countItems(itemPath);
             totalFiles += count.files;
             totalDirs += count.dirs;
-            fs.rmSync(dirPath, { recursive: true, force: true });
-            fs.mkdirSync(dirPath, { recursive: true });
+            // 清空目录内容而非删除目录本身
+            const items = fs.readdirSync(itemPath);
+            for (const item of items) {
+              const fullPath = path.join(itemPath, item);
+              fs.rmSync(fullPath, { recursive: true, force: true });
+            }
+          } else {
+            // 是文件而非目录，直接删除
+            fs.unlinkSync(itemPath);
+            totalFiles++;
           }
         }
         results.push('天学网缓存已清理');
