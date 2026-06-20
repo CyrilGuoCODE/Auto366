@@ -1653,25 +1653,29 @@ class AnswerExtractor {
 
           let analysisText = '';
 
-          const analysisMatch = elementContent.match(/<analysis>\s*<!\[CDATA\[(.*?)]]>\s*<\/analysis>/s);
-          if (analysisMatch && analysisMatch[1]) {
-            analysisText = this.cleanHtmlText(analysisMatch[1]);
+          // 支持两种格式：CDATA 和直接内容
+          const analysisMatch = elementContent.match(/<analysis>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/analysis>/s);
+          if (analysisMatch && (analysisMatch[1] || analysisMatch[2])) {
+            analysisText = this.cleanHtmlText(analysisMatch[1] || analysisMatch[2]);
             analysisText = analysisText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
           }
 
-          const answersMatch = elementContent.match(/<answers>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answers>/);
-          if (answersMatch && answersMatch[1]) {
-            const answerText = answersMatch[1].trim();
-            const answerItem = {
-              question: `第${index + 1}题`,
-              answer: answerText,
-              content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
-              questionText: answerText,
-              pattern: 'XML正确答案模式',
-              elementId: elementId
-            };
-            answers.push(answerItem);
-            console.log(`添加答案项:`, answerItem);
+          // 支持两种格式：CDATA 和直接内容
+          const answersMatch = elementContent.match(/<answers>\s*(?:<!\[CDATA\[([^\]]*)]]>|([^<]*))\s*<\/answers>/);
+          if (answersMatch && (answersMatch[1] || answersMatch[2])) {
+            const answerText = (answersMatch[1] || answersMatch[2] || '').trim();
+            if (answerText) {
+              const answerItem = {
+                question: `第${index + 1}题`,
+                answer: answerText,
+                content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
+                questionText: answerText,
+                pattern: 'XML正确答案模式',
+                elementId: elementId
+              };
+              answers.push(answerItem);
+              console.log(`添加答案项:`, answerItem);
+            }
           } else if (analysisText) {
             const answerItem = {
               question: `第${index + 1}题`,
@@ -1684,10 +1688,11 @@ class AnswerExtractor {
             answers.push(answerItem);
             console.log(`添加答案项（使用analysis）:`, answerItem);
           } else {
-            const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/answer>/g)];
+            // 支持两种格式：CDATA 和直接内容
+            const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*(?:<!\[CDATA\[([^\]]*)]]>|([^<]*))\s*<\/answer>/g)];
 
             if (answerMatches.length > 0) {
-              const allAnswers = answerMatches.map(match => match[1].trim()).filter(text => text);
+              const allAnswers = answerMatches.map(match => (match[1] || match[2] || '').trim()).filter(text => text);
 
               if (allAnswers.length === 1) {
                 const answerItem = {
@@ -1735,21 +1740,22 @@ class AnswerExtractor {
           console.log(`处理paper element, ID: "${elementId}" (长度: ${elementId.length})`);
 
           const questionNoMatch = elementContent.match(/<question_no>(\d+)<\/question_no>/);
-          const questionTextMatch = elementContent.match(/<question_text>\s*<!\[CDATA\[(.*?)]]>\s*<\/question_text>/s);
+          // 支持两种格式：CDATA 和直接内容
+          const questionTextMatch = elementContent.match(/<question_text>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/question_text>/s);
 
           console.log(`处理element ${elementId}, 题目编号: ${questionNoMatch ? questionNoMatch[1] : '未找到'}, 题目文本匹配: ${!!questionTextMatch}`);
 
-          const knowledgeMatch = elementContent.match(/<knowledge>\s*<!\[CDATA\[([^\]]+)]]>\s*<\/knowledge>/);
+          const knowledgeMatch = elementContent.match(/<knowledge>\s*(?:<!\[CDATA\[([^\]]*)]]>|([^<]*))\s*<\/knowledge>/);
 
-          const attachmentMatch = elementContent.match(/<attachment>\s*<!\[CDATA\[(.*?)]]>\s*<\/attachment>/s);
+          const attachmentMatch = elementContent.match(/<attachment>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/attachment>/s);
           let attachmentAnswers = [];
-          if (attachmentMatch && attachmentMatch[1]) {
+          if (attachmentMatch && (attachmentMatch[1] || attachmentMatch[2])) {
             try {
-              const decodedAttachment = decodeURIComponent(attachmentMatch[1]);
+              const decodedAttachment = decodeURIComponent(attachmentMatch[1] || attachmentMatch[2]);
               const answersInAttachment = decodedAttachment.match(/<answers>([\s\S]*?)<\/answers>/);
               if (answersInAttachment) {
-                const itemMatches = [...answersInAttachment[0].matchAll(/<item[^>]*>\s*<!\[CDATA\[([\s\S]*?)]]>\s*<\/item>/g)];
-                attachmentAnswers = itemMatches.map(match => this.cleanHtmlText(match[1].trim())).filter(text => text);
+                const itemMatches = [...answersInAttachment[0].matchAll(/<item[^>]*>\s*(?:<!\[CDATA\[([\s\S]*?)]]>|([^<]*))\s*<\/item>/g)];
+                attachmentAnswers = itemMatches.map(match => this.cleanHtmlText((match[1] || match[2] || '').trim())).filter(text => text);
               }
             } catch (e) {
               console.log('解析attachment失败:', e);
@@ -1758,7 +1764,7 @@ class AnswerExtractor {
 
           if (questionNoMatch && questionTextMatch) {
             const questionNo = parseInt(questionNoMatch[1]);
-            let questionText = questionTextMatch[1];
+            let questionText = questionTextMatch[1] || questionTextMatch[2] || '';
 
             console.log(`原始题目文本: "${questionText}"`);
 
@@ -1767,11 +1773,12 @@ class AnswerExtractor {
 
             console.log(`清理后题目文本: "${questionText}"`);
 
-            const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*[^>]*>\s*<!\[CDATA\[(.*?)]]>\s*<\/option>/gs)];
+            // 支持两种格式：CDATA 和直接内容
+            const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*[^>]*>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/option>/gs)];
 
             let answerInfo = {
               question: `第${questionNo}题`,
-              answer: attachmentAnswers.length > 0 ? attachmentAnswers.join('\n') : (knowledgeMatch ? knowledgeMatch[1].trim() : '未找到答案'),
+              answer: attachmentAnswers.length > 0 ? attachmentAnswers.join('\n') : (knowledgeMatch ? (knowledgeMatch[1] || knowledgeMatch[2] || '').trim() : '未找到答案'),
               content: `题目: ${questionText}`,
               questionText: questionText,
               pattern: 'XML题目模式',
@@ -1786,14 +1793,14 @@ class AnswerExtractor {
 
             if (optionsMatches.length > 0) {
               const optionsText = optionsMatches.map(optionMatch =>
-                `${optionMatch[1]}. ${optionMatch[2].trim()}`
+                `${optionMatch[1]}. ${(optionMatch[2] || optionMatch[3] || '').trim()}`
               ).join('\n');
 
               answerInfo.content = `题目: ${questionText}\n\n选项:\n${optionsText}`;
               answerInfo.pattern = 'XML题目选项模式';
               answerInfo.options = optionsMatches.map(optionMatch => ({
                 id: optionMatch[1],
-                text: optionMatch[2].trim()
+                text: (optionMatch[2] || optionMatch[3] || '').trim()
               }));
             }
 
@@ -1889,8 +1896,21 @@ class AnswerExtractor {
 
           if (matchingQuestion) {
             console.log(`匹配成功 - 题目文本: "${matchingQuestion.questionText}"`);
+
+            // 如果答案是选项字母（如"A"），尝试获取选项内容
+            let answerContent = correctAns.answer;
+            if (matchingQuestion.options && matchingQuestion.options.length > 0) {
+              const answerLetter = correctAns.answer.trim().charAt(0).toUpperCase();
+              const matchedOption = matchingQuestion.options.find(opt => opt.id === answerLetter);
+              if (matchedOption && matchedOption.text) {
+                answerContent = matchedOption.text;
+              }
+            }
+
             mergedAnswers.push({
               ...correctAns,
+              answer: answerContent,
+              content: `答案: ${answerContent}`,
               questionText: matchingQuestion.questionText
             });
             successfulMerges++;
