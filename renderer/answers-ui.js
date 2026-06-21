@@ -23,12 +23,50 @@ class AnswersUI {
       });
     }
 
-    // 导出答案按钮
+    // 导出菜单
     const exportAnswersBtn = document.getElementById('exportAnswerBtn');
+    const exportAnswerDropdown = document.getElementById('exportAnswerDropdown');
+    const exportAnswerMenu = document.getElementById('exportAnswerMenu');
+
     if (exportAnswersBtn) {
       exportAnswersBtn.addEventListener('click', () => {
-        this.exportAnswers();
+        this.exportAnswersPdf();
       });
+    }
+
+    if (exportAnswerDropdown) {
+      exportAnswerDropdown.querySelectorAll('.export-menu__item').forEach(item => {
+        item.addEventListener('click', () => {
+          const action = item.dataset.action;
+          if (action === 'json') {
+            this.exportAnswersJson();
+          }
+        });
+      });
+    }
+
+    // 悬停显示/隐藏导出 JSON 菜单
+    let hideDropdownTimeout = null;
+    const showDropdown = () => {
+      if (hideDropdownTimeout) {
+        clearTimeout(hideDropdownTimeout);
+        hideDropdownTimeout = null;
+      }
+      if (exportAnswerDropdown) {
+        exportAnswerDropdown.classList.add('is-visible');
+      }
+    };
+    const hideDropdown = () => {
+      hideDropdownTimeout = setTimeout(() => {
+        if (exportAnswerDropdown) {
+          exportAnswerDropdown.classList.remove('is-visible');
+        }
+      }, 150);
+    };
+
+    if (exportAnswerMenu) {
+      exportAnswerMenu.addEventListener('mouseenter', showDropdown);
+      exportAnswerMenu.addEventListener('mouseleave', hideDropdown);
     }
   }
 
@@ -367,8 +405,8 @@ class AnswersUI {
     }
   }
 
-  // 导出答案文件
-  async exportAnswers() {
+  // 导出 JSON 答案文件
+  async exportAnswersJson() {
     if (!this.state.lastAnswersData || !this.state.lastAnswersData.answers || this.state.lastAnswersData.answers.length === 0) {
       this.logManager.addErrorLog('没有可导出的答案数据');
       return;
@@ -388,12 +426,10 @@ class AnswersUI {
         exportedBy: 'Auto366'
       };
 
-      // 创建下载链接
       const dataStr = JSON.stringify(exportData, null, 2);
       const dataBlob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(dataBlob);
 
-      // 创建下载链接
       const link = document.createElement('a');
       link.href = url;
       link.download = `answers_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
@@ -401,14 +437,286 @@ class AnswersUI {
       link.click();
       document.body.removeChild(link);
 
-      // 清理URL对象
       URL.revokeObjectURL(url);
 
-      this.logManager.addSuccessLog(`答案文件已导出: ${link.download}`);
+      this.logManager.addSuccessLog(`JSON 答案文件已导出: ${link.download}`);
 
     } catch (error) {
       this.logManager.addErrorLog(`导出失败: ${error.message}`);
     }
+  }
+
+  // 导出 PDF 答案文件
+  async exportAnswersPdf() {
+    if (!this.state.lastAnswersData || !this.state.lastAnswersData.answers || this.state.lastAnswersData.answers.length === 0) {
+      this.logManager.addErrorLog('没有可导出的答案数据');
+      return;
+    }
+
+    try {
+      this.logManager.addInfoLog('正在生成 PDF 答案文件...');
+
+      let appVersion = '1.0';
+      if (window.electronAPI && window.electronAPI.getAppVersion) {
+        appVersion = await window.electronAPI.getAppVersion();
+      }
+
+      const exportData = {
+        timestamp: new Date().toISOString(),
+        totalAnswers: this.state.lastAnswersData.answers.length,
+        answers: this.state.lastAnswersData.answers,
+        version: appVersion,
+        exportedBy: 'Auto366'
+      };
+
+      const htmlContent = this.buildPdfHtml(exportData, appVersion);
+
+      if (window.electronAPI && window.electronAPI.exportAnswersPdf) {
+        const result = await window.electronAPI.exportAnswersPdf(htmlContent);
+        if (result && result.success) {
+          this.logManager.addSuccessLog(`PDF 答案文件已导出: ${result.filePath}`);
+        } else {
+          this.logManager.addErrorLog(`导出 PDF 失败: ${result?.error || '未知错误'}`);
+        }
+      } else {
+        this.logManager.addErrorLog('当前环境不支持 PDF 导出');
+      }
+
+    } catch (error) {
+      this.logManager.addErrorLog(`导出 PDF 失败: ${error.message}`);
+    }
+  }
+
+  // 构建 PDF 水印网格 HTML
+  buildWatermarkGridHtml(cols = 2, rows = 3) {
+    const text = '文档与答案由Auto366提取并生成';
+    let html = '';
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const top = ((row + 0.5) / rows) * 100;
+        const left = ((col + 0.5) / cols) * 100;
+        html += `<div class="watermark" style="top: ${top}%; left: ${left}%;">${text}</div>`;
+      }
+    }
+    return html;
+  }
+
+  // 构建 PDF 用 HTML
+  buildPdfHtml(exportData, appVersion) {
+    const escapeHtml = (text) => {
+      if (text == null) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    };
+
+    const formatTime = (iso) => {
+      try {
+        const date = new Date(iso);
+        return date.toLocaleString('zh-CN');
+      } catch (e) {
+        return iso;
+      }
+    };
+
+    // 按文件分组
+    const organizedData = {};
+    exportData.answers.forEach(answer => {
+      const fileName = answer.file || '未知文件';
+      if (!organizedData[fileName]) {
+        organizedData[fileName] = [];
+      }
+      organizedData[fileName].push(answer);
+    });
+
+    let contentHtml = '';
+    Object.keys(organizedData).forEach(groupName => {
+      const answers = organizedData[groupName];
+      const answersHtml = answers.map((answer, index) => {
+        const questionText = answer.questionText || answer.question || '无题目';
+        const hasChildren = answer.children && Array.isArray(answer.children) && answer.children.length > 0;
+
+        let answerHtml = '';
+        if (hasChildren) {
+          const childrenHtml = answer.children.map((child, childIndex) => `
+            <div class="child-answer">
+              <div class="child-answer__header">${escapeHtml(child.question || `答案${childIndex + 1}`)}</div>
+              <div class="child-answer__content">${escapeHtml(child.answer || '无答案')}</div>
+            </div>
+          `).join('');
+          answerHtml = `
+            <div class="answer-item__main">${escapeHtml(answer.answer || '无答案')}</div>
+            <div class="answer-item__children">${childrenHtml}</div>
+          `;
+        } else {
+          answerHtml = `<div class="answer-item__answer">${escapeHtml(answer.answer || '无答案')}</div>`;
+        }
+
+        return `
+          <div class="answer-item">
+            <div class="answer-item__header">
+              <span class="answer-item__index">#${index + 1}</span>
+              <span class="answer-item__type">${escapeHtml(answer.pattern || '未知题型')}</span>
+            </div>
+            <div class="answer-item__question">${escapeHtml(questionText)}</div>
+            ${answerHtml}
+          </div>
+        `;
+      }).join('');
+
+      contentHtml += `
+        <div class="answer-group">
+          <div class="answer-group__header">
+            <span class="answer-group__title">${escapeHtml(groupName)}</span>
+            <span class="badge--count">${answers.length} 个答案</span>
+          </div>
+          <div class="answer-group__list">${answersHtml}</div>
+        </div>
+      `;
+    });
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Auto366 答案报告</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 40px;
+      font-family: "Microsoft YaHei", "PingFang SC", "SimHei", sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #333;
+      background: #fff;
+    }
+    .pdf-header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #2196f3;
+    }
+    .pdf-title {
+      font-size: 26px;
+      font-weight: bold;
+      color: #1976d2;
+      margin: 0 0 10px 0;
+    }
+    .pdf-meta {
+      font-size: 12px;
+      color: #666;
+    }
+    .pdf-meta span {
+      margin: 0 10px;
+    }
+    .answer-group {
+      margin-bottom: 25px;
+    }
+    .answer-group__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f5f5f5;
+      padding: 10px 14px;
+      border-left: 4px solid #2196f3;
+      margin-bottom: 12px;
+    }
+    .answer-group__title {
+      font-size: 15px;
+      font-weight: bold;
+      color: #333;
+    }
+    .badge--count {
+      font-size: 11px;
+      color: #fff;
+      background: #2196f3;
+      padding: 2px 10px;
+      border-radius: 9999px;
+    }
+    .answer-item {
+      padding: 12px 0;
+      border-bottom: 1px dashed #ddd;
+    }
+    .answer-item:last-child {
+      border-bottom: none;
+    }
+    .answer-item__header {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+    .answer-item__index {
+      font-weight: bold;
+      color: #2196f3;
+    }
+    .answer-item__type {
+      color: #666;
+    }
+    .answer-item__question {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #222;
+    }
+    .answer-item__answer {
+      color: #1565c0;
+      font-weight: 500;
+      white-space: pre-wrap;
+    }
+    .answer-item__main {
+      color: #333;
+      font-weight: 500;
+      margin-bottom: 8px;
+      white-space: pre-wrap;
+    }
+    .answer-item__children {
+      margin-left: 16px;
+      padding-left: 12px;
+      border-left: 2px solid #e0e0e0;
+    }
+    .child-answer {
+      margin-bottom: 8px;
+    }
+    .child-answer__header {
+      font-size: 12px;
+      font-weight: bold;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .child-answer__content {
+      color: #1565c0;
+      white-space: pre-wrap;
+    }
+    .watermark {
+      position: fixed;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 20px;
+      color: rgba(0, 0, 0, 0.08);
+      pointer-events: none;
+      z-index: 9999;
+      white-space: nowrap;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+  </style>
+</head>
+<body>
+  ${this.buildWatermarkGridHtml()}
+  <div class="pdf-header">
+    <h1 class="pdf-title">Auto366 答案报告</h1>
+    <div class="pdf-meta">
+      <span>生成时间：${formatTime(exportData.timestamp)}</span>
+      <span>Auto366版本：${escapeHtml(appVersion)}</span>
+      <span>答案总数：${exportData.totalAnswers}</span>
+    </div>
+  </div>
+  ${contentHtml}
+</body>
+</html>`;
   }
 
   // 显示分享结果模态框

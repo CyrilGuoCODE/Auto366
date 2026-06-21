@@ -226,10 +226,18 @@
                             <i class="bi bi-share"></i>
                             <span>分享答案</span>
                         </button>
-                        <button id="exportAnswerBtn" class="btn--export" title="导出答案文件">
-                            <i class="bi bi-upload"></i>
-                            <span>导出答案</span>
-                        </button>
+                        <div class="export-menu" id="exportAnswerMenu">
+                            <button id="exportAnswerBtn" class="btn--export" title="导出答案为PDF">
+                                <i class="bi bi-upload"></i>
+                                <span>导出答案</span>
+                            </button>
+                            <div class="export-menu__dropdown" id="exportAnswerDropdown">
+                                <button class="export-menu__item" data-action="json">
+                                    <i class="bi bi-file-earmark-json"></i>
+                                    <span>导出 JSON</span>
+                                </button>
+                            </div>
+                        </div>
                         <button id="replaceAudioBtn" class="btn--replace-audio" title="替换音频文件">
                             <i class="bi bi-arrow-repeat"></i>
                             <span>替换音频</span>

@@ -104,7 +104,7 @@ app.whenReady().then(async () => {
   windowManager.registerIpcHandlers();
   rulesManager.registerIpcHandlers();
   proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, rulesManager);
-  fileManager.registerIpcHandlers(mainWindow);
+  fileManager.registerIpcHandlers(mainWindow, windowManager);
   processMonitor.registerIpcHandlers(mainWindow);
 
   // 注册代理启动/停止的分析追踪

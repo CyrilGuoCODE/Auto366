@@ -444,12 +444,46 @@ class FileManager {
   }
 
   // 注册 IPC 处理器
-  registerIpcHandlers(mainWindow) {
+  registerIpcHandlers(mainWindow, windowManager) {
     ipcMain.handle('clear-cache', async () => {
       try {
         return await this.clearAllCache(mainWindow);
       } catch (error) {
         return { success: false, error: error.message, filesDeleted: 0, dirsDeleted: 0 };
+      }
+    });
+
+    ipcMain.handle('export-answers-pdf', async (e, htmlContent) => {
+      try {
+        if (!windowManager) {
+          return { success: false, error: '窗口管理器未初始化' };
+        }
+
+        const pdfResult = await windowManager.exportHtmlToPdf(htmlContent);
+        if (!pdfResult.success) {
+          return { success: false, error: pdfResult.error };
+        }
+
+        const filePath = await this.saveFileDialog({
+          defaultPath: `answers_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.pdf`,
+          filters: [
+            { name: 'PDF Files', extensions: ['pdf'] }
+          ]
+        });
+
+        if (!filePath) {
+          return { success: false, error: '用户取消保存' };
+        }
+
+        const writeOk = this.writeFile(filePath, pdfResult.pdfBuffer);
+        if (!writeOk) {
+          return { success: false, error: '写入 PDF 文件失败' };
+        }
+
+        return { success: true, filePath };
+      } catch (error) {
+        console.error('导出 PDF 失败:', error);
+        return { success: false, error: error.message };
       }
     });
 

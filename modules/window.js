@@ -159,6 +159,44 @@ class WindowManager {
   getMainWindow() {
     return this.mainWindow;
   }
+
+  // 将 HTML 内容导出为 PDF 缓冲区
+  async exportHtmlToPdf(htmlContent) {
+    let hiddenWindow = null;
+    try {
+      hiddenWindow = new BrowserWindow({
+        show: false,
+        width: 1200,
+        height: 800,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+
+      const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`;
+      await hiddenWindow.loadURL(dataUrl);
+
+      // 等待页面加载并渲染完成
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      const pdfBuffer = await hiddenWindow.webContents.printToPDF({
+        marginsType: 1,
+        printBackground: true,
+        printSelectionOnly: false,
+        landscape: false
+      });
+
+      return { success: true, pdfBuffer };
+    } catch (error) {
+      console.error('生成 PDF 失败:', error);
+      return { success: false, error: error.message };
+    } finally {
+      if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+        hiddenWindow.destroy();
+      }
+    }
+  }
 }
 
 module.exports = WindowManager;

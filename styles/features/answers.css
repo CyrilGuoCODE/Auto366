@@ -500,3 +500,81 @@
 #leftContent .view-panel__controls .btn--clear:hover::before {
     color: var(--color-white) !important;
 }
+
+/* 导出按钮 */
+.export-menu {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.export-menu .btn--export {
+    border-radius: var(--radius-sm);
+    margin: 0;
+    justify-content: center;
+}
+
+.export-menu__dropdown {
+    position: absolute;
+    bottom: calc(100% + var(--space-xs));
+    left: 50%;
+    transform: translateX(-50%) translateY(0);
+    min-width: 110px;
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-xs);
+    display: none;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    z-index: var(--z-dropdown);
+    animation: exportMenuFadeIn var(--ease-fast);
+}
+
+@keyframes exportMenuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.export-menu__dropdown.is-visible {
+    display: flex;
+}
+
+.export-menu__item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--ease-fast);
+}
+
+.export-menu__item:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-primary);
+}
+
+.export-menu__item i {
+    font-size: var(--text-base);
+    color: var(--color-text-muted);
+}
+
+.export-menu__item:hover i {
+    color: var(--color-primary);
+}

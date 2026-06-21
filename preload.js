@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 文件操作
   clearCache: () => ipcRenderer.invoke('clear-cache'),
+  exportAnswersPdf: (htmlContent) => ipcRenderer.invoke('export-answers-pdf', htmlContent),
   resetCertificate: () => ipcRenderer.invoke('reset-certificate'),
   restartApp: () => ipcRenderer.invoke('restart-app'),
   openUp366: () => ipcRenderer.invoke('open-up366'),
