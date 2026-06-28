@@ -22,6 +22,8 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 ### 新版本(v0.9.1)已完成
 
 - [新功能]加入导出答案为PDF功能
+- [新功能]自动填空支持选择题Beta版(By ゼロ)
+- [新功能]加入TUN抓包模式
 - [BUG修复]修复缓存清理失败ENOTDIR问题(By ゼロ)
 
 ### BUG问题

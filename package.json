@@ -37,6 +37,7 @@
   "build": {
     "appId": "com.auto366.app",
     "productName": "Auto366",
+    "electronLanguages": ["zh-CN"],
     "directories": {
       "output": "dist"
     },
@@ -60,6 +61,14 @@
       "target": "nsis",
       "icon": "icon.png",
       "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052"
     },
     "publish": {
       "provider": "github",
