@@ -1,0 +1,119 @@
+/* TUN 强制软包模式 - 仅作用于设置面板内的 TUN 设置组 */
+.tun-processes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.tun-processes__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    margin-bottom: var(--space-xs);
+}
+
+.tun-processes__title {
+    font-size: var(--text-base);
+    color: var(--color-text);
+}
+
+.tun-processes__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    max-height: 240px;
+    overflow-y: auto;
+    padding: var(--space-xs);
+    background: var(--color-bg-muted);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+}
+
+.tun-processes__list:empty::after {
+    content: '暂无进程，点击"添加进程"按钮添加';
+    display: block;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    padding: var(--space-sm);
+    text-align: center;
+}
+
+.tun-process-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-xs);
+    transition: background var(--ease-normal);
+}
+
+.tun-process-item:hover {
+    background: var(--color-bg-hover);
+}
+
+.tun-process-item__label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+}
+
+.tun-process-item__label input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.tun-process-item__name {
+    font-size: var(--text-sm);
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono, monospace);
+}
+
+.tun-process-item__remove {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-xs);
+    transition: all var(--ease-normal);
+    padding: 0;
+}
+
+.tun-process-item__remove:hover {
+    background: var(--color-danger-50);
+    color: var(--color-danger);
+}
+
+.tun-processes__status {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-xs);
+    line-height: var(--leading-normal);
+}
+
+.tun-processes__status--running {
+    color: var(--color-success-text);
+    background: var(--color-success-bg);
+}
+
+.tun-processes__status--stopped {
+    color: var(--color-text-muted);
+    background: var(--color-bg-muted);
+}

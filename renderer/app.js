@@ -65,6 +65,9 @@ class Auto366App {
       // 初始化数据分析设置
       this.settingsUI.initAnalyticsSettings();
 
+      // 初始化 TUN 强制软包模式设置
+      this.settingsUI.initTunSettings();
+
       // 绑定更新按钮点击事件
       this.bindUpdateButtons();
 

@@ -416,6 +416,35 @@
                             </div>
                         </div>
                         <div class="setting-group">
+                            <h4>TUN 强制软包模式</h4>
+                            <div class="setting-item">
+                                <div class="setting-item__content">
+                                    <label>
+                                        <input type="checkbox" id="tunModeEnabled">
+                                        <span>启用 TUN 强制软包模式</span>
+                                    </label>
+                                    <div class="setting-item__description">
+                                        启用后将创建虚拟网卡，将所选进程的流量强制重定向到 Auto366 代理，无需在天学网客户端中手动设置代理
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-item__content">
+                                    <div class="tun-processes">
+                                        <div class="tun-processes__header">
+                                            <span class="tun-processes__title">选择需要重定向的进程:</span>
+                                            <button type="button" id="addTunProcessBtn" class="btn--ghost">
+                                                <i class="bi bi-plus"></i>
+                                                <span>添加进程</span>
+                                            </button>
+                                        </div>
+                                        <div id="tunProcessList" class="tun-processes__list"></div>
+                                        <div class="tun-processes__status" id="tunStatusText"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-group">
                             <h4>规则设置</h4>
                             <div class="setting-item">
                                 <div class="setting-item__content">

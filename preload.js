@@ -104,6 +104,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopProcessMonitor: () => ipcRenderer.invoke('stop-process-monitor'),
   getProcessMonitorStatus: () => ipcRenderer.invoke('get-process-monitor-status'),
 
+  // TUN 强制软包模式API
+  startTun: () => ipcRenderer.invoke('start-tun'),
+  stopTun: () => ipcRenderer.invoke('stop-tun'),
+  getTunStatus: () => ipcRenderer.invoke('get-tun-status'),
+  setTunProcesses: (processes) => ipcRenderer.invoke('set-tun-processes', processes),
+  getTunProcesses: () => ipcRenderer.invoke('get-tun-processes'),
+  onTunStatus: (callback) => ipcRenderer.on('tun-status', callback),
+
   // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
     return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);

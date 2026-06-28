@@ -1997,6 +1997,7 @@ class ProxyServer {
     this.startBucketServer();
 
     console.log(`万能答案获取代理服务器已启动: 127.0.0.1:${this.proxyPort}`);
+    this.isRunning = true;
     this.safeIpcSend('proxy-status', {
       running: true,
       host: '127.0.0.1',

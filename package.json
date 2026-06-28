@@ -55,6 +55,10 @@
       {
         "from": "./resources/init.mp3",
         "to": "../"
+      },
+      {
+        "from": "./resources/tun",
+        "to": "../tun"
       }
     ],
     "win": {

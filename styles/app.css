@@ -20,6 +20,7 @@
 @import "./features/community.css";
 @import "./features/settings.css";
 @import "./features/logs.css";
+@import "./features/tun.css";
 
 /* 浮窗/弹窗/覆盖层 */
 @import "./overlay/appreciation.css";

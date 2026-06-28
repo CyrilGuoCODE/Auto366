@@ -11,6 +11,7 @@ const RulesLoader = require('./modules/rules-loader');
 const ProcessMonitor = require('./modules/process-monitor');
 const AnalyticsManager = require('./modules/analytics');
 const AgreementManager = require('./modules/agreement');
+const TunManager = require('./modules/tun');
 
 const SUPABASE_URL = 'https://myenzpblosjnrtvicdor.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU';
@@ -27,6 +28,7 @@ let rulesLoader;
 let processMonitor;
 let analyticsManager;
 let agreementManager;
+let tunManager;
 
 process.on('uncaughtException', (error) => {
   if (error.code === 'ECONNRESET') {
@@ -100,12 +102,14 @@ app.whenReady().then(async () => {
   processMonitor = new ProcessMonitor();
   agreementManager = new AgreementManager();
   agreementManager.init();
+  tunManager = new TunManager(proxyServer);
 
   windowManager.registerIpcHandlers();
   rulesManager.registerIpcHandlers();
   proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, rulesManager);
   fileManager.registerIpcHandlers(mainWindow, windowManager);
   processMonitor.registerIpcHandlers(mainWindow);
+  tunManager.registerIpcHandlers(mainWindow);
 
   // 注册代理启动/停止的分析追踪
   ipcMain.on('start-answer-proxy', () => {
@@ -142,6 +146,9 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', async () => {
+  if (tunManager) {
+    tunManager.stop();
+  }
   if (analyticsManager) {
     analyticsManager.capture('app_closed');
     await analyticsManager.shutdown();
