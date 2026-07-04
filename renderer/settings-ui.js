@@ -220,6 +220,8 @@ class SettingsUI {
             tunToggle.checked = !enabled;
           } else {
             this.logManager.addSuccessLog(result.message);
+            // 通知控制栏按钮同步状态
+            document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running: enabled } }));
           }
         } catch (error) {
           this.logManager.addErrorLog(`TUN 操作失败: ${error.message}`);
@@ -239,6 +241,15 @@ class SettingsUI {
           this._handleTunStatusChange(data);
         });
       }
+
+      // 监听控制栏触发的 TUN 状态变化，同步复选框
+      document.addEventListener('tun-state-changed', (e) => {
+        const running = e.detail.running;
+        if (tunToggle.checked !== running) {
+          tunToggle.checked = running;
+          this._updateTunStatusText();
+        }
+      });
     } catch (error) {
       console.error('初始化 TUN 设置失败:', error);
     }
@@ -420,19 +431,27 @@ class SettingsUI {
     const toggle = document.getElementById('tunModeEnabled');
     if (!toggle) return;
 
+    let running = null;
     if (data.type === 'started') {
       toggle.checked = true;
+      running = true;
       this.logManager.addSuccessLog(data.message || 'TUN 强制软包模式已启动');
     } else if (data.type === 'stopped') {
       toggle.checked = false;
+      running = false;
       this.logManager.addInfoLog(data.message || 'TUN 强制软包模式已停止');
     } else if (data.type === 'error') {
       this.logManager.addErrorLog(data.message || 'TUN 错误');
       if (data.running === false) {
         toggle.checked = false;
+        running = false;
       }
     }
     this._updateTunStatusText();
+    // 通知控制栏按钮同步状态（仅在主进程主动通知的意外状态变化时）
+    if (running !== null) {
+      document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running } }));
+    }
   }
 
   // 处理清理缓存

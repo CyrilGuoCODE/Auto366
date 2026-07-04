@@ -163,4 +163,86 @@
     box-shadow: var(--shadow-primary);
 }
 
+/* TUN 增强模式开关按钮（专业模式：仅图标） */
+.btn--tun-toggle {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-bg-panel);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--ease-fast);
+    font-size: var(--text-base);
+    line-height: 1;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+/* 专业模式：隐藏文字标签 */
+.btn--tun-toggle > span {
+    display: none;
+}
+
+.btn--tun-toggle:hover {
+    background: var(--color-bg-muted);
+    border-color: var(--color-gray-400);
+    color: var(--color-text-heading);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn--tun-toggle:active {
+    transform: scale(0.95);
+}
+
+.btn--tun-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* TUN 开启状态：闪电填充 + 主色高亮 */
+.btn--tun-toggle.is-active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-white);
+    box-shadow: var(--shadow-primary);
+}
+
+.btn--tun-toggle.is-active:hover {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+}
+
+/* 简单模式适配：取消固定尺寸，参与控制栏 hover 展开动画 */
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--tun-toggle {
+    width: auto;
+    height: auto;
+    min-width: 0;
+    padding: var(--space-sm) 10px;
+    border-radius: var(--radius-md);
+    transform: none;
+    box-shadow: none;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--tun-toggle:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--tun-toggle:active {
+    transform: none;
+}
+
+/* 简单模式：显示文字标签（展开动画由 simple-mode.css 通用规则控制） */
+html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--tun-toggle > span {
+    display: block;
+}
+
 

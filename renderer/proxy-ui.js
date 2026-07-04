@@ -37,6 +37,85 @@ class ProxyUI {
 
     // 初始化代理端口设置
     this.initProxyPortSettings();
+
+    // 初始化 TUN 增强模式开关（控制栏）
+    this.initTunToggle();
+  }
+
+  // 初始化 TUN 增强模式开关（控制栏图标按钮）
+  initTunToggle() {
+    const tunBtn = document.getElementById('toggleTunBtn');
+    if (!tunBtn) return;
+
+    // 应用启动时 TUN 尚未运行，按钮初始为关闭状态
+    this.updateTunButtonState(false);
+
+    // 点击切换 TUN
+    tunBtn.addEventListener('click', async () => {
+      if (tunBtn.disabled) return;
+      const willEnable = !tunBtn.classList.contains('is-active');
+      tunBtn.disabled = true;
+      try {
+        const result = willEnable
+          ? await window.electronAPI.startTun()
+          : await window.electronAPI.stopTun();
+        if (result.success) {
+          this.updateTunButtonState(willEnable);
+          // 记录自动启动偏好：开启则下次自动启动，关闭则不自动启动
+          localStorage.setItem('tun-autostart', willEnable ? 'true' : 'false');
+          this.logManager.addSuccessLog(result.message);
+          // 通知设置页同步复选框状态
+          document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running: willEnable } }));
+        } else {
+          this.logManager.addErrorLog(`TUN ${willEnable ? '启动' : '停止'}失败: ${result.message}`);
+        }
+      } catch (error) {
+        this.logManager.addErrorLog(`TUN 操作失败: ${error.message}`);
+      } finally {
+        tunBtn.disabled = false;
+      }
+    });
+
+    // 监听设置页/自动启动触发的状态变化，同步按钮
+    document.addEventListener('tun-state-changed', (e) => {
+      this.updateTunButtonState(e.detail.running);
+    });
+  }
+
+  // 更新 TUN 按钮视觉状态
+  updateTunButtonState(running) {
+    const tunBtn = document.getElementById('toggleTunBtn');
+    if (!tunBtn) return;
+    const iconClass = running ? 'bi-lightning-charge-fill' : 'bi-lightning-charge';
+    if (running) {
+      tunBtn.classList.add('is-active');
+      tunBtn.title = 'TUN 增强模式（开启）';
+    } else {
+      tunBtn.classList.remove('is-active');
+      tunBtn.title = 'TUN 增强模式（关闭）';
+    }
+    tunBtn.innerHTML = `<i class="bi ${iconClass}"></i><span>增强模式</span>`;
+  }
+
+  // 代理启动后自动启动 TUN（若用户已开启自动启动偏好）
+  _autoStartTun() {
+    if (localStorage.getItem('tun-autostart') !== 'true') return;
+    // 延迟一会确保代理完全就绪
+    setTimeout(async () => {
+      try {
+        const status = await window.electronAPI.getTunStatus();
+        if (status.running) return;
+        const result = await window.electronAPI.startTun();
+        if (result.success) {
+          this.updateTunButtonState(true);
+          this.logManager.addSuccessLog('TUN 增强模式已自动启动');
+          // 通知设置页同步复选框状态
+          document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running: true } }));
+        }
+      } catch (e) {
+        // 静默失败
+      }
+    }, 1000);
   }
 
   // 初始化答案获取开关
@@ -349,6 +428,9 @@ class ProxyUI {
       }
 
       this.logManager.addInfoLog(`代理服务器已启动，监听地址: ${host}:${port}`);
+
+      // 代理启动后，若用户已开启 TUN 自动启动偏好，则自动启动 TUN
+      this._autoStartTun();
     } else {
       this.state.isProxyRunning = false;
       statusElement.textContent = '已停止';
