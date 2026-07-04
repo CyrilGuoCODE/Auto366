@@ -26,6 +26,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [新功能]加入TUN抓包模式Beta版(为解决6.12版本抓包失败问题)
 - [BUG修复]修复缓存清理失败ENOTDIR问题(By ゼロ)
 - [功能优化]优化自动听力中完成率与正确率以及UI显示
+- [BUG修复]自动填空在题干中间时的匹配问题
 
 ### BUG问题
 

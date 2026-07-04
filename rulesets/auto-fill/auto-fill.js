@@ -69,7 +69,8 @@ function loadBucketFromServer() {
                                 answer: answerText,
                                 answerIndex: answerIndex,
                                 index: i.index,
-                                elementId: i.elementId
+                                elementId: i.elementId,
+                                questionNum: questionNum
                             });
 
                             multiAnswerMap.get(questionNum).push({
@@ -115,6 +116,9 @@ function loadBucketFromServer() {
                 // 将多空题数据存储到全局变量
                 window.multiAnswerMap = multiAnswerMap;
                 window.elementAnswerMap = elementAnswerMap;
+
+                // 题号→答案映射表（用于选择题题号精确匹配）
+                window.questionNumAnswerMap = answerMap;
 
                 bucketLoaded = true;
                 bucketError = null;
@@ -220,7 +224,6 @@ function findAnswerByContent(questionText) {
 async function fillChoiceQuestions() {
     let filledCount = 0;
 
-    // 获取所有选项容器
     const optionElements = document.querySelectorAll('.u3-option__content.is-text');
     addLogMessage(`选择题检测: 找到 ${optionElements.length} 个选项元素`, 'info');
     if (optionElements.length === 0) return 0;
@@ -231,10 +234,8 @@ async function fillChoiceQuestions() {
 
     for (let i = 0; i < optionElements.length; i++) {
         if (assignedOptions.has(i)) continue;
-
         const opt = optionElements[i];
 
-        // 向上查找最低的包含 >= 2 个选项的祖先
         let container = null;
         let el = opt.parentElement;
         while (el && el !== document.body) {
@@ -245,10 +246,8 @@ async function fillChoiceQuestions() {
             }
             el = el.parentElement;
         }
-
         if (!container) continue;
 
-        // 如果容器选项过多（>6），尝试在子元素中找更小的容器
         let finalContainer = container;
         const totalOpts = container.querySelectorAll('.u3-option__content.is-text').length;
         if (totalOpts > 6) {
@@ -262,8 +261,6 @@ async function fillChoiceQuestions() {
         }
 
         questionContainers.push(finalContainer);
-
-        // 标记该容器内所有选项为已分组
         for (let j = i; j < optionElements.length; j++) {
             if (finalContainer.contains(optionElements[j])) {
                 assignedOptions.add(j);
@@ -278,108 +275,248 @@ async function fillChoiceQuestions() {
         const options = container.querySelectorAll('.u3-option__content.is-text');
         if (options.length === 0) continue;
 
-        // 获取题号（仅用于日志显示）
-        let questionNum = qi + 1;
+        // 获取题号（多层回退检测）
+        let questionNum = 0;
+        // 方法1: 标准题号元素
         const noEl = container.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"]');
         if (noEl) {
             const parsed = parseInt(noEl.textContent.trim());
             if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
         }
+        // 方法2: u3-input__prepared 元素（填空题使用的题号标记）
+        if (!questionNum) {
+            const preparedEl = container.querySelector('.u3-input__prepared');
+            if (preparedEl) {
+                const parsed = parseInt(preparedEl.textContent.trim());
+                if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
+            }
+        }
+        // 方法3: data 属性
+        if (!questionNum) {
+            const dataNum = container.getAttribute('data-question-no') || container.getAttribute('data-index');
+            if (dataNum) {
+                const parsed = parseInt(dataNum);
+                if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
+            }
+        }
+        // 方法4: 向上查找父容器中的题号
+        if (!questionNum) {
+            let parent = container.parentElement;
+            for (let up = 0; up < 5 && parent; up++) {
+                const parentNoEl = parent.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared');
+                if (parentNoEl) {
+                    const parsed = parseInt(parentNoEl.textContent.trim());
+                    if (!isNaN(parsed) && parsed > 0) {
+                        questionNum = parsed;
+                        break;
+                    }
+                }
+                parent = parent.parentElement;
+            }
+        }
+        // 回退: 使用容器索引
+        if (!questionNum) questionNum = qi + 1;
 
-        // 获取题目文本（用于内容匹配），排除选项内的文本
+        // 获取题目文本（多层回退），排除选项内的文本
         let questionText = '';
+        // 方法1: .u3-question-text（排除选项内的）
         const allTextEls = container.querySelectorAll('.u3-question-text');
         for (const textEl of allTextEls) {
             if (textEl.closest('.u3-option__content')) continue;
             questionText = textEl.textContent.trim();
             break;
         }
-
-        // 收集选项文本
-        const optionTexts = [];
-        for (const opt of options) {
-            const optTextEl = opt.querySelector('.u3-question-text');
-            const optText = optTextEl ? optTextEl.textContent.trim() : opt.textContent.trim();
-            optionTexts.push(optText);
+        // 方法2: .u3-question-stem 或 .u3-stem
+        if (!questionText) {
+            const stemEl = container.querySelector('.u3-question-stem, .u3-stem, [class*="question-stem"]');
+            if (stemEl) questionText = stemEl.textContent.trim();
         }
-
-        // 检查是否所有选项都已选中
-        const allChecked = [...options].every(opt => opt.classList.contains('is-checked'));
-        if (allChecked) continue;
-
-        // === 答案匹配策略（不依赖题号，适配幻灯片翻页） ===
-
-        // 策略1: 内容匹配 — 用题目文本在答案库中查找，并验证答案出现在选项中
-        let targetAnswer = null;
-        if (questionText) {
-            const match = findAnswerByContent(questionText);
-            if (match) {
-                const cleanMatchAns = match.answer.replace(/\s+/g, '').toLowerCase();
-                if (optionTexts.some(t => t.replace(/\s+/g, '').toLowerCase() === cleanMatchAns)) {
-                    targetAnswer = match.answer;
-                }
-            }
-        }
-
-        // 策略2: 选项反查 — 遍历所有答案，找到出现在当前选项中的那个
-        if (!targetAnswer) {
-            for (const ans of answers) {
-                if (!ans) continue;
-                const cleanAns = ans.replace(/\s+/g, '').toLowerCase();
-                if (optionTexts.some(t => t.replace(/\s+/g, '').toLowerCase() === cleanAns)) {
-                    targetAnswer = ans;
+        // 方法3: 向上查找父容器中的题目文本
+        if (!questionText) {
+            let parent = container.parentElement;
+            for (let up = 0; up < 3 && parent; up++) {
+                const parentTextEl = parent.querySelector('.u3-question-text, .u3-question-stem, [class*="question-text"]');
+                if (parentTextEl && !parentTextEl.closest('.u3-option__content')) {
+                    questionText = parentTextEl.textContent.trim();
                     break;
                 }
+                parent = parent.parentElement;
+            }
+        }
+        // 方法4: data 属性
+        if (!questionText) {
+            questionText = container.getAttribute('data-question-text') || container.getAttribute('data-stem') || '';
+        }
+
+        // 收集选项信息：原始文本、清洗文本（去字母前缀）、字母标签
+        const optionsData = [];
+        for (const opt of options) {
+            const optTextEl = opt.querySelector('.u3-question-text');
+            const rawText = optTextEl ? optTextEl.textContent.trim() : opt.textContent.trim();
+            // 从选项文本中提取字母标签（如 "C.beer" → letter="C", cleanText="beer"）
+            const letterMatch = rawText.match(/^([A-Fa-f])[.、\s]+/);
+            const letterLabel = letterMatch ? letterMatch[1].toUpperCase() : null;
+            const cleanText = letterMatch ? rawText.substring(letterMatch[0].length).trim() : rawText;
+            optionsData.push({ element: opt, rawText, cleanText, letterLabel });
+        }
+
+        const allChecked = optionsData.every(od => od.element.classList.contains('is-checked'));
+        if (allChecked) continue;
+
+        const cleanTextsLower = optionsData.map(od => od.cleanText.replace(/\s+/g, '').toLowerCase());
+
+        // 辅助函数：判断答案文本是否匹配某个选项
+        // answerText: 答案文本（可能短如"scent"，也可能长如"greet the new day with songs"）
+        // optCleanText: 选项清洗后的文本（通常较短，如"scent", "greet", "kingdom"）
+        function answerMatchesOption(answerText, optCleanText) {
+            const ansLower = answerText.toLowerCase().trim();
+            const optLower = optCleanText.toLowerCase().trim();
+            const ansClean = ansLower.replace(/\s+/g, '');
+            const optClean = optLower.replace(/\s+/g, '');
+
+            // 精确匹配
+            if (ansClean === optClean) return true;
+
+            // 答案较短时：答案包含选项（如 "C.beer" → "cbeer" 包含 "beer"）
+            if (ansClean.length <= optClean.length + 5 && ansClean.includes(optClean)) return true;
+
+            // 答案比选项长很多时：只有答案以选项文本开头才匹配
+            // 这表示答案是选项的前缀截断（如 "greet" 匹配 "greet the new day with songs"）
+            // 但不会误匹配中间出现的词（如 "scent" 不匹配 "breathe in the sweet scent"）
+            if (ansLower.length > optLower.length + 5 && ansLower.startsWith(optLower)) return true;
+
+            return false;
+        }
+
+        // 辅助函数：从候选项中选择最佳答案
+        function pickBestAnswer(candidatesList) {
+            if (candidatesList.length === 0) return null;
+            if (candidatesList.length === 1) return candidatesList[0].answer;
+
+            // 按相似度降序，相同时优先选更长的答案（更具体的描述，消歧效果更好）
+            candidatesList.sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return (b.answer.length || 0) - (a.answer.length || 0);
+            });
+            return candidatesList[0].answer;
+        }
+
+        // === 策略1: 内容匹配 — 用题目文本在答案库中查找，并验证答案出现在选项中 ===
+        let targetAnswer = null;
+        if (questionText) {
+            // 首先尝试 findAnswerByContent（相似度>60%的最佳匹配）
+            const match = findAnswerByContent(questionText);
+            if (match) {
+                for (let oi = 0; oi < optionsData.length; oi++) {
+                    if (answerMatchesOption(match.answer, optionsData[oi].cleanText)) {
+                        targetAnswer = optionsData[oi].cleanText;
+                        break;
+                    }
+                }
+            }
+            // 如果最佳匹配的答案不在选项中，遍历所有候选项（相似度>40%）
+            if (!targetAnswer) {
+                for (const item of rawAnswerData) {
+                    const matchText = item.questionText || item.question || '';
+                    if (!matchText) continue;
+                    const sim = calculateTextSimilarity(questionText, matchText);
+                    if (sim < 40) continue;
+                    for (let oi = 0; oi < optionsData.length; oi++) {
+                        if (answerMatchesOption(item.answer, optionsData[oi].cleanText)) {
+                            targetAnswer = optionsData[oi].cleanText;
+                            break;
+                        }
+                    }
+                    if (targetAnswer) break;
+                }
             }
         }
 
-        // 策略3: 在 rawAnswerData 中查找更多答案
+        // === 策略2: 选项反查 — 严格防止跨题误匹配 ===
+        // 只在以下情况接受候选项：
+        // A) 题目文本存在 且 候选项的题目文本相似度 >= 20%
+        // B) 题目文本不存在 且 答案与选项精确匹配（排除长答案的前缀匹配，防止跨题污染）
+        if (!targetAnswer) {
+            const candidates = [];
+            const hasQText = !!questionText;
+            for (const item of rawAnswerData) {
+                if (!item.answer) continue;
+                // 检查答案是否匹配某个选项
+                let matchIndex = -1;
+                for (let oi = 0; oi < optionsData.length; oi++) {
+                    if (answerMatchesOption(item.answer, optionsData[oi].cleanText)) {
+                        matchIndex = oi;
+                        break;
+                    }
+                }
+                if (matchIndex === -1) continue;
+
+                if (hasQText) {
+                    // 路径A：题目文本存在时，必须验证相似度 >= 20%
+                    const itemQuestionText = item.questionText || item.question || '';
+                    if (!itemQuestionText) continue;
+                    const score = calculateTextSimilarity(questionText, itemQuestionText);
+                    if (score < 20) continue; // 相似度过低说明是不同题目，拒绝
+                    candidates.push({ answer: item.answer, score, matchIndex });
+                } else {
+                    // 路径B：题目文本不存在时，只接受精确匹配或短答案包含匹配
+                    // 拒绝长答案的前缀匹配（如 "greet the new day" 不应匹配 "greet"）
+                    const itemAns = item.answer.replace(/\s+/g, '').toLowerCase();
+                    const optText = optionsData[matchIndex].cleanText.replace(/\s+/g, '').toLowerCase();
+                    const isExact = itemAns === optText;
+                    const isShort = itemAns.length <= optText.length + 5;
+                    if (isExact || isShort) {
+                        candidates.push({ answer: item.answer, score: 0, matchIndex });
+                    }
+                }
+            }
+            targetAnswer = pickBestAnswer(candidates);
+        }
+
+        // === 策略3: 字母标签匹配 — 答案为单字母时直接匹配选项的字母标签 ===
         if (!targetAnswer) {
             for (const item of rawAnswerData) {
                 if (!item.answer) continue;
-                const cleanItemAns = item.answer.replace(/\s+/g, '').toLowerCase();
-                if (optionTexts.some(t => t.replace(/\s+/g, '').toLowerCase() === cleanItemAns)) {
-                    targetAnswer = item.answer;
+                const trimmed = item.answer.trim();
+                if (!/^[A-Fa-f]$/.test(trimmed)) continue;
+                const letter = trimmed.toUpperCase();
+                const matchIdx = optionsData.findIndex(od => od.letterLabel === letter);
+                if (matchIdx !== -1) {
+                    targetAnswer = optionsData[matchIdx].cleanText;
                     break;
                 }
             }
         }
 
-        addLogMessage(`选择题 ${questionNum}: 答案="${targetAnswer || '未找到'}", 选项=[${optionTexts.join(', ')}]`, 'info');
+        addLogMessage(`选择题 ${questionNum}: 题目="${questionText || '(空)'}", 答案="${targetAnswer || '未找到'}", 选项=[${optionsData.map(od => od.cleanText).join(', ')}]`, 'info');
 
         if (!targetAnswer) continue;
 
-        // 在选项中查找匹配的选项并点击
+        // === 选择匹配的选项并点击 ===
         let matched = false;
-        const cleanTarget = targetAnswer.replace(/\s+/g, '').toLowerCase();
 
-        for (let oi = 0; oi < options.length; oi++) {
-            const opt = options[oi];
-            if (opt.classList.contains('is-checked')) continue;
-
-            const optText = optionTexts[oi];
-            const cleanOpt = optText.replace(/\s+/g, '').toLowerCase();
-
-            // 精确匹配或模糊匹配
-            if (optText === targetAnswer || cleanOpt === cleanTarget) {
-                opt.click();
+        for (let oi = 0; oi < optionsData.length; oi++) {
+            const od = optionsData[oi];
+            if (od.element.classList.contains('is-checked')) continue;
+            if (answerMatchesOption(targetAnswer, od.cleanText)) {
+                od.element.click();
                 filledCount++;
-                addLogMessage(`选择题 ${questionNum} 选中: ${optText}`, 'success');
+                addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
                 await wait1(50);
                 matched = true;
                 break;
             }
         }
 
-        // 如果答案是单字母（A/B/C/D/E/F），按位置选择选项
+        // 字母回退：答案为单字母时按位置选择
         if (!matched && /^[A-Fa-f]$/.test(targetAnswer.trim())) {
             const letterIndex = targetAnswer.trim().toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
-            if (letterIndex < options.length) {
-                const opt = options[letterIndex];
-                if (!opt.classList.contains('is-checked')) {
-                    opt.click();
+            if (letterIndex < optionsData.length) {
+                const od = optionsData[letterIndex];
+                if (!od.element.classList.contains('is-checked')) {
+                    od.element.click();
                     filledCount++;
-                    addLogMessage(`选择题 ${questionNum} 按字母 ${targetAnswer.trim().toUpperCase()} 选中: ${optionTexts[letterIndex]}`, 'success');
+                    addLogMessage(`选择题 ${questionNum} 按字母 ${targetAnswer.trim().toUpperCase()} 选中: ${od.rawText}`, 'success');
                     await wait1(50);
                 }
             }
@@ -433,6 +570,7 @@ async function work() {
         addLogMessage('使用内容匹配模式', 'info');
         
         const questionTexts = document.getElementsByClassName('u3-question-text');
+        const processedScopes = new Set();
         
         for (let i = 0; i < questionTexts.length; i++) {
             const questionTextElement = questionTexts[i];
@@ -444,8 +582,15 @@ async function work() {
             }
 
             if (containerInputs.length > 0) {
-                // 获取纯文本内容，去除HTML标签和题号
-                const questionText = questionTextElement.textContent || questionTextElement.innerText || '';
+                // 跳过已处理过的容器（填空在题干中间时会有多个 .u3-question-text）
+                if (processedScopes.has(scopeEl)) continue;
+                processedScopes.add(scopeEl);
+
+                // 从整个题目容器获取完整题干文本（包含填空前后的部分）
+                // 克隆后移除 input/textarea/button/选项/题号等非题干元素
+                const clone = scopeEl.cloneNode(true);
+                clone.querySelectorAll('input, textarea, button, .u3-option__content, .u3-input__prepared, [contenteditable]').forEach(el => el.remove());
+                const questionText = (clone.textContent || '').replace(/\s+/g, ' ').trim();
                 const cleanQuestionText = questionText.replace(/^\d+[\s\.\)]*/, '').trim();
 
                 const match = findAnswerByContent(cleanQuestionText);
