@@ -50,7 +50,9 @@
         answerError: null,
         autoFillRunning: false,
         autoFillIndex: 0,
-        accuracyRate: 100,
+        completionRate: (function() { var v = parseInt(localStorage.getItem('a366_completion_rate')); return (!isNaN(v) && v >= 0 && v <= 100) ? v : 100; })(),
+        accuracyRate: (function() { var v = parseInt(localStorage.getItem('a366_accuracy_rate')); return (!isNaN(v) && v >= 0 && v <= 100) ? v : 100; })(),
+        _skipIndices: null,
         _wrongIndices: null,
         // ===== 听力时间修改（"内置-自动基础听力"子规则）=====
         listenTimeEnabled: localStorage.getItem('a366_listentime_enabled') === 'true',
@@ -114,10 +116,8 @@
                         <button id="a366-auto-fill-all" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">一键填答</button>
                         <button id="a366-stop-auto-fill" style="background:var(--a366-danger);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">停止</button>
                         <button id="a366-jiaojuan-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">交卷</button>
-                        <div style="display:flex;align-items:stretch;">
-                            <button id="a366-auto-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md) 0 0 var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;border-right:1px solid rgba(255,255,255,0.3);">自动听力</button>
-                            <button id="a366-auto-settings" style="background:var(--a366-info);color:#fff;border:none;border-radius:0 var(--a366-radius-md) var(--a366-radius-md) 0;padding:8px 10px;font-size:14px;cursor:pointer;font-weight:500;display:flex;align-items:center;justify-content:center;" title="正确率设置">⚙</button>
-                        </div>
+                        <button id="a366-auto-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">自动听力</button>
+                        <button id="a366-auto-settings" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;display:flex;align-items:center;gap:4px;" title="填答设置"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0;"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/></svg>设置</button>
                     </div>
                 </div>
             </div>
@@ -149,7 +149,17 @@
 
         document.getElementById('a366-dev-btn').addEventListener('click', toggleDevPanel);
         document.getElementById('a366-minimize').addEventListener('click', toggleCollapse);
-        document.getElementById('a366-jiaojuan-btn').addEventListener('click', submitExam);
+        document.getElementById('a366-jiaojuan-btn').addEventListener('click', async () => {
+            submitExam();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            addLog('等待交卷确认弹窗...', 'info');
+            const confirmed = await waitAndClickConfirmSubmit(5000);
+            if (confirmed) {
+                addLog('已点击确认交卷按钮', 'success');
+            } else {
+                addLog('未检测到交卷确认弹窗（可能无需确认或已超时）', 'warn');
+            }
+        });
         document.getElementById('a366-auto-btn').addEventListener('click', executeAuto);
         document.getElementById('a366-auto-settings').addEventListener('click', toggleAccuracySettings);
         document.getElementById('a366-auto-fill-all').addEventListener('click', startAutoFillAll);
@@ -281,7 +291,7 @@
 
         devPanel.innerHTML = `
             <div id="a366-dev-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--a366-bg-secondary);border-radius:8px 8px 0 0;border-bottom:1px solid var(--a366-border);cursor:move;user-select:none;">
-                <span style="font-weight:600;font-size:14px;color:var(--a366-info);">🔧 开发者面板</span>
+                <span style="font-weight:600;font-size:14px;color:var(--a366-info);"开发者面板</span>
                 <button id="a366-dev-close" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;">✕</button>
             </div>
             <div style="display:flex;border-bottom:1px solid var(--a366-border);background:var(--a366-bg-secondary);">
@@ -380,7 +390,10 @@
         }
 
         const filledCount = list.filter(a => a._fillStatus === 'filled').length;
+        const skippedCount = list.filter(a => a._fillStatus === 'skipped').length;
         const failedCount = list.filter(a => a._fillStatus === 'failed').length;
+        const correctCount = list.filter(a => a._fillStatus === 'filled' && a._fillMode !== 'wrong').length;
+        const wrongCount = list.filter(a => a._fillStatus === 'filled' && a._fillMode === 'wrong').length;
 
         let badges = '';
         list.forEach((ans) => {
@@ -391,6 +404,8 @@
                 badges += '<span style="color:var(--a366-success);font-weight:600;">✓</span>';
             } else if (status === 'filling') {
                 badges += '<span style="color:var(--a366-warning);font-weight:600;">●</span>';
+            } else if (status === 'skipped') {
+                badges += '<span style="color:var(--a366-text-muted);font-weight:600;">—</span>';
             } else if (status === 'failed') {
                 badges += '<span style="color:var(--a366-danger);font-weight:600;">✕</span>';
             } else {
@@ -400,7 +415,7 @@
 
         fillStatus.innerHTML = `
             <div style="font-size:12px;color:var(--a366-text);margin-bottom:6px;">
-                已获取 <b>${list.length}</b> 条答案 | 已填答 <b style="color:var(--a366-success);">${filledCount}</b>/${list.length}${failedCount > 0 ? ' | <span style="color:var(--a366-danger);">失败 ' + failedCount + '</span>' : ''}
+                已获取 <b>${list.length}</b> 条答案 | 填答 <b style="color:var(--a366-success);">${filledCount}</b>/${list.length}${skippedCount > 0 ? ' | <span style="color:var(--a366-text-muted);">跳过 ' + skippedCount + '</span>' : ''}${wrongCount > 0 ? ' | <span style="color:var(--a366-success);">答对 ' + correctCount + '</span> <span style="color:var(--a366-danger);">答错 ' + wrongCount + '</span>' : ''}${failedCount > 0 ? ' | <span style="color:var(--a366-danger);">失败 ' + failedCount + '</span>' : ''}
             </div>
             <div style="font-size:15px;letter-spacing:2px;word-break:break-all;line-height:1.8;">${badges}</div>
         `;
@@ -411,7 +426,7 @@
             fillAllBtn.style.display = 'none';
             stopBtn.style.display = '';
         } else {
-            fillAllBtn.style.display = filledCount < list.length ? '' : 'none';
+            fillAllBtn.style.display = list.length > 0 ? '' : 'none';
             stopBtn.style.display = 'none';
         }
     }
@@ -480,26 +495,15 @@
             return;
         }
 
-        addLog(`找到 ${submitBtns.length} 个 ${selectorName} 元素`, 'success');
-
-        state.currentResults = [];
-        state.testQueue = [];
+        addLog(`找到 ${submitBtns.length} 个 ${selectorName} 元素，准备点击`, 'success');
 
         submitBtns.forEach((el, i) => {
-            const info = buildElementInfo(el, `${selectorName}类匹配`);
-            state.currentResults.push(info);
+            el.style.outline = '3px solid var(--a366-success)';
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => { el.style.outline = ''; }, 1500);
+            el.click();
+            addLog(`${escapeHtml(selectorName)} #${i + 1} 已点击`, 'click');
         });
-
-        if (resultsContainer) renderResults(state.currentResults);
-
-        submitBtns.forEach((el, i) => {
-            const info = state.currentResults[i];
-            state.testQueue.push(info);
-            addLog(`${escapeHtml(selectorName)} #${i + 1} 已加入测试队列`, 'queue');
-        });
-
-        renderQueue();
-        addLog(`共 ${submitBtns.length} 个 ${escapeHtml(selectorName)} 已加入队列`, 'info');
     }
 
     function buildElementInfo(el, strategyName) {
@@ -919,9 +923,10 @@
             if (fillStatus === 'filling') statusBadge = `<span style="color:var(--a366-warning);font-size:10px;">填答中</span>`;
             else if (fillStatus === 'filled' && ans._fillMode === 'wrong') statusBadge = `<span style="color:var(--a366-danger);font-size:10px;">故意错</span>`;
             else if (fillStatus === 'filled') statusBadge = `<span style="color:var(--a366-success);font-size:10px;">已填答</span>`;
+            else if (fillStatus === 'skipped') statusBadge = `<span style="color:var(--a366-text-muted);font-size:10px;">已跳过</span>`;
             else if (fillStatus === 'failed') statusBadge = `<span style="color:var(--a366-danger);font-size:10px;">失败</span>`;
 
-            const borderLeft = fillStatus === 'filled' && ans._fillMode === 'wrong' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'filled' ? 'border-left:3px solid var(--a366-success);' : fillStatus === 'failed' ? 'border-left:3px solid var(--a366-danger);' : '';
+            const borderLeft = fillStatus === 'filled' && ans._fillMode === 'wrong' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'filled' ? 'border-left:3px solid var(--a366-success);' : fillStatus === 'failed' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'skipped' ? 'border-left:3px solid var(--a366-text-muted);' : '';
             html += `
             <div style="border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:8px 10px;background:var(--a366-bg);${borderLeft}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -999,16 +1004,9 @@
                 ans._fillMode = 'wrong';
                 addLog(`#${idx + 1} 已选择错误选项`, 'success');
             } else {
-                addLog(`#${idx + 1} 选择错误选项失败，回退到选择正确答案`, 'warn');
-                const fallbackFound = findAndClickOption(optionId, optionContent, ans);
-                if (fallbackFound) {
-                    ans._fillStatus = 'filled';
-                    ans._fillMode = 'correct';
-                    addLog(`#${idx + 1} 回退填答成功（正确答案）`, 'success');
-                } else {
-                    ans._fillStatus = 'failed';
-                    addLog(`#${idx + 1} 填答失败`, 'error');
-                }
+                // 选错失败时跳过该题，不回退到正确答案，保证正确率不被破坏
+                ans._fillStatus = 'skipped';
+                addLog(`#${idx + 1} 选择错误选项失败，已跳过（保证正确率）`, 'warn');
             }
         } else {
             addLog(`开始填答 #${idx + 1}: ${escapeHtml((ans.questionText || '').substring(0, 40))}`, 'info');
@@ -1072,8 +1070,9 @@
     function findAndClickWrongOption(optionId, optionContent, answerObj) {
         const allElements = document.querySelectorAll('body *');
         const pageWrap = document.getElementById('page-wrap');
-        let correctEl = null;
 
+        // 第一步：找到正确答案元素（与 findAndClickOption 逻辑完全一致）
+        const correctCandidates = [];
         for (const el of allElements) {
             if (el === container || container.contains(el) || el.contains(container)) continue;
             if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) continue;
@@ -1085,48 +1084,68 @@
                     if (['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag)) {
                         const rect = el.getBoundingClientRect();
                         if (rect.width > 0 && rect.height > 0) {
-                            correctEl = el;
-                            break;
+                            correctCandidates.push(el);
                         }
                     }
                 }
             } catch(e) {}
         }
 
-        if (!correctEl) {
+        if (correctCandidates.length === 0) {
             addLog('  未找到正确选项元素，无法选择错误选项', 'warn');
             return false;
         }
 
-        let optionsContainer = correctEl.parentElement;
-        let allOptions = [];
-        let maxDepth = 5;
+        const height24 = correctCandidates.filter(c => Math.round(c.getBoundingClientRect().height) === 24);
+        const correctEl = height24.length > 0 ? height24[0] : correctCandidates.sort((a, b) => a.getBoundingClientRect().height - b.getBoundingClientRect().height)[0];
+        const correctRect = correctEl.getBoundingClientRect();
+        const correctTag = correctEl.tagName;
+        const correctHeight = Math.round(correctRect.height);
 
-        while (optionsContainer && maxDepth > 0) {
-            allOptions = Array.from(optionsContainer.children).filter(child => {
-                const tag = child.tagName.toLowerCase();
-                const rect = child.getBoundingClientRect();
-                return ['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag) && rect.width > 0 && rect.height > 0;
-            });
+        // 第二步：在页面上找到与 correctEl 相似但文本不同的元素
+        // 不依赖 DOM 层级遍历，而是通过"外观相似性"找选项
+        const wrongCandidates = [];
 
-            if (allOptions.length >= 3) break;
-            optionsContainer = optionsContainer.parentElement;
-            maxDepth--;
+        for (const el of allElements) {
+            if (el === container || container.contains(el) || el.contains(container)) continue;
+            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) continue;
+            if (pageWrap && !pageWrap.contains(el)) continue;
+
+            // 排除 correctEl 及其祖先/后代
+            if (el === correctEl || el.contains(correctEl) || correctEl.contains(el)) continue;
+
+            // 必须与 correctEl 标签相同
+            if (el.tagName !== correctTag) continue;
+
+            const rect = el.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) continue;
+
+            // 高度相似（within 5px）
+            if (Math.abs(Math.round(rect.height) - correctHeight) > 5) continue;
+
+            const text = (el.textContent || '').trim();
+            if (text.length === 0) continue;
+
+            // 文本不能与正确答案相同
+            if (normalizeQuotes(text) === normalizeQuotes(optionContent)) continue;
+
+            // 必须在 correctEl 附近（同一道题的选项，垂直距离 < 500px）
+            const verticalDist = Math.abs(rect.top - correctRect.top);
+            if (verticalDist > 500) continue;
+
+            wrongCandidates.push({ element: el, distance: verticalDist });
         }
 
-        if (allOptions.length < 2) {
-            addLog(`  未找到足够的选项（仅 ${allOptions.length} 个），回退到随机选择`, 'warn');
+        if (wrongCandidates.length === 0) {
+            addLog('  未找到与正确选项相似的其他选项', 'warn');
             return false;
         }
 
-        const wrongOptions = allOptions.filter(opt => opt !== correctEl);
-        if (wrongOptions.length === 0) {
-            addLog('  所有选项均匹配正确答案，无法选择错误选项', 'warn');
-            return false;
-        }
-
-        const target = wrongOptions[0];
-        addLog(`  选择错误选项: 共 ${allOptions.length} 个选项，排除正确选项后选择第 1 个错误选项`, 'click');
+        // 按距离排序，选最近的
+        wrongCandidates.sort((a, b) => a.distance - b.distance);
+        const target = wrongCandidates[0].element;
+        const targetText = (target.textContent || '').trim().substring(0, 30);
+        addLog(`  选择错误选项: 找到 ${wrongCandidates.length} 个候选，选择最近的 "${escapeHtml(targetText)}"`, 'click');
 
         target.style.outline = '3px solid var(--a366-danger)';
         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1139,19 +1158,28 @@
     // 自动填答
     // ==========================================
 
-    function buildWrongIndices(total, accuracyRate) {
-        const correctCount = Math.ceil(total * accuracyRate / 100);
-        const wrongCount = total - correctCount;
+    // 统一计算填答计划：哪些跳过、哪些答错，确保索引不冲突
+    function buildFillPlan(total, completionRate, accuracyRate) {
+        const fillCount = Math.max(1, Math.ceil(total * completionRate / 100));
+        const skipCount = total - fillCount;
+        const correctCount = Math.max(0, Math.ceil(fillCount * accuracyRate / 100));
+        const wrongCount = fillCount - correctCount;
 
-        if (wrongCount === 0) return new Set();
-
+        // 打乱所有题目索引
         const indices = Array.from({ length: total }, (_, i) => i);
         for (let i = indices.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [indices[i], indices[j]] = [indices[j], indices[i]];
         }
 
-        return new Set(indices.slice(0, wrongCount));
+        // 前 skipCount 个 → 跳过
+        const skipSet = new Set(skipCount > 0 ? indices.slice(0, skipCount) : []);
+
+        // 剩余的 → 填答，其中前 wrongCount 个 → 答错
+        const fillIndices = indices.slice(skipCount);
+        const wrongSet = new Set(wrongCount > 0 ? fillIndices.slice(0, wrongCount) : []);
+
+        return { skipSet, wrongSet, fillCount, skipCount, correctCount, wrongCount };
     }
 
     function startAutoFillAll() {
@@ -1159,11 +1187,12 @@
         state.autoFillRunning = true;
         state.autoFillIndex = 0;
 
-        const wrongSet = buildWrongIndices(state.answerList.length, state.accuracyRate);
-        state._wrongIndices = wrongSet;
+        const total = state.answerList.length;
+        const plan = buildFillPlan(total, state.completionRate, state.accuracyRate);
+        state._skipIndices = plan.skipSet;
+        state._wrongIndices = plan.wrongSet;
 
-        const correctCount = state.answerList.length - wrongSet.size;
-        addLog(`开始一键自动填答，共 ${state.answerList.length} 题（正确率 ${state.accuracyRate}%：答对 ${correctCount} 题，答错 ${wrongSet.size} 题）`, 'info');
+        addLog(`开始一键自动填答，共 ${total} 题（完成率 ${state.completionRate}%：填答 ${plan.fillCount} 题，跳过 ${plan.skipCount} 题 | 正确率 ${state.accuracyRate}%：答对 ${plan.correctCount} 题，答错 ${plan.wrongCount} 题）`, 'info');
 
         document.getElementById('a366-auto-fill-all').style.display = 'none';
         document.getElementById('a366-stop-auto-fill').style.display = '';
@@ -1181,6 +1210,16 @@
         }
 
         const idx = state.autoFillIndex;
+        // 完成率 < 100% 时跳过部分题目
+        if (state._skipIndices && state._skipIndices.has(idx)) {
+            state.answerList[idx]._fillStatus = 'skipped';
+            addLog(`#${idx + 1} 已跳过（完成率控制）`, 'info');
+            state.autoFillIndex++;
+            renderAnswerList();
+            renderMainFillSection();
+            setTimeout(() => autoFillNext(), 20);
+            return;
+        }
         const forceWrong = state._wrongIndices && state._wrongIndices.has(idx);
         fillOneAnswer(idx, forceWrong);
         state.autoFillIndex++;
@@ -1272,11 +1311,12 @@
             state.autoFillRunning = true;
             state.autoFillIndex = 0;
 
-            const wrongSet = buildWrongIndices(state.answerList.length, state.accuracyRate);
-            state._wrongIndices = wrongSet;
+            const total = state.answerList.length;
+            const plan = buildFillPlan(total, state.completionRate, state.accuracyRate);
+            state._skipIndices = plan.skipSet;
+            state._wrongIndices = plan.wrongSet;
 
-            const correctCount = state.answerList.length - wrongSet.size;
-            addLog(`开始自动填答，共 ${state.answerList.length} 题（正确率 ${state.accuracyRate}%：答对 ${correctCount} 题，答错 ${wrongSet.size} 题）`, 'info');
+            addLog(`开始自动填答，共 ${total} 题（完成率 ${state.completionRate}%：填答 ${plan.fillCount} 题，跳过 ${plan.skipCount} 题 | 正确率 ${state.accuracyRate}%：答对 ${plan.correctCount} 题，答错 ${plan.wrongCount} 题）`, 'info');
 
             function checkFillComplete() {
                 if (!state.autoFillRunning || state.autoFillIndex >= state.answerList.length) {
@@ -1301,19 +1341,12 @@
 
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        if (state.testQueue.length > 0) {
-            addLog(`测试队列中有 ${state.testQueue.length} 个元素，开始逐个测试`, 'info');
-            await testAll();
-
-            addLog('等待交卷确认弹窗...', 'info');
-            const confirmed = await waitAndClickConfirmSubmit(5000);
-            if (confirmed) {
-                addLog('已点击确认交卷按钮', 'success');
-            } else {
-                addLog('未检测到交卷确认弹窗', 'warn');
-            }
+        addLog('等待交卷确认弹窗...', 'info');
+        const confirmed = await waitAndClickConfirmSubmit(5000);
+        if (confirmed) {
+            addLog('已点击确认交卷按钮', 'success');
         } else {
-            addLog('未找到交卷按钮，流程结束', 'warn');
+            addLog('未检测到交卷确认弹窗', 'warn');
         }
 
         addLog('━━━━━━━━ 自动流程结束 ━━━━━━━━', 'info');
@@ -1362,12 +1395,28 @@
                 }
             }
         } catch(e) {}
+        try {
+            const val = localStorage.getItem('a366_completion_rate');
+            if (val !== null) {
+                const rate = parseInt(val);
+                if (!isNaN(rate) && rate >= 0 && rate <= 100) {
+                    state.completionRate = rate;
+                }
+            }
+        } catch(e) {}
     }
 
     function saveAccuracyRate(rate) {
         state.accuracyRate = rate;
         try {
             localStorage.setItem('a366_accuracy_rate', rate.toString());
+        } catch(e) {}
+    }
+
+    function saveCompletionRate(rate) {
+        state.completionRate = rate;
+        try {
+            localStorage.setItem('a366_completion_rate', rate.toString());
         } catch(e) {}
     }
 
@@ -1389,31 +1438,41 @@
         `;
 
         modal.innerHTML = `
-            <div id="a366-accuracy-panel" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#ffffff;border-radius:8px;border:1px solid #dee2e6;box-shadow:0 8px 32px rgba(0,0,0,0.2);width:380px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;">
+            <div id="a366-accuracy-panel" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#ffffff;border-radius:8px;border:1px solid #dee2e6;box-shadow:0 8px 32px rgba(0,0,0,0.2);width:400px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8f9fa;border-bottom:1px solid #dee2e6;">
-                    <span style="font-weight:600;font-size:14px;color:#212529;">正确率设置</span>
+                    <span style="font-weight:600;font-size:14px;color:#212529;">填答设置</span>
                     <button id="a366-accuracy-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#6c757d;padding:0 4px;line-height:1;">✕</button>
                 </div>
                 <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
                     <div>
-                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">快捷设置</div>
+                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">完成率 — 填答的题目占总题数的比例</div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="a366-completion-quick" data-rate="60" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">60%</button>
+                            <button class="a366-completion-quick" data-rate="80" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">80%</button>
+                            <button class="a366-completion-quick" data-rate="90" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">90%</button>
+                            <button class="a366-completion-quick" data-rate="100" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">100%</button>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                            <input id="a366-completion-input" type="number" min="0" max="100" value="${state.completionRate}" style="flex:1;padding:8px 10px;border:1px solid #dee2e6;border-radius:6px;background:#ffffff;color:#212529;font-size:13px;outline:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;text-align:center;box-sizing:border-box;">
+                            <span style="font-size:14px;color:#6c757d;font-weight:500;">%</span>
+                        </div>
+                    </div>
+                    <div style="border-top:1px solid #dee2e6;padding-top:14px;">
+                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">正确率 — 已填答题中答对的比例</div>
                         <div style="display:flex;gap:8px;">
                             <button class="a366-accuracy-quick" data-rate="70" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">70%</button>
                             <button class="a366-accuracy-quick" data-rate="80" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">80%</button>
                             <button class="a366-accuracy-quick" data-rate="90" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">90%</button>
                             <button class="a366-accuracy-quick" data-rate="100" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">100%</button>
                         </div>
-                    </div>
-                    <div>
-                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">自定义正确率 (0-100%)</div>
-                        <div style="display:flex;gap:8px;align-items:center;">
+                        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
                             <input id="a366-accuracy-input" type="number" min="0" max="100" value="${state.accuracyRate}" style="flex:1;padding:8px 10px;border:1px solid #dee2e6;border-radius:6px;background:#ffffff;color:#212529;font-size:13px;outline:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;text-align:center;box-sizing:border-box;">
                             <span style="font-size:14px;color:#6c757d;font-weight:500;">%</span>
                         </div>
                     </div>
                     <div id="a366-accuracy-preview" style="font-size:11px;color:#6c757d;padding:8px 10px;background:#e9ecef;border-radius:4px;line-height:1.6;">
-                        正确率：${state.accuracyRate}%<br>
-                        <span style="color:#17a2b8;">获取答案后将自动计算正确/错误题数</span>
+                        完成率：${state.completionRate}% | 正确率：${state.accuracyRate}%<br>
+                        <span style="color:#17a2b8;">获取答案后将自动计算填答/跳过/正确/错误题数</span>
                     </div>
                     <div style="display:flex;gap:8px;justify-content:flex-end;">
                         <button id="a366-accuracy-cancel" style="padding:8px 20px;background:#e9ecef;color:#6c757d;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;">取消</button>
@@ -1425,8 +1484,33 @@
 
         document.body.appendChild(modal);
 
-        const input = document.getElementById('a366-accuracy-input');
+        const completionInput = document.getElementById('a366-completion-input');
+        const accuracyInput = document.getElementById('a366-accuracy-input');
 
+        // 完成率快捷按钮
+        const completionQuickBtns = modal.querySelectorAll('.a366-completion-quick');
+        completionQuickBtns.forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = '#e7f1ff';
+                btn.style.borderColor = '#007bff';
+                btn.style.color = '#007bff';
+            });
+            btn.addEventListener('mouseleave', () => {
+                if (parseInt(completionInput.value) !== parseInt(btn.dataset.rate)) {
+                    btn.style.background = '#e9ecef';
+                    btn.style.borderColor = '#dee2e6';
+                    btn.style.color = '#212529';
+                }
+            });
+            btn.addEventListener('click', () => {
+                const rate = parseInt(btn.dataset.rate);
+                completionInput.value = rate;
+                updateAccuracyPreview(parseInt(completionInput.value), parseInt(accuracyInput.value));
+                highlightCompletionBtn(rate);
+            });
+        });
+
+        // 正确率快捷按钮
         const quickBtns = modal.querySelectorAll('.a366-accuracy-quick');
         quickBtns.forEach(btn => {
             btn.addEventListener('mouseenter', () => {
@@ -1435,7 +1519,7 @@
                 btn.style.color = '#007bff';
             });
             btn.addEventListener('mouseleave', () => {
-                if (parseInt(input.value) !== parseInt(btn.dataset.rate)) {
+                if (parseInt(accuracyInput.value) !== parseInt(btn.dataset.rate)) {
                     btn.style.background = '#e9ecef';
                     btn.style.borderColor = '#dee2e6';
                     btn.style.color = '#212529';
@@ -1443,17 +1527,25 @@
             });
             btn.addEventListener('click', () => {
                 const rate = parseInt(btn.dataset.rate);
-                input.value = rate;
-                updateAccuracyPreview(rate);
+                accuracyInput.value = rate;
+                updateAccuracyPreview(parseInt(completionInput.value), rate);
                 highlightQuickBtn(rate);
             });
         });
 
-        input.addEventListener('input', () => {
-            let val = parseInt(input.value);
+        completionInput.addEventListener('input', () => {
+            let val = parseInt(completionInput.value);
             if (isNaN(val)) val = 100;
             val = Math.max(0, Math.min(100, val));
-            updateAccuracyPreview(val);
+            updateAccuracyPreview(val, parseInt(accuracyInput.value));
+            highlightCompletionBtn(val);
+        });
+
+        accuracyInput.addEventListener('input', () => {
+            let val = parseInt(accuracyInput.value);
+            if (isNaN(val)) val = 100;
+            val = Math.max(0, Math.min(100, val));
+            updateAccuracyPreview(parseInt(completionInput.value), val);
             highlightQuickBtn(val);
         });
 
@@ -1466,12 +1558,16 @@
         });
 
         document.getElementById('a366-accuracy-save').addEventListener('click', () => {
-            let val = parseInt(input.value);
-            if (isNaN(val)) val = 100;
-            val = Math.max(0, Math.min(100, val));
-            saveAccuracyRate(val);
+            let compVal = parseInt(completionInput.value);
+            if (isNaN(compVal)) compVal = 100;
+            compVal = Math.max(0, Math.min(100, compVal));
+            let accVal = parseInt(accuracyInput.value);
+            if (isNaN(accVal)) accVal = 100;
+            accVal = Math.max(0, Math.min(100, accVal));
+            saveCompletionRate(compVal);
+            saveAccuracyRate(accVal);
             modal.style.display = 'none';
-            addLog(`正确率已设置为 ${val}%`, 'success');
+            addLog(`设置已更新：完成率 ${compVal}% | 正确率 ${accVal}%`, 'success');
         });
 
         modal.addEventListener('click', (e) => {
@@ -1480,24 +1576,43 @@
             }
         });
 
+        highlightCompletionBtn(state.completionRate);
         highlightQuickBtn(state.accuracyRate);
     }
 
-    function updateAccuracyPreview(rate) {
+    function updateAccuracyPreview(completionRate, accuracyRate) {
         const preview = document.getElementById('a366-accuracy-preview');
         if (!preview) return;
         const total = state.answerList.length;
         if (total === 0) {
-            preview.innerHTML = `正确率：${rate}%<br><span style="color:#17a2b8;">获取答案后将自动计算正确/错误题数</span>`;
+            preview.innerHTML = `完成率：${completionRate}% | 正确率：${accuracyRate}%<br><span style="color:#17a2b8;">获取答案后将自动计算填答/跳过/正确/错误题数</span>`;
         } else {
-            const correctCount = Math.ceil(total * rate / 100);
-            const wrongCount = total - correctCount;
-            preview.innerHTML = `正确率：${rate}%<br>总题数：${total} 题<br>答对：<span style="color:#28a745;">${correctCount} 题</span> | 答错：<span style="color:#dc3545;">${wrongCount} 题</span>`;
+            const fillCount = Math.max(1, Math.ceil(total * completionRate / 100));
+            const skipCount = total - fillCount;
+            const correctCount = Math.max(0, Math.ceil(fillCount * accuracyRate / 100));
+            const wrongCount = fillCount - correctCount;
+            preview.innerHTML = `完成率：${completionRate}% | 正确率：${accuracyRate}%<br>总题数：${total} 题<br>填答：<span style="color:#007bff;">${fillCount} 题</span> | 跳过：<span style="color:#6c757d;">${Math.max(0, skipCount)} 题</span><br>答对：<span style="color:#28a745;">${correctCount} 题</span> | 答错：<span style="color:#dc3545;">${wrongCount} 题</span>`;
         }
     }
 
     function highlightQuickBtn(activeRate) {
         const quickBtns = document.querySelectorAll('.a366-accuracy-quick');
+        quickBtns.forEach(btn => {
+            const rate = parseInt(btn.dataset.rate);
+            if (rate === activeRate) {
+                btn.style.background = '#007bff';
+                btn.style.borderColor = '#007bff';
+                btn.style.color = '#ffffff';
+            } else {
+                btn.style.background = '#e9ecef';
+                btn.style.borderColor = '#dee2e6';
+                btn.style.color = '#212529';
+            }
+        });
+    }
+
+    function highlightCompletionBtn(activeRate) {
+        const quickBtns = document.querySelectorAll('.a366-completion-quick');
         quickBtns.forEach(btn => {
             const rate = parseInt(btn.dataset.rate);
             if (rate === activeRate) {
@@ -1519,9 +1634,12 @@
         if (isVisible) {
             modal.style.display = 'none';
         } else {
-            const input = document.getElementById('a366-accuracy-input');
-            if (input) input.value = state.accuracyRate;
-            updateAccuracyPreview(state.accuracyRate);
+            const completionInput = document.getElementById('a366-completion-input');
+            const accuracyInput = document.getElementById('a366-accuracy-input');
+            if (completionInput) completionInput.value = state.completionRate;
+            if (accuracyInput) accuracyInput.value = state.accuracyRate;
+            updateAccuracyPreview(state.completionRate, state.accuracyRate);
+            highlightCompletionBtn(state.completionRate);
             highlightQuickBtn(state.accuracyRate);
             modal.style.display = 'block';
         }
