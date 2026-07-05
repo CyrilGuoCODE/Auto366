@@ -179,6 +179,19 @@ function calculateTextSimilarity(text1, text2) {
     const c1 = clean(text1), c2 = clean(text2);
     if (c1 === c2) return 100;
     if (!c1 || !c2) return 0;
+
+    // 子串匹配：当一个文本是另一个的子串时，给予高分
+    // 解决英文题干→中文答案、中文题干→英文答案的长度差异问题
+    const shorter = c1.length <= c2.length ? c1 : c2;
+    const longer = c1.length <= c2.length ? c2 : c1;
+    if (shorter.length >= 3) {
+        if (longer.startsWith(shorter) || longer.endsWith(shorter)) return 90;
+        if (shorter.length >= 5 && longer.includes(shorter)) {
+            const ratio = shorter.length / longer.length;
+            return 80 + ratio * 10;
+        }
+    }
+
     const maxLen = Math.max(c1.length, c2.length);
     const editSim = (1 - levenshtein(c1, c2) / maxLen) * 60;
     const words1 = c1.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+/g) || [];
@@ -591,7 +604,7 @@ async function work() {
                 const clone = scopeEl.cloneNode(true);
                 clone.querySelectorAll('input, textarea, button, .u3-option__content, .u3-input__prepared, [contenteditable]').forEach(el => el.remove());
                 const questionText = (clone.textContent || '').replace(/\s+/g, ' ').trim();
-                const cleanQuestionText = questionText.replace(/^\d+[\s\.\)]*/, '').trim();
+                const cleanQuestionText = questionText.replace(/分值\d+分\s*/g, '').replace(/^\d+[\s\.\)]*/, '').trim();
 
                 const match = findAnswerByContent(cleanQuestionText);
 
