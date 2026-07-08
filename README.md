@@ -27,6 +27,8 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [BUG修复]修复缓存清理失败ENOTDIR问题(By ゼロ)
 - [功能优化]优化自动听力中完成率与正确率以及UI显示
 - [BUG修复]自动填空在题干中间时的匹配问题
+- [新功能]加入天学网进程加速(基于OpenSpeedy)(Beta版)(By 五羰基)
+- [新功能]深色模式UI支持(By 五烃基)
 
 ### BUG问题
 
@@ -37,14 +39,13 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 #### 短期更新
 
 - 深度UI更新
-- 深色模式UI支持
 - 加入Funny模式
 - 优化听力自动化
 - Log日志系统与通知系统优化
 
 #### 长期更新
 
-- 加入天学网进程加速(基于OpenSpeedy)
+- 滚木
 
 ## 安装说明
 

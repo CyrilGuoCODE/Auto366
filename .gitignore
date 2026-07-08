@@ -54,3 +54,4 @@ coverage/
 # 特殊忽略
 *.zip
 resources/tun/
+resources/openspeedy/
