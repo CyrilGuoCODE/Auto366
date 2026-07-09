@@ -21,6 +21,18 @@ body {
     display: flex;
 }
 
+/* 表单控件默认不继承 body 的 color(UA 强制黑字), 深色模式下会看不见输入的文字;
+   统一让所有输入框跟随主题文字色, 具体控件如有自定义色可用更高特异性覆盖。 */
+input,
+textarea,
+select {
+    color: var(--color-text);
+}
+input::placeholder,
+textarea::placeholder {
+    color: var(--color-text-muted);
+}
+
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;

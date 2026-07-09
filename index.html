@@ -7,6 +7,18 @@
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="stylesheet" href="node_modules/bootstrap-icons/font/bootstrap-icons.css">
     <link rel="stylesheet" href="styles/app.css">
+    <script>
+        // 颜色模式: 首帧前同步应用, 避免深/浅切换时闪白。默认跟随系统。
+        (function () {
+            try {
+                var t = localStorage.getItem('a366-theme');
+                if (t !== 'light' && t !== 'dark') {
+                    t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (e) { /* 忽略 */ }
+        })();
+    </script>
 </head>
 
 <body>
@@ -33,6 +45,10 @@
     </header>
 
     <div id="simple-home" class="simple-home">
+        <button type="button" id="themeToggleBtnSimple" class="simple-home__theme-btn"
+            aria-label="切换颜色模式" title="切换深色/浅色模式">
+            <i class="bi bi-moon-stars"></i>
+        </button>
         <button type="button" id="update-notification-btn-simple" class="btn--update-notify"
             title="发现新版本">
             <svg class="btn--update-notify__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -121,10 +137,20 @@
                 <i class="bi bi-cloud-download"></i>
                 <span>社区规则集</span>
             </div>
+            <div class="sidebar__item" data-view="speed">
+                <i class="bi bi-speedometer2"></i>
+                <span>进程加速</span>
+            </div>
             <div class="sidebar__item" data-view="settings">
                 <i class="bi bi-gear"></i>
                 <span>设置</span>
             </div>
+        </div>
+
+        <div class="sidebar__item sidebar__item--theme" id="themeToggleBtn"
+             role="button" tabindex="0" aria-label="切换颜色模式" title="切换深色/浅色模式">
+            <i class="bi bi-moon-stars"></i>
+            <span>深色模式</span>
         </div>
 
     </div>
@@ -550,6 +576,31 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 进程加速 -->
+                <div class="view-panel view-panel--speed" id="speed-view">
+                    <div class="speed-page">
+                        <div class="speed-page__content">
+                            <div class="speed-page__display">
+                                <span id="speed-value" class="speed-page__value">1</span>
+                                <span class="speed-page__unit">×</span>
+                            </div>
+                            <div class="speed-page__slider-wrap" id="speed-slider-wrap">
+                                <input type="range" id="speed-slider" class="speed-page__slider"
+                                       min="1" max="1000" step="1" value="1">
+                            </div>
+                            <div class="speed-page__labels">
+                                <span>1×</span><span>200×</span><span>400×</span><span>600×</span><span>800×</span><span>1000×</span>
+                            </div>
+                            <div class="speed-page__status" id="speed-status">正常速度</div>
+                            <div class="speed-page__info" id="speed-info">拖动滑块加速天学网(需已启动天学网, 且本程序为管理员权限)</div>
+                        </div>
+                        <div class="speed-page__credit">
+                            由于 Auto366 的开发者太懒了，所以进程加速使用的是现成的项目
+                            <a href="#" class="speed-page__link" data-url="https://github.com/game1024/OpenSpeedy">OpenSpeedy</a>。如果您看不下去了且想要名流千古的话，请访问<a href="#" class="speed-page__link" data-url="https://366.cyril.qzz.io/tutorial/contributingGuide">贡献指南</a>。
                         </div>
                     </div>
                 </div>

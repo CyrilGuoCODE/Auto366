@@ -1,0 +1,142 @@
+/* ===== 进程加速页面 ===== */
+
+/* view-panel 内的加速页: 绝对铺满, 不受 flex 高度歧义影响 */
+#speed-view {
+  padding: 0;
+}
+.speed-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  background: var(--color-bg-page);
+}
+
+.speed-page__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 520px;
+  padding: 0 40px;
+  box-sizing: border-box;
+}
+
+/* 倍率数字显示 */
+.speed-page__display {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  transition: color 0.4s;
+}
+.speed-page__value {
+  font-size: 72px;
+  font-weight: 800;
+  letter-spacing: -3px;
+  line-height: 1;
+  color: var(--color-primary-600);
+  transition: color 0.25s ease;
+  font-variant-numeric: tabular-nums;
+}
+.speed-page__unit {
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--color-gray-400);
+  transition: color 0.3s;
+}
+
+/* 滑块容器 */
+.speed-page__slider-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  height: 28px;
+}
+
+/* 原生 range 样式重写: 已填充段的渐变由 JS 逐帧按倍率生成(见 speed-ui.js),
+   这里只给中性凹槽兜底; --speed-accent 为当前倍率对应色 */
+.speed-page__slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-gray-200);
+  outline: none;
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
+  margin: 0;
+}
+.speed-page__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--speed-accent, var(--color-primary-500));
+  border: 3px solid var(--color-white);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  cursor: grab;
+  transition: background 0.15s ease;
+}
+.speed-page__slider::-webkit-slider-thumb:active { cursor: grabbing; }
+
+/* 刻度标签 */
+.speed-page__labels {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 11px;
+  color: var(--color-gray-400);
+  padding: 0 2px;
+  box-sizing: border-box;
+  margin-top: -8px;
+}
+
+/* 状态文字 */
+.speed-page__status {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-gray-600);
+  min-height: 20px;
+  text-align: center;
+  transition: color 0.3s;
+}
+.speed-page__info {
+  font-size: 12px;
+  color: var(--color-gray-400);
+  min-height: 16px;
+  text-align: center;
+}
+
+/* 底部小字致谢 */
+.speed-page__credit {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1;
+  max-width: 620px;
+  padding: 0 24px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-gray-400);
+  text-align: center;
+}
+.speed-page__link {
+  color: var(--color-primary-500);
+  text-decoration: none;
+  cursor: pointer;
+}
+.speed-page__link:hover {
+  text-decoration: underline;
+}

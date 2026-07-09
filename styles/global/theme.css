@@ -1,0 +1,106 @@
+/* ===== 颜色模式 (深色主题) =====
+ * 语义令牌(--color-bg-page / --color-text / --color-border ...)在 tokens.css 中
+ * 全部是 var(--color-gray-*) / var(--color-white) 之类的引用, CSS 变量在使用处
+ * 惰性求值, 因此这里只需在 html[data-theme="dark"] 作用域内反转灰阶 + 白/黑,
+ * 语义令牌即自动全部翻转; 再针对状态色底/文字单独调深, 保证对比度。
+ * html[data-theme="dark"] 特异性(0,1,1) 高于 :root(0,1,0), 稳定覆盖。
+ */
+
+html[data-theme="dark"] {
+  /* 灰阶整体反转: 50(最浅)<->900(最深) */
+  --color-gray-50:  #16181c;
+  --color-gray-100: #1e2127;
+  --color-gray-200: #2a2e35;
+  --color-gray-300: #3a404a;
+  --color-gray-400: #6b7480;
+  --color-gray-500: #8a939f;
+  --color-gray-600: #b6bdc7;
+  --color-gray-700: #d4dae1;
+  --color-gray-800: #e9edf2;
+  --color-gray-900: #f5f7fa;
+
+  /* 白/黑对调(白=深底, 黑=浅字); 深底用柔和近黑而非纯黑 */
+  --color-white: #1e2127;
+  --color-black: #f5f7fa;
+
+  /* primary 在深底下略提亮, 保证按钮/高亮可读 */
+  --color-primary-500: #3ea6ff;
+  --color-primary-600: #2f97f0;
+  --color-primary-light: #22303d;
+
+  /* 页面/面板/边框 关键语义直接钉深色值(避免个别引用歧义) */
+  --color-bg-page:   #16181c;
+  --color-bg-muted:  #1e2127;
+  --color-bg-panel:  #1e2127;
+  --color-bg-hover:  #2a2e35;
+  --color-border:        #2a2e35;
+  --color-border-light:  #23272e;
+  --color-border-strong: #3a404a;
+  --color-text:         #d4dae1;
+  --color-text-muted:   #8a939f;
+  --color-text-heading: #f5f7fa;
+
+  /* 状态色: 底色调深, 文字提亮 */
+  --color-success-bg: #123020; --color-success-text: #7ee2a0;
+  --color-error-bg:   #3a1a1e; --color-error-text:   #f2a3ab;
+  --color-warn-bg:    #3a2f12; --color-warn-text:    #ffd97a;
+  --color-info-bg:    #12303a; --color-info-text:    #7fd6e6;
+  --color-installed-bg: #14251a;
+
+  /* 杂项 */
+  --color-toggle-off: #4a4f57;
+  --color-border-tutorial: #2a2e35;
+  --color-orange-light: #3a2a12;
+  --color-blue-light: #12263a;
+}
+
+/* 切换主题的一瞬间, 给所有元素同一条过渡, 让背景/文字/边框/图标一起淡变,
+   避免"大背景慢变、控件与文字瞬变"的割裂感; 切换结束由 JS 移除 .theme-switching,
+   平时不挂全局过渡, 不影响交互性能。 */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: background-color var(--ease-slow),
+              color var(--ease-slow),
+              border-color var(--ease-slow),
+              fill var(--ease-slow),
+              stroke var(--ease-slow),
+              box-shadow var(--ease-slow) !important;
+}
+
+/* ===== 侧栏底部: 颜色模式切换 =====
+ * 直接复用 .sidebar__item 的全部样式(与导航项处于同一竖线, 图标/文案/悬停/展开
+ * 行为完全一致), 仅用 margin-top:auto 把它顶到侧栏最底部。
+ * 不再自建 .sidebar__footer —— 该类名已被 layout.css 占用(padding:8px), 复用会
+ * 造成 padding 冲突把图标顶偏。 */
+.sidebar__item--theme {
+  margin-top: auto;
+}
+
+/* ===== 简易 UI: 右上角浮动的颜色模式切换按钮 ===== */
+.simple-home__theme-btn {
+  position: absolute;
+  top: var(--space-lg);
+  right: var(--space-lg);
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-bg-panel);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--text-xl);
+  box-shadow: var(--shadow-sm);
+  transition: background var(--ease-normal), color var(--ease-normal),
+              border-color var(--ease-normal), transform var(--ease-normal);
+}
+.simple-home__theme-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}

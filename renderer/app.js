@@ -10,6 +10,8 @@ import SettingsUI from './settings-ui.js';
 import FileUI from './file-ui.js';
 import TutorialManager from './tutorial-ui.js';
 import AgreementUI from './agreement-ui.js';
+import SpeedUI from './speed-ui.js';
+import ThemeUI from './theme-ui.js';
 
 class Auto366App {
   constructor() {
@@ -24,6 +26,8 @@ class Auto366App {
     this.fileUI = new FileUI(this.state, this.logManager);
     this.tutorialUI = new TutorialManager(this.state, this.logManager);
     this.agreementUI = new AgreementUI();
+    this.speedUI = new SpeedUI();
+    this.themeUI = new ThemeUI();
   }
 
   // 初始化应用
@@ -31,6 +35,12 @@ class Auto366App {
     try {
       // 暴露方法到全局（必须在最前面，因为HTML中的onclick依赖这些方法）
       this.exposeMethods();
+
+      // 初始化颜色模式切换（尽早, 保证按钮联动与系统跟随）
+      this.themeUI.init();
+
+      // 初始化进程加速页面
+      this.speedUI.init();
 
       // 初始化全局设置（缓存路径等）
       this.initGlobalSettings();

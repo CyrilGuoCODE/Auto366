@@ -52,8 +52,9 @@ class EventManager {
 
   // 初始化侧边栏
   initSidebar() {
-    // 侧边栏菜单项点击事件
-    const menuItems = document.querySelectorAll('.sidebar__item');
+    // 侧边栏菜单项点击事件(仅限带 data-view 的导航项; 颜色模式切换项无 data-view,
+    // 由 theme-ui.js 单独处理, 不参与视图切换)
+    const menuItems = document.querySelectorAll('.sidebar__item[data-view]');
     menuItems.forEach(item => {
       item.addEventListener('click', () => {
         const view = item.getAttribute('data-view');

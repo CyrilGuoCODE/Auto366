@@ -1,5 +1,6 @@
 /* 全局基础 */
 @import "./global/tokens.css";
+@import "./global/theme.css";
 @import "./global/base.css";
 @import "./global/layout.css";
 @import "./global/titlebar.css";
@@ -21,6 +22,7 @@
 @import "./features/settings.css";
 @import "./features/logs.css";
 @import "./features/tun.css";
+@import "./features/speed.css";
 
 /* 浮窗/弹窗/覆盖层 */
 @import "./overlay/appreciation.css";

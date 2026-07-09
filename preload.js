@@ -112,6 +112,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTunProcesses: () => ipcRenderer.invoke('get-tun-processes'),
   onTunStatus: (callback) => ipcRenderer.on('tun-status', callback),
 
+  // 进程加速API
+  setSpeed: (factor) => ipcRenderer.invoke('set-speed', factor),
+  resetSpeed: () => ipcRenderer.invoke('reset-speed'),
+  getSpeedStatus: () => ipcRenderer.invoke('get-speed-status'),
+  onSpeedStatus: (callback) => ipcRenderer.on('speed-status', (event, data) => callback(data)),
+
   // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
     return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);

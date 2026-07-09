@@ -19,6 +19,8 @@
     border-radius: var(--radius-md);
     font-size: var(--text-lg);
     background: var(--color-bg-panel);
+    /* 表单控件不继承 body 的 color, UA 默认黑字在深色模式下看不见, 需显式跟随主题 */
+    color: var(--color-text);
     transition: all var(--ease-normal);
     box-sizing: border-box;
 }
