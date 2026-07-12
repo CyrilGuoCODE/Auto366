@@ -12,7 +12,7 @@
         (function () {
             try {
                 var t = localStorage.getItem('a366-theme');
-                if (t !== 'light' && t !== 'dark') {
+                if (t === 'system' || (t !== 'light' && t !== 'dark')) {
                     t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
                 document.documentElement.setAttribute('data-theme', t);
@@ -381,6 +381,18 @@
                             <div class="setting-item__description">显示侧边栏与完整多视图界面，适合技术人员。</div>
                         </div>
                         <div class="setting-group">
+                            <h4>颜色模式</h4>
+                            <div class="setting-item">
+                                <label for="themeSelect">主题:</label>
+                                <select id="themeSelect" class="form-input">
+                                    <option value="system">跟随系统</option>
+                                    <option value="dark">深色模式</option>
+                                    <option value="light">浅色模式</option>
+                                </select>
+                            </div>
+                            <div class="setting-item__description">选择"跟随系统"将自动适配系统深浅色设置。</div>
+                        </div>
+                        <div class="setting-group">
                             <h4>缓存路径</h4>
                             <div class="setting-item">
                                 <input type="text" id="cachePathInput" class="form-input" placeholder="选择缓存路径">
@@ -596,7 +608,7 @@
                                 <span>1×</span><span>200×</span><span>400×</span><span>600×</span><span>800×</span><span>1000×</span>
                             </div>
                             <div class="speed-page__status" id="speed-status">正常速度</div>
-                            <div class="speed-page__info" id="speed-info">拖动滑块加速天学网(需已启动天学网, 且本程序为管理员权限)</div>
+                            <div class="speed-page__info" id="speed-info">拖动滑块加速天学网(需已启动天学网并进入练习, 且本程序为管理员权限)</div>
                         </div>
                         <div class="speed-page__credit">
                             由于 Auto366 的开发者太懒了，所以进程加速使用的是现成的项目

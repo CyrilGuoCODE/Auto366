@@ -178,6 +178,30 @@ class SettingsUI {
     }
   }
 
+  // 初始化颜色模式设置
+  initThemeSettings() {
+    const select = document.getElementById('themeSelect');
+    if (!select) return;
+
+    // 从 localStorage 读取当前偏好
+    const stored = localStorage.getItem('a366-theme');
+    select.value = (stored === 'light' || stored === 'dark' || stored === 'system') ? stored : 'system';
+
+    select.addEventListener('change', () => {
+      const value = select.value;
+      // 通过全局 themeUI 实例切换主题（同步按钮和 DOM）
+      if (window.app && window.app.themeUI) {
+        window.app.themeUI.setTheme(value);
+      } else {
+        // 降级：直接操作
+        localStorage.setItem('a366-theme', value);
+        const mql = window.matchMedia('(prefers-color-scheme: dark)');
+        const effective = (value === 'system') ? (mql.matches ? 'dark' : 'light') : value;
+        document.documentElement.setAttribute('data-theme', effective);
+      }
+    });
+  }
+
   // 初始化 TUN 强制软包模式设置
   async initTunSettings() {
     try {
