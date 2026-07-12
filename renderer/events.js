@@ -317,6 +317,13 @@ class EventManager {
         this.state.switchView('rules');
       });
     }
+    const openSpeed = document.getElementById('simple-open-speed');
+    if (openSpeed) {
+      openSpeed.addEventListener('click', () => {
+        this.state.setSimplePage('app');
+        this.state.switchView('speed');
+      });
+    }
     const openCommunityFromRules = document.getElementById('simple-open-community-from-rules');
     if (openCommunityFromRules) {
       openCommunityFromRules.addEventListener('click', () => {

@@ -71,7 +71,7 @@ class StateManager {
 
   // 同步简单模式控制面板状态
   syncSimpleControlPanelActive(viewName) {
-    const ids = ['simple-open-answers', 'simple-open-rules', 'simple-open-settings'];
+    const ids = ['simple-open-answers', 'simple-open-rules', 'simple-open-speed', 'simple-open-settings'];
     const ui = document.documentElement.getAttribute('data-ui');
     const page = document.documentElement.getAttribute('data-simple-page');
     ids.forEach((id) => {
@@ -85,6 +85,8 @@ class StateManager {
       activeId = 'simple-open-answers';
     } else if (viewName === 'rules' || viewName === 'community') {
       activeId = 'simple-open-rules';
+    } else if (viewName === 'speed') {
+      activeId = 'simple-open-speed';
     } else if (viewName === 'settings') {
       activeId = 'simple-open-settings';
     }
