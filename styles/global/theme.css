@@ -95,6 +95,7 @@ html.theme-switching *::after {
   color: var(--color-text-muted);
   cursor: pointer;
   font-size: var(--text-xl);
+  line-height: 1;
   box-shadow: var(--shadow-sm);
   transition: background var(--ease-normal), color var(--ease-normal),
               border-color var(--ease-normal), transform var(--ease-normal);

@@ -107,23 +107,24 @@ export default class ThemeUI {
     }
   }
 
-  // 图标/文案: 根据 _getStored() 显示对应提示
+  // 图标/文案: 显示"点击后即将切换到的模式"
   _updateButtons() {
     const stored = this._getStored();
+    const idx = THEMES.indexOf(stored);
+    const next = THEMES[(idx + 1) % THEMES.length];
     let iconClass, labelText, title;
-    if (stored === 'system') {
-      const effective = this._current();
-      iconClass = effective === 'dark' ? 'bi bi-circle-half' : 'bi bi-circle-half';
+    if (next === 'system') {
+      iconClass = 'bi bi-circle-half';
       labelText = '跟随系统';
-      title = '当前跟随系统';
-    } else if (stored === 'dark') {
-      iconClass = 'bi bi-brightness-high';
-      labelText = '浅色模式';
       title = '切换到跟随系统';
-    } else {
+    } else if (next === 'dark') {
       iconClass = 'bi bi-moon-stars';
       labelText = '深色模式';
       title = '切换到深色模式';
+    } else {
+      iconClass = 'bi bi-brightness-high';
+      labelText = '浅色模式';
+      title = '切换到浅色模式';
     }
     this.btns.forEach((btn) => {
       const icon = btn.querySelector('i');
