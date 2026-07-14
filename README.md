@@ -19,7 +19,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 ## Todo List待办清单
 
-### 新版本(v0.9.1)已完成
+### 新版本(v0.9.5)已完成
 
 - [新功能]加入导出答案为PDF功能
 - [新功能]自动填空支持选择题Beta版(By ゼロ)
@@ -29,10 +29,13 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [BUG修复]自动填空在题干中间时的匹配问题
 - [新功能]加入天学网进程加速(基于OpenSpeedy)(Beta版)(By 五羰基)
 - [新功能]深色模式UI支持(By 五烃基)
+- [新功能]自动填空支持时间修改(By Fish)
+- [优化]将所有规则改为使用动态注入(By Fish)
+- [优化]优化包体体积(减小约50mb)
 
 ### BUG问题
 
-- 无
+- 进程加速存在问题
 
 ### TODO新功能
 
@@ -40,7 +43,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 - 深度UI更新
 - 加入Funny模式
-- 优化听力自动化
+- 优化听力自动化(听说)
 - Log日志系统与通知系统优化
 
 #### 长期更新
