@@ -12,6 +12,17 @@ let rawAnswerData = [];
 let elementAnswerMap = new Map();
 const MAX_LOG_MESSAGES = 200;  // 最大日志数量
 
+// ===== 时间修改（参考 auto-pk / auto-listening，对应本地代理 /fill-time 端点）=====
+let fillTimeModEnabled = localStorage.getItem('fillTimeModEnabled') === 'true';
+let fillTimeModSeconds = (function() {
+    var raw = localStorage.getItem('fillTimeModSeconds');
+    if (raw === null || raw === '') return null;
+    var v = parseInt(raw, 10);
+    return Number.isFinite(v) ? v : null;
+})();
+const FILL_TIME_INT32_MIN = -2147483648;
+const FILL_TIME_INT32_MAX = 2147483647;
+
 function loadBucketFromServer() {
     try {
         const url = customBucketUrl || 'http://127.0.0.1:5290/fill-answer';
@@ -732,6 +743,52 @@ function stopAutoFill() {
     addLogMessage('自动填空已停止', 'info');
 }
 
+// 时间修改 —— 把"启用/秒数"状态经本地 bucket server 推给代理层
+// 代理层据此改写 fill 提交的 duration（落库时 ×1000 转毫秒）
+let FillTimeMod = {
+    bucketBase: function() {
+        // 从 customBucketUrl 提取 origin；为空时回退默认端口
+        // 不用 new URL() 以兼容 local:// 等 protocol
+        var full = customBucketUrl || '';
+        if (full) {
+            var m = full.match(/^(https?:\/\/[^\/]+)/);
+            if (m) return m[1];
+        }
+        return 'http://127.0.0.1:5290';
+    },
+    push: function() {
+        var payload = {
+            enabled: fillTimeModEnabled === true,
+            seconds: (fillTimeModSeconds === null || fillTimeModSeconds === undefined)
+                ? null : fillTimeModSeconds
+        };
+        try {
+            fetch(FillTimeMod.bucketBase() + '/fill-time', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                cache: 'no-cache'
+            }).then(function(r) { return r.json(); })
+              .then(function(res) {
+                  if (res && res.success) {
+                      addLogMessage('[时间修改] 状态已同步到代理层 | 启用='
+                          + payload.enabled + ' 秒数=' + (payload.seconds === null ? '-' : payload.seconds), 'success');
+                  } else {
+                      addLogMessage('[时间修改] 同步失败(代理层返回异常)', 'warning');
+                  }
+              })
+              .catch(function(e) {
+                  addLogMessage('[时间修改] 同步失败：连不上本地服务(' + e.message + ')，确认代理已开启', 'warning');
+              });
+        } catch (e) {
+            addLogMessage('[时间修改] 同步异常：' + e.message, 'warning');
+        }
+    },
+    install: function() {
+        FillTimeMod.push();
+    }
+};
+
 // 注入成功后显示提示文字
 const showSuccessMessage = () => {
     const messageDiv = document.createElement('div');
@@ -1183,6 +1240,115 @@ function createAutoFillPanel() {
     matchModeRow.appendChild(matchModeLabel);
     autoFillPanel.appendChild(matchModeRow);
 
+    // ===== 时间修改行（参考 auto-pk / auto-listening）=====
+    const timeModRow = document.createElement('div');
+    timeModRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 4px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        gap: 4px;
+    `;
+
+    const timeModLabel = document.createElement('span');
+    timeModLabel.textContent = '时间修改';
+    timeModLabel.style.cssText = `font-size: 11px; font-weight: 600; color: #fff; margin-right: 4px;`;
+
+    const timeModEnable = document.createElement('input');
+    timeModEnable.type = 'checkbox';
+    timeModEnable.checked = fillTimeModEnabled;
+    timeModEnable.style.cssText = `margin: 0 2px; cursor: pointer;`;
+
+    function ftMakeNumInput() {
+        const el = document.createElement('input');
+        el.type = 'number';
+        el.step = '1';
+        el.min = String(FILL_TIME_INT32_MIN);
+        el.max = String(FILL_TIME_INT32_MAX);
+        el.placeholder = '-';
+        el.style.cssText = `
+            width: 52px; font-size: 11px; text-align: center;
+            background: rgba(255,255,255,0.2); color: #fff;
+            border: 1px solid rgba(255,255,255,0.3); border-radius: 3px;
+            padding: 2px 4px;
+        `;
+        el.disabled = !fillTimeModEnabled;
+        el.style.opacity = fillTimeModEnabled ? '1' : '0.5';
+        return el;
+    }
+    const ftMinInput = ftMakeNumInput();
+    const ftSecInput = ftMakeNumInput();
+
+    function ftFillFromTotal() {
+        if (fillTimeModSeconds === null || fillTimeModSeconds === undefined) {
+            ftMinInput.value = '';
+            ftSecInput.value = '';
+            return;
+        }
+        const total = fillTimeModSeconds;
+        const sign = total < 0 ? -1 : 1;
+        const abs = Math.abs(total);
+        ftMinInput.value = String(Math.floor(abs / 60) * sign);
+        ftSecInput.value = String((abs % 60) * sign);
+    }
+    ftFillFromTotal();
+
+    function ftCommitFromInputs() {
+        const mRaw = ftMinInput.value.trim();
+        const sRaw = ftSecInput.value.trim();
+        if (mRaw === '' && sRaw === '') {
+            fillTimeModSeconds = null;
+            localStorage.removeItem('fillTimeModSeconds');
+            addLogMessage('[时间修改] 时间已清空（提交不会被修改）', 'info');
+            FillTimeMod.push();
+            return;
+        }
+        let m = mRaw === '' ? 0 : parseInt(mRaw, 10);
+        let s = sRaw === '' ? 0 : parseInt(sRaw, 10);
+        if (!Number.isFinite(m)) m = 0;
+        if (!Number.isFinite(s)) s = 0;
+        let total = m * 60 + s;
+        if (total < FILL_TIME_INT32_MIN) total = FILL_TIME_INT32_MIN;
+        if (total > FILL_TIME_INT32_MAX) total = FILL_TIME_INT32_MAX;
+        fillTimeModSeconds = total;
+        localStorage.setItem('fillTimeModSeconds', String(total));
+        ftFillFromTotal();
+        addLogMessage('[时间修改] 提交用时设为 ' + m + '分' + s + '秒 = ' + total + '秒', 'info');
+        FillTimeMod.push();
+    }
+
+    timeModEnable.addEventListener('change', () => {
+        fillTimeModEnabled = timeModEnable.checked;
+        localStorage.setItem('fillTimeModEnabled', String(fillTimeModEnabled));
+        ftMinInput.disabled = !fillTimeModEnabled;
+        ftSecInput.disabled = !fillTimeModEnabled;
+        ftMinInput.style.opacity = fillTimeModEnabled ? '1' : '0.5';
+        ftSecInput.style.opacity = fillTimeModEnabled ? '1' : '0.5';
+        addLogMessage('[时间修改] ' + (fillTimeModEnabled ? '已启用' : '已禁用')
+            + (fillTimeModEnabled && fillTimeModSeconds === null ? '（时间未填，提交不会被修改）' : ''), 'info');
+        FillTimeMod.push();
+    });
+    ftMinInput.addEventListener('change', ftCommitFromInputs);
+    ftSecInput.addEventListener('change', ftCommitFromInputs);
+
+    const ftMinSuffix = document.createElement('span');
+    ftMinSuffix.textContent = '分';
+    ftMinSuffix.style.cssText = `font-size: 11px; color: #ccc; margin: 0 4px 0 2px;`;
+
+    const ftSecSuffix = document.createElement('span');
+    ftSecSuffix.textContent = '秒';
+    ftSecSuffix.style.cssText = `font-size: 11px; color: #ccc; margin-left: 2px;`;
+
+    timeModRow.appendChild(timeModLabel);
+    timeModRow.appendChild(timeModEnable);
+    timeModRow.appendChild(ftMinInput);
+    timeModRow.appendChild(ftMinSuffix);
+    timeModRow.appendChild(ftSecInput);
+    timeModRow.appendChild(ftSecSuffix);
+    autoFillPanel.appendChild(timeModRow);
+
     const statusRow = document.createElement('div');
     statusRow.style.fontSize = '12px';
     statusRow.style.marginBottom = '6px';
@@ -1272,6 +1438,7 @@ function initAutoFill() {
     createLogPanel();
     addLogMessage('系统初始化完成', 'success');
     loadBucketFromServer();
+    FillTimeMod.install();
 }
 
 if (document.readyState === 'loading') {

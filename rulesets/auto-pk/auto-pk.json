@@ -33,14 +33,13 @@
     "updatedAt": "2026-05-27T14:50:00.000Z"
   },
   {
-    "name": "注入ZIP",
-    "type": "zip-implant",
-    "description": "注入ZIP",
+    "name": "动态注入",
+    "type": "zip-implant-dynamic",
+    "description": "动态注入",
     "enabled": true,
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
     "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
-    "zipImplant": "auto-pk.zip",
-    "createdAt": "2026-02-25T10:12:43.688Z",
-    "updatedAt": "2026-02-25T10:12:43.688Z"
+    "injectScript": "auto-pk.js",
+    "downloadTimeout": 30000
   }
 ]
