@@ -43,7 +43,12 @@
     },
     "files": [
       "**/*",
+      "!.http-mitm-proxy/**/*",
+      "!.trae/**/*",
+      "!.vscode/**/*",
+      "!answers/**/*",
       "!dist/**/*",
+      "!temp/**/*",
       "!.git/**/*",
       "!web/**/*"
     ],

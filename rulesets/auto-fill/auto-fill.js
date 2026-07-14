@@ -8,6 +8,7 @@ let customBucketUrl = localStorage.getItem('customFillBucketUrl') || '';  // 自
 let logPanel = null;  // 日志面板
 let logMessages = [];  // 日志消息数组
 let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || false;
+let supportChoiceQuestions = localStorage.getItem('supportChoiceQuestions') === 'true' || false;
 let rawAnswerData = [];
 let elementAnswerMap = new Map();
 const MAX_LOG_MESSAGES = 200;  // 最大日志数量
@@ -582,7 +583,7 @@ async function work() {
     };
 
     // ========== 选择题自动选择 ==========
-    const choiceFilledCount = await fillChoiceQuestions();
+    const choiceFilledCount = supportChoiceQuestions ? await fillChoiceQuestions() : 0;
 
     // ========== 填空题自动填写 ==========
     const preparedElements = document.getElementsByClassName('u3-input__prepared');
@@ -1239,6 +1240,83 @@ function createAutoFillPanel() {
     matchModeRow.appendChild(matchModeCheckbox);
     matchModeRow.appendChild(matchModeLabel);
     autoFillPanel.appendChild(matchModeRow);
+
+    // 支持选择题复选框（依赖内容匹配模式）
+    const supportChoiceRow = document.createElement('div');
+    supportChoiceRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 4px 4px 4px 16px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        opacity: ${contentMatchMode ? '1' : '0.5'};
+    `;
+
+    const supportChoiceCheckbox = document.createElement('input');
+    supportChoiceCheckbox.type = 'checkbox';
+    supportChoiceCheckbox.id = 'support-choice-questions';
+    supportChoiceCheckbox.checked = supportChoiceQuestions;
+    supportChoiceCheckbox.disabled = !contentMatchMode;
+    supportChoiceCheckbox.style.cssText = `
+        margin-right: 8px;
+        cursor: ${contentMatchMode ? 'pointer' : 'not-allowed'};
+    `;
+    supportChoiceCheckbox.addEventListener('change', (e) => {
+        if (!contentMatchMode) {
+            e.target.checked = false;
+            return;
+        }
+        supportChoiceQuestions = e.target.checked;
+        localStorage.setItem('supportChoiceQuestions', supportChoiceQuestions.toString());
+        addLogMessage('支持选择题: ' + (supportChoiceQuestions ? '已启用' : '已禁用'), 'info');
+        updateSupportChoiceLabel();
+    });
+
+    const supportChoiceLabel = document.createElement('label');
+    supportChoiceLabel.htmlFor = 'support-choice-questions';
+    supportChoiceLabel.style.cssText = `
+        font-size: 11px;
+        cursor: ${contentMatchMode ? 'pointer' : 'not-allowed'};
+        flex: 1;
+    `;
+
+    function updateSupportChoiceLabel() {
+        const enabled = contentMatchMode && supportChoiceQuestions;
+        const color = enabled ? '#4caf50' : '#888';
+        const statusText = supportChoiceQuestions ? (contentMatchMode ? '(开启)' : '(已禁用-需先开启内容匹配)') : '(关闭)';
+        supportChoiceLabel.innerHTML = `
+            <span style="color: ${color};">
+                支持选择题(需要先开启内容匹配) ${statusText}
+            </span>
+        `;
+    }
+
+    function updateSupportChoiceState() {
+        const enabled = contentMatchMode;
+        supportChoiceCheckbox.disabled = !enabled;
+        supportChoiceRow.style.opacity = enabled ? '1' : '0.5';
+        supportChoiceCheckbox.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        supportChoiceLabel.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        if (!enabled) {
+            // 内容匹配关闭时，自动取消支持选择题
+            if (supportChoiceQuestions) {
+                supportChoiceQuestions = false;
+                localStorage.setItem('supportChoiceQuestions', 'false');
+            }
+            supportChoiceCheckbox.checked = false;
+        }
+        updateSupportChoiceLabel();
+    }
+
+    updateSupportChoiceLabel();
+
+    // 内容匹配模式变化时同步支持选择题状态
+    matchModeCheckbox.addEventListener('change', updateSupportChoiceState);
+
+    supportChoiceRow.appendChild(supportChoiceCheckbox);
+    supportChoiceRow.appendChild(supportChoiceLabel);
+    autoFillPanel.appendChild(supportChoiceRow);
 
     // ===== 时间修改行（参考 auto-pk / auto-listening）=====
     const timeModRow = document.createElement('div');
