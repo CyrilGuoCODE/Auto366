@@ -35,6 +35,9 @@ class ProxyServer {
     // ===== 听力时间修改（"内置-自动基础听力"子规则，状态由听力面板经 /listen-time 推送）=====
     // 改 task/score/submit 的 tasksJson.seconds 并重算 ut 签名（salt 固定）。
     this.listenTime = { enabled: false, seconds: null };
+    // ===== 填空时间修改（"自动填空"子规则，状态由填空面板经 /fill-time 推送）=====
+    // 与听力时间修改共用 task/score/submit 接口，改 tasksJson.seconds 并重算 ut。
+    this.fillTimeMod = { enabled: false, seconds: null };
     this.LISTEN_TIME_SALT = 'submitTaskToken-pc-987654';
     this.mainWindow = null;
     this.trafficCache = new Map();
@@ -92,8 +95,9 @@ class ProxyServer {
         const hasPostChangeTimeRule = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method).length > 0;
         const hasPkTimeMod = this.shouldApplyPkTimeMod(fullUrl, ctx.clientToProxyRequest.method);
         const hasListenTime = this.shouldApplyListenTime(fullUrl, ctx.clientToProxyRequest.method);
-        // 需要拦截改写 body 的任一情形：post-change-time 规则 或 PK时间修改 或 听力时间修改
-        const needBufferBody = hasPostChangeTimeRule || hasPkTimeMod || hasListenTime;
+        const hasFillTimeMod = this.shouldApplyFillTimeMod(fullUrl, ctx.clientToProxyRequest.method);
+        // 需要拦截改写 body 的任一情形：post-change-time 规则 或 PK时间修改 或 听力时间修改 或 填空时间修改
+        const needBufferBody = hasPostChangeTimeRule || hasPkTimeMod || hasListenTime || hasFillTimeMod;
 
         ctx.onRequestData((ctx, chunk, callback) => {
           requestBody.push(chunk)
@@ -136,6 +140,13 @@ class ProxyServer {
             // ===== 听力时间修改：改写听力作业提交用时 =====
             if (hasListenTime) {
               const modifiedBody = this.applyListenTime(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+              this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
+              return callback();
+            }
+
+            // ===== 填空时间修改：改写填空作业提交用时 =====
+            if (hasFillTimeMod) {
+              const modifiedBody = this.applyFillTimeMod(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
               this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
               return callback();
             }
@@ -452,6 +463,46 @@ class ProxyServer {
           'Access-Control-Allow-Origin': '*'
         });
         res.end(JSON.stringify(this.listenTime));
+        return;
+      }
+
+      // ===== 填空时间修改：填空面板推送开关/秒数 =====
+      if (req.method === 'POST' && req.url === '/fill-time') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            const enabled = data.enabled === true;
+            let seconds = null;
+            if (data.seconds !== null && data.seconds !== undefined && data.seconds !== '') {
+              const v = parseInt(data.seconds, 10);
+              if (Number.isFinite(v)) {
+                seconds = Math.max(INT32_MIN, Math.min(INT32_MAX, v));
+              }
+            }
+            this.fillTimeMod = { enabled, seconds };
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: true, fillTimeMod: this.fillTimeMod }));
+          } catch (e) {
+            res.writeHead(500, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: false, error: e.message }));
+          }
+        });
+        return;
+      }
+      if (req.method === 'GET' && url.parse(req.url).pathname === '/fill-time') {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify(this.fillTimeMod));
         return;
       }
 
@@ -988,6 +1039,86 @@ class ProxyServer {
     if (this.listenTime.seconds === null || this.listenTime.seconds === undefined) return false;
     if (method && method !== 'POST') return false;
     return url.indexOf('task/score/submit') !== -1;
+  }
+
+  // ===== 填空时间修改：是否命中填空作业提交接口 =====
+  shouldApplyFillTimeMod(url, method) {
+    if (!this.fillTimeMod || this.fillTimeMod.enabled !== true) return false;
+    if (this.fillTimeMod.seconds === null || this.fillTimeMod.seconds === undefined) return false;
+    if (method && method !== 'POST') return false;
+    return url.indexOf('task/score/submit') !== -1;
+  }
+
+  // 改写 tasksJson.seconds，用固定 salt 重算 ut（复用 calculateUt）
+  applyFillTimeMod(bodyText, url, contentType) {
+    if (!contentType || !contentType.includes('application/x-www-form-urlencoded')) {
+      this.safeIpcSend('rule-log', {
+        type: 'warning',
+        message: `[填空时间] 命中提交，但content-type非表单(${contentType || '无'})，原样放行`,
+        url
+      });
+      return bodyText;
+    }
+
+    let targetSeconds = this.fillTimeMod.seconds;
+    targetSeconds = Math.max(INT32_MIN, Math.min(INT32_MAX, targetSeconds));
+
+    const formFields = [];
+    let tasksJsonRaw = null;
+    for (const pair of bodyText.split('&')) {
+      if (!pair.includes('=')) continue;
+      const eqIndex = pair.indexOf('=');
+      const key = pair.substring(0, eqIndex);
+      const value = pair.substring(eqIndex + 1);
+      if (key === 'tasksJson') {
+        tasksJsonRaw = decodeURIComponent(value);
+      } else if (key === 'ut') {
+        // 丢弃旧 ut，下面重算
+      } else {
+        formFields.push([key, value]);
+      }
+    }
+
+    if (tasksJsonRaw === null) {
+      this.safeIpcSend('rule-log', {
+        type: 'warning',
+        message: `[填空时间] body无tasksJson字段，原样放行`,
+        url
+      });
+      return bodyText;
+    }
+
+    let tasksJson;
+    try {
+      tasksJson = JSON.parse(tasksJsonRaw);
+    } catch (e) {
+      this.safeIpcSend('rule-log', {
+        type: 'warning',
+        message: `[填空时间] tasksJson解析失败，原样放行`,
+        url
+      });
+      return bodyText;
+    }
+
+    const oldSeconds = tasksJson.seconds;
+    tasksJson.seconds = targetSeconds;
+
+    const newTasksJsonRaw = JSON.stringify(tasksJson);
+    const newUt = this.calculateUt(newTasksJsonRaw, this.LISTEN_TIME_SALT);
+
+    formFields.push(['tasksJson', encodeURIComponent(newTasksJsonRaw)]);
+    formFields.push(['ut', encodeURIComponent(newUt)]);
+
+    const modifiedBody = formFields.map(([k, v]) => k + '=' + v).join('&');
+
+    this.safeIpcSend('rule-log', {
+      type: 'success',
+      message: `[填空时间] 提交时间已修改 ✓`,
+      url,
+      details: `seconds: ${oldSeconds} → ${targetSeconds}s | ut 已重算`
+    });
+
+    return modifiedBody;
   }
 
   // 改写 tasksJson.seconds，用固定 salt 重算 ut（复用 calculateUt）
