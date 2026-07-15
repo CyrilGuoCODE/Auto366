@@ -49,8 +49,11 @@
       "!answers/**/*",
       "!dist/**/*",
       "!temp/**/*",
+      "!file/**/*",
       "!.git/**/*",
-      "!web/**/*"
+      "!web/**/*",
+      "!resources/tun/**/*",
+      "!resources/openspeedy/**/*"
     ],
     "extraResources": [
       {
@@ -63,7 +66,11 @@
       },
       {
         "from": "./resources/tun",
-        "to": "../tun"
+        "to": "tun"
+      },
+      {
+        "from": "./resources/openspeedy",
+        "to": "openspeedy"
       }
     ],
     "win": {
