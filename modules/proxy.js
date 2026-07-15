@@ -35,10 +35,11 @@ class ProxyServer {
     // ===== 听力时间修改（"内置-自动基础听力"子规则，状态由听力面板经 /listen-time 推送）=====
     // 改 task/score/submit 的 tasksJson.seconds 并重算 ut 签名（salt 固定）。
     this.listenTime = { enabled: false, seconds: null };
-    // ===== 填空时间修改（"自动填空"子规则，状态由填空面板经 /fill-time 推送）=====
-    // 与听力时间修改共用 task/score/submit 接口，改 tasksJson.seconds 并重算 ut。
-    this.fillTimeMod = { enabled: false, seconds: null };
     this.LISTEN_TIME_SALT = 'submitTaskToken-pc-987654';
+    // ===== 填空时间修改（"内置-自动填空"子规则，状态由填空面板经 /fill-time 推送）=====
+    // 同样改 task/score/submit 的 tasksJson.seconds 并重算 ut，用不同的 salt 以与听力区分
+    this.fillTimeMod = { enabled: false, seconds: null };
+    this.FILL_TIME_SALT = 'submitTaskToken-pc-987654'; // 与听力共用同一服务端盐值
     this.mainWindow = null;
     this.trafficCache = new Map();
     this.serverDatas = {};
@@ -95,9 +96,9 @@ class ProxyServer {
         const hasPostChangeTimeRule = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method).length > 0;
         const hasPkTimeMod = this.shouldApplyPkTimeMod(fullUrl, ctx.clientToProxyRequest.method);
         const hasListenTime = this.shouldApplyListenTime(fullUrl, ctx.clientToProxyRequest.method);
-        const hasFillTimeMod = this.shouldApplyFillTimeMod(fullUrl, ctx.clientToProxyRequest.method);
+        const hasFillTime = this.shouldApplyFillTime(fullUrl, ctx.clientToProxyRequest.method);
         // 需要拦截改写 body 的任一情形：post-change-time 规则 或 PK时间修改 或 听力时间修改 或 填空时间修改
-        const needBufferBody = hasPostChangeTimeRule || hasPkTimeMod || hasListenTime || hasFillTimeMod;
+        const needBufferBody = hasPostChangeTimeRule || hasPkTimeMod || hasListenTime || hasFillTime;
 
         ctx.onRequestData((ctx, chunk, callback) => {
           requestBody.push(chunk)
@@ -144,11 +145,26 @@ class ProxyServer {
               return callback();
             }
 
-            // ===== 填空时间修改：改写填空作业提交用时 =====
-            if (hasFillTimeMod) {
+            // ===== 填空时间修改：改写填空作业提交用时（gzip端点需重新压缩）=====
+            if (hasFillTime) {
               const modifiedBody = this.applyFillTimeMod(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
-              this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
-              return callback();
+              zlib.gzip(Buffer.from(modifiedBody, 'utf-8'), (err, compressed) => {
+                if (err) {
+                  this.safeIpcSend('rule-log', { type: 'error', message: `[填空时间] gzip压缩失败: ` + err.message, url: fullUrl });
+                  this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
+                } else {
+                  ctx.proxyToServerRequest.removeHeader('transfer-encoding');
+                  ctx.proxyToServerRequest.setHeader('content-encoding', 'gzip');
+                  ctx.proxyToServerRequest.setHeader('content-length', compressed.length);
+                  ctx.proxyToServerRequest.write(compressed);
+                  if (requestInfo) {
+                    try { requestInfo.requestBody = JSON.stringify(JSON.parse(modifiedBody), null, 2); }
+                    catch (e) { requestInfo.requestBody = modifiedBody; }
+                  }
+                }
+                return callback();
+              });
+              return;
             }
 
             if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/json')) {
@@ -1041,20 +1057,26 @@ class ProxyServer {
     return url.indexOf('task/score/submit') !== -1;
   }
 
-  // ===== 填空时间修改：是否命中填空作业提交接口 =====
-  shouldApplyFillTimeMod(url, method) {
+  // ===== 填空时间修改：是否命中作业提交接口 =====
+  // 与听力共用 task/score/submit 接口，但仅在听力时间修改未启用时生效，避免冲突
+  shouldApplyFillTime(url, method) {
     if (!this.fillTimeMod || this.fillTimeMod.enabled !== true) return false;
     if (this.fillTimeMod.seconds === null || this.fillTimeMod.seconds === undefined) return false;
     if (method && method !== 'POST') return false;
-    return url.indexOf('task/score/submit') !== -1;
+    // 听力时间修改已启用时不重复处理（听力有独立salt，优先级更高）
+    if (this.listenTime && this.listenTime.enabled === true && this.listenTime.seconds !== null) return false;
+    return url.indexOf('task/score/gzip/submit') !== -1;
   }
 
-  // 改写 tasksJson.seconds，用固定 salt 重算 ut（复用 calculateUt）
+  // 改写 tasksJson.seconds，用填空专用 salt 重算 ut
+  // 支持两种格式：application/json (gzip提交) 和 application/x-www-form-urlencoded (普通提交)
   applyFillTimeMod(bodyText, url, contentType) {
-    if (!contentType || !contentType.includes('application/x-www-form-urlencoded')) {
+    const isJson = contentType && contentType.includes('application/json');
+    const isForm = contentType && contentType.includes('application/x-www-form-urlencoded');
+    if (!isJson && !isForm) {
       this.safeIpcSend('rule-log', {
         type: 'warning',
-        message: `[填空时间] 命中提交，但content-type非表单(${contentType || '无'})，原样放行`,
+        message: `[填空时间] 命中提交，但content-type不支持(${contentType || '无'})，原样放行`,
         url
       });
       return bodyText;
@@ -1063,20 +1085,51 @@ class ProxyServer {
     let targetSeconds = this.fillTimeMod.seconds;
     targetSeconds = Math.max(INT32_MIN, Math.min(INT32_MAX, targetSeconds));
 
-    const formFields = [];
     let tasksJsonRaw = null;
-    for (const pair of bodyText.split('&')) {
-      if (!pair.includes('=')) continue;
-      const eqIndex = pair.indexOf('=');
-      const key = pair.substring(0, eqIndex);
-      const value = pair.substring(eqIndex + 1);
-      if (key === 'tasksJson') {
-        tasksJsonRaw = decodeURIComponent(value);
-      } else if (key === 'ut') {
-        // 丢弃旧 ut，下面重算
-      } else {
-        formFields.push([key, value]);
+    let otherFields = {}; // for JSON: other top-level keys; for form: other form fields
+
+    if (isJson) {
+      // JSON body: {"tasksJson":"<url-encoded>","ut":"...","submitType":8}
+      let jsonObj;
+      try {
+        jsonObj = JSON.parse(bodyText);
+      } catch (e) {
+        this.safeIpcSend('rule-log', {
+          type: 'warning',
+          message: `[填空时间] JSON解析失败，原样放行: ` + e.message,
+          url
+        });
+        return bodyText;
       }
+      if (!jsonObj.tasksJson) {
+        this.safeIpcSend('rule-log', {
+          type: 'warning',
+          message: `[填空时间] JSON body无tasksJson字段，原样放行`,
+          url
+        });
+        return bodyText;
+      }
+      tasksJsonRaw = jsonObj.tasksJson;
+      // 保存其他字段（ut 要重新计算，其他字段保留）
+      const { tasksJson, ut, ...rest } = jsonObj;
+      otherFields = rest;
+    } else {
+      // Form body: tasksJson=<url-encoded>&ut=...&other=...
+      const formFields = [];
+      for (const pair of bodyText.split('&')) {
+        if (!pair.includes('=')) continue;
+        const eqIndex = pair.indexOf('=');
+        const key = pair.substring(0, eqIndex);
+        const value = pair.substring(eqIndex + 1);
+        if (key === 'tasksJson') {
+          tasksJsonRaw = decodeURIComponent(value);
+        } else if (key === 'ut') {
+          // 忽略旧ut，下面重算
+        } else {
+          formFields.push([key, value]);
+        }
+      }
+      otherFields = { _formFields: formFields };
     }
 
     if (tasksJsonRaw === null) {
@@ -1088,37 +1141,55 @@ class ProxyServer {
       return bodyText;
     }
 
-    let tasksJson;
-    try {
-      tasksJson = JSON.parse(tasksJsonRaw);
-    } catch (e) {
-      this.safeIpcSend('rule-log', {
-        type: 'warning',
-        message: `[填空时间] tasksJson解析失败，原样放行`,
-        url
-      });
-      return bodyText;
+    const secondsMatch = tasksJsonRaw.match(/"seconds":(\d+)/);
+    const originalSeconds = secondsMatch ? parseInt(secondsMatch[1], 10) : null;
+
+    let modifiedTasksJson = tasksJsonRaw.replace(
+      /"seconds":\d+/g,
+      `"seconds":${targetSeconds}`
+    );
+
+    // 同步修改 studyDate，让时间差与 seconds 一致（服务器以此校验实际用时）
+    let studyDateDelta = 0;
+    if (originalSeconds !== null) {
+      const studyDateMatch = modifiedTasksJson.match(/"studyDate":(\d+)/);
+      if (studyDateMatch) {
+        const originalStudyDate = parseInt(studyDateMatch[1], 10);
+        studyDateDelta = (targetSeconds - originalSeconds) * 1000;
+        const newStudyDate = originalStudyDate + studyDateDelta;
+        modifiedTasksJson = modifiedTasksJson.replace(
+          /"studyDate":\d+/,
+          `"studyDate":${newStudyDate}`
+        );
+      }
     }
 
-    const oldSeconds = tasksJson.seconds;
-    tasksJson.seconds = targetSeconds;
-
-    const newTasksJsonRaw = JSON.stringify(tasksJson);
-    const newUt = this.calculateUt(newTasksJsonRaw, this.LISTEN_TIME_SALT);
-
-    formFields.push(['tasksJson', encodeURIComponent(newTasksJsonRaw)]);
-    formFields.push(['ut', encodeURIComponent(newUt)]);
-
-    const modifiedBody = formFields.map(([k, v]) => k + '=' + v).join('&');
+    const newUt = this.calculateUt(modifiedTasksJson, this.FILL_TIME_SALT);
 
     this.safeIpcSend('rule-log', {
       type: 'success',
-      message: `[填空时间] 提交时间已修改 ✓`,
+      message: `[填空时间] 填空提交时间已修改 ✓`,
       url,
-      details: `seconds: ${oldSeconds} → ${targetSeconds}s | ut 已重算`
+      details: `seconds: ${originalSeconds !== null ? originalSeconds : '?'} → ${targetSeconds} | studyDate${studyDateDelta >= 0 ? '+' : ''}${studyDateDelta}ms | ut已重算`
     });
 
-    return modifiedBody;
+    if (isJson) {
+      // 重新拼 JSON body
+      const newJsonObj = {
+        tasksJson: modifiedTasksJson,
+        ut: newUt,
+        ...otherFields
+      };
+      return JSON.stringify(newJsonObj);
+    } else {
+      // 重新拼 form body
+      const parts = ['tasksJson=' + encodeURIComponent(modifiedTasksJson)];
+      for (const [k, v] of otherFields._formFields) {
+        parts.push(k + '=' + v);
+      }
+      parts.push('ut=' + newUt);
+      return parts.join('&');
+    }
   }
 
   // 改写 tasksJson.seconds，用固定 salt 重算 ut（复用 calculateUt）
