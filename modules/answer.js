@@ -1637,7 +1637,7 @@ class AnswerExtractor {
     try {
       if (filePath.includes('correctAnswer')) {
         console.log('开始解析correctAnswer.xml文件');
-        const elementMatches = [...content.matchAll(/<element\s+id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
+        const elementMatches = [...content.matchAll(/<element\s+id="([^"]+)"[^>]*(?<!\/)>(.*?)<\/element>/gs)];
         console.log(`找到 ${elementMatches.length} 个element元素`);
 
         elementMatches.forEach((elementMatch, index) => {
@@ -1730,7 +1730,7 @@ class AnswerExtractor {
 
       if (filePath.includes('paper')) {
         console.log('开始解析paper.xml文件');
-        const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*>(.*?)<\/element>/gs)];
+        const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*(?<!\/)>(.*?)<\/element>/gs)];
         console.log(`找到 ${elementMatches.length} 个element元素`);
 
         elementMatches.forEach((elementMatch) => {
@@ -1897,13 +1897,20 @@ class AnswerExtractor {
           if (matchingQuestion) {
             console.log(`匹配成功 - 题目文本: "${matchingQuestion.questionText}"`);
 
-            // 如果答案是选项字母（如"A"），尝试获取选项内容
+            // 如果答案是选项字母（如"A"或"ACD"），尝试获取选项内容
             let answerContent = correctAns.answer;
             if (matchingQuestion.options && matchingQuestion.options.length > 0) {
-              const answerLetter = correctAns.answer.trim().charAt(0).toUpperCase();
-              const matchedOption = matchingQuestion.options.find(opt => opt.id === answerLetter);
-              if (matchedOption && matchedOption.text) {
-                answerContent = matchedOption.text;
+              const answerLetters = correctAns.answer.trim().split('').map(ch => ch.toUpperCase()).filter(ch => /[A-Z]/.test(ch));
+              if (answerLetters.length > 0) {
+                const matchedTexts = answerLetters
+                  .map(letter => {
+                    const opt = matchingQuestion.options.find(o => o.id === letter);
+                    return opt ? this.cleanHtmlText(opt.text) : null;
+                  })
+                  .filter(Boolean);
+                if (matchedTexts.length > 0) {
+                  answerContent = matchedTexts.join(' / ');
+                }
               }
             }
 

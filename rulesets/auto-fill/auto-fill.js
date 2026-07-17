@@ -11,7 +11,7 @@ let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || fa
 let supportChoiceQuestions = localStorage.getItem('supportChoiceQuestions') === 'true' || false;
 let rawAnswerData = [];
 let elementAnswerMap = new Map();
-const MAX_LOG_MESSAGES = 200;  // 最大日志数量
+const LOG_ROW_HEIGHT = 22;  // 虚拟滚动行高
 
 // ===== 时间修改（参考 auto-pk / auto-listening，对应本地代理 /fill-time 端点）=====
 let fillTimeModEnabled = localStorage.getItem('fillTimeModEnabled') === 'true';
@@ -139,10 +139,17 @@ function loadBucketFromServer() {
 
                 const multiBlankCount = Array.from(multiAnswerMap.values()).filter(list => list.length > 1).length;
                 if (multiBlankCount > 0) {
-                    addLogMessage(`检测到 ${multiBlankCount} 个多空题`, 'info');
+                    addLogMessage(`检测到 ${multiBlankCount} 个多空/多选题`, 'info');
+                    for (let [qNum, ansList] of multiAnswerMap) {
+                        if (ansList.length > 1) {
+                            const answerTexts = ansList.map(a => a.answer).join(', ');
+                            addLogMessage(`  题${qNum}: ${ansList.length}个答案 → [${answerTexts}]`, 'info');
+                        }
+                    }
                 }
-                
+
                 addLogMessage('内容匹配模式: ' + (contentMatchMode ? '已启用' : '已禁用'), 'info');
+                addLogMessage('支持选择题: ' + (supportChoiceQuestions ? '已启用' : '已禁用'), 'info');
                 console.log('填空答案库加载成功，共' + answers.length + '个题目');
                 console.log('多空题数据:', multiAnswerMap);
             })
@@ -428,6 +435,8 @@ async function fillChoiceQuestions() {
 
         // === 策略1: 内容匹配 — 用题目文本在答案库中查找，并验证答案出现在选项中 ===
         let targetAnswer = null;
+        let strategyUsed = '';
+        let backendQuestionNum = null;  // 后端题号，用于查 multiAnswerMap
         if (questionText) {
             // 首先尝试 findAnswerByContent（相似度>60%的最佳匹配）
             const match = findAnswerByContent(questionText);
@@ -435,6 +444,8 @@ async function fillChoiceQuestions() {
                 for (let oi = 0; oi < optionsData.length; oi++) {
                     if (answerMatchesOption(match.answer, optionsData[oi].cleanText)) {
                         targetAnswer = optionsData[oi].cleanText;
+                        strategyUsed = '策略1(内容匹配 ' + Math.round(match.similarity || 0) + '%)';
+                        backendQuestionNum = match.questionNum;
                         break;
                     }
                 }
@@ -449,6 +460,7 @@ async function fillChoiceQuestions() {
                     for (let oi = 0; oi < optionsData.length; oi++) {
                         if (answerMatchesOption(item.answer, optionsData[oi].cleanText)) {
                             targetAnswer = optionsData[oi].cleanText;
+                            backendQuestionNum = item.questionNum;
                             break;
                         }
                     }
@@ -496,6 +508,7 @@ async function fillChoiceQuestions() {
                 }
             }
             targetAnswer = pickBestAnswer(candidates);
+            if (targetAnswer) strategyUsed = '策略2(选项反查)';
         }
 
         // === 策略3: 字母标签匹配 — 答案为单字母时直接匹配选项的字母标签 ===
@@ -508,41 +521,66 @@ async function fillChoiceQuestions() {
                 const matchIdx = optionsData.findIndex(od => od.letterLabel === letter);
                 if (matchIdx !== -1) {
                     targetAnswer = optionsData[matchIdx].cleanText;
+                    strategyUsed = '策略3(字母匹配)';
                     break;
                 }
             }
         }
 
-        addLogMessage(`选择题 ${questionNum}: 题目="${questionText || '(空)'}", 答案="${targetAnswer || '未找到'}", 选项=[${optionsData.map(od => od.cleanText).join(', ')}]`, 'info');
+        // 如果策略1未设置后端题号，从 rawAnswerData 反查
+        if (targetAnswer && !backendQuestionNum) {
+            const entry = rawAnswerData.find(item => answerMatchesOption(item.answer, targetAnswer));
+            if (entry) backendQuestionNum = entry.questionNum;
+        }
 
-        if (!targetAnswer) continue;
+        addLogMessage(`选择题 ${questionNum}: 题目="${questionText || '(空)'}", ${strategyUsed ? '策略=' + strategyUsed + ', ' : ''}答案="${targetAnswer || '未找到'}", 后端题号=${backendQuestionNum || '?'}, 选项=[${optionsData.map(od => od.cleanText).join(', ')}]`, 'info');
 
-        // === 选择匹配的选项并点击 ===
+        // === 收集该题所有正确答案（支持多选题） ===
+        let allAnswersForQuestion = [];
+        // 优先用后端题号查 multiAnswerMap（避免 DOM 题号与后端题号不一致）
+        const lookupNum = backendQuestionNum || questionNum;
+        if (window.multiAnswerMap && window.multiAnswerMap.has(lookupNum)) {
+            const multiAnswers = window.multiAnswerMap.get(lookupNum);
+            allAnswersForQuestion = multiAnswers.map(a => a.answer).filter(Boolean);
+        }
+        // 回退：multiAnswerMap 无数据时使用单选的 targetAnswer
+        if (allAnswersForQuestion.length === 0 && targetAnswer) {
+            allAnswersForQuestion = [targetAnswer];
+        }
+
+        if (allAnswersForQuestion.length === 0) continue;
+
+        // === 选择匹配的选项并点击（每个答案匹配一个选项） ===
         let matched = false;
 
-        for (let oi = 0; oi < optionsData.length; oi++) {
-            const od = optionsData[oi];
-            if (od.element.classList.contains('is-checked')) continue;
-            if (answerMatchesOption(targetAnswer, od.cleanText)) {
-                od.element.click();
-                filledCount++;
-                addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
-                await wait1(50);
-                matched = true;
-                break;
+        for (const answerText of allAnswersForQuestion) {
+            for (let oi = 0; oi < optionsData.length; oi++) {
+                const od = optionsData[oi];
+                if (od.element.classList.contains('is-checked')) continue;
+                if (answerMatchesOption(answerText, od.cleanText)) {
+                    od.element.click();
+                    filledCount++;
+                    addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
+                    await wait1(50);
+                    matched = true;
+                    break; // 当前答案已匹配，处理下一个答案
+                }
             }
         }
 
-        // 字母回退：答案为单字母时按位置选择
-        if (!matched && /^[A-Fa-f]$/.test(targetAnswer.trim())) {
-            const letterIndex = targetAnswer.trim().toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
-            if (letterIndex < optionsData.length) {
-                const od = optionsData[letterIndex];
-                if (!od.element.classList.contains('is-checked')) {
-                    od.element.click();
-                    filledCount++;
-                    addLogMessage(`选择题 ${questionNum} 按字母 ${targetAnswer.trim().toUpperCase()} 选中: ${od.rawText}`, 'success');
-                    await wait1(50);
+        // 字母回退：未匹配的答案为单字母时按位置选择
+        if (!matched) {
+            const letterAnswers = allAnswersForQuestion.filter(a => /^[A-Fa-f]$/.test(a.trim()));
+            for (const letter of letterAnswers) {
+                const letterIndex = letter.trim().toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
+                if (letterIndex < optionsData.length) {
+                    const od = optionsData[letterIndex];
+                    if (!od.element.classList.contains('is-checked')) {
+                        od.element.click();
+                        filledCount++;
+                        addLogMessage(`选择题 ${questionNum} 按字母 ${letter.trim().toUpperCase()} 选中: ${od.rawText}`, 'success');
+                        await wait1(50);
+                    }
                 }
             }
         }
@@ -818,27 +856,14 @@ const showSuccessMessage = () => {
     }, 15000);
 };
 
-// 添加日志消息
+// 添加日志消息（无容量上限，虚拟滚动渲染）
 function addLogMessage(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
     logMessages.unshift({ timestamp, message, type });
-
-    if (logMessages.length > MAX_LOG_MESSAGES) {
-        const importantLogs = logMessages.filter(log => log.type === 'error' || log.type === 'warning');
-        const normalLogs = logMessages.filter(log => log.type !== 'error' && log.type !== 'warning');
-
-        const maxNormalLogs = MAX_LOG_MESSAGES - importantLogs.length;
-        const keptNormalLogs = normalLogs.slice(0, Math.max(0, maxNormalLogs));
-
-        logMessages = [...importantLogs, ...keptNormalLogs].sort((a, b) => {
-            return new Date('1970-01-01 ' + b.timestamp) - new Date('1970-01-01 ' + a.timestamp);
-        });
-    }
-
     updateLogPanel();
 }
 
-// 创建日志面板
+// 创建日志面板（虚拟滚动 + 导出功能）
 function createLogPanel() {
     if (logPanel) return;
     logPanel = document.createElement('div');
@@ -846,7 +871,7 @@ function createLogPanel() {
     logPanel.style.position = 'fixed';
     logPanel.style.right = '300px';
     logPanel.style.bottom = '80px';
-    logPanel.style.width = '350px';
+    logPanel.style.width = '380px';
     logPanel.style.height = '400px';
     logPanel.style.background = 'rgba(0,0,0,0.9)';
     logPanel.style.color = '#fff';
@@ -855,7 +880,7 @@ function createLogPanel() {
     logPanel.style.zIndex = '9998';
     logPanel.style.overflow = 'hidden';
     logPanel.style.display = 'none';
-    logPanel.style.userSelect = 'text'; // 允许文字选中
+    logPanel.style.userSelect = 'text';
 
     const header = document.createElement('div');
     header.style.display = 'flex';
@@ -864,7 +889,7 @@ function createLogPanel() {
     header.style.marginBottom = '8px';
     header.style.paddingBottom = '8px';
     header.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
-    header.style.cursor = 'move'; // 添加拖动光标
+    header.style.cursor = 'move';
 
     const titleSpan = document.createElement('span');
     titleSpan.textContent = '运行日志';
@@ -872,30 +897,66 @@ function createLogPanel() {
     titleSpan.style.fontWeight = 'bold';
     header.appendChild(titleSpan);
 
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = '导出';
+    exportBtn.title = '导出日志到桌面';
+    exportBtn.style.fontSize = '12px';
+    exportBtn.style.padding = '2px 6px';
+    exportBtn.style.cursor = 'pointer';
+    exportBtn.style.background = '#fff';
+    exportBtn.style.border = 'none';
+    exportBtn.style.color = '#000';
+    exportBtn.style.borderRadius = '3px';
+    exportBtn.style.marginRight = '3px';
+    exportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportLogs();
+    });
+    header.appendChild(exportBtn);
+
     const closeBtn = document.createElement('button');
-    closeBtn.textContent = '×';
+    closeBtn.textContent = '\u00d7';
     closeBtn.style.fontSize = '18px';
     closeBtn.style.padding = '0 6px';
     closeBtn.style.cursor = 'pointer';
     closeBtn.style.background = 'transparent';
     closeBtn.style.border = 'none';
     closeBtn.style.color = '#fff';
-    closeBtn.style.userSelect = 'none'; // 关闭按钮不参与文字选中
+    closeBtn.style.userSelect = 'none';
     closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // 阻止事件冒泡
+        e.stopPropagation();
         logPanel.style.display = 'none';
     });
     header.appendChild(closeBtn);
     logPanel.appendChild(header);
 
-    const logContent = document.createElement('div');
-    logContent.id = 'auto-fill-log-content';
-    logContent.style.height = 'calc(100% - 40px)';
-    logContent.style.overflowY = 'auto';
-    logContent.style.fontSize = '11px';
-    logContent.style.fontFamily = 'monospace';
-    logContent.style.userSelect = 'text'; // 日志内容可选中
-    logPanel.appendChild(logContent);
+    // 虚拟滚动结构：viewport > spacer + visible
+    const logViewport = document.createElement('div');
+    logViewport.id = 'auto-fill-log-viewport';
+    logViewport.style.height = 'calc(100% - 40px)';
+    logViewport.style.overflowY = 'auto';
+    logViewport.style.position = 'relative';
+    logViewport.style.fontSize = '11px';
+    logViewport.style.fontFamily = 'monospace';
+    logViewport.style.userSelect = 'text';
+
+    const logSpacer = document.createElement('div');
+    logSpacer.id = 'auto-fill-log-spacer';
+
+    const logVisible = document.createElement('div');
+    logVisible.id = 'auto-fill-log-visible';
+    logVisible.style.position = 'absolute';
+    logVisible.style.top = '0';
+    logVisible.style.left = '0';
+    logVisible.style.right = '0';
+
+    logViewport.appendChild(logSpacer);
+    logViewport.appendChild(logVisible);
+    logPanel.appendChild(logViewport);
+
+    logViewport.addEventListener('scroll', () => {
+        renderVisibleLogs();
+    });
 
     document.body.appendChild(logPanel);
 
@@ -904,7 +965,7 @@ function createLogPanel() {
     let offsetY = 0;
 
     header.addEventListener('mousedown', (e) => {
-        if (e.target === closeBtn) return;
+        if (e.target === closeBtn || e.target === exportBtn) return;
         isDragging = true;
         offsetX = e.clientX - logPanel.offsetLeft;
         offsetY = e.clientY - logPanel.offsetTop;
@@ -924,21 +985,89 @@ function createLogPanel() {
     });
 }
 
-// 更新日志面板
+// 导出日志到桌面
+function exportLogs() {
+    if (logMessages.length === 0) {
+        addLogMessage('没有日志可导出', 'warning');
+        return;
+    }
+
+    const logText = logMessages.slice().reverse().map(msg => {
+        let typePrefix = '';
+        if (msg.type === 'success') typePrefix = '[成功] ';
+        else if (msg.type === 'error') typePrefix = '[错误] ';
+        else if (msg.type === 'warning') typePrefix = '[警告] ';
+        else if (msg.type === 'match') typePrefix = '[匹配] ';
+        else if (msg.type === 'info') typePrefix = '[信息] ';
+        return '[' + msg.timestamp + '] ' + typePrefix + msg.message;
+    }).join('\n');
+
+    addLogMessage('正在保存日志到桌面...', 'info');
+
+    fetch('http://127.0.0.1:5290/save-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: logText })
+    })
+    .then(res => res.json())
+    .then(result => {
+        if (result.success) {
+            addLogMessage('日志已保存到: ' + result.path, 'success');
+        } else {
+            addLogMessage('保存失败: ' + result.error, 'error');
+        }
+    })
+    .catch(err => {
+        addLogMessage('保存失败: ' + err.message, 'error');
+    });
+}
+
+// 更新日志面板（触发虚拟滚动渲染）
 function updateLogPanel() {
     if (!logPanel) return;
-    const logContent = document.getElementById('auto-fill-log-content');
-    if (!logContent) return;
+    const viewport = document.getElementById('auto-fill-log-viewport');
+    if (!viewport) return;
+    renderVisibleLogs();
+}
 
-    logContent.innerHTML = logMessages.map(msg => {
+// 虚拟滚动渲染可见日志行
+function renderVisibleLogs() {
+    const viewport = document.getElementById('auto-fill-log-viewport');
+    if (!viewport) return;
+
+    const spacer = document.getElementById('auto-fill-log-spacer');
+    const visible = document.getElementById('auto-fill-log-visible');
+    if (!spacer || !visible) return;
+
+    const totalHeight = logMessages.length * LOG_ROW_HEIGHT;
+    spacer.style.height = totalHeight + 'px';
+
+    const scrollTop = viewport.scrollTop;
+    const viewportHeight = viewport.clientHeight;
+
+    const startIndex = Math.max(0, Math.floor(scrollTop / LOG_ROW_HEIGHT) - 2);
+    const visibleCount = Math.ceil(viewportHeight / LOG_ROW_HEIGHT) + 20;
+    const endIndex = Math.min(startIndex + visibleCount, logMessages.length);
+
+    visible.style.top = (startIndex * LOG_ROW_HEIGHT) + 'px';
+
+    let html = '';
+    for (let i = startIndex; i < endIndex; i++) {
+        const msg = logMessages[i];
         let color = '#fff';
         if (msg.type === 'success') color = '#4caf50';
-        if (msg.type === 'error') color = '#f44336';
-        if (msg.type === 'warning') color = '#ff9800';
-        if (msg.type === 'info') color = '#2196f3';
+        else if (msg.type === 'error') color = '#f44336';
+        else if (msg.type === 'warning') color = '#ff9800';
+        else if (msg.type === 'match') color = '#e040fb';
+        else if (msg.type === 'info') color = '#2196f3';
 
-        return `<div style="margin-bottom: 4px; color: ${color}">[${msg.timestamp}] ${msg.message}</div>`;
-    }).join('');
+        const escapedMsg = msg.message
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        html += '<div style="margin-bottom:4px;color:' + color + '">[' + msg.timestamp + '] ' + escapedMsg + '</div>';
+    }
+    visible.innerHTML = html;
 }
 
 function createAutoFillPanel() {
