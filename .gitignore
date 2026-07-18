@@ -51,7 +51,8 @@ coverage/
 **/release/
 .env
 
-# 特殊忽略
+# 特殊资源忽略
 *.zip
 resources/tun/
 resources/openspeedy/
+resources/tts/

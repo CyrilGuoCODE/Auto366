@@ -38,6 +38,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - 加入Funny模式
 - 优化听力自动化(听说)
 - Log日志系统与通知系统优化
+- 词王争霸复活赛
 
 #### 长期更新
 

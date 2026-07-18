@@ -53,7 +53,8 @@
       "!.git/**/*",
       "!web/**/*",
       "!resources/tun/**/*",
-      "!resources/openspeedy/**/*"
+      "!resources/openspeedy/**/*",
+      "!resources/tts/**/*"
     ],
     "extraResources": [
       {
@@ -71,6 +72,10 @@
       {
         "from": "./resources/openspeedy",
         "to": "openspeedy"
+      },
+      {
+        "from": "./resources/tts",
+        "to": "tts"
       }
     ],
     "win": {
