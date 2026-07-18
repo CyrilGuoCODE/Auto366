@@ -54,7 +54,9 @@
       "!web/**/*",
       "!resources/tun/**/*",
       "!resources/openspeedy/**/*",
-      "!resources/tts/**/*"
+      "!resources/tts/**/*",
+      "!resources/init.mp3",
+      "!resources/Auto366CompatibilityMode.ps1"
     ],
     "extraResources": [
       {
@@ -63,7 +65,7 @@
       },
       {
         "from": "./resources/init.mp3",
-        "to": "../"
+        "to": "./"
       },
       {
         "from": "./resources/tun",

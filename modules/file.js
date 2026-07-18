@@ -344,10 +344,11 @@ class FileManager {
 
       const flipbooksPath = path.join(cachePath, 'flipbooks');
 
-      // 查找 init.mp3 文件的位置
-      let initAudioPath = path.join(this.appPath, 'resources', 'init.mp3');
-      if (!fs.existsSync(initAudioPath)) {
+      let initAudioPath;
+      if (app && app.isPackaged) {
         initAudioPath = path.join(process.resourcesPath, 'init.mp3');
+      } else {
+        initAudioPath = path.join(this.appPath, 'resources', 'init.mp3');
       }
 
       if (!fs.existsSync(initAudioPath)) {
