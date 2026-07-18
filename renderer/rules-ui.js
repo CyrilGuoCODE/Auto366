@@ -4,6 +4,19 @@ class RulesUI {
   constructor(state, logManager) {
     this.state = state;
     this.logManager = logManager;
+    // 复杂 UI 下被收起的规则集 ID 集合
+    this.collapsedGroups = new Set();
+    try {
+      const saved = localStorage.getItem('collapsedRuleGroups');
+      if (saved) {
+        const ids = JSON.parse(saved);
+        if (Array.isArray(ids)) {
+          this.collapsedGroups = new Set(ids);
+        }
+      }
+    } catch (e) {
+      this.collapsedGroups = new Set();
+    }
   }
 
   // 初始化规则事件监听器
@@ -486,10 +499,12 @@ class RulesUI {
     rulesets.forEach(group => {
       const groupRules = group.rules || [];
       const statusClass = group.enabled ? 'is-enabled' : 'is-disabled';
+      const isCollapsed = this.collapsedGroups.has(group.id);
+      const contentClass = isCollapsed ? 'rule-group__content is-collapsed' : 'rule-group__content';
 
       html += `
         <div class="rule-group" data-group-id="${group.id}">
-          <div class="rule-group__header">
+          <div class="rule-group__header" data-group-id="${group.id}">
             <div class="rule-group__info">
               <div class="rule-group__name">
                 <i class="bi bi-collection"></i>
@@ -505,23 +520,23 @@ class RulesUI {
               ${group.author ? `<div class="rule-group__author">作者: ${group.author}</div>` : ''}
             </div>
             <div class="rule-group__actions">
-              <button class="btn--rule btn--add-rule" onclick="universalAnswerFeature.showRuleModal(null, '${group.id}')" title="添加规则">
+              <button class="btn--rule btn--add-rule" onclick="event.stopPropagation();universalAnswerFeature.showRuleModal(null, '${group.id}')" title="添加规则">
                 <i class="bi bi-plus"></i>
               </button>
-              <button class="btn--rule btn--edit" onclick="universalAnswerFeature.editRuleGroup('${group.id}')" title="编辑规则集">
+              <button class="btn--rule btn--edit" onclick="event.stopPropagation();universalAnswerFeature.editRuleGroup('${group.id}')" title="编辑规则集">
                 <i class="bi bi-pencil"></i>
               </button>
               ${this.hasTriggersInGroup(groupRules) ? `
-              <button class="btn--rule btn--reset" onclick="universalAnswerFeature.resetRuleTriggers('${group.id}')" title="重置触发次数">
+              <button class="btn--rule btn--reset" onclick="event.stopPropagation();universalAnswerFeature.resetRuleTriggers('${group.id}')" title="重置触发次数">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
               ` : ''}
-              <button class="btn--rule btn--delete" onclick="universalAnswerFeature.deleteRule('${group.id}')" title="删除规则集">
+              <button class="btn--rule btn--delete" onclick="event.stopPropagation();universalAnswerFeature.deleteRule('${group.id}')" title="删除规则集">
                 <i class="bi bi-trash"></i>
               </button>
             </div>
           </div>
-          <div class="rule-group__content">
+          <div class="${contentClass}">
             ${this.generateGroupRulesHtml(groupRules, group.enabled, group.id)}
           </div>
         </div>
@@ -530,6 +545,51 @@ class RulesUI {
 
     html += '</div>';
     rulesContent.innerHTML = html;
+
+    // 绑定复杂 UI 规则集标题行展开/收起事件
+    this._bindRuleGroupCollapseEvents(rulesContent);
+  }
+
+  // 绑定规则集标题行点击展开/收起
+  _bindRuleGroupCollapseEvents(container) {
+    const headers = container.querySelectorAll('.rule-group__header');
+    headers.forEach(header => {
+      header.addEventListener('click', (e) => {
+        // 点击按钮、开关、操作区时不触发收起/展开
+        if (e.target.closest('.rule-group__actions')) return;
+        if (e.target.closest('.toggle')) return;
+        if (e.target.closest('button')) return;
+        if (e.target.closest('input')) return;
+        if (e.target.closest('label')) return;
+
+        const groupId = header.getAttribute('data-group-id');
+        if (!groupId) return;
+        this._toggleRuleGroupCollapse(groupId, header);
+      });
+    });
+  }
+
+  // 切换单个规则集展开/收起状态
+  _toggleRuleGroupCollapse(groupId, headerEl) {
+    const groupEl = headerEl.closest('.rule-group');
+    if (!groupEl) return;
+    const contentEl = groupEl.querySelector('.rule-group__content');
+    const willCollapse = !this.collapsedGroups.has(groupId);
+
+    if (willCollapse) {
+      this.collapsedGroups.add(groupId);
+      contentEl?.classList.add('is-collapsed');
+    } else {
+      this.collapsedGroups.delete(groupId);
+      contentEl?.classList.remove('is-collapsed');
+    }
+
+    // 持久化折叠状态
+    try {
+      localStorage.setItem('collapsedRuleGroups', JSON.stringify(Array.from(this.collapsedGroups)));
+    } catch (e) {
+      // 忽略存储失败
+    }
   }
 
   // 检查规则组是否有触发次数限制

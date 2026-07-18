@@ -199,6 +199,10 @@
     padding: 0;
 }
 
+.rule-group__content.is-collapsed {
+    display: none;
+}
+
 .rules-list__group-empty {
     padding: var(--space-xl);
     text-align: center;
