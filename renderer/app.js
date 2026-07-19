@@ -81,6 +81,9 @@ class Auto366App {
       // 初始化 TUN 强制软包模式设置
       this.settingsUI.initTunSettings();
 
+      // 初始化 TTS 语音生成设置
+      this.settingsUI.initTtsSettings();
+
       // 绑定更新按钮点击事件
       this.bindUpdateButtons();
 

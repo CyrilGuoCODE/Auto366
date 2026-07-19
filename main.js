@@ -13,6 +13,7 @@ const AnalyticsManager = require('./modules/analytics');
 const AgreementManager = require('./modules/agreement');
 const TunManager = require('./modules/tun');
 const SpeedManager = require('./modules/speed-manager');
+const TtsManager = require('./modules/tts');
 
 const SUPABASE_URL = 'https://myenzpblosjnrtvicdor.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU';
@@ -31,6 +32,7 @@ let analyticsManager;
 let agreementManager;
 let tunManager;
 let speedManager;
+let ttsManager;
 
 process.on('uncaughtException', (error) => {
   if (error.code === 'ECONNRESET') {
@@ -98,7 +100,8 @@ app.whenReady().then(async () => {
 
   const certManager = new CertificateManager();
   rulesManager = new RulesManager();
-  proxyServer = new ProxyServer(certManager, rulesManager, analyticsManager);
+  ttsManager = new TtsManager();
+  proxyServer = new ProxyServer(certManager, rulesManager, analyticsManager, ttsManager);
   fileManager = new FileManager(app.getAppPath());
   rulesLoader = new RulesLoader(app.getAppPath());
   processMonitor = new ProcessMonitor();
@@ -107,6 +110,7 @@ app.whenReady().then(async () => {
   tunManager = new TunManager(proxyServer);
   speedManager = new SpeedManager();
   speedManager.init(app.getAppPath(), mainWindow);
+  ttsManager.init(app.getAppPath(), mainWindow, rulesManager);
 
   windowManager.registerIpcHandlers();
   rulesManager.registerIpcHandlers();
@@ -115,6 +119,7 @@ app.whenReady().then(async () => {
   processMonitor.registerIpcHandlers(mainWindow);
   tunManager.registerIpcHandlers(mainWindow);
   speedManager.registerIpcHandlers(mainWindow);
+  ttsManager.registerIpcHandlers(mainWindow);
 
   // 注册代理启动/停止的分析追踪
   ipcMain.on('start-answer-proxy', () => {
@@ -156,6 +161,9 @@ app.on('before-quit', async () => {
   }
   if (speedManager) {
     speedManager.stop();
+  }
+  if (ttsManager) {
+    ttsManager.stop();
   }
   if (analyticsManager) {
     analyticsManager.capture('app_closed');

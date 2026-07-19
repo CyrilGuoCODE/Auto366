@@ -18,10 +18,11 @@ const INT32_MIN = -2147483648;
 const INT32_MAX = 2147483647;
 
 class ProxyServer {
-  constructor(certManager, rulesManager, analyticsManager) {
+  constructor(certManager, rulesManager, analyticsManager, ttsManager) {
     this.certManager = certManager;
     this.rulesManager = rulesManager;
     this.analyticsManager = analyticsManager;
+    this.ttsManager = ttsManager || null;
     this.bucketServer = null;
     this.proxyPort = 5291;
     this.bucketPort = 5290;
@@ -564,6 +565,17 @@ class ProxyServer {
         return;
       }
 
+      // ===== TTS 端点路由 =====
+      if (this.ttsManager) {
+        // TTS 音频输出: {basePath}/output/{n}.wav
+        const outputHandled = this.ttsManager.handleTtsOutputRequest(pathname, res);
+        if (outputHandled) return;
+
+        // TTS 配置端点: {basePath}/setting
+        const settingHandled = this.ttsManager.handleTtsSettingRequest(req, res, pathname);
+        if (settingHandled) return;
+      }
+
       if (pathname === '/') {
         // 服务器信息页面
         const availablePaths = Object.keys(this.serverDatas);
@@ -952,6 +964,10 @@ class ProxyServer {
             }
 
             l.push(3)
+          }
+          // TTS 规则：只要有启用的 tts-generate 规则就触发答案处理流程
+          if (type === 'response-body' && rule.type === 'tts-generate') {
+            l.push(3);
           }
           if (type === 'response-body' && rule.type === 'zip-implant-dynamic') {
             const fileinfoUrlMatches = rule.urlFileinfo ? this.urlMatchesPattern(url, rule.urlFileinfo) : false;
@@ -1548,6 +1564,23 @@ class ProxyServer {
             }
             else {
               this.serverDatas[rule.serverLocate] = extracted_answers.answers;
+            }
+          }
+
+          // ===== TTS 规则：从已提取答案自动触发语音生成 =====
+          if (rule.type === 'tts-generate') {
+            if (this.ttsManager) {
+              const answers = extracted_answers.answers || [];
+              if (Array.isArray(answers) && answers.length > 0) {
+                const basePath = rule.ttsBasePath || '/tts';
+                this.safeIpcSend('rule-log', { type: 'info', message: `[TTS] 检测到 ${answers.length} 个答案，开始生成语音...` });
+                setImmediate(() => {
+                  this.ttsManager.generateForAnswers(answers, basePath).catch(err => {
+                    console.error('TTS 生成失败:', err);
+                    this.safeIpcSend('rule-log', { type: 'error', message: `[TTS] 生成失败: ${err.message}` });
+                  });
+                });
+              }
             }
           }
         }

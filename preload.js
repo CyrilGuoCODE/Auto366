@@ -118,6 +118,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSpeedStatus: () => ipcRenderer.invoke('get-speed-status'),
   onSpeedStatus: (callback) => ipcRenderer.on('speed-status', (event, data) => callback(data)),
 
+  // TTS 语音生成API
+  getTtsConfig: () => ipcRenderer.invoke('get-tts-config'),
+  saveTtsConfig: (config) => ipcRenderer.invoke('save-tts-config', config),
+  generateTtsForAnswers: (answers) => ipcRenderer.invoke('generate-tts-for-answers', answers),
+  getTtsStatus: () => ipcRenderer.invoke('get-tts-status'),
+
   // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
     return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);

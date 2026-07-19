@@ -491,6 +491,27 @@
                             </div>
                         </div>
                         <div class="setting-group">
+                            <h4>TTS 语音生成</h4>
+                            <div class="setting-item">
+                                <label for="ttsVoiceSelect">音色:</label>
+                                <select id="ttsVoiceSelect" class="form-input">
+                                    <option value="Jasper" selected>Jasper (男)</option>
+                                    <option value="Bella">Bella (女)</option>
+                                    <option value="Bruno">Bruno (男)</option>
+                                    <option value="Luna">Luna (女)</option>
+                                    <option value="Hugo">Hugo (男)</option>
+                                    <option value="Rosie">Rosie (女)</option>
+                                    <option value="Leo">Leo (男)</option>
+                                    <option value="Kiki">Kiki (女)</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label for="ttsSpeedInput">语速:</label>
+                                <input type="number" id="ttsSpeedInput" class="form-input" value="1.1" step="0.1" min="0.5" max="2.0" placeholder="1.1">
+                            </div>
+                            <div class="setting-item__description">语速范围 0.5 ~ 2.0，1.0 为正常语速，默认 1.1</div>
+                        </div>
+                        <div class="setting-group">
                             <h4>规则设置</h4>
                             <div class="setting-item">
                                 <div class="setting-item__content">
@@ -823,6 +844,7 @@
                             <option value="zip-implant-dynamic">动态注入</option>
                             <option value="answer-upload">答案上传</option>
                             <option value="post-change-time">修改时间</option>
+                            <option value="tts-generate">TTS语音生成</option>
                         </select>
                     </div>
 
@@ -970,6 +992,15 @@
                         <div class="form-group">
                             <label for="pctTargetSeconds">目标秒数</label>
                             <input type="number" id="pctTargetSeconds" class="form-input" placeholder="建议设定合理的作答用时，单位秒" value="1212">
+                        </div>
+                    </div>
+
+                    <!-- TTS语音生成规则字段 -->
+                    <div id="ttsgenerateFields" class="rule-form__fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="ttsBasePath">TTS基础路径</label>
+                            <input type="text" id="ttsBasePath" class="form-input" placeholder="/tts" value="/tts">
+                            <small class="form-group__help">TTS端点的URL基础路径，音频访问：端口/基础路径/output/编号.wav，设置：端口/基础路径/setting</small>
                         </div>
                     </div>
 

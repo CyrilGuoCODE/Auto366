@@ -223,7 +223,8 @@ class RulesUI {
       'zip-implant': 'zipimplantFields',
       'zip-implant-dynamic': 'zipimplantdynamicFields',
       'answer-upload': 'answeruploadFields',
-      'post-change-time': 'postchangetimeFields'
+      'post-change-time': 'postchangetimeFields',
+      'tts-generate': 'ttsgenerateFields'
     };
 
     // 隐藏所有规则字段
@@ -276,6 +277,8 @@ class RulesUI {
       document.getElementById('pctUrlRequest').value = rule.urlRequest || '';
       document.getElementById('pctSalt').value = rule.salt || '';
       document.getElementById('pctTargetSeconds').value = rule.targetSeconds || 1212;
+    } else if (rule.type === 'tts-generate') {
+      document.getElementById('ttsBasePath').value = rule.ttsBasePath || '/tts';
     }
 
     let maxTriggersInput;
@@ -392,6 +395,8 @@ class RulesUI {
         this.logManager.addErrorLog('请输入URL匹配模式');
         return;
       }
+    } else if (rule.type === 'tts-generate') {
+      rule.ttsBasePath = document.getElementById('ttsBasePath').value.trim() || '/tts';
     }
 
     let maxTriggersInput;
@@ -681,7 +686,8 @@ class RulesUI {
       'zip-implant': 'ZIP注入',
       'zip-implant-dynamic': '动态注入',
       'answer-upload': '答案上传',
-      'post-change-time': '修改时间'
+      'post-change-time': '修改时间',
+      'tts-generate': 'TTS语音生成'
     };
     return typeMap[type] || type || '未知类型';
   }
@@ -799,6 +805,13 @@ class RulesUI {
         <div class="rule-item__config-item">
           <span class="rule-item__config-label">目标秒数:</span>
           <span class="rule-item__config-value">${rule.targetSeconds || 1212}</span>
+        </div>
+      `;
+    } else if (rule.type === 'tts-generate') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">TTS基础路径:</span>
+          <span class="rule-item__config-value">${rule.ttsBasePath || '/tts'}</span>
         </div>
       `;
     }

@@ -153,6 +153,60 @@ class SettingsUI {
     }
   }
 
+  // 初始化 TTS 语音生成设置
+  initTtsSettings() {
+    try {
+      // 从 localStorage 读取已保存的配置
+      const savedConfig = (() => {
+        try {
+          return JSON.parse(localStorage.getItem('tts-config') || 'null');
+        } catch (e) { return null; }
+      })();
+
+      const voiceSelect = document.getElementById('ttsVoiceSelect');
+      const speedInput = document.getElementById('ttsSpeedInput');
+
+      // 恢复已保存的值
+      if (savedConfig) {
+        if (savedConfig.voice && voiceSelect) {
+          voiceSelect.value = savedConfig.voice;
+        }
+        if (savedConfig.speed !== undefined && speedInput) {
+          speedInput.value = savedConfig.speed;
+        }
+      }
+
+      // 保存配置到 localStorage 并同步到主进程
+      const saveTtsConfig = () => {
+        const config = {
+          voice: voiceSelect ? voiceSelect.value : 'Jasper',
+          speed: speedInput ? parseFloat(speedInput.value) || 1.1 : 1.1,
+        };
+        localStorage.setItem('tts-config', JSON.stringify(config));
+
+        // 同步到主进程
+        if (window.electronAPI && window.electronAPI.saveTtsConfig) {
+          window.electronAPI.saveTtsConfig(config).then(result => {
+            if (result && result.success) {
+              this.logManager.addSuccessLog('TTS 设置已保存');
+            }
+          }).catch(e => {
+            console.error('保存 TTS 配置到主进程失败:', e);
+          });
+        }
+      };
+
+      if (voiceSelect) {
+        voiceSelect.addEventListener('change', saveTtsConfig);
+      }
+      if (speedInput) {
+        speedInput.addEventListener('change', saveTtsConfig);
+      }
+    } catch (error) {
+      console.error('初始化 TTS 设置失败:', error);
+    }
+  }
+
   // 初始化数据分析设置
   async initAnalyticsSettings() {
     try {
