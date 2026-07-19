@@ -180,7 +180,7 @@ class SettingsUI {
       const saveTtsConfig = () => {
         const config = {
           voice: voiceSelect ? voiceSelect.value : 'Jasper',
-          speed: speedInput ? parseFloat(speedInput.value) || 1.1 : 1.1,
+          speed: speedInput ? parseFloat(speedInput.value) || 1.0 : 1.0,
         };
         localStorage.setItem('tts-config', JSON.stringify(config));
 

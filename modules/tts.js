@@ -2,7 +2,8 @@
  * TtsManager —— TTS 语音生成管理器 (主进程侧)
  * ------------------------------------------------------------
  * 职责:
- *   - 管理 sherpa-onnx-node OfflineTts 引擎生命周期
+ *   - 通过 child_process.fork() 启动子进程运行 sherpa-onnx TTS 引擎
+ *   - 主进程通过 IPC 消息与子进程通信，不阻塞 UI
  *   - 对答案文本批量生成 WAV 音频，写入磁盘（不存内存）
  *   - 通过 bucket 服务器提供 {basePath}/output/{n}.wav 和 {basePath}/setting 端点
  *   - 配置管理（音色、语速）—— 仅内存，通过 IPC 与渲染进程 localStorage 同步
@@ -13,13 +14,14 @@
  *   - 代理逻辑、规则匹配
  *   - UI 渲染
  *   - 本地文件持久化（配置由渲染进程 localStorage 管理）
+ *   - sherpa-onnx 引擎加载或 tts.generate() 调用（由子进程负责）
  */
 
 const { ipcMain, app } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const os = require('os');
-const crypto = require('crypto');
+const child_process = require('child_process');
 
 const VOICE_MAP = {
   Jasper: 0,
@@ -35,13 +37,17 @@ const VOICE_MAP = {
 class TtsManager {
   constructor() {
     this.mainWindow = null;
-    this.tts = null;
+    this.worker = null;
     this.initialized = false;
     this.initializing = false;
 
+    // 异步请求追踪：id → { resolve, reject, timer }
+    this.pendingRequests = new Map();
+    this._requestId = 0;
+
     this.config = {
       voice: 'Jasper',
-      speed: 1.1,
+      speed: 1.0,
     };
 
     // 序号 → 磁盘文件路径（不存音频 Buffer，节省内存）
@@ -138,111 +144,153 @@ class TtsManager {
     } catch (e) { /* 忽略 */ }
   }
 
-  // ---- 引擎管理 ----
-  async _ensureEngine() {
-    if (this.tts && this.initialized) return true;
-    if (this.initializing) return false;
+  // ================================================================
+  //  子进程管理
+  // ================================================================
 
-    this.initializing = true;
-    this._log('正在加载 TTS 引擎...', 'info');
-
-    try {
-      const sherpa_onnx = require('sherpa-onnx-node');
-
-      if (!fs.existsSync(this.modelDir)) {
-        this.initializing = false;
-        this._log('模型目录不存在: ' + this.modelDir, 'error');
-        return false;
+  /**
+   * 启动 worker 子进程并初始化 TTS 引擎
+   * @returns {Promise<boolean>} 引擎是否就绪
+   */
+  _startWorker() {
+    return new Promise((resolve) => {
+      if (this.worker && this.initialized) {
+        resolve(true);
+        return;
       }
 
-      const config = {
-        model: {
-          kitten: {
-            model: path.join(this.modelDir, 'model.int8.onnx'),
-            voices: path.join(this.modelDir, 'voices.bin'),
-            tokens: path.join(this.modelDir, 'tokens.txt'),
-            dataDir: path.join(this.modelDir, 'espeak-ng-data'),
-          },
-          debug: false, numThreads: 1, provider: 'cpu',
-        },
-        maxNumSentences: 1,
-      };
+      // 如果已有旧 worker 但未就绪，先清理
+      if (this.worker) {
+        try { this.worker.kill(); } catch (e) { /* 忽略 */ }
+        this.worker = null;
+      }
 
-      this.tts = new sherpa_onnx.OfflineTts(config);
-      this.initialized = true;
+      const workerPath = path.join(__dirname, 'tts-worker.js');
+      this.worker = child_process.fork(workerPath, [], { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
+
+      // 监听子进程消息
+      this.worker.on('message', (msg) => {
+        this._handleWorkerMessage(msg);
+      });
+
+      // 子进程异常退出
+      this.worker.on('exit', (code, signal) => {
+        this._log(`子进程退出 (code=${code}, signal=${signal})`, code === 0 ? 'info' : 'warning');
+        this.worker = null;
+        this.initialized = false;
+        this.initializing = false;
+
+        // 拒绝所有未完成的请求
+        for (const [id, pending] of this.pendingRequests) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error('子进程已退出'));
+        }
+        this.pendingRequests.clear();
+      });
+
+      // 子进程错误
+      this.worker.on('error', (err) => {
+        this._log('子进程错误: ' + err.message, 'error');
+        this.worker = null;
+        this.initialized = false;
+        this.initializing = false;
+      });
+
+      // 发送 init 消息到子进程
+      this._initResolve = resolve;
+      this.worker.send({ type: 'init', modelDir: this.modelDir });
+    });
+  }
+
+  /**
+   * 处理子进程发来的消息
+   */
+  _handleWorkerMessage(msg) {
+    const { type } = msg;
+
+    if (type === 'ready') {
+      // 引擎初始化完成
+      this.initialized = msg.success;
       this.initializing = false;
-      this._log('引擎加载完成 (' + this.tts.numSpeakers + ' 种音色)', 'success');
-      return true;
-    } catch (error) {
-      this.initializing = false;
-      this._log('引擎加载失败: ' + error.message, 'error');
+      if (this._initResolve) {
+        this._initResolve(msg.success);
+        this._initResolve = null;
+      }
+      return;
+    }
+
+    if (type === 'result') {
+      // 生成结果
+      const { id, index, filePath, error } = msg;
+      const pending = this.pendingRequests.get(id);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingRequests.delete(id);
+        if (error) {
+          pending.reject(new Error(error));
+        } else {
+          pending.resolve({ index, filePath });
+        }
+      }
+      return;
+    }
+
+    if (type === 'log') {
+      // 转发子进程日志
+      this._log(msg.message, msg.logType || 'info');
+      return;
+    }
+  }
+
+  /**
+   * 发送生成请求到子进程，返回 Promise
+   * @param {object} params - { text, index, voice, speed }
+   * @param {number} timeout - 超时时间 (ms)，默认 60 秒
+   * @returns {Promise<{index: number, filePath: string|null}>}
+   */
+  _sendToWorker(params, timeout = 60000) {
+    return new Promise((resolve, reject) => {
+      if (!this.worker || !this.initialized) {
+        reject(new Error('TTS 引擎未就绪'));
+        return;
+      }
+
+      const id = ++this._requestId;
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error(`TTS 生成超时 (${timeout}ms)`));
+      }, timeout);
+
+      this.pendingRequests.set(id, { resolve, reject, timer });
+
+      this.worker.send({
+        type: 'generate',
+        id,
+        text: params.text,
+        index: params.index,
+        cacheDir: this.cacheDir,
+        voice: params.voice || this.config.voice,
+        speed: params.speed || this.config.speed,
+      });
+    });
+  }
+
+  /**
+   * 确保引擎已就绪，如未启动则自动启动
+   */
+  async _ensureEngine() {
+    if (this.initialized) return true;
+    if (this.initializing) {
+      // 正在初始化，等待完成
+      this._log('引擎正在初始化中，请稍候...', 'warning');
       return false;
     }
-  }
 
-  // ---- 单条音频生成 → 写磁盘，返回文件路径 ----
-  async _generateOne(text, index) {
-    if (!text || typeof text !== 'string' || text.trim().length === 0) return null;
+    this.initializing = true;
+    this._log('正在启动 TTS 子进程...', 'info');
 
-    const cleanText = text.replace(/<[^>]*>/g, '').replace(/[<>{}[\]\\]/g, '').trim();
-    if (!cleanText) return null;
-
-    const ready = await this._ensureEngine();
-    if (!ready) return null;
-
-    try {
-      const sid = VOICE_MAP[this.config.voice] || 0;
-      const audio = this.tts.generate({
-        text: cleanText,
-        sid: sid,
-        speed: this.config.speed,
-        enableExternalBuffer: false,
-      });
-      const wavBuffer = this._buildWavBuffer(audio.samples, audio.sampleRate);
-
-      // 写入磁盘，不存内存
-      const filePath = this._wavPath(index);
-      fs.writeFileSync(filePath, wavBuffer);
-
-      return filePath;
-    } catch (error) {
-      this._log('生成失败: ' + error.message, 'error');
-      return null;
-    }
-  }
-
-  _buildWavBuffer(samples, sampleRate) {
-    const numChannels = 1;
-    const bitsPerSample = 16;
-    const bytesPerSample = bitsPerSample / 8;
-    const blockAlign = numChannels * bytesPerSample;
-
-    const int16Samples = new Int16Array(samples.length);
-    for (let i = 0; i < samples.length; i++) {
-      const s = Math.max(-1, Math.min(1, samples[i]));
-      int16Samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-
-    const dataSize = int16Samples.length * bytesPerSample;
-    const headerSize = 44;
-    const buffer = Buffer.alloc(headerSize + dataSize);
-
-    buffer.write('RIFF', 0);
-    buffer.writeUInt32LE(36 + dataSize, 4);
-    buffer.write('WAVE', 8);
-    buffer.write('fmt ', 12);
-    buffer.writeUInt32LE(16, 16);
-    buffer.writeUInt16LE(1, 20);
-    buffer.writeUInt16LE(numChannels, 22);
-    buffer.writeUInt32LE(sampleRate, 24);
-    buffer.writeUInt32LE(sampleRate * blockAlign, 28);
-    buffer.writeUInt16LE(blockAlign, 32);
-    buffer.writeUInt16LE(bitsPerSample, 34);
-    buffer.write('data', 36);
-    buffer.writeUInt32LE(dataSize, 40);
-
-    Buffer.from(int16Samples.buffer, int16Samples.byteOffset, int16Samples.byteLength).copy(buffer, 44);
-    return buffer;
+    const success = await this._startWorker();
+    return success;
   }
 
   // ---- 批量为答案生成 TTS ----
@@ -264,30 +312,52 @@ class TtsManager {
     this.nextIndex = 1;
 
     let generated = 0;
+    let skipped = 0;
     const total = answers.length;
+    const batchStart = Date.now();
+
+    this._log(`开始生成 ${total} 条语音...`, 'info');
 
     for (let i = 0; i < answers.length; i++) {
       const answer = answers[i];
       const text = answer.answer || answer.content || answer.text || '';
-      if (!text) continue;
+      if (!text) { skipped++; continue; }
 
       const index = this.nextIndex;
-      const filePath = await this._generateOne(text, index);
-      if (filePath) {
-        this.fileIndex.set(index, filePath);
-        this.textMap.set(index, text);
-        this.nextIndex++;
-        generated++;
+      try {
+        const result = await this._sendToWorker({ text, index });
+        if (result.filePath) {
+          this.fileIndex.set(index, result.filePath);
+          this.textMap.set(index, text);
+          this.nextIndex++;
+          generated++;
+        }
+      } catch (e) {
+        this._log('生成第 ' + index + ' 条失败: ' + e.message, 'error');
+      }
+
+      // 每 5 条或最后一条时输出进度
+      const processed = generated + skipped;
+      if (processed % 5 === 0 || i === answers.length - 1) {
+        const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
+        this._log(`进度 ${processed}/${total} (${elapsed}s)`, 'info');
       }
     }
 
-    // 一行简洁日志
-    this._log(`${generated}/${total} 答案已生成完成`, 'success');
+    // 汇总日志
+    const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
+    this._log(`生成完成: ${generated}/${total} 成功, ${skipped} 跳过 (${totalElapsed}s)`, 'success');
   }
 
   // ---- 配置变更后重新生成 ----
   async regenerateAll() {
     if (this.textMap.size === 0) return;
+
+    const ready = await this._ensureEngine();
+    if (!ready) {
+      this._log('引擎未就绪，跳过重新生成', 'warning');
+      return;
+    }
 
     this._cleanCacheDir();
     this.fileIndex.clear();
@@ -296,21 +366,37 @@ class TtsManager {
     const sortedKeys = Array.from(this.textMap.keys()).sort((a, b) => a - b);
     const newTextMap = new Map();
     let generated = 0;
+    const total = sortedKeys.length;
+    const batchStart = Date.now();
 
-    for (const oldIndex of sortedKeys) {
+    this._log(`开始重新生成 ${total} 条语音...`, 'info');
+
+    for (let i = 0; i < sortedKeys.length; i++) {
+      const oldIndex = sortedKeys[i];
       const text = this.textMap.get(oldIndex);
       const index = this.nextIndex;
-      const filePath = await this._generateOne(text, index);
-      if (filePath) {
-        newTextMap.set(index, text);
-        this.fileIndex.set(index, filePath);
-        this.nextIndex++;
-        generated++;
+      try {
+        const result = await this._sendToWorker({ text, index });
+        if (result.filePath) {
+          newTextMap.set(index, text);
+          this.fileIndex.set(index, result.filePath);
+          this.nextIndex++;
+          generated++;
+        }
+      } catch (e) {
+        this._log('重新生成第 ' + index + ' 条失败: ' + e.message, 'error');
+      }
+
+      // 每 5 条或最后一条时输出进度
+      if ((i + 1) % 5 === 0 || i === sortedKeys.length - 1) {
+        const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
+        this._log(`进度 ${i + 1}/${total} (${elapsed}s)`, 'info');
       }
     }
 
     this.textMap = newTextMap;
-    this._log(`${generated} 个答案已重新生成`, 'success');
+    const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
+    this._log(`重新生成完成: ${generated}/${total} 成功 (${totalElapsed}s)`, 'success');
   }
 
   // ---- 更新配置 ----
@@ -462,13 +548,37 @@ class TtsManager {
 
   // ---- 生命周期 ----
   stop() {
-    if (this.tts) {
-      try { if (typeof this.tts.free === 'function') this.tts.free(); } catch (e) { /* 忽略 */ }
-      this.tts = null;
+    // 发送 shutdown 消息给子进程
+    if (this.worker) {
+      try {
+        this.worker.send({ type: 'shutdown' });
+      } catch (e) { /* 忽略 */ }
+
+      // 2 秒后强制 kill
+      const workerRef = this.worker;
+      setTimeout(() => {
+        try {
+          if (workerRef && !workerRef.killed) {
+            workerRef.kill('SIGKILL');
+          }
+        } catch (e) { /* 忽略 */ }
+      }, 2000);
     }
+
+    this.worker = null;
     this.initialized = false;
+    this.initializing = false;
+
+    // 拒绝所有未完成的请求
+    for (const [id, pending] of this.pendingRequests) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error('TTS 管理器已停止'));
+    }
+    this.pendingRequests.clear();
+
     this.fileIndex.clear();
     this.textMap.clear();
+
     // 退出时清理磁盘缓存
     this._cleanCacheDir();
   }
