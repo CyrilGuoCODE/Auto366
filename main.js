@@ -110,6 +110,7 @@ app.whenReady().then(async () => {
   tunManager = new TunManager(proxyServer);
   speedManager = new SpeedManager();
   speedManager.init(app.getAppPath(), mainWindow);
+  proxyServer.speedManager = speedManager;  // 代理在关键请求期间对加速做"网络保护"
   ttsManager.init(app.getAppPath(), mainWindow, rulesManager);
 
   windowManager.registerIpcHandlers();

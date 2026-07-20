@@ -2,7 +2,8 @@
  * SpeedManager —— 进程加速管理器 (主进程侧)
  * ------------------------------------------------------------
  * 职责:
- *   - 常驻管理 injector64.exe 子进程(纯 C 注入器, 复用 OpenSpeedy 的 speedpatch64.dll)
+ *   - 常驻管理 injector32.exe 子进程(纯 C 注入器, 复用 OpenSpeedy 的 speedpatch32.dll;
+ *     up366 是 32 位, 只能 32 位注入; 注入器默认只注入 renderer 进程)
  *   - 接收「进程加速」页面经 IPC 推来的倍率(set-speed / reset-speed)
  *   - 通过 stdin 把 "speed <factor>" / "reset" 命令喂给注入器
  *   - 注入器内部自行枚举 up366.exe 全部进程并注入, 无需主进程传 pid
@@ -14,12 +15,12 @@
  *   - 生命周期挂在 main.js: app ready 时 init, before-quit 时 stop
  *
  * 依赖文件(随 Auto366 分发, 放在 resources/openspeedy/):
- *   - injector64.exe     本仓库 openspeedy/injector.c 编译产物
- *   - speedpatch64.dll   取自 OpenSpeedy(导出 SP_SetSpeed/SP_Enable)
+ *   - injector32.exe     本仓库 openspeedy/injector.c 编译产物(默认只注入 renderer)
+ *   - speedpatch32.dll   取自 OpenSpeedy(导出 SP_SetSpeed/SP_Enable)
  *
  * 关键前置:
  *   - Auto366 必须以管理员权限运行(注入需要), 注入器继承该权限
- *   - injector64.exe 与 speedpatch64.dll 必须在同一目录
+ *   - injector32.exe 与 speedpatch32.dll 必须在同一目录
  *   - 该目录路径不能含中文(LoadLibraryW 的 ASCII 回退在中文路径下会失败)
  */
 
@@ -38,6 +39,12 @@ class SpeedManager {
     // 当前期望状态(面板推来的)
     this.enabled = false;
     this.factor = null; // null = 未设置
+
+    // 网络保护: 关键请求在飞期间把倍率瞬时压回 1×(引用计数, 可并发)
+    this._netHolds = 0;
+    this._netActive = false;  // 是否已向注入器发过 hold(用于配对 resume)
+    this._netSafetyTimer = null;
+    this._lastDesired = null; // 去重, 避免重复下发相同 speed/reset
 
     // 注入器文件所在目录
     this.baseDir = null;
@@ -71,7 +78,7 @@ class SpeedManager {
       const root = process.env.ProgramData || 'C:\\ProgramData';
       const dest = path.join(root, 'Auto366', 'openspeedy');
       fs.mkdirSync(dest, { recursive: true });
-      const files = ['injector32.exe', 'speedpatch32.dll', 'injector64.exe', 'speedpatch64.dll'];
+      const files = ['injector32.exe', 'speedpatch32.dll'];
       for (const name of files) {
         const src = path.join(this.baseDir, name);
         if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dest, name));
@@ -117,11 +124,11 @@ class SpeedManager {
       return false;
     }
     if (!fs.existsSync(this.injectorPath)) {
-      this._log('缺少 injector64.exe: ' + this.injectorPath, 'error');
+      this._log('缺少 injector32.exe: ' + this.injectorPath, 'error');
       return false;
     }
     if (!fs.existsSync(this.dllPath)) {
-      this._log('缺少 speedpatch64.dll: ' + this.dllPath, 'error');
+      this._log('缺少 speedpatch32.dll: ' + this.dllPath, 'error');
       return false;
     }
     // 含中文路径会导致 LoadLibrary ASCII 回退失败
@@ -173,6 +180,11 @@ class SpeedManager {
       this.child = null;
       this.ready = false;
       this.starting = false;
+      this._lastDesired = null;
+      this._netHolds = 0;
+      this._netActive = false;
+      clearTimeout(this._netSafetyTimer);
+      this._netSafetyTimer = null;
     });
 
     this.child.on('error', (err) => {
@@ -180,6 +192,11 @@ class SpeedManager {
       this.child = null;
       this.ready = false;
       this.starting = false;
+      this._lastDesired = null;
+      this._netHolds = 0;
+      this._netActive = false;
+      clearTimeout(this._netSafetyTimer);
+      this._netSafetyTimer = null;
     });
 
     return true;
@@ -264,13 +281,45 @@ class SpeedManager {
     }
   }
 
-  // 根据当前期望状态(enabled/factor)下发命令
+  // 根据当前期望状态(enabled/factor/网络保护)下发命令。
+  // 网络保护激活(_netHolds>0)时一律 reset(1×); 去重避免频繁 hold/release 刷屏。
   _applyDesired() {
     if (!this.ready) return;
-    if (this.enabled && this.factor && this.factor > 0) {
-      this._send('speed ' + this.factor);
-    } else {
-      this._send('reset');
+    const cmd = (this.enabled && this.factor && this.factor > 0)
+      ? ('speed ' + this.factor)
+      : 'reset';
+    if (cmd === this._lastDesired) return;
+    this._lastDesired = cmd;
+    this._send(cmd);
+  }
+
+  // 网络保护: 关键请求开始 → 发轻量 hold 压回 1×(引用计数, 仅加速中且就绪才发)
+  netHold() {
+    this._netHolds++;
+    if (this._netHolds === 1 && this.enabled && this.ready) {
+      this._netActive = true;
+      this._send('hold');
+      // 兜底: 万一某请求漏配对 release, 20s 后强制 resume, 防止卡在 1×
+      clearTimeout(this._netSafetyTimer);
+      this._netSafetyTimer = setTimeout(() => {
+        if (this._netHolds > 0) {
+          this._log('网络保护超时(20s), 强制恢复加速', 'warning');
+          this._netHolds = 0;
+          if (this._netActive) { this._netActive = false; this._send('resume'); }
+        }
+      }, 20000);
+    }
+  }
+
+  // 网络保护: 关键请求结束/出错 → 发 resume 恢复目标倍率(引用计数归零且发过 hold 才恢复)
+  netRelease() {
+    if (this._netHolds <= 0) return;
+    this._netHolds--;
+    if (this._netHolds === 0 && this._netActive) {
+      this._netActive = false;
+      clearTimeout(this._netSafetyTimer);
+      this._netSafetyTimer = null;
+      this._send('resume');
     }
   }
 
@@ -295,8 +344,8 @@ class SpeedManager {
       // 若正在启动, READY 回调里会补发
       return { success: true };
     } else {
-      // 关闭加速: 若注入器在跑则恢复 1.0(不杀进程, 便于下次快速再开)
-      if (this.ready) this._send('reset');
+      // 关闭加速: 恢复 1.0(不杀进程, 便于下次快速再开)。经 _applyDesired 统一去重下发。
+      this._applyDesired();
       return { success: true };
     }
   }

@@ -42,6 +42,7 @@ class ProxyServer {
     this.fillTimeMod = { enabled: false, seconds: null };
     this.FILL_TIME_SALT = 'submitTaskToken-pc-987654'; // 与听力共用同一服务端盐值
     this.mainWindow = null;
+    this.speedManager = null;  // 由 main.js 注入; 用于关键请求期间瞬时降速(网络保护)
     this.trafficCache = new Map();
     this.serverDatas = {};
     this.isStopping = false;
@@ -60,6 +61,25 @@ class ProxyServer {
     this._progressWindowReady = false;
   }
 
+  // ===== 进程加速"网络保护" =====
+  // 关键 up366 请求在飞期间, 把加速倍率瞬时压回 1×(引用计数), 响应结束/出错再恢复,
+  // 避免加速把 renderer 的请求超时按倍率缩短 → 题目进不去/交卷失败。时钟污染不在此列。
+  _speedHold(ctx) {
+    const sm = this.speedManager;
+    if (!sm || !sm.enabled || !ctx || ctx._speedHeld) return;
+    const host = (ctx.clientToProxyRequest && ctx.clientToProxyRequest.headers
+                  && ctx.clientToProxyRequest.headers.host) || '';
+    if (!/up366/i.test(host)) return;   // 只保护天学网自身请求
+    ctx._speedHeld = true;
+    sm.netHold();
+  }
+
+  _speedRelease(ctx) {
+    if (!ctx || !ctx._speedHeld) return;
+    ctx._speedHeld = false;
+    if (this.speedManager) this.speedManager.netRelease();
+  }
+
   // 启动代理服务器
   startProxyPromise() {
     return new Promise((resolve) => {
@@ -69,7 +89,8 @@ class ProxyServer {
       // 创建新的代理实例
       this.proxy = new Proxy();
 
-      this.proxy.onError(function (ctx, err) {
+      this.proxy.onError((ctx, err) => {
+        this._speedRelease(ctx);  // 网络保护: 请求出错也要恢复加速, 防止卡在 1×
         console.error('代理出错:', err);
       });
 
@@ -92,6 +113,10 @@ class ProxyServer {
         if (!isAnswerCaptureEnabled) {
           return callback();
         }
+
+        // 进程加速网络保护: 该 up366 请求在飞期间把倍率瞬时压回 1×, 响应结束再恢复,
+        // 避免加速把 renderer 请求超时掐断(题目进不去/交卷失败)。与下方 onResponseEnd 配对。
+        this._speedHold(ctx);
 
         let requestBody = [], responseBody = [];
         const hasPostChangeTimeRule = this.getPostChangeTimeRules(fullUrl, ctx.clientToProxyRequest.method).length > 0;
@@ -253,6 +278,7 @@ class ProxyServer {
           else return callback(null, chunk);
         })
         ctx.onResponseEnd(async (ctx, callback) => {
+          this._speedRelease(ctx);  // 网络保护: 响应结束, 恢复加速
           let { buffer, text, decompressFailed } = await this.decompressBuffer(Buffer.concat(responseBody), ctx.serverToProxyResponse.headers['content-encoding']);
           if (responseBodyRules.includes(2)) {
             buffer = this.applyZipImplantRules(fullUrl, buffer);
