@@ -24,11 +24,11 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [功能优化]优化XML解析和选择题填充逻辑(By Fish)
 - [功能优化]复杂模式规则管理UI优化
 - [新功能]加入TTS语音生成规则
+- [BUG修复]修复听力自动化完成率与正确率不准确
 
 ### BUG问题
 
 - 进程加速存在问题
-- 听力自动化完成率与正确率不准确
 - 包体大小仍需优化
 
 ### TODO新功能

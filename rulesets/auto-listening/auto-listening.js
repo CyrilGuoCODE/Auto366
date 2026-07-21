@@ -1205,8 +1205,30 @@
         // ===== 第三步：收集同一道题目的其他选项元素 =====
         let wrongCandidates = [];
 
-        // 策略 A：如果正确选项内部有 input，找同一选项组（同一父容器）内其他含 input 的兄弟
+        // 策略 A-1：通过 input name 分组直接定位同题其他选项（最可靠）
         if (correctInput) {
+            const inputName = correctInput.getAttribute('name');
+            if (inputName) {
+                const sameNameInputs = Array.from(scope.querySelectorAll('input[type="radio"], input[type="checkbox"]')).filter(input => input.getAttribute('name') === inputName);
+                const otherInputs = sameNameInputs.filter(input => input !== correctInput && !correctOption.contains(input));
+                if (otherInputs.length > 0) {
+                    wrongCandidates = otherInputs.map(input => {
+                        const el = input.closest(optionSelectors.join(',')) || input.parentElement || input;
+                        const rect = el.getBoundingClientRect();
+                        return {
+                            element: el,
+                            source: 'input-name',
+                            hasInput: true,
+                            distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
+                        };
+                    });
+                    addLog(`  通过 input name="${inputName}" 找到 ${otherInputs.length} 个其他选项`, 'info');
+                }
+            }
+        }
+
+        // 策略 A-2：如果正确选项内部有 input，找同一选项组（同一父容器）内其他含 input 的兄弟
+        if (wrongCandidates.length === 0 && correctInput) {
             let groupContainer = correctOption.parentElement;
             for (let i = 0; i < 4 && groupContainer; i++) {
                 const siblings = Array.from(groupContainer.children).filter(child => {
@@ -1349,7 +1371,7 @@
         }
 
         // 排序：优先含 input，再按 source 优先级，最后按距离
-        const srcRank = { 'input-sibling': 0, 'option-list': 1, 'sibling': 2, 'similar': 3 };
+        const srcRank = { 'input-name': 0, 'input-sibling': 1, 'option-list': 2, 'sibling': 3, 'similar': 4 };
         wrongCandidates.sort((a, b) => {
             if (a.hasInput && !b.hasInput) return -1;
             if (!a.hasInput && b.hasInput) return 1;
@@ -1436,11 +1458,15 @@
         state._skipIndices = plan.skipSet;
         state._wrongIndices = plan.wrongSet;
 
-        // 重置所有答案的执行状态为 pending，避免旧数据干扰
-        state.answerList.forEach(ans => {
-            ans._fillStatus = 'pending';
-            delete ans._fillMode;
-        });
+        // 只有在非自动填答时才重置所有答案的执行状态，避免正在执行时修改设置打乱已填状态
+        if (!state.autoFillRunning) {
+            state.answerList.forEach(ans => {
+                ans._fillStatus = 'pending';
+                delete ans._fillMode;
+            });
+        } else {
+            addLog('[计划] 自动填答进行中，设置已更新，后续题目按新计划执行，已填状态保留', 'warn');
+        }
 
         addLog(`[计划] 完成率 ${state.completionRate}% / 正确率 ${state.accuracyRate}% | 跳过索引 [${Array.from(plan.skipSet).map(i => i + 1).join(',')}] | 答错索引 [${Array.from(plan.wrongSet).map(i => i + 1).join(',')}]`, 'info');
     }
@@ -1479,23 +1505,30 @@
         }
 
         const idx = state.autoFillIndex;
-        const isSkip = state._skipIndices && state._skipIndices.has(idx);
-        const isWrong = state._wrongIndices && state._wrongIndices.has(idx);
-        addLog(`[执行] #${idx + 1} 跳过=${isSkip} 故意错=${isWrong}`, 'info');
+        try {
+            const isSkip = state._skipIndices && state._skipIndices.has(idx);
+            const isWrong = state._wrongIndices && state._wrongIndices.has(idx);
+            addLog(`[执行] #${idx + 1} 跳过=${isSkip} 故意错=${isWrong}`, 'info');
 
-        // 完成率 < 100% 时跳过部分题目
-        if (isSkip) {
-            state.answerList[idx]._fillStatus = 'skipped';
-            addLog(`#${idx + 1} 已跳过（完成率控制）`, 'info');
+            // 完成率 < 100% 时跳过部分题目
+            if (isSkip) {
+                state.answerList[idx]._fillStatus = 'skipped';
+                addLog(`#${idx + 1} 已跳过（完成率控制）`, 'info');
+                state.autoFillIndex++;
+                renderAnswerList();
+                renderMainFillSection();
+                setTimeout(() => autoFillNext(), 20);
+                return;
+            }
+            fillOneAnswer(idx, isWrong);
             state.autoFillIndex++;
-            renderAnswerList();
-            renderMainFillSection();
-            setTimeout(() => autoFillNext(), 20);
-            return;
+            setTimeout(() => autoFillNext(), 50);
+        } catch (e) {
+            addLog(`#${idx + 1} 执行异常：${escapeHtml(e.message)}，已跳过并继续`, 'error');
+            if (state.answerList[idx]) state.answerList[idx]._fillStatus = 'skipped';
+            state.autoFillIndex++;
+            setTimeout(() => autoFillNext(), 50);
         }
-        fillOneAnswer(idx, isWrong);
-        state.autoFillIndex++;
-        setTimeout(() => autoFillNext(), 50);
     }
 
     function stopAutoFill() {
