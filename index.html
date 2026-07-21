@@ -938,9 +938,14 @@
                             <small class="form-group__help">只有当文件信息响应体中的文件名匹配此字段时才会进行注入</small>
                         </div>
                         <div class="form-group">
-                            <label for="dynInjectScript">注入脚本路径</label>
+                            <label for="dynInjectScript">注入脚本路径（单个）</label>
                             <input type="text" id="dynInjectScript" class="form-input" placeholder="留空则默认使用 rulesets/auto-listening/auto-listening.js">
                             <small class="form-group__help">指定要注入到HTML中的JS文件路径</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="dynInjectScripts">注入脚本路径（多个）</label>
+                            <textarea id="dynInjectScripts" class="form-input" rows="3" placeholder="每行一个脚本路径&#10;如：auto-fill.js&#10;    ext/my-script.js"></textarea>
+                            <small class="form-group__help">多个脚本用换行分隔，优先级高于单个脚本路径。支持相对路径（相对于 rulesets/ 目录）</small>
                         </div>
                         <div class="form-group">
                             <label for="dynDownloadTimeout">下载超时时间（毫秒）</label>

@@ -1819,6 +1819,33 @@ class AnswerExtractor {
     }
   }
 
+  // 解析 JSON 响应体内嵌的 answerData/paperData XML，复用现有 XML 解析与合并逻辑
+  extractFromJsonResponse(jsonText) {
+    try {
+      const jsonObj = JSON.parse(jsonText);
+      if (!jsonObj.data || !jsonObj.data.answerData) return [];
+
+      const answerXml = jsonObj.data.answerData;
+      const paperXml = jsonObj.data.paperData || '';
+
+      // 复用 extractFromXML，模拟文件名触发 correctAnswer/paper 分支
+      const answerItems = this.extractFromXML(answerXml, 'correctAnswer.xml');
+      const paperItems = paperXml ? this.extractFromXML(paperXml, 'paper.xml') : [];
+
+      // 合并并设置 sourceFile（mergeAnswerData 依赖此字段筛选）
+      const combined = [
+        ...answerItems.map(a => ({ ...a, sourceFile: 'correctAnswer.xml' })),
+        ...paperItems.map(a => ({ ...a, sourceFile: 'paper.xml' }))
+      ];
+
+      if (combined.length === 0) return [];
+      return this.mergeAnswerData(combined);
+    } catch (e) {
+      console.error('解析JSON内嵌XML响应失败:', e);
+      return [];
+    }
+  }
+
   extractFromText(content, filePath) {
     const answers = [];
 

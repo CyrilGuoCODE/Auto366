@@ -256,7 +256,7 @@ function findAnswerByContent(questionText) {
 async function fillChoiceQuestions() {
     let filledCount = 0;
 
-    const optionElements = document.querySelectorAll('.u3-option__content.is-text');
+    const optionElements = document.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img');
     addLogMessage(`选择题检测: 找到 ${optionElements.length} 个选项元素`, 'info');
     if (optionElements.length === 0) return 0;
 
@@ -271,7 +271,7 @@ async function fillChoiceQuestions() {
         let container = null;
         let el = opt.parentElement;
         while (el && el !== document.body) {
-            const optCount = el.querySelectorAll('.u3-option__content.is-text').length;
+            const optCount = el.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img').length;
             if (optCount >= 2) {
                 container = el;
                 break;
@@ -281,10 +281,10 @@ async function fillChoiceQuestions() {
         if (!container) continue;
 
         let finalContainer = container;
-        const totalOpts = container.querySelectorAll('.u3-option__content.is-text').length;
+        const totalOpts = container.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img').length;
         if (totalOpts > 6) {
             for (const child of container.children) {
-                const childOpts = child.querySelectorAll('.u3-option__content.is-text').length;
+                const childOpts = child.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img').length;
                 if (childOpts >= 2 && childOpts <= 6) {
                     finalContainer = child;
                     break;
@@ -304,7 +304,7 @@ async function fillChoiceQuestions() {
 
     for (let qi = 0; qi < questionContainers.length; qi++) {
         const container = questionContainers[qi];
-        const options = container.querySelectorAll('.u3-option__content.is-text');
+        const options = container.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img');
         if (options.length === 0) continue;
 
         // 获取题号（多层回退检测）
@@ -350,26 +350,32 @@ async function fillChoiceQuestions() {
         if (!questionNum) questionNum = qi + 1;
 
         // 获取题目文本（多层回退），排除选项内的文本
+        // 辅助函数：克隆元素并移除音频播放器等噪音后再取文本
+        const getCleanText = (el) => {
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll('.u3-audioPlayer, [slot*="audio"]').forEach(e => e.remove());
+            return clone.textContent.trim();
+        };
         let questionText = '';
         // 方法1: .u3-question-text（排除选项内的）
         const allTextEls = container.querySelectorAll('.u3-question-text');
         for (const textEl of allTextEls) {
             if (textEl.closest('.u3-option__content')) continue;
-            questionText = textEl.textContent.trim();
+            questionText = getCleanText(textEl);
             break;
         }
-        // 方法2: .u3-question-stem 或 .u3-stem
+        // 方法2: .u3-question-stem 或 .u3-stem 或 .u3-choice__question--text
         if (!questionText) {
-            const stemEl = container.querySelector('.u3-question-stem, .u3-stem, [class*="question-stem"]');
-            if (stemEl) questionText = stemEl.textContent.trim();
+            const stemEl = container.querySelector('.u3-question-stem, .u3-stem, [class*="question-stem"], .u3-choice__question--text');
+            if (stemEl) questionText = getCleanText(stemEl);
         }
         // 方法3: 向上查找父容器中的题目文本
         if (!questionText) {
             let parent = container.parentElement;
             for (let up = 0; up < 3 && parent; up++) {
-                const parentTextEl = parent.querySelector('.u3-question-text, .u3-question-stem, [class*="question-text"]');
+                const parentTextEl = parent.querySelector('.u3-question-text, .u3-question-stem, .u3-choice__question--text, [class*="question-text"]');
                 if (parentTextEl && !parentTextEl.closest('.u3-option__content')) {
-                    questionText = parentTextEl.textContent.trim();
+                    questionText = getCleanText(parentTextEl);
                     break;
                 }
                 parent = parent.parentElement;
@@ -382,14 +388,24 @@ async function fillChoiceQuestions() {
 
         // 收集选项信息：原始文本、清洗文本（去字母前缀）、字母标签
         const optionsData = [];
+        let imgOptIndex = 0;
         for (const opt of options) {
-            const optTextEl = opt.querySelector('.u3-question-text');
-            const rawText = optTextEl ? optTextEl.textContent.trim() : opt.textContent.trim();
-            // 从选项文本中提取字母标签（如 "C.beer" → letter="C", cleanText="beer"）
-            const letterMatch = rawText.match(/^([A-Fa-f])[.、\s]+/);
-            const letterLabel = letterMatch ? letterMatch[1].toUpperCase() : null;
-            const cleanText = letterMatch ? rawText.substring(letterMatch[0].length).trim() : rawText;
-            optionsData.push({ element: opt, rawText, cleanText, letterLabel });
+            if (opt.classList.contains('u3-option-img')) {
+                // 图片选项：提取文件名，按位置分配字母标签(A=0, B=1, C=2)
+                const img = opt.querySelector('img');
+                const src = img ? (img.getAttribute('src') || '') : '';
+                const filename = src.split('/').pop().split('?')[0];
+                const letterLabel = String.fromCharCode(65 + imgOptIndex);
+                optionsData.push({ element: opt, rawText: filename, cleanText: filename, letterLabel });
+                imgOptIndex++;
+            } else {
+                const optTextEl = opt.querySelector('.u3-question-text');
+                const rawText = optTextEl ? optTextEl.textContent.trim() : opt.textContent.trim();
+                const letterMatch = rawText.match(/^([A-Fa-f])[.、\s]+/);
+                const letterLabel = letterMatch ? letterMatch[1].toUpperCase() : null;
+                const cleanText = letterMatch ? rawText.substring(letterMatch[0].length).trim() : rawText;
+                optionsData.push({ element: opt, rawText, cleanText, letterLabel });
+            }
         }
 
         const allChecked = optionsData.every(od => od.element.classList.contains('is-checked'));
@@ -558,7 +574,10 @@ async function fillChoiceQuestions() {
                 const od = optionsData[oi];
                 if (od.element.classList.contains('is-checked')) continue;
                 if (answerMatchesOption(answerText, od.cleanText)) {
-                    od.element.click();
+                    const clickTarget = od.element.classList.contains('u3-option-img')
+                        ? (od.element.querySelector('.u3-option-img__content') || od.element)
+                        : od.element;
+                    clickTarget.click();
                     filledCount++;
                     addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
                     await wait1(50);
@@ -576,7 +595,10 @@ async function fillChoiceQuestions() {
                 if (letterIndex < optionsData.length) {
                     const od = optionsData[letterIndex];
                     if (!od.element.classList.contains('is-checked')) {
-                        od.element.click();
+                        const clickTarget = od.element.classList.contains('u3-option-img')
+                            ? (od.element.querySelector('.u3-option-img__content') || od.element)
+                            : od.element;
+                        clickTarget.click();
                         filledCount++;
                         addLogMessage(`选择题 ${questionNum} 按字母 ${letter.trim().toUpperCase()} 选中: ${od.rawText}`, 'success');
                         await wait1(50);
@@ -756,11 +778,23 @@ async function work() {
         addLogMessage('已选择 ' + choiceFilledCount + ' 个选择题答案', 'success');
     }
 
-    const buttons = document.getElementsByClassName('btn');
-    if (buttons.length > 1) {
-        buttons[1].click();
-        addLogMessage('已点击提交按钮', 'info');
+    // 翻页：找到"下一页"按钮并点击
+    const nextBtn = findButtonByText('下一页');
+    if (nextBtn) {
+        nextBtn.click();
+        addLogMessage('已点击翻页按钮（下一页）', 'info');
     }
+}
+
+// 按按钮文字查找可点击元素
+function findButtonByText(text) {
+    const candidates = document.querySelectorAll('.x-button, .u3-button, .btn, button');
+    for (const el of candidates) {
+        if (el.textContent.trim() === text && el.offsetParent !== null) {
+            return el;
+        }
+    }
+    return null;
 }
 
 function startAutoFill() {

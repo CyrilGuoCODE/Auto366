@@ -268,6 +268,7 @@ class RulesUI {
       document.getElementById('dynUrlZip').value = rule.urlZip || '';
       document.getElementById('dynTargetFileName').value = rule.targetFileName || '';
       document.getElementById('dynInjectScript').value = rule.injectScript || '';
+      document.getElementById('dynInjectScripts').value = Array.isArray(rule.injectScripts) ? rule.injectScripts.join('\n') : '';
       document.getElementById('dynDownloadTimeout').value = rule.downloadTimeout || '';
     } else if (rule.type === 'answer-upload') {
       document.getElementById('urlUpload').value = rule.urlUpload || '';
@@ -360,6 +361,8 @@ class RulesUI {
       rule.urlZip = document.getElementById('dynUrlZip').value.trim();
       rule.targetFileName = document.getElementById('dynTargetFileName').value.trim();
       rule.injectScript = document.getElementById('dynInjectScript').value.trim();
+      const scriptsText = document.getElementById('dynInjectScripts').value.trim();
+      rule.injectScripts = scriptsText ? scriptsText.split('\n').map(s => s.trim()).filter(Boolean) : null;
       rule.downloadTimeout = parseInt(document.getElementById('dynDownloadTimeout').value) || 30000;
 
       if (!rule.urlFileinfo) {
@@ -762,7 +765,7 @@ class RulesUI {
         </div>
         <div class="rule-item__config-item">
           <span class="rule-item__config-label">注入脚本:</span>
-          <span class="rule-item__config-value">${rule.injectScript || '默认(auto-listening.js)'}</span>
+          <span class="rule-item__config-value">${rule.injectScript || '默认(auto-listening.js)'}${rule.injectScripts && rule.injectScripts.length ? ' (多脚本: ' + rule.injectScripts.join(', ') + ')' : ''}</span>
         </div>
         <div class="rule-item__config-item">
           <span class="rule-item__config-label">下载超时:</span>

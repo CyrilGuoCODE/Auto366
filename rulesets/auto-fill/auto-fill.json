@@ -19,5 +19,14 @@
     "targetFileName": "jc*.zip",
     "injectScript": "auto-fill.js",
     "downloadTimeout": 30000
+  },
+  {
+    "name": "自学专项答案接口",
+    "type": "answer-upload",
+    "description": "解析 self-api 自学专项接口的JSON内嵌XML答案",
+    "enabled": true,
+    "urlUpload": "self-api.up366.cn/selfstudy/special/questions",
+    "uploadType": "json-xml-extracted",
+    "serverLocate": "/fill-answer"
   }
 ]

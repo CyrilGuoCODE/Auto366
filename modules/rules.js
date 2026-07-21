@@ -252,7 +252,7 @@ class RulesManager {
       const TYPE_FIELDS = {
         'content-change': ['urlPattern', 'changeType', 'originalContent', 'newContent', 'action', 'modifyRules'],
         'zip-implant': ['urlFileinfo', 'urlZip', 'targetFileName', 'zipImplant'],
-        'zip-implant-dynamic': ['urlFileinfo', 'urlZip', 'targetFileName', 'injectScript', 'downloadTimeout'],
+        'zip-implant-dynamic': ['urlFileinfo', 'urlZip', 'targetFileName', 'injectScript', 'injectScripts', 'downloadTimeout'],
         'answer-upload': ['urlUpload', 'uploadType', 'serverLocate'],
         'post-change-time': ['urlRequest', 'salt', 'targetSeconds', 'method']
       };

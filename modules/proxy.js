@@ -1588,6 +1588,15 @@ class ProxyServer {
                 this.serverDatas[rule.serverLocate] = responseBody;
               }
             }
+            else if (rule.uploadType === 'json-xml-extracted') {
+              const extracted = this.answerExtractor.extractFromJsonResponse(responseBody.toString());
+              this.serverDatas[rule.serverLocate] = extracted;
+              this.safeIpcSend('rule-log', {
+                type: 'success',
+                message: `规则 "${rule.name}" 解析JSON内嵌XML答案: ${extracted.length} 个`,
+                url
+              });
+            }
             else {
               this.serverDatas[rule.serverLocate] = extracted_answers.answers;
             }
@@ -1707,9 +1716,9 @@ class ProxyServer {
       await this.extractZip(originalZipPath, extractDir);
 
       this.sendProgress('injecting', '正在注入脚本...', 50);
-      const injectScriptPath = this.resolveInjectScript(rule);
-      if (!injectScriptPath || !fs.existsSync(injectScriptPath)) {
-        this.safeIpcSend('rule-log', { type: 'error', message: `动态注入: 注入脚本不存在: ${injectScriptPath}` });
+      const injectScriptPaths = this.resolveInjectScripts(rule);
+      if (!injectScriptPaths || injectScriptPaths.length === 0) {
+        this.safeIpcSend('rule-log', { type: 'error', message: `动态注入: 未找到有效注入脚本` });
         this.closeProgressWindow();
         return responseBody;
       }
@@ -1722,9 +1731,11 @@ class ProxyServer {
       }
 
       for (const htmlFile of htmlFiles) {
-        this.injectScriptIntoHtml(htmlFile, path.basename(injectScriptPath));
-        const scriptDest = path.join(path.dirname(htmlFile), path.basename(injectScriptPath));
-        fs.copyFileSync(injectScriptPath, scriptDest);
+        for (const scriptPath of injectScriptPaths) {
+          this.injectScriptIntoHtml(htmlFile, path.basename(scriptPath));
+          const scriptDest = path.join(path.dirname(htmlFile), path.basename(scriptPath));
+          fs.copyFileSync(scriptPath, scriptDest);
+        }
       }
 
       this.sendProgress('packing', '正在重新打包...', 70);
@@ -1820,18 +1831,23 @@ class ProxyServer {
     return null;
   }
 
-  resolveInjectScript(rule) {
-    if (rule.injectScript && fs.existsSync(rule.injectScript)) {
-      return rule.injectScript;
+  resolveInjectScripts(rule) {
+    // 优先使用 injectScripts 数组
+    if (Array.isArray(rule.injectScripts) && rule.injectScripts.length > 0) {
+      return rule.injectScripts
+        .map(s => {
+          const p = path.resolve(this.appPath, s);
+          return fs.existsSync(p) ? p : (fs.existsSync(s) ? s : null);
+        })
+        .filter(Boolean);
     }
+    // 回退到单脚本 injectScript
+    const single = rule.injectScript;
+    if (single && fs.existsSync(single)) return [rule.injectScript];
+    if (single) return [rule.injectScript];
+    // 默认
     const defaultPath = path.join(this.appPath, 'rulesets', 'auto-listening', 'auto-listening.js');
-    if (fs.existsSync(defaultPath)) {
-      return defaultPath;
-    }
-    if (rule.injectScript) {
-      return rule.injectScript;
-    }
-    return defaultPath;
+    return fs.existsSync(defaultPath) ? [defaultPath] : [];
   }
 
   downloadWithTimeout(downloadUrl, savePath, timeout) {
