@@ -54,6 +54,7 @@
         accuracyRate: (function() { var v = parseInt(localStorage.getItem('a366_accuracy_rate')); return (!isNaN(v) && v >= 0 && v <= 100) ? v : 100; })(),
         _skipIndices: null,
         _wrongIndices: null,
+        _fillPlan: null,
         // ===== 听力时间修改（"内置-自动基础听力"子规则）=====
         listenTimeEnabled: localStorage.getItem('a366_listentime_enabled') === 'true',
         listenTimeSeconds: (function() {
@@ -389,11 +390,13 @@
             return;
         }
 
+        // 状态显示只按真实执行状态，初始全为 pending；
+        // 计划仅用于控制执行，不在获取答案/设置变更后预设显示。
         const filledCount = list.filter(a => a._fillStatus === 'filled').length;
         const skippedCount = list.filter(a => a._fillStatus === 'skipped').length;
-        const failedCount = list.filter(a => a._fillStatus === 'failed').length;
         const correctCount = list.filter(a => a._fillStatus === 'filled' && a._fillMode !== 'wrong').length;
         const wrongCount = list.filter(a => a._fillStatus === 'filled' && a._fillMode === 'wrong').length;
+        const pendingCount = list.filter(a => a._fillStatus !== 'filled' && a._fillStatus !== 'skipped').length;
 
         let badges = '';
         list.forEach((ans) => {
@@ -406,8 +409,6 @@
                 badges += '<span style="color:var(--a366-warning);font-weight:600;">●</span>';
             } else if (status === 'skipped') {
                 badges += '<span style="color:var(--a366-text-muted);font-weight:600;">—</span>';
-            } else if (status === 'failed') {
-                badges += '<span style="color:var(--a366-danger);font-weight:600;">✕</span>';
             } else {
                 badges += '<span style="color:var(--a366-text-muted);">○</span>';
             }
@@ -415,7 +416,7 @@
 
         fillStatus.innerHTML = `
             <div style="font-size:12px;color:var(--a366-text);margin-bottom:6px;">
-                已获取 <b>${list.length}</b> 条答案 | 填答 <b style="color:var(--a366-success);">${filledCount}</b>/${list.length}${skippedCount > 0 ? ' | <span style="color:var(--a366-text-muted);">跳过 ' + skippedCount + '</span>' : ''}${wrongCount > 0 ? ' | <span style="color:var(--a366-success);">答对 ' + correctCount + '</span> <span style="color:var(--a366-danger);">答错 ' + wrongCount + '</span>' : ''}${failedCount > 0 ? ' | <span style="color:var(--a366-danger);">失败 ' + failedCount + '</span>' : ''}
+                已获取 <b>${list.length}</b> 条答案 | 填答 <b style="color:var(--a366-success);">${filledCount}</b>/${list.length}${skippedCount > 0 ? ' | <span style="color:var(--a366-text-muted);">跳过 ' + skippedCount + '</span>' : ''}${wrongCount > 0 || correctCount > 0 ? ' | <span style="color:var(--a366-success);">答对 ' + correctCount + '</span> <span style="color:var(--a366-danger);">答错 ' + wrongCount + '</span>' : ''}${pendingCount > 0 ? ' | <span style="color:var(--a366-text-muted);">待填 ' + pendingCount + '</span>' : ''}
             </div>
             <div style="font-size:15px;letter-spacing:2px;word-break:break-all;line-height:1.8;">${badges}</div>
         `;
@@ -878,6 +879,7 @@
             }
 
             renderAnswerList();
+            applyFillPlan();
             renderMainFillSection();
             if (statusEl) statusEl.textContent = '';
 
@@ -924,9 +926,8 @@
             else if (fillStatus === 'filled' && ans._fillMode === 'wrong') statusBadge = `<span style="color:var(--a366-danger);font-size:10px;">故意错</span>`;
             else if (fillStatus === 'filled') statusBadge = `<span style="color:var(--a366-success);font-size:10px;">已填答</span>`;
             else if (fillStatus === 'skipped') statusBadge = `<span style="color:var(--a366-text-muted);font-size:10px;">已跳过</span>`;
-            else if (fillStatus === 'failed') statusBadge = `<span style="color:var(--a366-danger);font-size:10px;">失败</span>`;
 
-            const borderLeft = fillStatus === 'filled' && ans._fillMode === 'wrong' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'filled' ? 'border-left:3px solid var(--a366-success);' : fillStatus === 'failed' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'skipped' ? 'border-left:3px solid var(--a366-text-muted);' : '';
+            const borderLeft = fillStatus === 'filled' && ans._fillMode === 'wrong' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'filled' ? 'border-left:3px solid var(--a366-success);' : fillStatus === 'skipped' ? 'border-left:3px solid var(--a366-text-muted);' : '';
             html += `
             <div style="border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:8px 10px;background:var(--a366-bg);${borderLeft}">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -1004,9 +1005,8 @@
                 ans._fillMode = 'wrong';
                 addLog(`#${idx + 1} 已选择错误选项`, 'success');
             } else {
-                // 选错失败时跳过该题，不回退到正确答案，保证正确率不被破坏
                 ans._fillStatus = 'skipped';
-                addLog(`#${idx + 1} 选择错误选项失败，已跳过（保证正确率）`, 'warn');
+                addLog(`#${idx + 1} 选择错误选项失败，已跳过`, 'warn');
             }
         } else {
             addLog(`开始填答 #${idx + 1}: ${escapeHtml((ans.questionText || '').substring(0, 40))}`, 'info');
@@ -1018,8 +1018,8 @@
                 ans._fillMode = 'correct';
                 addLog(`#${idx + 1} 填答成功`, 'success');
             } else {
-                ans._fillStatus = 'failed';
-                addLog(`#${idx + 1} 未找到匹配选项`, 'error');
+                ans._fillStatus = 'skipped';
+                addLog(`#${idx + 1} 未找到匹配选项，已跳过`, 'warn');
             }
         }
         renderAnswerList();
@@ -1027,21 +1027,44 @@
     }
 
     function findAndClickOption(optionId, optionContent, answerObj) {
-        const allElements = document.querySelectorAll('body *');
         const pageWrap = document.getElementById('page-wrap');
-        const candidates = [];
+        const scope = pageWrap || document.body;
+        const normalizedAnswer = normalizeText(optionContent);
 
+        // 策略1：通过选项类名选择器精确匹配
+        const optionSelectors = [
+            '.option-item', '.option', '.choice-item', '.choice', '.answer-item', '.answer',
+            '.question-option', '.exam-option', '.select-option', '.item-option'
+        ];
+        for (const selector of optionSelectors) {
+            const items = scope.querySelectorAll(selector);
+            for (const item of items) {
+                if (isForeignElement(item)) continue;
+                if (normalizeText(item.textContent) === normalizedAnswer) {
+                    addLog(`  通过选项选择器 ${selector} 匹配点击`, 'click');
+                    item.style.outline = '3px solid var(--a366-success)';
+                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => { item.style.outline = ''; }, 1500);
+                    item.click();
+                    return true;
+                }
+            }
+        }
+
+        // 策略2：全局文本搜索兜底
+        const allElements = scope.querySelectorAll('*');
+        const candidates = [];
         for (const el of allElements) {
-            if (el === container || container.contains(el) || el.contains(container)) continue;
-            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) continue;
-            if (pageWrap && !pageWrap.contains(el)) continue;
+            if (isForeignElement(el)) continue;
             try {
                 const text = (el.textContent || '').trim();
-                if (normalizeQuotes(text) === normalizeQuotes(optionContent)) {
+                if (normalizeText(text) === normalizedAnswer) {
                     const tag = el.tagName.toLowerCase();
                     if (['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag)) {
                         const rect = el.getBoundingClientRect();
-                        candidates.push({ element: el, height: Math.round(rect.height) });
+                        if (rect.width > 0 && rect.height > 0) {
+                            candidates.push({ element: el, height: Math.round(rect.height) });
+                        }
                     }
                 }
             } catch(e) {}
@@ -1068,18 +1091,91 @@
     }
 
     function findAndClickWrongOption(optionId, optionContent, answerObj) {
-        const allElements = document.querySelectorAll('body *');
         const pageWrap = document.getElementById('page-wrap');
+        const scope = pageWrap || document.body;
+        const normalizedAnswer = normalizeText(optionContent);
+        const optionSelectors = [
+            '.option-item', '.option', '.choice-item', '.choice', '.answer-item', '.answer',
+            '.question-option', '.exam-option', '.select-option', '.item-option'
+        ];
 
-        // 第一步：找到正确答案元素（与 findAndClickOption 逻辑完全一致）
-        const correctCandidates = [];
-        for (const el of allElements) {
-            if (el === container || container.contains(el) || el.contains(container)) continue;
-            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) continue;
-            if (pageWrap && !pageWrap.contains(el)) continue;
-            try {
+        // 辅助：找元素内最合适的点击目标（radio/checkbox 优先，避免只点到字母标签）
+        function getClickTarget(el) {
+            if (!el) return null;
+            const input = el.querySelector('input[type="radio"], input[type="checkbox"]');
+            if (input) return input;
+            const text = (el.textContent || '').trim();
+            // 如果当前元素文本只是选项字母（如 "A" / "A."），向上找到完整选项元素
+            if (/^[A-Da-d](\.|\))?$/.test(text)) {
+                let parent = el.parentElement;
+                while (parent && parent !== document.body) {
+                    const parentInput = parent.querySelector('input[type="radio"], input[type="checkbox"]');
+                    if (parentInput) return parentInput;
+                    const parentText = (parent.textContent || '').trim();
+                    if (isOptionElement(parent) && parentText.length > text.length + 1) {
+                        return parent;
+                    }
+                    parent = parent.parentElement;
+                }
+            }
+            return el;
+        }
+
+        // 辅助：判断元素是否属于选项元素
+        function isOptionElement(el) {
+            return optionSelectors.some(sel => el.matches && el.matches(sel));
+        }
+
+        // 辅助：向上找到完整选项元素（含 input 或文本包含当前元素且更长的选项祖先）
+        function findOptionRoot(el) {
+            // 方法1：找包含 input 的最小祖先
+            let current = el;
+            while (current && current !== document.body) {
+                if (current.querySelector('input[type="radio"], input[type="checkbox"]')) {
+                    return current;
+                }
+                current = current.parentElement;
+            }
+
+            // 方法2：向上找到文本包含 el.textContent 且更长、并匹配选项选择器的祖先
+            let best = el;
+            let bestText = (el.textContent || '').trim();
+            let parent = el.parentElement;
+            while (parent && parent !== document.body) {
+                const parentText = (parent.textContent || '').trim();
+                if (parentText.length > bestText.length && parentText.includes(bestText)) {
+                    if (isOptionElement(parent)) {
+                        best = parent;
+                        bestText = parentText;
+                    }
+                }
+                parent = parent.parentElement;
+            }
+            return best;
+        }
+
+        // ===== 第一步：定位文本匹配的元素 =====
+        let textMatchEl = null;
+        for (const selector of optionSelectors) {
+            const items = scope.querySelectorAll(selector);
+            for (const item of items) {
+                if (isForeignElement(item)) continue;
+                if (normalizeText(item.textContent) === normalizedAnswer) {
+                    textMatchEl = item;
+                    break;
+                }
+            }
+            if (textMatchEl) break;
+        }
+
+        // 兜底：全局文本搜索
+        if (!textMatchEl) {
+            const allElements = scope.querySelectorAll('*');
+            const correctCandidates = [];
+            for (const el of allElements) {
+                if (isForeignElement(el)) continue;
                 const text = (el.textContent || '').trim();
-                if (normalizeQuotes(text) === normalizeQuotes(optionContent)) {
+                if (normalizeText(text) === normalizedAnswer) {
                     const tag = el.tagName.toLowerCase();
                     if (['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag)) {
                         const rect = el.getBoundingClientRect();
@@ -1088,52 +1184,163 @@
                         }
                     }
                 }
-            } catch(e) {}
+            }
+            if (correctCandidates.length === 0) {
+                addLog('  未找到正确选项元素，无法选择错误选项', 'warn');
+                return false;
+            }
+            const height24 = correctCandidates.filter(c => Math.round(c.getBoundingClientRect().height) === 24);
+            textMatchEl = height24.length > 0 ? height24[0] : correctCandidates.sort((a, b) => a.getBoundingClientRect().height - b.getBoundingClientRect().height)[0];
         }
 
-        if (correctCandidates.length === 0) {
-            addLog('  未找到正确选项元素，无法选择错误选项', 'warn');
-            return false;
-        }
+        // ===== 第二步：将文本元素提升为完整选项元素 =====
+        const correctOption = findOptionRoot(textMatchEl);
+        addLog('  定位到正确答案选项元素', 'info');
 
-        const height24 = correctCandidates.filter(c => Math.round(c.getBoundingClientRect().height) === 24);
-        const correctEl = height24.length > 0 ? height24[0] : correctCandidates.sort((a, b) => a.getBoundingClientRect().height - b.getBoundingClientRect().height)[0];
-        const correctRect = correctEl.getBoundingClientRect();
-        const correctTag = correctEl.tagName;
+        const correctRect = correctOption.getBoundingClientRect();
+        const correctTag = correctOption.tagName;
         const correctHeight = Math.round(correctRect.height);
+        const correctInput = correctOption.querySelector('input[type="radio"], input[type="checkbox"]');
 
-        // 第二步：在页面上找到与 correctEl 相似但文本不同的元素
-        // 不依赖 DOM 层级遍历，而是通过"外观相似性"找选项
-        const wrongCandidates = [];
+        // ===== 第三步：收集同一道题目的其他选项元素 =====
+        let wrongCandidates = [];
 
-        for (const el of allElements) {
-            if (el === container || container.contains(el) || el.contains(container)) continue;
-            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) continue;
-            if (pageWrap && !pageWrap.contains(el)) continue;
+        // 策略 A：如果正确选项内部有 input，找同一选项组（同一父容器）内其他含 input 的兄弟
+        if (correctInput) {
+            let groupContainer = correctOption.parentElement;
+            for (let i = 0; i < 4 && groupContainer; i++) {
+                const siblings = Array.from(groupContainer.children).filter(child => {
+                    if (child === correctOption || correctOption.contains(child) || child.contains(correctOption)) return false;
+                    if (isForeignElement(child)) return false;
+                    const input = child.querySelector('input[type="radio"], input[type="checkbox"]');
+                    if (!input) return false;
+                    const text = (child.textContent || '').trim();
+                    if (text.length === 0) return false;
+                    if (normalizeText(text) === normalizedAnswer) return false;
+                    return true;
+                });
+                if (siblings.length > 0) {
+                    wrongCandidates = siblings.map(el => {
+                        const rect = el.getBoundingClientRect();
+                        return {
+                            element: el,
+                            source: 'input-sibling',
+                            hasInput: true,
+                            distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
+                        };
+                    });
+                    addLog(`  通过 input 兄弟找到 ${siblings.length} 个其他选项`, 'info');
+                    break;
+                }
+                groupContainer = groupContainer.parentElement;
+            }
+        }
 
-            // 排除 correctEl 及其祖先/后代
-            if (el === correctEl || el.contains(correctEl) || correctEl.contains(el)) continue;
+        // 策略 B：在所有匹配选项选择器的元素中，按与正确答案的位置接近程度筛选
+        if (wrongCandidates.length === 0) {
+            let allOptions = [];
+            for (const selector of optionSelectors) {
+                scope.querySelectorAll(selector).forEach(el => {
+                    if (!isForeignElement(el) && !allOptions.includes(el)) allOptions.push(el);
+                });
+            }
 
-            // 必须与 correctEl 标签相同
-            if (el.tagName !== correctTag) continue;
+            wrongCandidates = allOptions
+                .filter(el => {
+                    if (el === correctOption || el.contains(correctOption) || correctOption.contains(el)) return false;
+                    const text = (el.textContent || '').trim();
+                    if (text.length === 0) return false;
+                    if (normalizeText(text) === normalizedAnswer) return false;
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width <= 0 || rect.height <= 0) return false;
+                    const horizontalOverlap = rect.left < correctRect.right && rect.right > correctRect.left;
+                    const verticalDist = Math.abs(rect.top - correctRect.top);
+                    return horizontalOverlap && verticalDist < 250;
+                })
+                .map(el => {
+                    const rect = el.getBoundingClientRect();
+                    return {
+                        element: el,
+                        source: 'option-list',
+                        hasInput: !!el.querySelector('input[type="radio"], input[type="checkbox"]'),
+                        distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
+                    };
+                });
 
-            const rect = el.getBoundingClientRect();
-            if (rect.width <= 0 || rect.height <= 0) continue;
+            if (wrongCandidates.length > 0) {
+                addLog(`  从候选选项中筛选出 ${wrongCandidates.length} 个同题错误选项`, 'info');
+            }
+        }
 
-            // 高度相似（within 5px）
-            if (Math.abs(Math.round(rect.height) - correctHeight) > 5) continue;
+        // 策略 C：基于 DOM 兄弟结构兜底（child 必须是完整选项元素）
+        if (wrongCandidates.length === 0) {
+            let parent = correctOption.parentElement;
+            for (let i = 0; i < 4 && parent; i++) {
+                const children = Array.from(parent.children);
+                const others = children.filter(child => {
+                    if (child === correctOption || correctOption.contains(child) || child.contains(correctOption)) return false;
+                    if (isForeignElement(child)) return false;
+                    const rect = child.getBoundingClientRect();
+                    if (rect.width <= 0 || rect.height <= 0) return false;
+                    const text = (child.textContent || '').trim();
+                    if (text.length === 0) return false;
+                    if (normalizeText(text) === normalizedAnswer) return false;
+                    // 必须是完整选项元素：匹配选项选择器 或 包含 input
+                    const isValidOption = isOptionElement(child) || child.querySelector('input[type="radio"], input[type="checkbox"]');
+                    if (!isValidOption) return false;
+                    return true;
+                });
+                if (others.length > 0) {
+                    wrongCandidates = others.map(el => {
+                        const rect = el.getBoundingClientRect();
+                        return {
+                            element: el,
+                            source: 'sibling',
+                            hasInput: !!el.querySelector('input[type="radio"], input[type="checkbox"]'),
+                            distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
+                        };
+                    });
+                    addLog(`  通过兄弟结构找到 ${others.length} 个其他选项`, 'info');
+                    break;
+                }
+                parent = parent.parentElement;
+            }
+        }
 
-            const text = (el.textContent || '').trim();
-            if (text.length === 0) continue;
+        // 策略 D：全局外观相似性兜底
+        if (wrongCandidates.length === 0) {
+            const allElements = scope.querySelectorAll('*');
+            for (const el of allElements) {
+                if (isForeignElement(el)) continue;
+                if (el === correctOption || el.contains(correctOption) || correctOption.contains(el)) continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) continue;
+                const text = (el.textContent || '').trim();
+                if (text.length === 0) continue;
+                if (normalizeText(text) === normalizedAnswer) continue;
 
-            // 文本不能与正确答案相同
-            if (normalizeQuotes(text) === normalizeQuotes(optionContent)) continue;
+                const tag = el.tagName;
+                if (tag !== correctTag && !['DIV', 'SPAN', 'LI', 'LABEL', 'BUTTON', 'A', 'P'].includes(tag)) continue;
 
-            // 必须在 correctEl 附近（同一道题的选项，垂直距离 < 500px）
-            const verticalDist = Math.abs(rect.top - correctRect.top);
-            if (verticalDist > 500) continue;
+                const heightDiff = Math.abs(Math.round(rect.height) - correctHeight);
+                const hasOptionClass = optionSelectors.some(sel => el.matches && el.matches(sel));
+                if (heightDiff > 8 && !hasOptionClass) continue;
 
-            wrongCandidates.push({ element: el, distance: verticalDist });
+                const horizontalOverlap = rect.left < correctRect.right && rect.right > correctRect.left;
+                const verticalDist = Math.abs(rect.top - correctRect.top);
+                if (!horizontalOverlap && verticalDist > 80) continue;
+                if (verticalDist > 200) continue;
+
+                wrongCandidates.push({
+                    element: el,
+                    source: 'similar',
+                    hasInput: !!el.querySelector('input[type="radio"], input[type="checkbox"]'),
+                    distance: verticalDist + Math.abs(rect.left - correctRect.left) * 0.3
+                });
+            }
+            if (wrongCandidates.length > 0) {
+                addLog(`  通过全局相似性找到 ${wrongCandidates.length} 个候选`, 'info');
+            }
         }
 
         if (wrongCandidates.length === 0) {
@@ -1141,32 +1348,65 @@
             return false;
         }
 
-        // 按距离排序，选最近的
-        wrongCandidates.sort((a, b) => a.distance - b.distance);
-        const target = wrongCandidates[0].element;
-        const targetText = (target.textContent || '').trim().substring(0, 30);
-        addLog(`  选择错误选项: 找到 ${wrongCandidates.length} 个候选，选择最近的 "${escapeHtml(targetText)}"`, 'click');
+        // 排序：优先含 input，再按 source 优先级，最后按距离
+        const srcRank = { 'input-sibling': 0, 'option-list': 1, 'sibling': 2, 'similar': 3 };
+        wrongCandidates.sort((a, b) => {
+            if (a.hasInput && !b.hasInput) return -1;
+            if (!a.hasInput && b.hasInput) return 1;
+            if (srcRank[a.source] !== srcRank[b.source]) return srcRank[a.source] - srcRank[b.source];
+            return a.distance - b.distance;
+        });
 
-        target.style.outline = '3px solid var(--a366-danger)';
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => { target.style.outline = ''; }, 1500);
-        target.click();
+        // 在最近的 1-3 个里随机选一个
+        const poolSize = Math.min(3, wrongCandidates.length);
+        const picked = wrongCandidates[Math.floor(Math.random() * poolSize)];
+        const targetEl = picked.element;
+        const clickTarget = getClickTarget(targetEl);
+        const targetText = (targetEl.textContent || '').trim().substring(0, 30);
+        addLog(`  选择错误选项: "${escapeHtml(targetText)}"`, 'click');
+
+        targetEl.style.outline = '3px solid var(--a366-danger)';
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => { targetEl.style.outline = ''; }, 1500);
+        if (clickTarget && clickTarget !== targetEl) {
+            addLog('  通过内部 input 触发选择', 'info');
+        }
+        clickTarget.click();
         return true;
+    }
+
+    function isForeignElement(el) {
+        if (!el) return true;
+        if (el === container || container.contains(el) || el.contains(container)) return true;
+        if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) return true;
+        return false;
+    }
+
+    function normalizeText(str) {
+        return String(str || '')
+            .replace(/[\u2018\u2019]/g, "'")
+            .replace(/[\u201C\u201D]/g, '"')
+            .replace(/\s+/g, ' ')
+            .trim();
     }
 
     // ==========================================
     // 自动填答
     // ==========================================
 
-    // 统一计算填答计划：哪些跳过、哪些答错，确保索引不冲突
+    // 统一计算填答计划：哪些跳过、哪些答错，仅保证数量与设置一致，题号随机分布
     function buildFillPlan(total, completionRate, accuracyRate) {
-        const fillCount = Math.max(1, Math.ceil(total * completionRate / 100));
-        const skipCount = total - fillCount;
-        const correctCount = Math.max(0, Math.ceil(fillCount * accuracyRate / 100));
+        const totalNum = Math.max(0, parseInt(total) || 0);
+        const compNum = Math.max(0, Math.min(100, parseInt(completionRate) || 0));
+        const accNum = Math.max(0, Math.min(100, parseInt(accuracyRate) || 0));
+
+        const fillCount = Math.max(0, Math.ceil(totalNum * compNum / 100));
+        const skipCount = totalNum - fillCount;
+        const correctCount = fillCount > 0 ? Math.max(0, Math.ceil(fillCount * accNum / 100)) : 0;
         const wrongCount = fillCount - correctCount;
 
-        // 打乱所有题目索引
-        const indices = Array.from({ length: total }, (_, i) => i);
+        // 随机打乱所有题目索引
+        const indices = Array.from({ length: totalNum }, (_, i) => i);
         for (let i = indices.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [indices[i], indices[j]] = [indices[j], indices[i]];
@@ -1182,15 +1422,44 @@
         return { skipSet, wrongSet, fillCount, skipCount, correctCount, wrongCount };
     }
 
+    // 根据当前答案列表和设置重新生成/同步填答计划，并预置每道题的期望状态
+    function applyFillPlan() {
+        const total = state.answerList.length;
+        if (total === 0) {
+            state._fillPlan = null;
+            state._skipIndices = null;
+            state._wrongIndices = null;
+            return;
+        }
+        const plan = buildFillPlan(total, state.completionRate, state.accuracyRate);
+        state._fillPlan = plan;
+        state._skipIndices = plan.skipSet;
+        state._wrongIndices = plan.wrongSet;
+
+        // 重置所有答案的执行状态为 pending，避免旧数据干扰
+        state.answerList.forEach(ans => {
+            ans._fillStatus = 'pending';
+            delete ans._fillMode;
+        });
+
+        addLog(`[计划] 完成率 ${state.completionRate}% / 正确率 ${state.accuracyRate}% | 跳过索引 [${Array.from(plan.skipSet).map(i => i + 1).join(',')}] | 答错索引 [${Array.from(plan.wrongSet).map(i => i + 1).join(',')}]`, 'info');
+    }
+
     function startAutoFillAll() {
         if (state.answerList.length === 0) return;
+        if (state.autoFillRunning) {
+            addLog('自动填答已在运行，忽略重复启动', 'warn');
+            return;
+        }
+
+        // 每次开始前重新同步计划，确保与当前设置和答案列表完全一致
+        applyFillPlan();
+
         state.autoFillRunning = true;
         state.autoFillIndex = 0;
 
         const total = state.answerList.length;
-        const plan = buildFillPlan(total, state.completionRate, state.accuracyRate);
-        state._skipIndices = plan.skipSet;
-        state._wrongIndices = plan.wrongSet;
+        const plan = state._fillPlan;
 
         addLog(`开始一键自动填答，共 ${total} 题（完成率 ${state.completionRate}%：填答 ${plan.fillCount} 题，跳过 ${plan.skipCount} 题 | 正确率 ${state.accuracyRate}%：答对 ${plan.correctCount} 题，答错 ${plan.wrongCount} 题）`, 'info');
 
@@ -1210,8 +1479,12 @@
         }
 
         const idx = state.autoFillIndex;
+        const isSkip = state._skipIndices && state._skipIndices.has(idx);
+        const isWrong = state._wrongIndices && state._wrongIndices.has(idx);
+        addLog(`[执行] #${idx + 1} 跳过=${isSkip} 故意错=${isWrong}`, 'info');
+
         // 完成率 < 100% 时跳过部分题目
-        if (state._skipIndices && state._skipIndices.has(idx)) {
+        if (isSkip) {
             state.answerList[idx]._fillStatus = 'skipped';
             addLog(`#${idx + 1} 已跳过（完成率控制）`, 'info');
             state.autoFillIndex++;
@@ -1220,8 +1493,7 @@
             setTimeout(() => autoFillNext(), 20);
             return;
         }
-        const forceWrong = state._wrongIndices && state._wrongIndices.has(idx);
-        fillOneAnswer(idx, forceWrong);
+        fillOneAnswer(idx, isWrong);
         state.autoFillIndex++;
         setTimeout(() => autoFillNext(), 50);
     }
@@ -1288,6 +1560,11 @@
     }
 
     async function executeAuto() {
+        if (state.autoFillRunning) {
+            addLog('自动流程已在运行，忽略重复启动', 'warn');
+            return;
+        }
+
         addLog('━━━━━━━━ 自动流程开始 ━━━━━━━', 'info');
 
         const startBtnClicked = clickStartBtn();
@@ -1312,9 +1589,8 @@
             state.autoFillIndex = 0;
 
             const total = state.answerList.length;
-            const plan = buildFillPlan(total, state.completionRate, state.accuracyRate);
-            state._skipIndices = plan.skipSet;
-            state._wrongIndices = plan.wrongSet;
+            applyFillPlan();
+            const plan = state._fillPlan;
 
             addLog(`开始自动填答，共 ${total} 题（完成率 ${state.completionRate}%：填答 ${plan.fillCount} 题，跳过 ${plan.skipCount} 题 | 正确率 ${state.accuracyRate}%：答对 ${plan.correctCount} 题，答错 ${plan.wrongCount} 题）`, 'info');
 
@@ -1566,6 +1842,8 @@
             accVal = Math.max(0, Math.min(100, accVal));
             saveCompletionRate(compVal);
             saveAccuracyRate(accVal);
+            applyFillPlan();
+            renderMainFillSection();
             modal.style.display = 'none';
             addLog(`设置已更新：完成率 ${compVal}% | 正确率 ${accVal}%`, 'success');
         });
@@ -1587,11 +1865,8 @@
         if (total === 0) {
             preview.innerHTML = `完成率：${completionRate}% | 正确率：${accuracyRate}%<br><span style="color:#17a2b8;">获取答案后将自动计算填答/跳过/正确/错误题数</span>`;
         } else {
-            const fillCount = Math.max(1, Math.ceil(total * completionRate / 100));
-            const skipCount = total - fillCount;
-            const correctCount = Math.max(0, Math.ceil(fillCount * accuracyRate / 100));
-            const wrongCount = fillCount - correctCount;
-            preview.innerHTML = `完成率：${completionRate}% | 正确率：${accuracyRate}%<br>总题数：${total} 题<br>填答：<span style="color:#007bff;">${fillCount} 题</span> | 跳过：<span style="color:#6c757d;">${Math.max(0, skipCount)} 题</span><br>答对：<span style="color:#28a745;">${correctCount} 题</span> | 答错：<span style="color:#dc3545;">${wrongCount} 题</span>`;
+            const plan = buildFillPlan(total, completionRate, accuracyRate);
+            preview.innerHTML = `完成率：${completionRate}% | 正确率：${accuracyRate}%<br>总题数：${total} 题<br>填答：<span style="color:#007bff;">${plan.fillCount} 题</span> | 跳过：<span style="color:#6c757d;">${Math.max(0, plan.skipCount)} 题</span><br>答对：<span style="color:#28a745;">${plan.correctCount} 题</span> | 答错：<span style="color:#dc3545;">${plan.wrongCount} 题</span>`;
         }
     }
 
@@ -1676,12 +1951,6 @@
         document.addEventListener('mouseup', () => {
             if (isDragging) { isDragging = false; targetEl.style.transition = ''; }
         });
-    }
-
-    function normalizeQuotes(str) {
-        return String(str)
-            .replace(/[\u2018\u2019]/g, "'")
-            .replace(/[\u201C\u201D]/g, '"');
     }
 
     function escapeHtml(str) {
