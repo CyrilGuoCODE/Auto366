@@ -1821,9 +1821,17 @@ var Loader = {
                             return;
                         }
                         else if (fullData && fullData.data && fullData.data.contentList && fullData.data.contentList[0] && fullData.data.contentList[0].entryList) {
-                            entryList = fullData.data.contentList[0].entryList;
-                            dataSource = '格式1 (contentList.entryList)';
-                            UI.addLogMessage('使用格式1加载词库: contentList.entryList', 'info');
+                            // 合并所有 contentList 的 entryList（原仅取 [0] 会丢失后续词典）
+                            var clDetails = [];
+                            for (var ci = 0; ci < fullData.data.contentList.length; ci++) {
+                                var cl = fullData.data.contentList[ci];
+                                if (cl.entryList && Array.isArray(cl.entryList)) {
+                                    entryList = entryList.concat(cl.entryList);
+                                    clDetails.push('model=' + cl.model + ': ' + cl.entryList.length + '条');
+                                }
+                            }
+                            dataSource = '格式1 (contentList[*].entryList合并，共' + fullData.data.contentList.length + '本词典)';
+                            UI.addLogMessage('使用格式1加载词库: 合并 ' + fullData.data.contentList.length + ' 本词典 (' + clDetails.join(', ') + ')', 'info');
                         }
                         else if (fullData && Array.isArray(fullData.data) && fullData.data.length > 0 && fullData.data[0].entryList) {
                             // 合并所有词典的entryList
