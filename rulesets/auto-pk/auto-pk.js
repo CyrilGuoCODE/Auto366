@@ -1818,6 +1818,7 @@ var Loader = {
                             UI.addLogMessage('使用v3.4预标准化格式加载词库', 'info');
                             UI.addLogMessage('词库数据结构标准化完成 (v3.4)', 'success');
                             UI.addLogMessage('单词PK词库加载成功，共' + State.jsonData.words.length + '个词条，数据源：' + dataSource, 'success');
+                            PkTimeMod.autoCalc(State.jsonData.words.length);
                             return;
                         }
                         else if (fullData && fullData.data && fullData.data.contentList && fullData.data.contentList[0] && fullData.data.contentList[0].entryList) {
@@ -1877,6 +1878,7 @@ var Loader = {
                             UI.updateStatus();
                             UI.addLogMessage('词库数据结构标准化完成 (v3.4)', 'success');
                             UI.addLogMessage('单词PK词库加载成功，共' + State.jsonData.words.length + '个词条（含标准化），数据源：' + dataSource, 'success');
+                            PkTimeMod.autoCalc(State.jsonData.words.length);
                         } else {
                             throw new Error('词库数据为空');
                         }
@@ -2709,7 +2711,9 @@ var UI = {
             return el;
         }
         var ptMinInput = ptMakeNumInput();
+        ptMinInput.id = 'pk-time-min';
         var ptSecInput = ptMakeNumInput();
+        ptSecInput.id = 'pk-time-sec';
 
         // 用总秒数回填分秒框（保留符号：负总秒显示为 -分/-秒里的分钟带号）
         function ptFillFromTotal() {
@@ -3083,6 +3087,35 @@ var PkTimeMod = {
     // 初始化：把面板当前状态推一次，保证代理层与面板一致
     install: function() {
         PkTimeMod.push();
+    },
+
+    // 词库加载后自动计算合理时间：每词 2.5~4 秒随机取值，取整
+    autoCalc: function(wordCount) {
+        if (!wordCount || wordCount <= 0) return;
+        var rate = 2.5 + Math.random() * 1.5;
+        var total = Math.round(wordCount * rate);
+        State.pkTimeModSeconds = total;
+        localStorage.setItem('pkTimeModSeconds', String(total));
+        UI.addLogMessage('[时间修改] 词库 ' + wordCount + ' 词 × ' + rate.toFixed(1) + 's/词 ≈ ' + total + '秒，已自动设定', 'info');
+        PkTimeMod.push();
+        PkTimeMod.updateInputs();
+    },
+
+    // 用 State.pkTimeModSeconds 回填 UI 分秒输入框
+    updateInputs: function() {
+        var minInput = document.getElementById('pk-time-min');
+        var secInput = document.getElementById('pk-time-sec');
+        if (!minInput || !secInput) return;
+        if (State.pkTimeModSeconds === null || State.pkTimeModSeconds === undefined) {
+            minInput.value = '';
+            secInput.value = '';
+            return;
+        }
+        var total = State.pkTimeModSeconds;
+        var sign = total < 0 ? -1 : 1;
+        var abs = Math.abs(total);
+        minInput.value = String(Math.floor(abs / 60) * sign);
+        secInput.value = String((abs % 60) * sign);
     }
 };
 
