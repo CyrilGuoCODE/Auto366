@@ -9,6 +9,9 @@ let logPanel = null;  // 日志面板
 let logMessages = [];  // 日志消息数组
 let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || false;
 let supportChoiceQuestions = localStorage.getItem('supportChoiceQuestions') === 'true' || false;
+let supportReadAlong = localStorage.getItem('supportReadAlong') === 'true' || false;
+let isReadAlongProcessing = false;
+let readAlongAborted = false;  // 跟读朗读中断标志
 let rawAnswerData = [];
 let elementAnswerMap = new Map();
 const LOG_ROW_HEIGHT = 22;  // 虚拟滚动行高
@@ -150,6 +153,7 @@ function loadBucketFromServer() {
 
                 addLogMessage('内容匹配模式: ' + (contentMatchMode ? '已启用' : '已禁用'), 'info');
                 addLogMessage('支持选择题: ' + (supportChoiceQuestions ? '已启用' : '已禁用'), 'info');
+                addLogMessage('支持跟读朗读: ' + (supportReadAlong ? '已启用' : '已禁用'), 'info');
                 console.log('填空答案库加载成功，共' + answers.length + '个题目');
                 console.log('多空题数据:', multiAnswerMap);
             })
@@ -218,6 +222,53 @@ function calculateTextSimilarity(text1, text2) {
     const overlap = words1.filter(w => words2.has(w)).length;
     const wordSim = (overlap / Math.max(words1.length, words2.size, 1)) * 40;
     return editSim + wordSim;
+}
+
+// 用题面文本匹配答案库中的答案文本（而非题面匹配题面）
+function findAnswerByReadText(readText) {
+    if (!rawAnswerData || rawAnswerData.length === 0) return null;
+    const normalizedRead = readText.trim().toLowerCase();
+    let bestMatch = null;
+    let bestScore = 0;
+
+    // 调试：输出答案库内容
+    console.log('[auto-fill] findAnswerByReadText: readText="' + readText + '", rawAnswerData.length=' + rawAnswerData.length);
+    rawAnswerData.forEach((item, index) => {
+        const answerText = (item.answer || '').trim();
+        console.log('[auto-fill]   [' + index + '] answer="' + answerText + '" questionText="' + (item.questionText || '') + '"');
+    });
+
+    rawAnswerData.forEach((item, index) => {
+        const answerText = (item.answer || '').trim();
+        const normalizedAnswer = answerText.toLowerCase();
+        let score = 0;
+
+        // 1. 精确匹配
+        if (normalizedRead === normalizedAnswer) {
+            score = 100;
+        }
+        // 2. 答案包含在题面中 或 题面包含在答案中
+        else if (normalizedAnswer.length > 0 && (normalizedRead.includes(normalizedAnswer) || normalizedAnswer.includes(normalizedRead))) {
+            score = Math.min(normalizedRead.length, normalizedAnswer.length) / Math.max(normalizedRead.length, normalizedAnswer.length) * 90;
+        }
+        // 3. 相似度匹配
+        else {
+            score = calculateTextSimilarity(readText, answerText);
+        }
+
+        if (score > bestScore && score > 20) {
+            bestScore = score;
+            bestMatch = {
+                answer: answerText,
+                similarity: score,
+                index: index,
+                answerIndex: item.answerIndex,
+                questionNum: item.questionNum
+            };
+        }
+    });
+    console.log('[auto-fill] findAnswerByReadText: bestMatch=', bestMatch);
+    return bestMatch;
 }
 
 function findAnswerByContent(questionText) {
@@ -611,7 +662,475 @@ async function fillChoiceQuestions() {
     return filledCount;
 }
 
+// ===== 跟读朗读题型处理 =====
+
+// 可中断的 wait：如果 readAlongAborted 被置 true 则立即返回
+function waitInterruptible(ms) {
+    return new Promise(resolve => {
+        const check = () => { if (readAlongAborted) { resolve(); return; } };
+        const timer = setTimeout(() => { resolve(); }, ms);
+        const interval = setInterval(() => { if (readAlongAborted) { clearTimeout(timer); clearInterval(interval); resolve(); } }, 100);
+    });
+}
+
+// Vue 兼容的 click：同时派发 mousedown/mouseup/click 事件
+function vueClick(el) {
+    if (!el) return;
+    const events = ['mousedown', 'mouseup', 'click'];
+    for (const type of events) {
+        el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    }
+}
+
+// 等待录音面板出现并获取停止按钮
+async function findStopRecordBtn(parentEl, timeoutMs) {
+    // 录音开始后 Vue 会更新 DOM，panel 从 display:none 变为可见
+    // 需要轮询等待按钮出现且可交互
+    const deadline = Date.now() + (timeoutMs || 3000);
+    while (Date.now() < deadline) {
+        // 尝试多种选择器：__btn, __btn-circle, __btn-circle-middle
+        const btn = parentEl.querySelector('.u3-recorder-panel__btn-circle-middle')
+            || parentEl.querySelector('.u3-recorder-panel__btn-circle')
+            || parentEl.querySelector('.u3-recorder-panel__btn');
+        if (btn && btn.offsetParent !== null) return btn;
+        await new Promise(r => setTimeout(r, 100));
+    }
+    // 超时后返回最后找到的（即使不可见）
+    return parentEl.querySelector('.u3-recorder-panel__btn-circle-middle')
+        || parentEl.querySelector('.u3-recorder-panel__btn-circle')
+        || parentEl.querySelector('.u3-recorder-panel__btn');
+}
+
+// 使用浏览器 SpeechSynthesis 作为 TTS 回退方案
+function speakWithSpeechSynthesis(text) {
+    return new Promise(resolve => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 1.0;
+        utterance.onend = resolve;
+        utterance.onerror = resolve;
+        speechSynthesis.speak(utterance);
+    });
+}
+
+// 劫持 getUserMedia，用 TTS 音频流替换麦克风输入
+async function hijackGetUserMediaWithAudio(wavArrayBuffer) {
+    const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
+
+    // 创建 AudioContext 并解码 WAV
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    const audioBuffer = await audioCtx.decodeAudioData(wavArrayBuffer);
+
+    // 创建 BufferSource → GainNode(放大音量) → MediaStreamDestination
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.loop = true;
+
+    const gain = audioCtx.createGain();
+    gain.gain.value = 2.5;
+
+    const dest = audioCtx.createMediaStreamDestination();
+    source.connect(gain);
+    gain.connect(dest);
+
+    // 先启动音频源，让流处于活跃状态
+    source.start();
+    addLogMessage('跟读朗读: 假音频流已启动 (时长' + audioBuffer.duration.toFixed(1) + 's, tracks:' + dest.stream.getAudioTracks().length + ')', 'info');
+
+    // 拦截 getUserMedia，音频请求返回假流，其他走原始通道
+    const fakeStream = dest.stream;
+    navigator.mediaDevices.getUserMedia = async function(constraints) {
+        console.log('[auto-fill] getUserMedia 被调用, constraints:', JSON.stringify(constraints));
+        addLogMessage('跟读朗读: getUserMedia 被调用 (audio=' + !!constraints.audio + ')', 'info');
+        if (constraints && constraints.audio) {
+            console.log('[auto-fill] 返回假音频流, tracks:', fakeStream.getAudioTracks().length);
+            return fakeStream;
+        }
+        return originalGetUserMedia.call(this, constraints);
+    };
+
+    addLogMessage('跟读朗读: getUserMedia 已劫持', 'info');
+
+    return {
+        audioCtx,
+        source,
+        gain,
+        dest,
+        duration: audioBuffer.duration,
+        stop: function() { try { source.stop(); } catch(e) {} },
+        restore: function() {
+            navigator.mediaDevices.getUserMedia = originalGetUserMedia;
+            addLogMessage('跟读朗读: getUserMedia 已恢复', 'info');
+        }
+    };
+}
+
+// 跟读朗读题型主处理函数
+async function handleReadAlongQuestions() {
+    if (!supportReadAlong || !contentMatchMode) return 0;
+    if (isReadAlongProcessing) return 0;
+
+    // 检测当前页面是否有跟读题型
+    const activeSlide = document.querySelector('.swiper-slide-active');
+    if (!activeSlide) return 0;
+
+    const readAlongElements = activeSlide.querySelectorAll('.partA_word_repeat');
+    if (readAlongElements.length === 0) return 0;
+
+    // 过滤出包含"跟读"文字的元素
+    const readAlongQuestions = [];
+    for (const el of readAlongElements) {
+        const nameEl = el.querySelector('.u3-question-container__ques-order--name');
+        if (nameEl && nameEl.textContent.includes('跟读')) {
+            readAlongQuestions.push(el);
+        }
+    }
+
+    if (readAlongQuestions.length === 0) return 0;
+
+    isReadAlongProcessing = true;
+    readAlongAborted = false;
+    let processedCount = 0;
+
+    // 直接从 fill-answer 端点获取原始答案数据（不依赖 rawAnswerData，避免 sourceFile 过滤问题）
+    let directAnswers = [];
+    try {
+        const url = customBucketUrl || 'http://127.0.0.1:5290/fill-answer';
+        const res = await fetch(url, { cache: 'no-cache' });
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                for (let i = 0; i < data.length; i++) {
+                    const item = data[i];
+                    // 提取答案文本，兼容多种格式
+                    let answerTexts = [];
+                    if (Array.isArray(item.multipleAnswers) && item.multipleAnswers.length > 0) {
+                        answerTexts = item.multipleAnswers.map(x => String(x).trim()).filter(Boolean);
+                    } else if (typeof item.answer === 'string') {
+                        const raw = item.answer.replace(/\s+/g, ' ').trim();
+                        if (raw.includes('/')) {
+                            answerTexts = raw.split('/').map(s => s.trim()).filter(Boolean);
+                        } else if (raw) {
+                            answerTexts = [raw];
+                        }
+                    }
+                    for (const at of answerTexts) {
+                        directAnswers.push({
+                            answer: at,
+                            index: i,
+                            answerIndex: item.answerIndex || (directAnswers.length + 1)
+                        });
+                    }
+                }
+            }
+        }
+        addLogMessage('跟读朗读: 直接获取答案 ' + directAnswers.length + ' 条 (rawAnswerData: ' + rawAnswerData.length + ')', directAnswers.length > 0 ? 'success' : 'warning');
+    } catch (e) {
+        addLogMessage('跟读朗读: 获取答案失败: ' + e.message, 'warning');
+    }
+
+    // 合并答案源：directAnswers 优先，rawAnswerData 补充
+    const allAnswers = directAnswers.length > 0 ? directAnswers : rawAnswerData.map((item, i) => ({
+        answer: item.answer,
+        index: i,
+        answerIndex: item.answerIndex || (i + 1)
+    }));
+
+    // 用题面匹配答案（使用合并后的数据源）
+    function matchReadTextToAnswer(readText) {
+        if (allAnswers.length === 0) return null;
+        const normalizedRead = readText.trim().toLowerCase();
+        let bestMatch = null;
+        let bestScore = 0;
+        allAnswers.forEach((item) => {
+            const answerText = (item.answer || '').trim();
+            const normalizedAnswer = answerText.toLowerCase();
+            let score = 0;
+            if (normalizedRead === normalizedAnswer) {
+                score = 100;
+            } else if (normalizedAnswer.length > 0 && (normalizedRead.includes(normalizedAnswer) || normalizedAnswer.includes(normalizedRead))) {
+                score = Math.min(normalizedRead.length, normalizedAnswer.length) / Math.max(normalizedRead.length, normalizedAnswer.length) * 90;
+            } else {
+                score = calculateTextSimilarity(readText, answerText);
+            }
+            if (score > bestScore && score > 20) {
+                bestScore = score;
+                bestMatch = { answer: answerText, similarity: score, index: item.index, answerIndex: item.answerIndex };
+            }
+        });
+        return bestMatch;
+    }
+
+    // 创建一个全局 AudioContext + MediaStreamDestination，整个流程中 stream 不变
+    const globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (globalAudioCtx.state === 'suspended') await globalAudioCtx.resume();
+    const globalGain = globalAudioCtx.createGain();
+    globalGain.gain.value = 1.0;
+    const globalDest = globalAudioCtx.createMediaStreamDestination();
+    globalGain.connect(globalDest);
+    const globalFakeStream = globalDest.stream;
+
+    // 全局劫持 getUserMedia，始终返回同一个 globalFakeStream
+    const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
+    navigator.mediaDevices.getUserMedia = async function(constraints) {
+        if (constraints && constraints.audio) {
+            console.log('[auto-fill] getUserMedia 拦截: 返回全局假音频流');
+            return globalFakeStream;
+        }
+        return originalGetUserMedia.call(this, constraints);
+    };
+    addLogMessage('跟读朗读: 全局劫持就绪 (stream tracks: ' + globalFakeStream.getAudioTracks().length + ')', 'info');
+
+    try {
+        // 外层循环：跨 slide 处理所有跟读朗读题
+        let slideIndex = 0;
+        while (!readAlongAborted) {
+            // 检测当前 active slide 上的跟读题型
+            const currentSlide = document.querySelector('.swiper-slide-active');
+            if (!currentSlide) break;
+
+            const currentReadAlongEls = currentSlide.querySelectorAll('.partA_word_repeat');
+            const currentQuestions = [];
+            for (const el of currentReadAlongEls) {
+                const nameEl = el.querySelector('.u3-question-container__ques-order--name');
+                if (nameEl && nameEl.textContent.includes('跟读')) {
+                    currentQuestions.push(el);
+                }
+            }
+
+            // 当前 slide 没有跟读题，翻页继续
+            if (currentQuestions.length === 0) {
+                // 尝试翻页
+                const nextBtn = document.querySelector('.swiper-button-next:not(.swiper-button-disabled)');
+                if (nextBtn) {
+                    vueClick(nextBtn);
+                    await waitInterruptible(1000);
+                    slideIndex++;
+                    if (slideIndex > 30) break; // 安全限制
+                    continue;
+                } else {
+                    break; // 没有下一页了
+                }
+            }
+
+            // 处理当前 slide 上的每个跟读题
+            let slideHasWork = false;
+            for (const questionEl of currentQuestions) {
+                if (readAlongAborted) break;
+
+                // 检查该题是否已完成（已有录音结果）
+                const recorderBtn = questionEl.querySelector('.u3-recorder-btns__recorder-first');
+                if (!recorderBtn) continue;
+
+                // 如果已经有完成标记，跳过
+                const hasResult = questionEl.querySelector('.u3-recorder-result, .u3-recorder-btns__result');
+                if (hasResult) continue;
+
+                slideHasWork = true;
+
+                // 提取朗读文本
+                const textEl = questionEl.querySelector('.u3-wordBlock-content__midPanel-enText p');
+                const readText = textEl ? textEl.textContent.trim() : '';
+                if (!readText) {
+                    addLogMessage('跟读朗读: 未找到朗读文本，跳过', 'warning');
+                    continue;
+                }
+
+                addLogMessage('跟读朗读: 开始处理第 ' + (processedCount + 1) + ' 题', 'info');
+
+                // 通过题面文本匹配答案（使用直接获取的答案数据）
+                addLogMessage('跟读朗读: 题面文本 "' + readText + '" (答案库 ' + allAnswers.length + ' 条)', 'info');
+                const answerMatch = matchReadTextToAnswer(readText);
+                let answerIndex = -1;
+            if (answerMatch) {
+                answerIndex = answerMatch.index + 1; // rawAnswerData 是 0-based，TTS 文件是 1-based
+                addLogMessage('跟读朗读: 匹配到答案 #' + answerIndex + ' (相似度 ' + answerMatch.similarity.toFixed(0) + '%, 答案: "' + answerMatch.answer + '")', 'info');
+            } else {
+                // 回退：用当前 slide 索引
+                const allSlides = document.querySelectorAll('.swiper-slide');
+                for (let si = 0; si < allSlides.length; si++) {
+                    if (allSlides[si].classList.contains('swiper-slide-active')) {
+                        answerIndex = si + 1;
+                        break;
+                    }
+                }
+                addLogMessage('跟读朗读: 未匹配答案，回退用 slide #' + answerIndex, 'warning');
+            }
+
+            const base = FillTimeMod.bucketBase();
+            let ttsWavData = null;
+            let usedFallback = false;
+
+            // 尝试从 TTS 服务获取 WAV 音频
+            try {
+                // 先轮询 TTS 状态，等待生成完成
+                let ttsReady = false;
+                for (let poll = 0; poll < 30; poll++) {
+                    if (readAlongAborted) break;
+                    const statusRes = await fetch(base + '/fill-tts/status', { cache: 'no-cache' });
+                    if (statusRes.ok) {
+                        const statusData = await statusRes.json();
+                        if (!statusData.generating) {
+                            ttsReady = true;
+                            break;
+                        }
+                        addLogMessage('跟读朗读: TTS生成中，等待...', 'info');
+                    }
+                    await waitInterruptible(1000);
+                }
+
+                if (ttsReady) {
+                    // 按答案编号获取 WAV 音频
+                    const wavRes = await fetch(base + '/fill-tts/output/' + answerIndex + '.wav', { cache: 'no-cache' });
+                    if (wavRes.ok) {
+                        ttsWavData = await wavRes.arrayBuffer();
+                        addLogMessage('跟读朗读: TTS音频获取成功 (answer #' + answerIndex + ', ' + ttsWavData.byteLength + ' bytes)', 'success');
+                    } else {
+                        addLogMessage('跟读朗读: TTS音频未找到 (answer #' + answerIndex + ', HTTP ' + wavRes.status + ')，尝试回退', 'warning');
+                    }
+                }
+            } catch (e) {
+                addLogMessage('跟读朗读: TTS服务异常: ' + e.message, 'warning');
+            }
+
+            if (readAlongAborted) break;
+
+            // 如果 TTS WAV 不可用，使用 SpeechSynthesis 回退
+            if (!ttsWavData) {
+                addLogMessage('跟读朗读: 使用浏览器语音合成回退', 'info');
+                usedFallback = true;
+
+                // 使用 SpeechSynthesis 先播放音频
+                await speakWithSpeechSynthesis(readText);
+
+                // 然后点击录音按钮
+                vueClick(recorderBtn);
+
+                // 使用 SpeechSynthesis 再次播放作为"录音内容"
+                await waitInterruptible(500);
+                await speakWithSpeechSynthesis(readText);
+                await waitInterruptible(500);
+
+                // 点击停止录音
+                const stopBtn = questionEl.querySelector('.u3-recorder-panel__btn');
+                if (stopBtn) {
+                    vueClick(stopBtn);
+                } else {
+                    vueClick(recorderBtn);
+                }
+
+                processedCount++;
+                await waitInterruptible(1000);
+                continue;
+            }
+
+            // 在全局 AudioContext 上创建 BufferSource 连到 globalGain → globalDest
+            // stream 始终是 globalFakeStream，组件缓存了也不影响
+            let audioSource = null;
+            let audioDuration = 0;
+            try {
+                const audioBuffer = await globalAudioCtx.decodeAudioData(ttsWavData);
+                audioSource = globalAudioCtx.createBufferSource();
+                audioSource.buffer = audioBuffer;
+                audioSource.loop = true;
+                audioSource.connect(globalGain);
+                audioSource.start();
+                audioDuration = audioBuffer.duration;
+                const trackState = globalFakeStream.getAudioTracks().map(t => 'kind=' + t.kind + ',label=' + t.label + ',readyState=' + t.readyState + ',muted=' + t.muted);
+                addLogMessage('跟读朗读: 音频源就绪 (时长 ' + audioDuration.toFixed(1) + 's, ctx.state=' + globalAudioCtx.state + ', tracks=[' + trackState.join(',') + '])', 'success');
+            } catch (e) {
+                addLogMessage('跟读朗读: 解码音频失败: ' + e.message, 'error');
+                // 回退到 SpeechSynthesis
+                await speakWithSpeechSynthesis(readText);
+                vueClick(recorderBtn);
+                await waitInterruptible(500);
+                await speakWithSpeechSynthesis(readText);
+                await waitInterruptible(500);
+                const stopBtn = await findStopRecordBtn(questionEl);
+                if (stopBtn) {
+                    vueClick(stopBtn);
+                } else {
+                    vueClick(recorderBtn);
+                }
+                processedCount++;
+                await waitInterruptible(1000);
+                continue;
+            }
+
+            // 点击录音按钮（getUserMedia 全局劫持中，globalFakeStream 始终相同）
+            const hijackActive = navigator.mediaDevices.getUserMedia !== originalGetUserMedia;
+            addLogMessage('跟读朗读: 点击录音按钮 (劫持' + (hijackActive ? '生效' : '已失效!') + ', stream tracks: ' + globalFakeStream.getAudioTracks().length + ')', 'info');
+            vueClick(recorderBtn);
+
+            // 等待 5 秒（测试用）
+            addLogMessage('跟读朗读: 等待5秒录音中...', 'info');
+            await waitInterruptible(5000);
+
+            // 停止音频源（断开连接，但不关闭 AudioContext，stream 不变）
+            if (audioSource) {
+                try { audioSource.stop(); } catch(e) {}
+                try { audioSource.disconnect(); } catch(e) {}
+            }
+
+            // 检查 stream track 状态（组件可能 stop 了 track）
+            const tracksAfter = globalFakeStream.getAudioTracks();
+            const trackStates = tracksAfter.map(t => t.readyState + '/muted=' + t.muted);
+            addLogMessage('跟读朗读: 录音后 track 状态: [' + trackStates.join(', ') + ']', 'info');
+
+            // 点击停止录音（等 Vue 更新 DOM 后查找）
+            const stopBtn = await findStopRecordBtn(questionEl);
+            addLogMessage('跟读朗读: 点击停止录音', 'info');
+            if (stopBtn) {
+                vueClick(stopBtn);
+            } else {
+                vueClick(recorderBtn);
+            }
+
+            processedCount++;
+            addLogMessage('跟读朗读: 第 ' + processedCount + ' 题完成', 'success');
+
+            await waitInterruptible(1500);
+            } // end for (currentQuestions)
+
+            // 当前 slide 处理完，翻到下一页
+            if (!readAlongAborted) {
+                const nextBtn = document.querySelector('.swiper-button-next:not(.swiper-button-disabled)');
+                if (nextBtn) {
+                    addLogMessage('跟读朗读: 翻到下一页', 'info');
+                    vueClick(nextBtn);
+                    await waitInterruptible(1000);
+                    slideIndex++;
+                } else {
+                    break; // 没有下一页了
+                }
+            }
+
+            if (slideIndex > 30) break; // 安全限制
+        } // end while
+
+        if (processedCount > 0) {
+            addLogMessage('跟读朗读: 共处理 ' + processedCount + ' 个跟读题目', 'success');
+        }
+    } catch (e) {
+        addLogMessage('跟读朗读处理异常: ' + e.message, 'error');
+    } finally {
+        // 恢复 getUserMedia + 关闭全局 AudioContext
+        navigator.mediaDevices.getUserMedia = originalGetUserMedia;
+        if (globalAudioCtx.state !== 'closed') {
+            try { globalAudioCtx.close(); } catch(e) {}
+        }
+        addLogMessage('跟读朗读: 劫持已恢复', 'info');
+        isReadAlongProcessing = false;
+    }
+
+    return processedCount;
+}
+
 async function work() {
+    // 跟读朗读处理中时跳过其他工作
+    if (isReadAlongProcessing) return;
+
     const getInputs = (root) => {
         const a = root.getElementsByClassName('u3-input__content--input');
         if (a && a.length) return a;
@@ -644,6 +1163,9 @@ async function work() {
 
     // ========== 选择题自动选择 ==========
     const choiceFilledCount = supportChoiceQuestions ? await fillChoiceQuestions() : 0;
+
+    // ========== 跟读朗读题型处理 ==========
+    const readAlongCount = supportReadAlong && contentMatchMode ? await handleReadAlongQuestions() : 0;
 
     // ========== 填空题自动填写 ==========
     const preparedElements = document.getElementsByClassName('u3-input__prepared');
@@ -778,11 +1300,19 @@ async function work() {
         addLogMessage('已选择 ' + choiceFilledCount + ' 个选择题答案', 'success');
     }
 
-    // 翻页：找到"下一页"按钮并点击
-    const nextBtn = findButtonByText('下一页');
-    if (nextBtn) {
-        nextBtn.click();
-        addLogMessage('已点击翻页按钮（下一页）', 'info');
+    if (readAlongCount > 0) {
+        addLogMessage('本次跟读朗读完成 ' + readAlongCount + ' 题', 'success');
+    } else if (supportReadAlong && contentMatchMode) {
+        // 开启了跟读但当前页没有跟读题，不输出
+    }
+
+    // 翻页：找到"下一页"按钮并点击（仅在未中断时）
+    if (!readAlongAborted) {
+        const nextBtn = findButtonByText('下一页');
+        if (nextBtn) {
+            nextBtn.click();
+            addLogMessage('已点击翻页按钮（下一页）', 'info');
+        }
     }
 }
 
@@ -802,6 +1332,8 @@ function startAutoFill() {
         clearInterval(autoFillIntervalId);
         autoFillIntervalId = null;
     }
+    readAlongAborted = false;
+    isReadAlongProcessing = false;
     autoFillIntervalId = setInterval(work, autoFillDelay);
     updateAutoFillPanelStatus();
     addLogMessage('自动填空已启动，间隔: ' + autoFillDelay + 'ms', 'info');
@@ -812,6 +1344,8 @@ function stopAutoFill() {
         clearInterval(autoFillIntervalId);
         autoFillIntervalId = null;
     }
+    isReadAlongProcessing = false;
+    readAlongAborted = true;
     updateAutoFillPanelStatus();
     addLogMessage('自动填空已停止', 'info');
 }
@@ -1470,6 +2004,21 @@ function createAutoFillPanel() {
             supportChoiceCheckbox.checked = false;
         }
         updateSupportChoiceLabel();
+
+        // 同步更新跟读朗读复选框状态
+        supportReadAlongCheckbox.disabled = !enabled;
+        supportReadAlongRow.style.opacity = enabled ? '1' : '0.5';
+        supportReadAlongCheckbox.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        supportReadAlongLabel.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        if (!enabled) {
+            if (supportReadAlong) {
+                supportReadAlong = false;
+                localStorage.setItem('supportReadAlong', 'false');
+            }
+            supportReadAlongCheckbox.checked = false;
+        }
+        updateReadAlongLabel();
+        updateTtsProgressVisibility();
     }
 
     updateSupportChoiceLabel();
@@ -1480,6 +2029,121 @@ function createAutoFillPanel() {
     supportChoiceRow.appendChild(supportChoiceCheckbox);
     supportChoiceRow.appendChild(supportChoiceLabel);
     autoFillPanel.appendChild(supportChoiceRow);
+
+    // 支持跟读朗读复选框（依赖内容匹配模式）
+    const supportReadAlongRow = document.createElement('div');
+    supportReadAlongRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 4px 4px 4px 16px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        opacity: ${contentMatchMode ? '1' : '0.5'};
+    `;
+
+    const supportReadAlongCheckbox = document.createElement('input');
+    supportReadAlongCheckbox.type = 'checkbox';
+    supportReadAlongCheckbox.id = 'support-read-along';
+    supportReadAlongCheckbox.checked = supportReadAlong;
+    supportReadAlongCheckbox.disabled = !contentMatchMode;
+    supportReadAlongCheckbox.style.cssText = `
+        margin-right: 8px;
+        cursor: ${contentMatchMode ? 'pointer' : 'not-allowed'};
+    `;
+    supportReadAlongCheckbox.addEventListener('change', (e) => {
+        if (!contentMatchMode) {
+            e.target.checked = false;
+            return;
+        }
+        supportReadAlong = e.target.checked;
+        localStorage.setItem('supportReadAlong', supportReadAlong.toString());
+        addLogMessage('支持跟读朗读: ' + (supportReadAlong ? '已启用' : '已禁用'), 'info');
+        updateReadAlongLabel();
+        updateTtsProgressVisibility();
+    });
+
+    const supportReadAlongLabel = document.createElement('label');
+    supportReadAlongLabel.htmlFor = 'support-read-along';
+    supportReadAlongLabel.style.cssText = `
+        font-size: 11px;
+        cursor: ${contentMatchMode ? 'pointer' : 'not-allowed'};
+        flex: 1;
+    `;
+
+    function updateReadAlongLabel() {
+        const enabled = contentMatchMode && supportReadAlong;
+        const color = enabled ? '#4caf50' : '#888';
+        const statusText = supportReadAlong ? (contentMatchMode ? '(开启)' : '(已禁用-需先开启内容匹配)') : '(关闭)';
+        supportReadAlongLabel.innerHTML = `
+            <span style="color: ${color};">
+                支持跟读朗读(需要先开启内容匹配) ${statusText}
+            </span>
+        `;
+    }
+
+    updateReadAlongLabel();
+
+    supportReadAlongRow.appendChild(supportReadAlongCheckbox);
+    supportReadAlongRow.appendChild(supportReadAlongLabel);
+    autoFillPanel.appendChild(supportReadAlongRow);
+
+    // TTS 生成进度显示
+    const ttsProgressDiv = document.createElement('div');
+    ttsProgressDiv.id = 'tts-progress-display';
+    ttsProgressDiv.style.cssText = `
+        font-size: 11px;
+        margin-bottom: 6px;
+        padding: 4px 4px 4px 16px;
+        color: #ffc107;
+        display: ${supportReadAlong && contentMatchMode ? 'block' : 'none'};
+    `;
+    ttsProgressDiv.textContent = 'TTS: 就绪';
+    autoFillPanel.appendChild(ttsProgressDiv);
+
+    let ttsPollIntervalId = null;
+
+    function updateTtsProgressVisibility() {
+        const visible = supportReadAlong && contentMatchMode;
+        ttsProgressDiv.style.display = visible ? 'block' : 'none';
+        if (visible && !ttsPollIntervalId) {
+            startTtsPoll();
+        } else if (!visible && ttsPollIntervalId) {
+            clearInterval(ttsPollIntervalId);
+            ttsPollIntervalId = null;
+        }
+    }
+
+    function startTtsPoll() {
+        if (ttsPollIntervalId) return;
+        const pollTts = async () => {
+            if (!supportReadAlong || !contentMatchMode) return;
+            try {
+                const base = FillTimeMod.bucketBase();
+                const res = await fetch(base + '/fill-tts/status', { cache: 'no-cache' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.generating) {
+                        const gen = data.generated || 0;
+                        const tot = data.total || '?';
+                        const pct = tot > 0 ? Math.round(gen / tot * 100) : 0;
+                        ttsProgressDiv.textContent = 'TTS生成: ' + gen + '/' + tot + ' (' + pct + '%)';
+                        ttsProgressDiv.style.color = '#ffc107';
+                    } else {
+                        ttsProgressDiv.textContent = 'TTS: 就绪';
+                        ttsProgressDiv.style.color = '#4caf50';
+                    }
+                }
+            } catch (e) {
+                ttsProgressDiv.textContent = 'TTS: 未连接';
+                ttsProgressDiv.style.color = '#ff9800';
+            }
+        };
+        pollTts();
+        ttsPollIntervalId = setInterval(pollTts, 5000);
+    }
+
+    updateTtsProgressVisibility();
 
     // ===== 时间修改行（参考 auto-pk / auto-listening）=====
     const timeModRow = document.createElement('div');

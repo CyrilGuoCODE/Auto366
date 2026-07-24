@@ -56,6 +56,10 @@ class TtsManager {
     this.textMap = new Map();
     this.nextIndex = 1;
     this.currentBasePath = '/tts';
+
+    // 生成状态（供 /status 轮询）
+    this.isGenerating = false;
+    this.generationProgress = { total: 0, generated: 0, skipped: 0 };
     this.modelDir = null;
     this.cacheDir = null;
     this.rulesManager = null;
@@ -316,12 +320,14 @@ class TtsManager {
     const total = answers.length;
     const batchStart = Date.now();
 
+    this.isGenerating = true;
+    this.generationProgress = { total, generated: 0, skipped: 0 };
     this._log(`开始生成 ${total} 条语音...`, 'info');
 
     for (let i = 0; i < answers.length; i++) {
       const answer = answers[i];
       const text = answer.answer || answer.content || answer.text || '';
-      if (!text) { skipped++; continue; }
+      if (!text) { skipped++; this.generationProgress.skipped = skipped; continue; }
 
       const index = this.nextIndex;
       try {
@@ -331,6 +337,7 @@ class TtsManager {
           this.textMap.set(index, text);
           this.nextIndex++;
           generated++;
+          this.generationProgress.generated = generated;
         }
       } catch (e) {
         this._log('生成第 ' + index + ' 条失败: ' + e.message, 'error');
@@ -347,6 +354,8 @@ class TtsManager {
     // 汇总日志
     const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
     this._log(`生成完成: ${generated}/${total} 成功, ${skipped} 跳过 (${totalElapsed}s)`, 'success');
+
+    this.isGenerating = false;
   }
 
   // ---- 配置变更后重新生成 ----
@@ -371,6 +380,9 @@ class TtsManager {
 
     this._log(`开始重新生成 ${total} 条语音...`, 'info');
 
+    this.isGenerating = true;
+    this.generationProgress = { total, generated: 0, skipped: 0 };
+
     for (let i = 0; i < sortedKeys.length; i++) {
       const oldIndex = sortedKeys[i];
       const text = this.textMap.get(oldIndex);
@@ -382,6 +394,7 @@ class TtsManager {
           this.fileIndex.set(index, result.filePath);
           this.nextIndex++;
           generated++;
+          this.generationProgress.generated = generated;
         }
       } catch (e) {
         this._log('重新生成第 ' + index + ' 条失败: ' + e.message, 'error');
@@ -397,6 +410,8 @@ class TtsManager {
     this.textMap = newTextMap;
     const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
     this._log(`重新生成完成: ${generated}/${total} 成功 (${totalElapsed}s)`, 'success');
+
+    this.isGenerating = false;
   }
 
   // ---- 更新配置 ----
@@ -484,6 +499,25 @@ class TtsManager {
     }
 
     return false;
+  }
+
+  handleTtsStatusRequest(pathname, res) {
+    const basePath = this._getBasePathFromRules();
+    const statusPath = basePath + '/status';
+    if (pathname !== statusPath) return false;
+
+    const progress = this.generationProgress;
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({
+      generating: this.isGenerating,
+      total: progress.total,
+      generated: progress.generated,
+      skipped: progress.skipped,
+      generatedCount: this.fileIndex.size,
+      voice: this.config.voice,
+      speed: this.config.speed,
+    }));
+    return true;
   }
 
   async _pushConfigToRenderer() {
