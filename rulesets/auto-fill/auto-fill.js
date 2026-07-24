@@ -841,19 +841,34 @@ async function handleReadAlongQuestions() {
     function matchReadTextToAnswer(readText) {
         if (allAnswers.length === 0) return null;
         const normalizedRead = readText.trim().toLowerCase();
+        // 提取题面英文部分："bring about 带来；引起" → "bring about"
+        //                          "sandstorm /ˈsændstɔːm/ n. 沙尘暴" → "sandstorm"
+        const englishPart = readText.replace(/[\u4e00-\u9fff].*$/, '').replace(/\s*\/[^a-zA-Z].*$/, '').trim().toLowerCase();
+
         let bestMatch = null;
         let bestScore = 0;
         allAnswers.forEach((item) => {
             const answerText = (item.answer || '').trim();
             const normalizedAnswer = answerText.toLowerCase();
             let score = 0;
+
             if (normalizedRead === normalizedAnswer) {
+                // 1. 完全精确匹配
                 score = 100;
+            } else if (englishPart.length > 2 && englishPart === normalizedAnswer) {
+                // 2. 英文部分精确匹配（最常见场景）
+                score = 95;
+            } else if (englishPart.length > 2 && normalizedAnswer.length > 2 && englishPart.includes(normalizedAnswer)) {
+                // 3. 答案是英文部分的子串（如英文="bring about", 答案="bring about"）
+                score = (normalizedAnswer.length / englishPart.length) * 90;
             } else if (normalizedAnswer.length > 0 && (normalizedRead.includes(normalizedAnswer) || normalizedAnswer.includes(normalizedRead))) {
-                score = Math.min(normalizedRead.length, normalizedAnswer.length) / Math.max(normalizedRead.length, normalizedAnswer.length) * 90;
+                // 4. 原有子串包含匹配
+                score = Math.min(normalizedRead.length, normalizedAnswer.length) / Math.max(normalizedRead.length, normalizedAnswer.length) * 80;
             } else {
-                score = calculateTextSimilarity(readText, answerText);
+                // 5. 相似度回退
+                score = calculateTextSimilarity(readText, answerText) * 0.8;
             }
+
             if (score > bestScore && score > 20) {
                 bestScore = score;
                 bestMatch = { answer: answerText, similarity: score, index: item.index, answerIndex: item.answerIndex };
