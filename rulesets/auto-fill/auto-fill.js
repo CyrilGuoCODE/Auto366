@@ -870,17 +870,34 @@ async function handleReadAlongQuestions() {
     const globalDest = globalAudioCtx.createMediaStreamDestination();
     globalGain.connect(globalDest);
     const globalFakeStream = globalDest.stream;
+    const ourTracks = new Set(globalFakeStream.getAudioTracks());
 
-    // 全局劫持 getUserMedia，始终返回同一个 globalFakeStream
+    // 劫持1: getUserMedia — 返回假流
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
     navigator.mediaDevices.getUserMedia = async function(constraints) {
         if (constraints && constraints.audio) {
-            console.log('[auto-fill] getUserMedia 拦截: 返回全局假音频流');
+            console.log('[auto-fill] getUserMedia → 假流');
             return globalFakeStream;
         }
         return originalGetUserMedia.call(this, constraints);
     };
-    addLogMessage('跟读朗读: 全局劫持就绪 (stream tracks: ' + globalFakeStream.getAudioTracks().length + ')', 'info');
+
+    // 劫持2: MediaStreamTrack.stop — 阻止组件 kill 我们的 track
+    // 这是第二题失败的关键根因：组件录音结束后调 track.stop()，
+    // track 变 ended，后续录音即使有新音频也无法通过已死的 track
+    const originalTrackStop = MediaStreamTrack.prototype.stop;
+    let trackStopBlocked = 0;
+    MediaStreamTrack.prototype.stop = function() {
+        if (ourTracks.has(this)) {
+            trackStopBlocked++;
+            console.log('[auto-fill] 阻止 track.stop() #' + trackStopBlocked + ' (readyState=' + this.readyState + ')');
+            addLogMessage('跟读朗读: 阻止组件 stop track #' + trackStopBlocked, 'info');
+            return; // 不真正 stop，保持 track live
+        }
+        return originalTrackStop.call(this);
+    };
+
+    addLogMessage('跟读朗读: 双层劫持就绪 (getUserMedia + track.stop 保护, tracks: ' + ourTracks.size + ')', 'info');
 
     try {
         // 外层循环：跨 slide 处理所有跟读朗读题
@@ -1115,12 +1132,17 @@ async function handleReadAlongQuestions() {
     } catch (e) {
         addLogMessage('跟读朗读处理异常: ' + e.message, 'error');
     } finally {
-        // 恢复 getUserMedia + 关闭全局 AudioContext
+        // 恢复两层劫持 + 真正 stop track + 关闭 AudioContext
+        MediaStreamTrack.prototype.stop = originalTrackStop;
+        // 现在允许真正 stop 我们的 track
+        for (const track of ourTracks) {
+            try { originalTrackStop.call(track); } catch(e) {}
+        }
         navigator.mediaDevices.getUserMedia = originalGetUserMedia;
         if (globalAudioCtx.state !== 'closed') {
             try { globalAudioCtx.close(); } catch(e) {}
         }
-        addLogMessage('跟读朗读: 劫持已恢复', 'info');
+        addLogMessage('跟读朗读: 劫持已恢复 (阻止了 ' + trackStopBlocked + ' 次 track.stop)', 'info');
         isReadAlongProcessing = false;
     }
 
