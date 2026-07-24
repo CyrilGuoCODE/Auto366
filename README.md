@@ -27,6 +27,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [BUG修复]修复听力自动化完成率与正确率不准确
 - [功能优化]优化自动填空答案上传规则，支持自学专项题型(By Fish)
 - [功能优化]优化进程加速卡死问题(By Wutanji)
+- [新功能]自动填空支持跟读朗读题型
 
 ### BUG问题
 
