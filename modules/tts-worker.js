@@ -85,10 +85,19 @@ process.on('message', async (msg) => {
       }
 
       const sherpa_onnx = require('sherpa-onnx-node');
+
+      // 自动检测模型文件名：fp32 > int8 > 无后缀
+      let modelFile = 'model.onnx';
+      if (fs.existsSync(path.join(modelDir, 'model.fp32.onnx'))) {
+        modelFile = 'model.fp32.onnx';
+      } else if (fs.existsSync(path.join(modelDir, 'model.int8.onnx'))) {
+        modelFile = 'model.int8.onnx';
+      }
+
       const config = {
         model: {
           kitten: {
-            model: path.join(modelDir, 'model.int8.onnx'),
+            model: path.join(modelDir, modelFile),
             voices: path.join(modelDir, 'voices.bin'),
             tokens: path.join(modelDir, 'tokens.txt'),
             dataDir: path.join(modelDir, 'espeak-ng-data'),
@@ -97,6 +106,8 @@ process.on('message', async (msg) => {
         },
         maxNumSentences: 1,
       };
+
+      sendLog('使用模型文件: ' + modelFile, 'info');
 
       tts = new sherpa_onnx.OfflineTts(config);
       process.send({ type: 'ready', success: true });

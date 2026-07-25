@@ -493,6 +493,13 @@
                         <div class="setting-group">
                             <h4>TTS 语音生成</h4>
                             <div class="setting-item">
+                                <label for="ttsModelSelect">TTS模型:</label>
+                                <select id="ttsModelSelect" class="form-input">
+                                    <option value="">加载中...</option>
+                                </select>
+                            </div>
+                            <div class="setting-item__description">切换模型后会自动重启TTS引擎并重新生成，已有TTS缓存将会清除</div>
+                            <div class="setting-item">
                                 <label for="ttsVoiceSelect">音色:</label>
                                 <select id="ttsVoiceSelect" class="form-input">
                                     <option value="Jasper" selected>Jasper (男)</option>
