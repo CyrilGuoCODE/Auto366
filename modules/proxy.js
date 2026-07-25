@@ -600,6 +600,10 @@ class ProxyServer {
         // TTS 配置端点: {basePath}/setting
         const settingHandled = this.ttsManager.handleTtsSettingRequest(req, res, pathname);
         if (settingHandled) return;
+
+        // TTS 状态轮询端点: {basePath}/status
+        const statusHandled = this.ttsManager.handleTtsStatusRequest(pathname, res);
+        if (statusHandled) return;
       }
 
       if (pathname === '/') {

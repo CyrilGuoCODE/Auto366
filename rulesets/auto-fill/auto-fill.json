@@ -28,5 +28,12 @@
     "urlUpload": "self-api.up366.cn/selfstudy/special/questions",
     "uploadType": "json-xml-extracted",
     "serverLocate": "/fill-answer"
+  },
+  {
+    "name": "TTS语音生成",
+    "type": "tts-generate",
+    "description": "将答案文本生成TTS语音，用于跟读朗读题型",
+    "enabled": true,
+    "ttsBasePath": "/fill-tts"
   }
 ]
