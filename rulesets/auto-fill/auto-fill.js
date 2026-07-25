@@ -1028,9 +1028,10 @@ async function handleReadAlongQuestions() {
             addLogMessage('跟读朗读: 点击录音按钮 (劫持' + (hijackActive ? '生效' : '已失效!') + ', stream tracks: ' + globalFakeStream.getAudioTracks().length + ')', 'info');
             vueClick(recorderBtn);
 
-            // 等待 5 秒（测试用）
-            addLogMessage('跟读朗读: 等待5秒录音中...', 'info');
-            await waitInterruptible(5000);
+            // 等待录音时长 = 音频时长 × 2不足三秒即为三秒
+            const waitTime = Math.max(Math.ceil(audioDuration * 2 * 1000), 3000);
+            addLogMessage('跟读朗读: 等待录音中... (音频 ' + audioDuration.toFixed(1) + 's, 等待 ' + (waitTime / 1000).toFixed(1) + 's)', 'info');
+            await waitInterruptible(waitTime);
 
             // 停止音频源（断开连接，但不关闭 AudioContext，stream 不变）
             if (audioSource) {
