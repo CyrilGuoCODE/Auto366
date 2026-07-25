@@ -20,6 +20,9 @@ default
 **/.env.test.local
 **/.env.production.local
 
+#分析工具
+**/auto366-snapshots/
+
 # 编辑器文件
 **/.vscode/
 .idea/
@@ -56,3 +59,7 @@ coverage/
 resources/tun/
 resources/openspeedy/
 resources/tts/
+
+# 本地mcp文件
+snapshot-*.js
+**/snapshot.js
