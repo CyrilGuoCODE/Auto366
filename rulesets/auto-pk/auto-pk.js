@@ -2912,9 +2912,336 @@ var UI = {
     }
 };
 
+// ============================================================
+// 拼写PK模块 —— 处理 u3-spell 类型的拼写填空题
+// 与选择PK共享词库，但交互方式完全不同：
+//   选择PK: 读题 → 匹配 → 点击选项
+//   拼写PK: 读题 → 匹配 → 从碎片块中拼出正确单词
+// ============================================================
+var SpellPk = {
+    lastAnsweredKey: '',
+
+    isActive: function() {
+        return !!document.querySelector('.u3-spell.u3-page-pking__pk-core');
+    },
+
+    getQuestions: function() {
+        var wordCns = document.querySelectorAll('.u3-spell__word-cn');
+        var questions = [];
+        for (var i = 0; i < wordCns.length; i++) {
+            var text = wordCns[i].textContent || '';
+            text = text.replace(/^\s*\/\s*/, '').trim();
+            questions.push(text);
+        }
+        return questions;
+    },
+
+    getActiveQuestionIndex: function() {
+        var wordCns = document.querySelectorAll('.u3-spell__word-cn');
+        for (var i = 0; i < wordCns.length; i++) {
+            if (wordCns[i].classList.contains('is-active')) return i;
+        }
+        // 回退：使用活跃填空位置
+        var fillBlanks = document.querySelectorAll('.u3-spell__fill-blank.is-active');
+        if (fillBlanks.length === 0) return 0;
+        var activeBlank = fillBlanks[0];
+        var fillLists = document.querySelectorAll('.u3-spell__fill-list');
+        for (var j = 0; j < fillLists.length; j++) {
+            if (fillLists[j].contains(activeBlank)) return j;
+        }
+        return 0;
+    },
+
+    getAnswerFragments: function() {
+        var cols = document.querySelectorAll('.u3-spell__answer-col');
+        var fragments = [];
+        for (var i = 0; i < cols.length; i++) {
+            var col = cols[i];
+            var rightEl = col.querySelector('.u3-spell__answer-right');
+            if (rightEl) {
+                var text = (rightEl.textContent || '').trim();
+                fragments.push({ index: i, text: text, element: rightEl });
+            }
+        }
+        return fragments;
+    },
+
+    matchQuestion: function(questionText) {
+        if (!State.jsonData || !State.jsonData.words) return null;
+
+        // 拼写PK特有的前缀清理：去除 "Phrase" / "n." / "v." 等标记
+        var cleanedQuestion = questionText.replace(/^Phrase\s*/i, '').trim();
+        var isChineseInput = /[\u4e00-\u9fff]/.test(cleanedQuestion);
+        var cleanedWord = Utils.removePartOfSpeech(cleanedQuestion);
+        var normalizedCleaned = Utils.normalizeText(cleanedWord);
+        var entryKeyCleaned = Utils.normalizeEntryKey(cleanedWord);
+
+        var byQuestion = State.jsonData.index ? State.jsonData.index.by_question : null;
+        var byWord = State.jsonData.index ? State.jsonData.index.by_word : null;
+        var wordsList = State.jsonData.words;
+
+        // 先尝试索引查找
+        var targetWords = new Set();
+        if (byQuestion) {
+            var lookupKeys = [questionText, normalizedCleaned, cleanedWord, entryKeyCleaned];
+            for (var li = 0; li < lookupKeys.length; li++) {
+                var key = lookupKeys[li];
+                if (key && byQuestion[key]) {
+                    var hits = byQuestion[key];
+                    for (var h = 0; h < hits.length; h++) {
+                        targetWords.add(hits[h]);
+                    }
+                }
+            }
+        }
+
+        if (isChineseInput && targetWords.size === 0) {
+            for (var wi = 0; wi < wordsList.length; wi++) {
+                var w = wordsList[wi];
+                var checkList = (w.clean_meanings || []).concat(w.meanings);
+                for (var ci = 0; ci < checkList.length; ci++) {
+                    var nm = Utils.normalizeText(checkList[ci]);
+                    if (nm && normalizedCleaned && (nm.includes(normalizedCleaned) || normalizedCleaned.includes(nm))) {
+                        targetWords.add(w.word);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (targetWords.size === 0) return null;
+
+        var bestWord = null;
+        var bestScore = 0;
+        targetWords.forEach(function(tw) {
+            var info = byWord ? byWord[tw] : null;
+            if (!info) {
+                for (var k = 0; k < wordsList.length; k++) {
+                    if (wordsList[k].word === tw) { info = wordsList[k]; break; }
+                }
+            }
+            if (!info) return;
+            var score = Utils.calculateSimilarity(cleanedWord, info.meaning_text || '');
+            if (score > bestScore) {
+                bestScore = score;
+                bestWord = tw;
+            }
+        });
+
+        return bestWord ? { word: bestWord, score: bestScore } : null;
+    },
+
+    findFragmentSequence: function(answer, fragments) {
+        // 归一化：去空格、标点，统一小写
+        function norm(s) { return s.toLowerCase().replace(/[\s.\-_,;:!?']/g, ''); }
+        var answerNorm = norm(answer);
+        var availFrags = [];
+        for (var i = 0; i < fragments.length; i++) {
+            if (fragments[i].text) {
+                availFrags.push({ text: norm(fragments[i].text), origIdx: i, orig: fragments[i] });
+            }
+        }
+
+        var result = SpellPk._searchSequence(answerNorm, availFrags, [], new Set());
+        return result;
+    },
+
+    _searchSequence: function(remaining, frags, path, usedSet) {
+        if (remaining.length === 0) return path;
+
+        // 按碎片长度降序排列，优先匹配较长的碎片（贪心）
+        var sorted = [];
+        for (var i = 0; i < frags.length; i++) {
+            if (!usedSet.has(i)) sorted.push(i);
+        }
+        sorted.sort(function(a, b) { return frags[b].text.length - frags[a].text.length; });
+
+        for (var s = 0; s < sorted.length; s++) {
+            var idx = sorted[s];
+            var frag = frags[idx];
+            if (remaining.startsWith(frag.text)) {
+                usedSet.add(idx);
+                var newPath = path.concat([frags[idx].orig]);
+                var result = SpellPk._searchSequence(remaining.substring(frag.text.length), frags, newPath, usedSet);
+                if (result) return result;
+                usedSet.delete(idx);
+            }
+        }
+        return null;
+    },
+
+    _clickSequence: function(sequence, idx) {
+        if (idx >= sequence.length) {
+            UI.addLogMessage('[拼写PK] 碎片点击序列完成', 'info');
+            UI.updateStatus();
+            return;
+        }
+        var frag = sequence[idx];
+
+        // 记录当前活跃填空，用于等待变化
+        var prevActiveBlank = document.querySelector('.u3-spell__fill-blank.is-active');
+
+        frag.element.click();
+        UI.addLogMessage('[拼写PK] 点击碎片[' + idx + ']: "' + frag.text + '"', 'info');
+
+        // 最后一个碎片点击后，等待面板设定的间隔再允许处理下一题
+        if (idx >= sequence.length - 1) {
+            UI.updateStatus();
+            var nextDelay = State.autoPkDelay || 1000;
+            UI.addLogMessage('[拼写PK] 当前题碎片已点完，等待 ' + nextDelay + 'ms 后处理下一题', 'info');
+            setTimeout(function() {
+                SpellPk.lastAnsweredKey = '';
+            }, nextDelay);
+            return;
+        }
+
+        // 等待活跃填空变化（is-active 移到下一个 blank）
+        var waitCount = 0;
+        var maxWait = 20; // 最多等 2 秒（20 × 100ms）
+        var checkInterval = setInterval(function() {
+            waitCount++;
+            var curActiveBlank = document.querySelector('.u3-spell__fill-blank.is-active');
+            if (curActiveBlank !== prevActiveBlank || waitCount >= maxWait) {
+                clearInterval(checkInterval);
+                if (waitCount >= maxWait) {
+                    UI.addLogMessage('[拼写PK] 等待填空变化超时，继续下一碎片', 'warning');
+                }
+                // 下一碎片
+                SpellPk._clickSequence(sequence, idx + 1);
+            }
+        }, 100);
+    },
+
+    auto: function() {
+        if (!SpellPk.isActive()) return false;
+
+        var questions = SpellPk.getQuestions();
+        if (questions.length === 0) {
+            UI.addLogMessage('[拼写PK] 未找到题目', 'warning');
+            return true;
+        }
+
+        var activeIdx = SpellPk.getActiveQuestionIndex();
+        if (activeIdx < 0) {
+            UI.addLogMessage('[拼写PK] 未找到活跃题目', 'warning');
+            return true;
+        }
+
+        var activeQuestion = questions[activeIdx] || '';
+        var dedupeKey = activeIdx + ':' + activeQuestion;
+        if (dedupeKey === SpellPk.lastAnsweredKey) return true;
+
+        UI.addLogMessage('[拼写PK] 第' + (activeIdx + 1) + '题: "' + activeQuestion + '"', 'info');
+
+        var answer = null;
+        var matchSource = '';
+
+        // 优先从词库匹配
+        var match = SpellPk.matchQuestion(activeQuestion);
+        if (match) {
+            answer = match.word;
+            matchSource = '词库(置信度=' + Math.round(match.score) + '%)';
+        }
+
+        // 回退：从 DOM 隐藏的 complex-content 读取答案
+        if (!answer) {
+            var complexContents = document.querySelectorAll('.u3-spell__complex-content');
+            if (complexContents.length > activeIdx) {
+                var domAnswer = (complexContents[activeIdx].textContent || '').trim();
+                if (domAnswer) {
+                    answer = domAnswer;
+                    matchSource = 'DOM(complex-content)';
+                }
+            }
+        }
+
+        if (!answer) {
+            UI.addLogMessage('[拼写PK] 词库和DOM均未找到答案', 'warning');
+            SpellPk.lastAnsweredKey = dedupeKey;
+            return true;
+        }
+
+        UI.addLogMessage('[拼写PK] 匹配: ' + answer + ' (来源=' + matchSource + ')', 'match');
+
+        var fragments = SpellPk.getAnswerFragments();
+        if (fragments.length === 0) {
+            UI.addLogMessage('[拼写PK] 未找到可点击碎片', 'warning');
+            SpellPk.lastAnsweredKey = dedupeKey;
+            return true;
+        }
+
+        var fragTexts = [];
+        for (var fi = 0; fi < fragments.length; fi++) {
+            fragTexts.push(fragments[fi].text);
+        }
+        UI.addLogMessage('[拼写PK] 可用碎片: ' + JSON.stringify(fragTexts), 'info');
+
+        // 尝试从碎片拼出答案
+        var sequence = SpellPk.findFragmentSequence(answer, fragments);
+
+        // 如果词库答案拼不出碎片，回退到 DOM complex-content 的答案
+        if (!sequence && matchSource.indexOf('词库') !== -1) {
+            var complexContents = document.querySelectorAll('.u3-spell__complex-content');
+            if (complexContents.length > activeIdx) {
+                var domAnswer = (complexContents[activeIdx].textContent || '').trim();
+                if (domAnswer && domAnswer !== answer) {
+                    UI.addLogMessage('[拼写PK] 词库答案"' + answer + '"拼不出碎片，尝试DOM答案"' + domAnswer + '"', 'info');
+                    answer = domAnswer;
+                    sequence = SpellPk.findFragmentSequence(answer, fragments);
+                }
+            }
+        }
+
+        // 如果完整匹配失败，检查当前填空中已有内容，只匹配剩余部分
+        if (!sequence) {
+            var activeFillList = document.querySelectorAll('.u3-spell__fill-list');
+            var currentFillList = activeFillList.length > activeIdx ? activeFillList[activeIdx] : null;
+            if (currentFillList) {
+                var filledBlanks = currentFillList.querySelectorAll('.u3-spell__fill-blank');
+                var filledText = '';
+                for (var fb = 0; fb < filledBlanks.length; fb++) {
+                    var blankText = (filledBlanks[fb].textContent || '').trim();
+                    if (blankText) filledText += blankText;
+                }
+                if (filledText) {
+                    var normFunc = function(s) { return s.toLowerCase().replace(/[\s.\-_,;:!?']/g, ''); };
+                    var answerNorm = normFunc(answer);
+                    var filledNorm = normFunc(filledText);
+                    if (answerNorm.startsWith(filledNorm) && filledNorm.length < answerNorm.length) {
+                        var remaining = answer.substring(filledText.length);
+                        UI.addLogMessage('[拼写PK] 已填入"' + filledText + '"，匹配剩余"' + remaining + '"', 'info');
+                        sequence = SpellPk.findFragmentSequence(remaining, fragments);
+                    }
+                }
+            }
+        }
+
+        if (!sequence) {
+            UI.addLogMessage('[拼写PK] 无法从碎片拼出 "' + answer + '"', 'warning');
+            SpellPk.lastAnsweredKey = dedupeKey;
+            return true;
+        }
+
+        SpellPk.lastAnsweredKey = dedupeKey;
+        State.matchCount++;
+
+        // 依次点击碎片，每次点击后等待活跃填空变化再点下一个
+        SpellPk._clickSequence(sequence, 0);
+
+        UI.updateStatus();
+        return true;
+    }
+};
+
 var Scheduler = {
     auto: function() {
         if (State.aiWaiting) return;
+
+        // 拼写PK优先检测
+        if (SpellPk.isActive()) {
+            SpellPk.auto();
+            return;
+        }
 
         var cnElements = document.getElementsByClassName('u3-pk-core__cn');
         if (!cnElements || cnElements.length === 0) {
