@@ -123,6 +123,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveTtsConfig: (config) => ipcRenderer.invoke('save-tts-config', config),
   generateTtsForAnswers: (answers) => ipcRenderer.invoke('generate-tts-for-answers', answers),
   getTtsStatus: () => ipcRenderer.invoke('get-tts-status'),
+  getTtsModels: () => ipcRenderer.invoke('get-tts-models'),
+  setTtsModel: (modelName) => ipcRenderer.invoke('set-tts-model', modelName),
 
   // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {

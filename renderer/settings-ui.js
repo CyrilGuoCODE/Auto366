@@ -165,6 +165,26 @@ class SettingsUI {
 
       const voiceSelect = document.getElementById('ttsVoiceSelect');
       const speedInput = document.getElementById('ttsSpeedInput');
+      const modelSelect = document.getElementById('ttsModelSelect');
+
+      // 加载可用模型列表
+      if (modelSelect && window.electronAPI && window.electronAPI.getTtsModels) {
+        window.electronAPI.getTtsModels().then(modelNames => {
+          if (modelNames && modelNames.length > 0) {
+            modelSelect.innerHTML = '';
+            modelNames.forEach(name => {
+              const opt = document.createElement('option');
+              opt.value = name;
+              opt.textContent = name;
+              modelSelect.appendChild(opt);
+            });
+            // 恢复已保存的模型
+            if (savedConfig && savedConfig.modelName) {
+              modelSelect.value = savedConfig.modelName;
+            }
+          }
+        }).catch(() => {});
+      }
 
       // 恢复已保存的值
       if (savedConfig) {
@@ -181,6 +201,7 @@ class SettingsUI {
         const config = {
           voice: voiceSelect ? voiceSelect.value : 'Jasper',
           speed: speedInput ? parseFloat(speedInput.value) || 1.0 : 1.0,
+          modelName: modelSelect ? modelSelect.value : undefined,
         };
         localStorage.setItem('tts-config', JSON.stringify(config));
 
@@ -195,6 +216,24 @@ class SettingsUI {
           });
         }
       };
+
+      // 模型切换：保存配置 + 通知主进程切换模型
+      if (modelSelect) {
+        modelSelect.addEventListener('change', () => {
+          saveTtsConfig();
+          if (window.electronAPI && window.electronAPI.setTtsModel) {
+            window.electronAPI.setTtsModel(modelSelect.value).then(result => {
+              if (result && result.success) {
+                this.logManager.addSuccessLog('TTS 模型已切换为: ' + modelSelect.value + (result.restarted ? ' (引擎已重启)' : ''));
+              } else {
+                this.logManager.addErrorLog('TTS 模型切换失败: ' + (result.error || '未知错误'));
+              }
+            }).catch(e => {
+              this.logManager.addErrorLog('TTS 模型切换失败: ' + e.message);
+            });
+          }
+        });
+      }
 
       if (voiceSelect) {
         voiceSelect.addEventListener('change', saveTtsConfig);

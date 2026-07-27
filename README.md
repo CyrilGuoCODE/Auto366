@@ -28,6 +28,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [功能优化]优化自动填空答案上传规则，支持自学专项题型(By Fish)
 - [功能优化]优化进程加速卡死问题(By Wutanji)
 - [新功能]自动填空支持跟读朗读题型
+- [BUG修复]修复打包环境下动态注入缓存无法清除
 
 ### BUG问题
 
@@ -38,9 +39,9 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 #### 短期更新
 
-- 深度UI更新
 - 加入Funny模式
-- 优化听力自动化(听说)
+- 优化答案获取题型规则
+- 优化听力自动化(针对听说考试模式)
 - Log日志系统与通知系统优化
 - 词王争霸复活赛
 

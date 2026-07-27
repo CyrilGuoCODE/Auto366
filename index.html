@@ -493,6 +493,13 @@
                         <div class="setting-group">
                             <h4>TTS 语音生成</h4>
                             <div class="setting-item">
+                                <label for="ttsModelSelect">TTS模型:</label>
+                                <select id="ttsModelSelect" class="form-input">
+                                    <option value="">加载中...</option>
+                                </select>
+                            </div>
+                            <div class="setting-item__description">切换模型后会自动重启TTS引擎并重新生成，已有TTS缓存将会清除</div>
+                            <div class="setting-item">
                                 <label for="ttsVoiceSelect">音色:</label>
                                 <select id="ttsVoiceSelect" class="form-input">
                                     <option value="Jasper" selected>Jasper (男)</option>
@@ -633,7 +640,8 @@
                                 <span>1×</span><span>200×</span><span>400×</span><span>600×</span><span>800×</span><span>1000×</span>
                             </div>
                             <div class="speed-page__status" id="speed-status">正常速度</div>
-                            <div class="speed-page__info" id="speed-info">拖动滑块加速天学网(需已启动天学网并进入练习, 且本程序为管理员权限)</div>
+                            <div class="speed-page__info" id="speed-info">拖动滑块加速天学网</div>
+                            <div class="speed-page__info" id="speed-info-important"><strong>(需已启动天学网并进入练习, 且本程序为管理员权限)</strong></div>
                         </div>
                         <div class="speed-page__credit">
                             由于 Auto366 的开发者太懒了，所以进程加速使用的是现成的项目

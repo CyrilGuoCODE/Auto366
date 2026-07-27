@@ -63,18 +63,71 @@ class TtsManager {
     this.modelDir = null;
     this.cacheDir = null;
     this.rulesManager = null;
+    this.appPath = null;
+    this.selectedModel = null; // 用户选中的模型文件夹名
+  }
+
+  /**
+   * 扫描 TTS 模型目录，返回可用模型列表
+   */
+  getAvailableModels() {
+    let ttsRoot;
+    if (app && app.isPackaged) {
+      ttsRoot = path.join(process.resourcesPath, 'tts');
+    } else {
+      ttsRoot = path.join(this.appPath || '', 'resources', 'tts');
+    }
+
+    const models = [];
+    try {
+      if (fs.existsSync(ttsRoot)) {
+        const dirs = fs.readdirSync(ttsRoot, { withFileTypes: true });
+        for (const d of dirs) {
+          if (!d.isDirectory()) continue;
+          const dirPath = path.join(ttsRoot, d.name);
+          // 检查是否包含必要的模型文件
+          const hasOnnx = fs.existsSync(path.join(dirPath, 'model.onnx'))
+            || fs.existsSync(path.join(dirPath, 'model.int8.onnx'))
+            || fs.existsSync(path.join(dirPath, 'model.fp32.onnx'));
+          const hasTokens = fs.existsSync(path.join(dirPath, 'tokens.txt'));
+          if (hasOnnx && hasTokens) {
+            models.push({ name: d.name, path: dirPath });
+          }
+        }
+      }
+    } catch (e) { /* 忽略 */ }
+    return models;
   }
 
   init(appPath, mainWindow, rulesManager) {
     this.mainWindow = mainWindow;
     this.rulesManager = rulesManager;
+    this.appPath = appPath;
 
-    if (app && app.isPackaged) {
-      this.modelDir = path.join(process.resourcesPath, 'tts', 'kitten-nano-en-v0_8-int8');
+    // 扫描可用模型
+    const availableModels = this.getAvailableModels();
+
+    // 从 localStorage 读取用户选中的模型
+    let savedModelName = null;
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        // 同步读取 - init 阶段不能用 executeJavaScript
+      }
+    } catch (e) { /* 忽略 */ }
+
+    // 确定 modelDir：优先用用户选中的模型 > 第一个可用模型
+    if (availableModels.length > 0) {
+      // 默认选中第一个
+      this.modelDir = availableModels[0].path;
+      this.selectedModel = availableModels[0].name;
     } else {
-      const sherpaDir = path.join(appPath, 'resources', 'tts', 'kitten-nano-en-v0_8-int8');
-      const hfDir = path.join(appPath, 'resources', 'tts', 'kitten-tts-nano-0.8-int8');
-      this.modelDir = fs.existsSync(sherpaDir) ? sherpaDir : hfDir;
+      // 回退：尝试硬编码路径
+      if (app && app.isPackaged) {
+        this.modelDir = path.join(process.resourcesPath, 'tts', 'kitten-micro-en-v0_8');
+      } else {
+        this.modelDir = path.join(appPath, 'resources', 'tts', 'kitten-micro-en-v0_8');
+      }
+      this.selectedModel = 'kitten-micro-en-v0_8';
     }
 
     // 临时缓存目录，可随时清理
@@ -115,6 +168,15 @@ class TtsManager {
         if (saved) {
           if (saved.voice && VOICE_MAP[saved.voice] !== undefined) this.config.voice = saved.voice;
           if (saved.speed !== undefined) this.config.speed = Math.max(0.5, Math.min(2.0, Number(saved.speed)));
+          // 恢复选中的模型
+          if (saved.modelName) {
+            const models = this.getAvailableModels();
+            const found = models.find(m => m.name === saved.modelName);
+            if (found) {
+              this.modelDir = found.path;
+              this.selectedModel = found.name;
+            }
+          }
         }
       }
     } catch (e) { /* 忽略 */ }
@@ -541,6 +603,7 @@ class TtsManager {
         voice: this.config.voice, speed: this.config.speed, basePath,
         availableVoices: Object.keys(VOICE_MAP), voiceMap: VOICE_MAP,
         initialized: this.initialized, generatedCount: this.fileIndex.size,
+        modelName: this.selectedModel, availableModels: this.getAvailableModels().map(m => m.name),
       };
     });
 
@@ -574,6 +637,56 @@ class TtsManager {
         this.nextIndex = 1;
         this._log('缓存已清除', 'info');
         return { success: true };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    ipcMain.handle('get-tts-models', async () => {
+      return this.getAvailableModels().map(m => m.name);
+    });
+
+    ipcMain.handle('set-tts-model', async (event, modelName) => {
+      try {
+        const models = this.getAvailableModels();
+        const found = models.find(m => m.name === modelName);
+        if (!found) {
+          return { success: false, error: '模型不存在: ' + modelName };
+        }
+
+        const changed = found.path !== this.modelDir;
+        this.modelDir = found.path;
+        this.selectedModel = found.name;
+        this._log('TTS 模型切换为: ' + modelName, 'info');
+
+        // 如果模型路径变了且 worker 已启动，需要重启 worker
+        if (changed && this.worker) {
+          this._log('重启 TTS 引擎以加载新模型...', 'info');
+          // 停止旧 worker：先移除监听器，防止退出事件干扰新 worker 状态
+          const oldWorker = this.worker;
+          try { oldWorker.send({ type: 'shutdown' }); } catch (e) { /* 忽略 */ }
+          oldWorker.removeAllListeners();
+          setTimeout(() => { try { oldWorker.kill(); } catch (e) { /* 忽略 */ } }, 2000);
+          this.worker = null;
+          this.initialized = false;
+          this.initializing = false;
+
+          // 启动新 worker
+          const ok = await this._startWorker();
+          if (ok) {
+            this._log('TTS 引擎已用新模型重新加载', 'success');
+
+            // 清理旧缓存，用新模型重新生成已有语音
+            if (this.textMap.size > 0) {
+              this._log('正在用新模型重新生成语音...', 'info');
+              await this.regenerateAll();
+            }
+          } else {
+            this._log('TTS 引擎新模型加载失败', 'error');
+          }
+        }
+
+        return { success: true, restarted: changed && !!this.worker };
       } catch (e) {
         return { success: false, error: e.message };
       }
