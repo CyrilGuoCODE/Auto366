@@ -267,10 +267,13 @@ class AnswerExtractor {
         allQuestionLists.push(...pageConfig.questionList);
       }
 
-      // 结构2: pageConfig.slides[].questionList（嵌套层级，如选择题题型）
-      if (pageConfig.slides && Array.isArray(pageConfig.slides)) {
-        for (const slide of pageConfig.slides) {
-          if (slide.questionList && Array.isArray(slide.questionList)) {
+      // 结构2: slides[].questionList（嵌套层级，如选择题题型）
+      // 实测真实 pageConfig 里这个字段叫 sliders，只找 slides 会整段落空，两个名字都收
+      for (const key of ['slides', 'sliders']) {
+        const group = pageConfig[key];
+        if (!Array.isArray(group)) continue;
+        for (const slide of group) {
+          if (slide && Array.isArray(slide.questionList)) {
             allQuestionLists.push(...slide.questionList);
           }
         }
@@ -510,7 +513,12 @@ class AnswerExtractor {
   }
 
   async processZipAnswer(zipPath, ansDir) {
-    let extractDir = zipPath.replace('.zip', '');
+    // 按扩展名去掉后缀；文件名不带 .zip 时另起目录，
+    // 否则 extractDir 会等于 zipPath，下一步就把待解压的文件本身删掉了
+    const zipExt = path.extname(zipPath);
+    let extractDir = zipExt
+      ? path.join(path.dirname(zipPath), path.basename(zipPath, zipExt))
+      : `${zipPath}_extracted`;
 
     if (fs.existsSync(extractDir)) {
       fs.removeSync(extractDir);
@@ -581,7 +589,18 @@ class AnswerExtractor {
     }
 
     // 最终去重和排序（根据数据来源选择排序策略）
-    const finalAnswers = this.sortAndDeduplicateAnswers(allAnswers, sourceMode);
+    let finalAnswers = this.sortAndDeduplicateAnswers(allAnswers, sourceMode);
+
+    // 一条答案都没提到，但试卷里确实有题（书面表达等本就不含答案的题型）：
+    // 退而展示题面/要点，而不是返回空结果
+    if (finalAnswers.length === 0 && dirExtractResult.questionMeta && dirExtractResult.questionMeta.length > 0) {
+      finalAnswers = this.sortAndDeduplicateAnswers(dirExtractResult.questionMeta, 'fallback');
+      if (finalAnswers.length > 0) {
+        sourceMode = 'question-only';
+        processedFiles = processedFiles.concat(dirExtractResult.processedFiles || []);
+        this.emitLog('warning', `未找到答案数据，改为展示 ${finalAnswers.length} 道题目信息（该题型可能本就不含答案）`);
+      }
+    }
 
     // 保存结果
     const answerFile = finalAnswers.length > 0
@@ -670,9 +689,14 @@ class AnswerExtractor {
 
         const answers = this.extractAnswersFromFile(filePath);
         const fileName = path.basename(relativePath);
+        // 试卷把每道题的资料放在以 element id 命名的目录里（如 F53C.../net/psdata/answer.json），
+        // 借这个 id 才能把答案还原成 paper.xml 里的题目顺序
+        const elementIdFromPath = this.elementIdFromRelativePath(relativePath);
         if (answers.length > 0) {
-          allAnswers.push(...answers.map(ans => ({
+          allAnswers.push(...answers.map((ans, idx) => ({
             ...ans,
+            elementId: ans.elementId || elementIdFromPath || undefined,
+            localIndex: Number.isFinite(ans.localIndex) ? ans.localIndex : idx,
             sourceFile: fileName
           })));
           processedFiles.push({
@@ -708,8 +732,39 @@ class AnswerExtractor {
       answers: mergedAnswers,
       count: mergedAnswers.length,
       processedFiles: processedFiles,
-      allFilesContent: allFilesContent
+      allFilesContent: allFilesContent,
+      // 一条答案都没提到时的兜底展示素材（题面/要点），见 processZipAnswer
+      questionMeta: this.buildQuestionMetaAnswers(allAnswers)
     };
+  }
+
+  // paper.xml 里没有答案的题目行平时会被剔除（否则满屏空白项），
+  // 但整份卷子一条答案都没有时（如书面表达），要把题面/要点顶上来，
+  // 不然面板全空，看起来就像答案获取彻底坏了
+  buildQuestionMetaAnswers(allAnswers) {
+    if (!Array.isArray(allAnswers)) return [];
+    return allAnswers
+      .filter(ans => ans.sourceFile === 'paper.xml' && ans.isQuestionMeta)
+      .map(ans => {
+        const text = ans.metaAnswer || ans.questionText || '';
+        return {
+          ...ans,
+          isQuestionMeta: false,
+          answer: text,
+          pattern: ans.pattern === 'XML题目模式' ? '题目信息(无答案)' : ans.pattern
+        };
+      })
+      .filter(ans => String(ans.answer).trim());
+  }
+
+  // 从解压目录内的相对路径里取出 element id（形如 <32位十六进制>/net/psdata/answer.json）
+  elementIdFromRelativePath(relativePath) {
+    if (!relativePath) return null;
+    const segments = relativePath.split(/[\\/]/);
+    for (const segment of segments) {
+      if (/^[0-9A-Fa-f]{32}$/.test(segment)) return segment.toUpperCase();
+    }
+    return null;
   }
 
   findAnswerFiles(dir) {
@@ -1315,16 +1370,31 @@ class AnswerExtractor {
     return results;
   }
 
+  // record_speak 里既有参考答案也有干扰项，只有 work=1 且 show=1 的才是可用答案
+  // （extractFromPage1 用的就是这个判定）。严格筛完为空时逐级放宽，避免反过来漏答案。
+  pickSpeakAnswers(recordSpeak) {
+    if (!Array.isArray(recordSpeak) || recordSpeak.length === 0) return [];
+
+    const textOf = item => this.cleanHtmlText(item.content?.trim() || '');
+    const isValid = text => text && text !== '<answers/>';
+    const is1 = value => value === "1" || value === 1;
+
+    const strict = recordSpeak.filter(item => is1(item.work) && is1(item.show)).map(textOf).filter(isValid);
+    if (strict.length > 0) return strict;
+
+    const shown = recordSpeak.filter(item => is1(item.show)).map(textOf).filter(isValid);
+    if (shown.length > 0) return shown;
+
+    return recordSpeak.map(textOf).filter(isValid);
+  }
+
   parseAnswerQuestions(questionObj, mediaIndex) {
     const results = [];
 
     if (questionObj.questions_list) {
       questionObj.questions_list.forEach((question, qIndex) => {
         if (question.record_speak) {
-          const answers = question.record_speak
-            .filter(item => item.show === "1" || item.show === 1)
-            .map(item => item.content?.trim() || '')
-            .filter(content => content && content !== '<answers/>');
+          const answers = this.pickSpeakAnswers(question.record_speak);
 
           let messageInfo = {
             question: `第${qIndex + 1}题`,
@@ -1348,10 +1418,7 @@ class AnswerExtractor {
     }
 
     if (questionObj.record_speak && results.length === 0) {
-      const answers = questionObj.record_speak
-        .filter(item => item.show === "1" || item.show === 1)
-        .map(item => item.content?.trim() || '')
-        .filter(content => content && content !== '<answers/>');
+      const answers = this.pickSpeakAnswers(questionObj.record_speak);
 
       let messageInfo = {
         question: `第1题`,
@@ -1443,17 +1510,15 @@ class AnswerExtractor {
     }
 
     if (questionObj.record_speak && questionObj.record_speak.length > 0) {
-      questionObj.record_speak.forEach((item, index) => {
-        if (item.content && item.content !== '<answers/>') {
-          const cleanContent = this.cleanHtmlText(item.content);
-          results.push({
-            question: `第${index + 1}项`,
-            answer: cleanContent,
-            content: `请回答: ${cleanContent}`,
-            pattern: '未知题型',
-            mediaIndex: mediaIndex
-          });
-        }
+      // 之前这里把 record_speak 全量倒出来，干扰项也当成答案了
+      this.pickSpeakAnswers(questionObj.record_speak).forEach((cleanContent, index) => {
+        results.push({
+          question: `第${index + 1}项`,
+          answer: cleanContent,
+          content: `请回答: ${cleanContent}`,
+          pattern: '未知题型',
+          mediaIndex: mediaIndex
+        });
       });
     }
 
@@ -1631,18 +1696,167 @@ class AnswerExtractor {
     }
   }
 
+  // ========== XML 解析辅助方法 ==========
+  // 天学网的 paper.xml / correctAnswer.xml 里 element 的属性顺序、CDATA 内容、嵌套层级
+  // 都不固定，单条正则很容易漏匹配或跨节点误匹配，这里用扫描器代替。
+
+  // paper.xml 的 <attachment> 是用 JS escape() 编码的：非 ASCII 编成 %uXXXX，
+  // decodeURIComponent 遇到它必抛 "URI malformed"（实测真实试卷 100% 触发），
+  // 之前整段 attachment 就此丢失。这里按 escape 的规则兜底解码。
+  decodeAttachment(text) {
+    if (typeof text !== 'string' || !text.includes('%')) return text || '';
+
+    try {
+      return decodeURIComponent(text);
+    } catch (e) {
+      // 落到下面按 escape() 解码
+    }
+
+    // 先还原 %uXXXX，再尝试把剩下的 %XX 当 UTF-8 解，失败则按 Latin-1 逐字节还原
+    const unicodeDecoded = text.replace(/%u([0-9a-fA-F]{4})/g,
+      (all, hex) => String.fromCharCode(parseInt(hex, 16)));
+    try {
+      return decodeURIComponent(unicodeDecoded);
+    } catch (e) {
+      return unicodeDecoded.replace(/%([0-9a-fA-F]{2})/g,
+        (all, hex) => String.fromCharCode(parseInt(hex, 16)));
+    }
+  }
+
+  // 书面表达题（question_type=14）的内容在 attachment 的 question_extended JSON 里：
+  // modelEssays 是范文（真答案），mainPoints 是要点。没有范文时要点也得带出来，
+  // 不然这类卷子提取结果为空，用户会以为答案获取坏了。
+  parseWritingExtended(decodedAttachment) {
+    const raw = this.readXmlTag(decodedAttachment, 'question_extended');
+    if (raw === null) return null;
+
+    let data;
+    try {
+      data = JSON.parse(raw.trim());
+    } catch (e) {
+      return null;
+    }
+    if (!data || typeof data !== 'object') return null;
+
+    const toText = value => {
+      if (typeof value === 'string') return this.cleanHtmlText(value).trim();
+      if (value && typeof value === 'object') {
+        return this.cleanHtmlText(value.cont || value.content || value.text || '').trim();
+      }
+      return '';
+    };
+
+    const mainPoints = Array.isArray(data.mainPoints) ? data.mainPoints.map(toText).filter(Boolean) : [];
+    const modelEssays = Array.isArray(data.modelEssays) ? data.modelEssays.map(toText).filter(Boolean) : [];
+    const title = (data.letterFormat && toText(data.letterFormat.title)) ||
+      (data.letterFormatV2 && toText(data.letterFormatV2.title)) || '';
+
+    if (!mainPoints.length && !modelEssays.length && !title) return null;
+    return { title, mainPoints, modelEssays };
+  }
+
+  // 解开 CDATA 包裹，返回内部原始文本
+  cleanCdata(str) {
+    if (typeof str !== 'string') return '';
+    return str.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  }
+
+  // 扫描出所有带 id 的 <element>，inner 已剔除嵌套的子 element，避免把子节点的答案算到父节点头上
+  matchXmlElements(content) {
+    const nodes = [];
+    const stack = [];
+    const tagRegex = /<(\/?)element\b([^>]*)>/g;
+    let match;
+
+    while ((match = tagRegex.exec(content)) !== null) {
+      const isClosing = match[1] === '/';
+      const attrs = match[2] || '';
+      const selfClosing = /\/\s*$/.test(attrs);
+
+      if (isClosing) {
+        const open = stack.pop();
+        if (open) {
+          open.innerEnd = match.index;
+          nodes.push(open);
+        }
+        continue;
+      }
+      if (selfClosing) continue;
+
+      const idMatch = attrs.match(/\bid\s*=\s*"([^"]*)"/) || attrs.match(/\bid\s*=\s*'([^']*)'/);
+      const node = {
+        id: idMatch ? idMatch[1] : '',
+        start: match.index,
+        innerStart: tagRegex.lastIndex,
+        innerEnd: content.length,
+        children: []
+      };
+      const parent = stack[stack.length - 1];
+      if (parent) parent.children.push(node);
+      stack.push(node);
+    }
+
+    // 未闭合的节点也收下，损坏的 XML 至少还能取到部分答案
+    while (stack.length > 0) nodes.push(stack.pop());
+
+    return nodes
+      .filter(node => node.id)
+      .sort((a, b) => a.start - b.start)
+      .map(node => {
+        let inner = '';
+        let cursor = node.innerStart;
+        for (const child of node.children.sort((a, b) => a.start - b.start)) {
+          inner += content.slice(cursor, child.start);
+          cursor = Math.max(cursor, child.innerEnd);
+          const closeEnd = content.indexOf('>', cursor);
+          cursor = closeEnd === -1 ? cursor : closeEnd + 1;
+        }
+        inner += content.slice(cursor, node.innerEnd);
+        return { id: node.id, inner };
+      });
+  }
+
+  // 读取首个 <tag>...</tag> 的内容，找不到返回 null（区别于"内容为空字符串"）
+  readXmlTag(content, tagName, options = {}) {
+    if (typeof content !== 'string') return null;
+    const re = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i');
+    const match = content.match(re);
+    if (!match) return null;
+    return options.raw ? match[1] : this.cleanCdata(match[1]);
+  }
+
+  // 读取所有 <tag>...</tag> 的文本内容（按文档顺序），已清洗并过滤空项
+  readXmlTagList(content, tagNames) {
+    if (typeof content !== 'string') return [];
+    const names = Array.isArray(tagNames) ? tagNames : [tagNames];
+    const results = [];
+    for (const name of names) {
+      const re = new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)<\\/${name}>`, 'gi');
+      let match;
+      while ((match = re.exec(content)) !== null) {
+        const text = this.cleanHtmlText(this.cleanCdata(match[1])).trim();
+        if (text) results.push({ index: match.index, text });
+      }
+      if (results.length > 0) break;  // 优先用排在前面的标签名，避免 answer/item 混取
+    }
+    return results.sort((a, b) => a.index - b.index).map(item => item.text);
+  }
+
   extractFromXML(content, filePath) {
     const answers = [];
 
     try {
-      if (filePath.includes('correctAnswer')) {
+      // 只看文件名：解压目录名里若带 paper/answer 字样，用整路径判断会把每个 xml 都走错分支
+      const fileName = path.basename(filePath).toLowerCase();
+
+      if (fileName.includes('correctanswer')) {
         console.log('开始解析correctAnswer.xml文件');
-        const elementMatches = [...content.matchAll(/<element\s+id="([^"]+)"[^>]*(?<!\/)>(.*?)<\/element>/gs)];
+        const elementMatches = this.matchXmlElements(content);
         console.log(`找到 ${elementMatches.length} 个element元素`);
 
         elementMatches.forEach((elementMatch, index) => {
-          const elementId = elementMatch[1];
-          const elementContent = elementMatch[2];
+          const elementId = elementMatch.id;
+          const elementContent = elementMatch.inner;
 
           console.log(`处理correctAnswer element ${index + 1}, ID: "${elementId}" (长度: ${elementId.length})`);
 
@@ -1651,164 +1865,173 @@ class AnswerExtractor {
             return;
           }
 
-          let analysisText = '';
+          const rawAnalysis = this.readXmlTag(elementContent, 'analysis');
+          const analysisText = rawAnalysis
+            ? this.cleanHtmlText(rawAnalysis).replace(/\s+/g, ' ').trim()
+            : '';
 
-          // 支持两种格式：CDATA 和直接内容
-          const analysisMatch = elementContent.match(/<analysis>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/analysis>/s);
-          if (analysisMatch && (analysisMatch[1] || analysisMatch[2])) {
-            analysisText = this.cleanHtmlText(analysisMatch[1] || analysisMatch[2]);
-            analysisText = analysisText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-          }
+          // 按可靠性从高到低取答案：
+          // 1. <answers> 下的 <answer>/<item> 子节点（多空题，每空一个答案）
+          // 2. <answers> 的直接文本
+          // 3. element 下任意位置的 <answer> 节点
+          // 4. 都没有时才退回 <analysis>（解析文本，不是标准答案）
+          const answersBlock = this.readXmlTag(elementContent, 'answers', { raw: true });
+          let allAnswers = [];
+          let usedAnalysisFallback = false;
 
-          // 支持两种格式：CDATA 和直接内容
-          const answersMatch = elementContent.match(/<answers>\s*(?:<!\[CDATA\[([^\]]*)]]>|([^<]*))\s*<\/answers>/);
-          if (answersMatch && (answersMatch[1] || answersMatch[2])) {
-            const answerText = (answersMatch[1] || answersMatch[2] || '').trim();
-            if (answerText) {
-              const answerItem = {
-                question: `第${index + 1}题`,
-                answer: answerText,
-                content: analysisText ? `解析: ${analysisText}\n答案: ${answerText}` : `答案: ${answerText}`,
-                questionText: answerText,
-                pattern: 'XML正确答案模式',
-                elementId: elementId
-              };
-              answers.push(answerItem);
-              console.log(`添加答案项:`, answerItem);
-            }
-          } else if (analysisText) {
-            const answerItem = {
-              question: `第${index + 1}题`,
-              answer: analysisText,
-              content: `解析: ${analysisText}`,
-              questionText: analysisText,
-              pattern: 'XML正确答案模式',
-              elementId: elementId
-            };
-            answers.push(answerItem);
-            console.log(`添加答案项（使用analysis）:`, answerItem);
-          } else {
-            // 支持两种格式：CDATA 和直接内容
-            const answerMatches = [...elementContent.matchAll(/<answer[^>]*>\s*(?:<!\[CDATA\[([^\]]*)]]>|([^<]*))\s*<\/answer>/g)];
-
-            if (answerMatches.length > 0) {
-              const allAnswers = answerMatches.map(match => (match[1] || match[2] || '').trim()).filter(text => text);
-
-              if (allAnswers.length === 1) {
-                const answerItem = {
-                  question: `第${index + 1}题`,
-                  answer: allAnswers[0],
-                  content: analysisText ? `解析: ${analysisText}\n答案: ${allAnswers[0]}` : `答案: ${allAnswers[0]}`,
-                  questionText: allAnswers[0],
-                  pattern: 'XML正确答案模式',
-                  elementId: elementId,
-                  answerIndex: 1
-                };
-                answers.push(answerItem);
-                console.log(`添加单答案项:`, answerItem);
-              } else {
-                const combinedAnswer = allAnswers.join(' / ');
-                const answerItem = {
-                  question: `第${index + 1}题`,
-                  answer: combinedAnswer,
-                  content: analysisText ? `解析: ${analysisText}\n答案: ${combinedAnswer}` : `答案: ${combinedAnswer}`,
-                  questionText: combinedAnswer,
-                  pattern: 'XML正确答案模式',
-                  elementId: elementId,
-                  answerIndex: 1,
-                  multipleAnswers: allAnswers
-                };
-                answers.push(answerItem);
-                console.log(`添加多空题答案项:`, answerItem);
-              }
-            } else {
-              console.log(`element ${elementId} 没有找到有效的答案数据`);
+          if (answersBlock !== null) {
+            allAnswers = this.readXmlTagList(answersBlock, ['answer', 'item']);
+            if (allAnswers.length === 0) {
+              const directText = this.cleanCdata(answersBlock).trim();
+              if (directText) allAnswers = [directText];
             }
           }
+
+          if (allAnswers.length === 0) {
+            allAnswers = this.readXmlTagList(elementContent, ['answer', 'item']);
+          }
+
+          if (allAnswers.length === 0 && analysisText) {
+            allAnswers = [analysisText];
+            usedAnalysisFallback = true;
+          }
+
+          if (allAnswers.length === 0) {
+            console.log(`element ${elementId} 没有找到有效的答案数据`);
+            return;
+          }
+
+          const combinedAnswer = allAnswers.join(' / ');
+          const answerItem = {
+            question: `第${index + 1}题`,
+            answer: combinedAnswer,
+            content: analysisText && !usedAnalysisFallback
+              ? `解析: ${analysisText}\n答案: ${combinedAnswer}`
+              : (usedAnalysisFallback ? `解析: ${analysisText}` : `答案: ${combinedAnswer}`),
+            questionText: combinedAnswer,
+            pattern: 'XML正确答案模式',
+            elementId: elementId,
+            answerIndex: 1,
+            elementOrder: index
+          };
+          if (allAnswers.length > 1) {
+            answerItem.multipleAnswers = allAnswers;
+          }
+          if (usedAnalysisFallback) {
+            answerItem.fromAnalysis = true;
+          }
+          answers.push(answerItem);
+          console.log(`添加答案项 (${allAnswers.length} 空):`, answerItem.answer);
         });
       }
 
-      if (filePath.includes('paper')) {
+      else if (fileName.includes('paper')) {
         console.log('开始解析paper.xml文件');
-        const elementMatches = [...content.matchAll(/<element[^>]*id="([^"]+)"[^>]*(?<!\/)>(.*?)<\/element>/gs)];
+        const elementMatches = this.matchXmlElements(content);
         console.log(`找到 ${elementMatches.length} 个element元素`);
 
+        let fallbackNo = 0;
         elementMatches.forEach((elementMatch) => {
-          const elementId = elementMatch[1];
-          const elementContent = elementMatch[2];
+          const elementId = elementMatch.id;
+          const elementContent = elementMatch.inner;
 
-          console.log(`处理paper element, ID: "${elementId}" (长度: ${elementId.length})`);
+          const questionNoText = this.readXmlTag(elementContent, 'question_no');
+          const rawQuestionText = this.readXmlTag(elementContent, 'question_text');
 
-          const questionNoMatch = elementContent.match(/<question_no>(\d+)<\/question_no>/);
-          // 支持两种格式：CDATA 和直接内容
-          const questionTextMatch = elementContent.match(/<question_text>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/question_text>/s);
+          // question_text 缺失时也要留下题序信息，后面合并答案还要靠它排序
+          if (rawQuestionText === null && questionNoText === null) {
+            console.log(`跳过element ${elementId}: 既无题目编号也无题目文本`);
+            return;
+          }
 
-          console.log(`处理element ${elementId}, 题目编号: ${questionNoMatch ? questionNoMatch[1] : '未找到'}, 题目文本匹配: ${!!questionTextMatch}`);
+          fallbackNo++;
+          const parsedNo = questionNoText !== null ? parseInt(questionNoText.trim(), 10) : NaN;
+          const questionNo = Number.isFinite(parsedNo) && parsedNo > 0 ? parsedNo : fallbackNo;
 
-          const knowledgeMatch = elementContent.match(/<knowledge>\s*(?:<!\[CDATA\[([^\]]*)]]>|([^<]*))\s*<\/knowledge>/);
+          const questionText = this.cleanHtmlText(rawQuestionText || '')
+            .replace(/\{\{\d+\}\}/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
 
-          const attachmentMatch = elementContent.match(/<attachment>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/attachment>/s);
+          // attachment 里的 <item> 才是真答案；knowledge 是知识点标签，不能当答案用
+          const attachmentRaw = this.readXmlTag(elementContent, 'attachment');
           let attachmentAnswers = [];
-          if (attachmentMatch && (attachmentMatch[1] || attachmentMatch[2])) {
+          let writing = null;
+          if (attachmentRaw) {
             try {
-              const decodedAttachment = decodeURIComponent(attachmentMatch[1] || attachmentMatch[2]);
-              const answersInAttachment = decodedAttachment.match(/<answers>([\s\S]*?)<\/answers>/);
-              if (answersInAttachment) {
-                const itemMatches = [...answersInAttachment[0].matchAll(/<item[^>]*>\s*(?:<!\[CDATA\[([\s\S]*?)]]>|([^<]*))\s*<\/item>/g)];
-                attachmentAnswers = itemMatches.map(match => this.cleanHtmlText((match[1] || match[2] || '').trim())).filter(text => text);
+              const decodedAttachment = this.decodeAttachment(attachmentRaw);
+              const answersInAttachment = this.readXmlTag(decodedAttachment, 'answers', { raw: true });
+              if (answersInAttachment !== null) {
+                attachmentAnswers = this.readXmlTagList(answersInAttachment, ['item', 'answer']);
+              }
+              // 书面表达题的范文/要点藏在 question_extended 里
+              writing = this.parseWritingExtended(decodedAttachment);
+              if (attachmentAnswers.length === 0 && writing && writing.modelEssays.length > 0) {
+                attachmentAnswers = writing.modelEssays;
               }
             } catch (e) {
               console.log('解析attachment失败:', e);
             }
           }
 
-          if (questionNoMatch && questionTextMatch) {
-            const questionNo = parseInt(questionNoMatch[1]);
-            let questionText = questionTextMatch[1] || questionTextMatch[2] || '';
+          const optionMatches = [...elementContent.matchAll(/<option\b[^>]*\bid\s*=\s*"([^"]*)"[^>]*>([\s\S]*?)<\/option>/gi)];
+          const options = optionMatches.map(optionMatch => ({
+            id: optionMatch[1],
+            text: this.cleanHtmlText(this.cleanCdata(optionMatch[2])).trim()
+          }));
 
-            console.log(`原始题目文本: "${questionText}"`);
+          const answerInfo = {
+            question: `第${questionNo}题`,
+            answer: attachmentAnswers.join('\n'),
+            content: `题目: ${questionText}`,
+            questionText: questionText,
+            pattern: 'XML题目模式',
+            elementId: elementId,
+            questionNo: questionNo,
+            // 没有 attachment 答案时这条只是题面信息，不是答案，合并阶段会剔除
+            isQuestionMeta: attachmentAnswers.length === 0
+          };
 
-            questionText = this.cleanHtmlText(questionText)
-              .replace(/\{\{\d+\}\}/g, ' ');
-
-            console.log(`清理后题目文本: "${questionText}"`);
-
-            // 支持两种格式：CDATA 和直接内容
-            const optionsMatches = [...elementContent.matchAll(/<option\s+id="([^"]+)"\s*[^>]*>\s*(?:<!\[CDATA\[(.*?)]]>|([^<]*))\s*<\/option>/gs)];
-
-            let answerInfo = {
-              question: `第${questionNo}题`,
-              answer: attachmentAnswers.length > 0 ? attachmentAnswers.join('\n') : (knowledgeMatch ? (knowledgeMatch[1] || knowledgeMatch[2] || '').trim() : '未找到答案'),
-              content: `题目: ${questionText}`,
-              questionText: questionText,
-              pattern: 'XML题目模式',
-              elementId: elementId,
-              questionNo: questionNo
-            };
-
-            if (attachmentAnswers.length > 0) {
-              answerInfo.pattern = 'XML题目附件模式';
-              answerInfo.attachmentAnswers = attachmentAnswers;
+          if (attachmentAnswers.length > 0) {
+            answerInfo.pattern = 'XML题目附件模式';
+            answerInfo.attachmentAnswers = attachmentAnswers;
+            if (attachmentAnswers.length > 1) {
+              answerInfo.multipleAnswers = attachmentAnswers;
             }
-
-            if (optionsMatches.length > 0) {
-              const optionsText = optionsMatches.map(optionMatch =>
-                `${optionMatch[1]}. ${(optionMatch[2] || optionMatch[3] || '').trim()}`
-              ).join('\n');
-
-              answerInfo.content = `题目: ${questionText}\n\n选项:\n${optionsText}`;
-              answerInfo.pattern = 'XML题目选项模式';
-              answerInfo.options = optionsMatches.map(optionMatch => ({
-                id: optionMatch[1],
-                text: (optionMatch[2] || optionMatch[3] || '').trim()
-              }));
-            }
-
-            answers.push(answerInfo);
-            console.log(`添加题目信息: elementId="${elementId}", questionNo=${questionNo}, questionText="${questionText}"`);
-          } else {
-            console.log(`跳过element ${elementId}: 缺少题目编号或题目文本`);
           }
+
+          if (options.length > 0) {
+            const optionsText = options.map(opt => `${opt.id}. ${opt.text}`).join('\n');
+            answerInfo.content = `题目: ${questionText}\n\n选项:\n${optionsText}`;
+            answerInfo.options = options;
+            if (attachmentAnswers.length === 0) {
+              answerInfo.pattern = 'XML题目选项模式';
+            }
+          }
+
+          // 书面表达：有范文就是答案；没范文时至少把标题和要点带出来，
+          // 否则这类卷子整份提取结果为空，面板上什么都看不到
+          if (writing) {
+            answerInfo.writing = writing;
+            if (writing.modelEssays.length > 0) {
+              answerInfo.pattern = '书面表达范文';
+              if (writing.modelEssays.length > 1) {
+                answerInfo.multipleAnswers = writing.modelEssays;
+              }
+            } else if (writing.mainPoints.length > 0) {
+              answerInfo.pattern = '书面表达要点';
+              answerInfo.metaAnswer = writing.mainPoints.map((p, i) => `${i + 1}. ${p}`).join('\n');
+            }
+            const head = [
+              writing.title ? `标题: ${writing.title}` : '',
+              `题目: ${questionText}`,
+              writing.mainPoints.length > 0
+                ? '要点:\n' + writing.mainPoints.map((p, i) => `  ${i + 1}. ${p}`).join('\n') : ''
+            ].filter(Boolean).join('\n');
+            answerInfo.content = head;
+          }
+
+          answers.push(answerInfo);
         });
       }
 
@@ -1850,13 +2073,9 @@ class AnswerExtractor {
     const answers = [];
 
     try {
-      const answerPatterns = [
-        /答案\s*[:：]\s*([^\n]+)/g,
-        /标准答案\s*[:：]\s*([^\n]+)/g,
-        /正确答案\s*[:：]\s*([^\n]+)/g,
-        /参考答案\s*[:：]\s*([^\n]+)/g,
-        /\b[A-D]\b/g
-      ];
+      // 合成一条正则：原来"答案/标准答案/正确答案/参考答案"四条会同时命中同一行，
+      // 一行"正确答案：B"被重复收录多次
+      const answerPattern = /(?:标准|正确|参考)?答案\s*[:：]\s*([^\n]+)/g;
 
       const lines = content.split('\n');
       let lineNum = 0;
@@ -1864,34 +2083,22 @@ class AnswerExtractor {
       for (const line of lines) {
         lineNum++;
 
-        for (const pattern of answerPatterns) {
-          const matches = [...line.matchAll(pattern)];
-
-          if (matches.length > 0) {
-            matches.forEach((match, index) => {
-              if (match[1]) {
-                answers.push({
-                  question: `文本-${lineNum}-${index + 1}`,
-                  answer: match[1].trim(),
-                  content: `答案: ${match[1].trim()} (行: ${lineNum})`,
-                  questionText: match[1].trim(),
-                  pattern: '文本答案模式'
-                });
-              }
+        const matches = [...line.matchAll(answerPattern)];
+        matches.forEach((match, index) => {
+          const text = match[1] && match[1].trim();
+          if (text) {
+            answers.push({
+              question: `文本-${lineNum}-${index + 1}`,
+              answer: text,
+              content: `答案: ${text} (行: ${lineNum})`,
+              questionText: text,
+              pattern: '文本答案模式'
             });
           }
-        }
+        });
 
-        const optionMatches = [...line.matchAll(/\b([A-D])\b/g)];
-        if (optionMatches.length > 0) {
-          answers.push({
-            question: `选项-${lineNum}`,
-            answer: optionMatches.map(m => m[1]).join(''),
-            content: `选项: ${optionMatches.map(m => m[1]).join('')} (行: ${lineNum})`,
-            questionText: optionMatches.map(m => m[1]).join(''),
-            pattern: '文本选项模式'
-          });
-        }
+        // 原先还会把每行里孤立出现的 A-D 字母凑成一条"选项"答案，
+        // 它既对不上题号、auto-fill 也不消费，只是在列表里刷屏，这里去掉
       }
 
       return answers;
@@ -1903,104 +2110,206 @@ class AnswerExtractor {
 
   mergeAnswerData(allAnswers) {
     try {
-      const correctAnswers = allAnswers.filter(ans => ans.sourceFile === 'correctAnswer.xml');
       const paperQuestions = allAnswers.filter(ans => ans.sourceFile === 'paper.xml');
+      const correctAnswers = allAnswers.filter(ans => ans.sourceFile === 'correctAnswer.xml');
+      // paper.xml 里没带答案的条目只是题面，不参与作答，但要留着做题序和题干来源
+      const otherAnswers = allAnswers.filter(ans =>
+        ans.sourceFile !== 'correctAnswer.xml' &&
+        !(ans.sourceFile === 'paper.xml' && ans.isQuestionMeta)
+      );
 
-      if (correctAnswers.length > 0 && paperQuestions.length > 0) {
-        const mergedAnswers = [];
-        let successfulMerges = 0;
+      // elementId -> 题目信息，大小写不敏感（目录名与 xml 里的写法不总是一致）
+      const paperByElement = new Map();
+      const paperByNo = new Map();
+      paperQuestions.forEach((q, order) => {
+        if (q.elementId) paperByElement.set(String(q.elementId).toUpperCase(), { ...q, order });
+        if (Number.isFinite(q.questionNo)) paperByNo.set(q.questionNo, { ...q, order });
+      });
 
-        correctAnswers.forEach((correctAns, index) => {
-          let matchingQuestion = paperQuestions.find(q => q.elementId === correctAns.elementId);
+      const lookupPaper = (ans, fallbackIndex) => {
+        if (ans.elementId) {
+          const hit = paperByElement.get(String(ans.elementId).toUpperCase());
+          if (hit) return hit;
+        }
+        if (Number.isFinite(ans.questionNo) && paperByNo.has(ans.questionNo)) {
+          return paperByNo.get(ans.questionNo);
+        }
+        // 最后才按出现次序对齐，容易错位，仅作兜底
+        if (Number.isFinite(fallbackIndex) && paperByNo.has(fallbackIndex + 1)) {
+          return paperByNo.get(fallbackIndex + 1);
+        }
+        return null;
+      };
 
-          console.log(`尝试匹配答案: elementId="${correctAns.elementId}", 找到匹配题目: ${!!matchingQuestion}`);
+      let successfulMerges = 0;
 
-          if (!matchingQuestion) {
-            const questionNumber = index + 1;
-            matchingQuestion = paperQuestions.find(q => q.questionNo === questionNumber);
-            console.log(`elementId匹配失败，尝试按题目编号匹配: 第${questionNumber}题, 找到匹配: ${!!matchingQuestion}`);
-          }
-
-          if (matchingQuestion) {
-            console.log(`匹配成功 - 题目文本: "${matchingQuestion.questionText}"`);
-
-            // 如果答案是选项字母（如"A"或"ACD"），尝试获取选项内容
-            let answerContent = correctAns.answer;
-            if (matchingQuestion.options && matchingQuestion.options.length > 0) {
-              const answerLetters = correctAns.answer.trim().split('').map(ch => ch.toUpperCase()).filter(ch => /[A-Z]/.test(ch));
-              if (answerLetters.length > 0) {
-                const matchedTexts = answerLetters
-                  .map(letter => {
-                    const opt = matchingQuestion.options.find(o => o.id === letter);
-                    return opt ? this.cleanHtmlText(opt.text) : null;
-                  })
-                  .filter(Boolean);
-                if (matchedTexts.length > 0) {
-                  answerContent = matchedTexts.join(' / ');
-                }
-              }
-            }
-
-            mergedAnswers.push({
-              ...correctAns,
-              answer: answerContent,
-              content: `答案: ${answerContent}`,
-              questionText: matchingQuestion.questionText
-            });
-            successfulMerges++;
-          } else {
-            console.log(`未找到匹配题目，保持原样: elementId="${correctAns.elementId}", 题目编号: 第${index + 1}题`);
-            mergedAnswers.push(correctAns);
-          }
-        });
-
-        console.log(`合并完成: 成功合并 ${successfulMerges}/${correctAnswers.length} 个答案`);
-
-        if (successfulMerges > 0) {
-          return this.sortAndDeduplicateAnswers(mergedAnswers, 'fallback');
+      // 1) correctAnswer.xml 的答案配上 paper.xml 的题干、选项和真实题号
+      const mergedCorrect = correctAnswers.map((correctAns, index) => {
+        const matchingQuestion = lookupPaper(correctAns, index);
+        if (!matchingQuestion) {
+          console.log(`未找到匹配题目，保持原样: elementId="${correctAns.elementId}"`);
+          return { ...correctAns, paperOrder: Number.MAX_SAFE_INTEGER, tieIndex: index };
         }
 
-        console.log('合并成功率过低，回退到普通模式');
-        return this.sortAndDeduplicateAnswers(allAnswers, 'fallback');
-      }
+        successfulMerges++;
 
-      return this.sortAndDeduplicateAnswers(allAnswers, 'fallback');
+        // 答案是选项字母（如 "A" 或 "ACD"）时换成选项正文，填空题答案原样保留
+        let answerContent = correctAns.answer;
+        const options = matchingQuestion.options || [];
+        if (options.length > 0 && /^[A-Za-z\s]+$/.test(String(correctAns.answer).trim())) {
+          const answerLetters = String(correctAns.answer).trim().toUpperCase().split('').filter(ch => /[A-Z]/.test(ch));
+          const matchedTexts = answerLetters
+            .map(letter => {
+              const opt = options.find(o => String(o.id).toUpperCase() === letter);
+              return opt ? this.cleanHtmlText(opt.text) : null;
+            })
+            .filter(Boolean);
+          if (matchedTexts.length === answerLetters.length && matchedTexts.length > 0) {
+            answerContent = matchedTexts.join(' / ');
+          }
+        }
+
+        return {
+          ...correctAns,
+          answer: answerContent,
+          content: `答案: ${answerContent}`,
+          questionText: matchingQuestion.questionText || correctAns.questionText,
+          options: options.length > 0 ? options : correctAns.options,
+          // 采用试卷的真实题号，而不是 correctAnswer.xml 里的数组下标
+          questionNo: matchingQuestion.questionNo,
+          question: `第${matchingQuestion.questionNo}题`,
+          paperOrder: matchingQuestion.order,
+          tieIndex: index
+        };
+      });
+
+      // 2) 其余答案（各题目录下的 answer.json、questionData.js 等）按试卷顺序归位
+      const mergedOthers = otherAnswers.map((ans, index) => {
+        const matchingQuestion = lookupPaper(ans, null);
+        return {
+          ...ans,
+          questionText: ans.questionText || (matchingQuestion ? matchingQuestion.questionText : ''),
+          paperOrder: matchingQuestion ? matchingQuestion.order : Number.MAX_SAFE_INTEGER,
+          tieIndex: index
+        };
+      });
+
+      console.log(`合并完成: 成功合并 ${successfulMerges}/${correctAnswers.length} 个答案`);
+
+      const combined = [...mergedCorrect, ...mergedOthers].sort((a, b) => {
+        if (a.paperOrder !== b.paperOrder) return a.paperOrder - b.paperOrder;
+        const localA = Number.isFinite(a.localIndex) ? a.localIndex : 0;
+        const localB = Number.isFinite(b.localIndex) ? b.localIndex : 0;
+        if (localA !== localB) return localA - localB;
+        return a.tieIndex - b.tieIndex;
+      });
+
+      const deduplicated = this.sortAndDeduplicateAnswers(combined, 'fallback');
+      return this.assignQuestionNumbers(deduplicated);
     } catch (error) {
       console.error('合并答案数据失败:', error);
       return allAnswers;
     }
   }
 
+  // 统一编号：correctAnswer 已经拿到试卷真实题号就沿用，其余（跟读句子等）按试卷顺序连续编号。
+  // 编号必须全局唯一——auto-fill 用「第N题」建索引，重号会让后面的答案被直接丢弃。
+  assignQuestionNumbers(answers) {
+    if (!Array.isArray(answers) || answers.length === 0) return answers;
+
+    const usedNumbers = new Set();
+    for (const ans of answers) {
+      if (ans.sourceFile === 'correctAnswer.xml' && Number.isFinite(ans.questionNo) && !usedNumbers.has(ans.questionNo)) {
+        usedNumbers.add(ans.questionNo);
+      }
+    }
+
+    let nextNumber = 1;
+    const takeNextNumber = () => {
+      while (usedNumbers.has(nextNumber)) nextNumber++;
+      usedNumbers.add(nextNumber);
+      return nextNumber;
+    };
+
+    // 同一道题的多个空/多个答案共用题号，用 answerIndex 区分先后
+    const seenPerQuestion = new Map();
+
+    return answers.map(ans => {
+      let questionNo;
+      if (ans.sourceFile === 'correctAnswer.xml' && Number.isFinite(ans.questionNo)) {
+        questionNo = ans.questionNo;
+      } else {
+        questionNo = takeNextNumber();
+      }
+
+      const seen = (seenPerQuestion.get(questionNo) || 0) + 1;
+      seenPerQuestion.set(questionNo, seen);
+
+      const result = {
+        ...ans,
+        questionNo,
+        question: `第${questionNo}题`,
+        answerIndex: Number.isFinite(ans.answerIndex) && ans.answerIndex > 0 ? ans.answerIndex : seen
+      };
+      delete result.paperOrder;
+      delete result.tieIndex;
+      delete result.localIndex;
+      return result;
+    }).map((ans, idx) => ({ ...ans, paperSeq: idx }));
+  }
+
   sortAndDeduplicateAnswers(answers, sourceMode = 'page1') {
     if (!answers || answers.length === 0) return answers;
+
+    // 先剔除没有答案内容的条目：paper.xml 的题面、空的 knowledge 标签等
+    // 之前它们会以空答案进入结果，既虚高了答案数，也让用户看到一堆空白项
+    const meaningful = answers.filter(ans => {
+      if (ans.isQuestionMeta) return false;
+      const text = typeof ans.answer === 'string' ? ans.answer.trim() : ans.answer;
+      return !!text && text !== '未找到答案';
+    });
+    const droppedEmpty = answers.length - meaningful.length;
 
     let sortedAnswers;
 
     if (sourceMode === 'page1' || sourceMode === 'mixed') {
       // 有 page1 数据时：保持原始顺序（pageConfig 的 slides 数组已有序）
-      sortedAnswers = [...answers];
+      sortedAnswers = [...meaningful];
+    } else if (meaningful.some(ans => Number.isFinite(ans.paperSeq) || Number.isFinite(ans.paperOrder))) {
+      // 已按 paper.xml 的题目顺序排好，不要再按媒体索引打乱
+      sortedAnswers = [...meaningful];
     } else {
-      // 只有 questionData.js 时：按媒体索引排序（T1, T2, T3...）
-      sortedAnswers = [...answers].sort((a, b) => {
+      // 没有试卷顺序可用时：按媒体索引排序（T1, T2, T3...）
+      sortedAnswers = [...meaningful].sort((a, b) => {
         const indexA = a.mediaIndex ?? Infinity;
         const indexB = b.mediaIndex ?? Infinity;
         return indexA - indexB;
       });
     }
 
-    // 去重（基于 questionText + answer）
-    const seen = new Map();
+    // 去重键带上 elementId / 题号 / 空序号：
+    // 不同题目的相同短答案（两个空都填 "the"）不能被当成重复删掉
+    const seen = new Set();
     const deduplicated = [];
 
     for (const ans of sortedAnswers) {
-      const key = `${ans.questionText}|${ans.answer}`;
+      const key = [
+        ans.elementId || '',
+        Number.isFinite(ans.questionNo) ? ans.questionNo : '',
+        Number.isFinite(ans.answerIndex) ? ans.answerIndex : '',
+        ans.questionText || '',
+        ans.answer
+      ].join('|');
       if (!seen.has(key)) {
-        seen.set(key, true);
+        seen.add(key);
         deduplicated.push(ans);
       }
     }
 
-    this.emitLog('info', `排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条 (来源: ${sourceMode})`);
+    this.emitLog('info',
+      `排序去重完成: 原始 ${answers.length} 条 -> 去重后 ${deduplicated.length} 条` +
+      (droppedEmpty > 0 ? ` (剔除 ${droppedEmpty} 条空答案)` : '') +
+      ` (来源: ${sourceMode})`);
 
     return deduplicated;
   }

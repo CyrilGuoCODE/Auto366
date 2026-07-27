@@ -289,7 +289,8 @@ class ProxyServer {
             ctx.proxyToClientResponse.write(buffer);
           }
           const isJson = /application\/json/.test(requestInfo.contentType);
-          const isFile = /application\/octet-stream|image/.test(requestInfo.contentType);
+          const isFile = /application\/octet-stream|application\/(x-)?zip|binary\/octet-stream|image/.test(requestInfo.contentType || '');
+          const downloadName = this._resolveDownloadFileName(requestInfo, fullUrl);
           if (decompressFailed) {
             requestInfo.responseBody = text;
           }
@@ -301,11 +302,7 @@ class ProxyServer {
             }
           }
           else if (isFile) {
-            if (requestInfo.responseHeaders["Content-Disposition"]) {
-              requestInfo.responseBody = requestInfo.responseHeaders["Content-Disposition"].replaceAll('filename=', '').replaceAll('"', '')
-            } else {
-              requestInfo.responseBody = decodeURIComponent(fullUrl.match(/https?:\/\/[^\/]+\/(?:[^\/]+\/)*([^\/?]+)(?=\?|$)/)[1])
-            }
+            requestInfo.responseBody = downloadName;
           }
           else {
             requestInfo.responseBody = text;
@@ -315,32 +312,43 @@ class ProxyServer {
           requestInfo.originalResponse = buffer
           this.trafficCache.set(requestInfo.uuid, requestInfo);
 
-          let extracted_answers;
+          let extracted_answers = {};
 
-          // 答案提取
-          if (isFile && requestInfo.responseBody.includes('zip')) {
-            fs.mkdirSync(this.tempDir, { recursive: true });
-            fs.mkdirSync(this.ansDir, { recursive: true });
-            const filePath = path.join(this.tempDir, requestInfo.responseBody)
-            await this.downloadFileByUuid(requestInfo.uuid, filePath)
-            extracted_answers = await this.extractZipFile(filePath, this.ansDir)
-
+          // 答案提取：以 ZIP 魔数为准，不再要求文件名里必须带 "zip"
+          // （Content-Type 和文件名都会变，魔数不会；再用下载请求特征挡掉无关的 zip 类文件）
+          if (this._looksLikeZip(buffer) && (isFile || this._isFileDownloadRequest(fullUrl))) {
+            let filePath = null;
             try {
-              const shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(`
-                    localStorage.getItem('keep-cache-files') === 'true'
-                  `);
+              fs.mkdirSync(this.tempDir, { recursive: true });
+              fs.mkdirSync(this.ansDir, { recursive: true });
+              filePath = path.join(this.tempDir, this._safeFileName(downloadName));
+              await this.downloadFileByUuid(requestInfo.uuid, filePath);
+              extracted_answers = await this.extractZipFile(filePath, this.ansDir);
+            } catch (error) {
+              console.error('答案提取失败:', error);
+              this.safeIpcSend('process-error', { error: `答案提取失败: ${error.message}` });
+              extracted_answers = {};
+            }
+
+            if (filePath) {
+              let shouldKeepCache = false;
+              try {
+                shouldKeepCache = await this.mainWindow.webContents.executeJavaScript(
+                  `localStorage.getItem('keep-cache-files') === 'true'`
+                );
+              } catch (error) {
+                shouldKeepCache = false;
+              }
 
               if (!shouldKeepCache) {
-                await fs.unlink(filePath)
-                await fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
+                // 用提取器实际使用的解压目录，避免这里自行推断路径导致残留
+                const extractDir = extracted_answers && extracted_answers.extractDir;
+                await fs.rm(filePath, { force: true }).catch(() => { });
+                if (extractDir && extractDir !== filePath) {
+                  await fs.rm(extractDir, { recursive: true, force: true }).catch(() => { });
+                }
               }
-            } catch (error) {
-              await fs.unlink(filePath)
-              await fs.rm(filePath.replace('.zip', ''), { recursive: true, force: true })
             }
-          }
-          else {
-            extracted_answers = {};
           }
 
           if (responseBodyRules.includes(3)) {
@@ -2117,6 +2125,50 @@ class ProxyServer {
         });
       }
     });
+  }
+
+  // 判断响应体是否为 ZIP（PK 魔数）
+  _looksLikeZip(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 4) return false;
+    const sig = buffer.readUInt32LE(0);
+    // 0x04034b50 普通条目, 0x06054b50 空压缩包, 0x08074b50 跨卷
+    return sig === 0x04034b50 || sig === 0x06054b50 || sig === 0x08074b50;
+  }
+
+  // 从 Content-Disposition 或 URL 推断下载文件名
+  // Node 会把响应头名统一转成小写，之前按 "Content-Disposition" 原样取值永远拿不到
+  _resolveDownloadFileName(requestInfo, fullUrl) {
+    const headers = requestInfo.responseHeaders || {};
+    const disposition = headers['content-disposition'] || headers['Content-Disposition'];
+
+    if (disposition) {
+      // RFC 5987: filename*=UTF-8''xxx 优先于 filename="xxx"
+      const extended = disposition.match(/filename\*\s*=\s*[^']*'[^']*'([^;]+)/i);
+      if (extended) {
+        try {
+          return decodeURIComponent(extended[1].trim().replace(/^"|"$/g, ''));
+        } catch (e) { /* 编码有问题就继续走普通 filename */ }
+      }
+      const plain = disposition.match(/filename\s*=\s*"([^"]*)"/i) || disposition.match(/filename\s*=\s*([^;]+)/i);
+      if (plain && plain[1].trim()) {
+        return plain[1].trim();
+      }
+    }
+
+    try {
+      const pathname = new URL(fullUrl).pathname;
+      const base = pathname.split('/').filter(Boolean).pop();
+      if (base) return decodeURIComponent(base);
+    } catch (e) { /* URL 解析失败时用兜底名 */ }
+
+    return `download_${Date.now()}.zip`;
+  }
+
+  // 文件名来自响应头/URL，属于外部输入，必须限制在 temp 目录内
+  _safeFileName(name) {
+    const base = path.basename(String(name || '')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim();
+    if (!base || base === '.' || base === '..') return `download_${Date.now()}.zip`;
+    return base.length > 120 ? base.slice(-120) : base;
   }
 
   // 扫描目录结构（只统计文件后缀数量）
