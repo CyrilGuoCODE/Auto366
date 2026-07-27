@@ -894,9 +894,33 @@ async function handleReadAlongQuestions() {
 
                 slideHasWork = true;
 
-                // 提取朗读文本
-                const textEl = questionEl.querySelector('.u3-wordBlock-content__midPanel-enText p');
-                const readText = textEl ? textEl.textContent.trim() : '';
+                // 提取朗读文本（多选择器回退）
+                let readText = '';
+                const readTextSelectors = [
+                    '.u3-wordBlock-content__midPanel-enText p',
+                    '.u3-wordBlock-content__midPanel-enText',
+                    '.u3-wordBlock-content__enText',
+                    '.u3-wordBlock-content p',
+                    '.u3-wordBlock-content',
+                    '.u3-read-text',
+                    '.u3-question-text'
+                ];
+                for (const sel of readTextSelectors) {
+                    const el = questionEl.querySelector(sel);
+                    if (el) {
+                        const txt = el.textContent.trim();
+                        if (txt.length > 0) {
+                            readText = txt;
+                            break;
+                        }
+                    }
+                }
+                // 最后回退：从 questionEl 自身取文本（排除录音按钮等噪音）
+                if (!readText) {
+                    const clone = questionEl.cloneNode(true);
+                    clone.querySelectorAll('button, .u3-recorder-btns, .u3-recorder-panel, .u3-audioPlayer, [slot*="audio"]').forEach(e => e.remove());
+                    readText = clone.textContent.trim();
+                }
                 if (!readText) {
                     addLogMessage('跟读朗读: 未找到朗读文本，跳过', 'warning');
                     continue;
