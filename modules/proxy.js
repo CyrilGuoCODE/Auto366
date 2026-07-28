@@ -41,6 +41,9 @@ class ProxyServer {
     // 同样改 task/score/submit 的 tasksJson.seconds 并重算 ut，用不同的 salt 以与听力区分
     this.fillTimeMod = { enabled: false, seconds: null };
     this.FILL_TIME_SALT = 'submitTaskToken-pc-987654'; // 与听力共用同一服务端盐值
+    // ===== 听力时间预设（zip 内 mp3 自动计算）=====
+    this.lastZipPath = null;  // 最近一次处理的套题 zip 路径
+    this.listenTimePresetCache = {};  // { zipPath: { success, seconds, detail, ts } }
     this.mainWindow = null;
     this.speedManager = null;  // 由 main.js 注入; 用于关键请求期间瞬时降速(网络保护)
     this.trafficCache = new Map();
@@ -405,7 +408,7 @@ class ProxyServer {
   }
 
   // 处理本地答案服务器请求
-  handleBucketRequest(req, res) {
+  async handleBucketRequest(req, res) {
     try {
       if (req.method === 'POST' && req.url === '/save-log') {
         let body = '';
@@ -554,6 +557,34 @@ class ProxyServer {
           'Access-Control-Allow-Origin': '*'
         });
         res.end(JSON.stringify(this.fillTimeMod));
+        return;
+      }
+
+      // ===== 听力时间预设（从 zip 内 mp3 自动计算）=====
+      if (req.method === 'GET' && url.parse(req.url).pathname === '/listen-time-preset') {
+        try {
+          if (!this.lastZipPath) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify({ success: false, error: 'no_zip', message: '尚未检测到套题 ZIP' }));
+            return;
+          }
+
+          // 优先从缓存返回（zip 可能已被删除）
+          const cached = this.listenTimePresetCache[this.lastZipPath];
+          if (cached && Date.now() - cached.ts < 60 * 1000) {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify(cached));
+            return;
+          }
+
+          // 缓存过期或不存在，尝试重新计算
+          const result = await this.calcListenTimePresetFromZip(this.lastZipPath);
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify({ success: false, error: 'calc_failed', message: e.message }));
+        }
         return;
       }
 
@@ -2171,10 +2202,219 @@ class ProxyServer {
     return base.length > 120 ? base.slice(-120) : base;
   }
 
+  // ===== 听力时间预设：mp3 时长解析 =====
+
+  /**
+   * 解析 MP3 Buffer 计算时长（秒）
+   * 支持 CBR / VBR（Xing/Info 帧头）、ID3v2 跳过
+   */
+  parseMp3Duration(buffer) {
+    let offset = 0;
+
+    // 跳过 ID3v2 头
+    if (buffer.length >= 10 && buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) {
+      const id3Size = ((buffer[6] & 0x7f) << 21) | ((buffer[7] & 0x7f) << 14) |
+                      ((buffer[8] & 0x7f) << 7)  | (buffer[9] & 0x7f);
+      offset = 10 + id3Size;
+    }
+
+    // MPEG 比特率表 [version][layer][bitrateIndex]（单位 kbps）
+    const bitrateTable = {
+      1: { 1: [0,32,64,96,128,160,192,224,256,288,320,352,384,416,448,0],
+           2: [0,32,48,56,64,80,96,112,128,160,192,224,256,320,384,0],
+           3: [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,0] },
+      2: { 1: [0,32,48,56,64,80,96,112,128,144,160,176,192,224,256,0],
+           2: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0],
+           3: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0] },
+      2.5: { 1: [0,32,48,56,64,80,96,112,128,144,160,176,192,224,256,0],
+             2: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0],
+             3: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0] }
+    };
+    const sampleRateTable = {
+      1: [44100, 48000, 32000],
+      2: [22050, 24000, 16000],
+      2.5: [11025, 12000, 8000]
+    };
+    const samplesPerFrame = {
+      1: { 1: 384, 2: 1152, 3: 1152 },
+      2: { 1: 384, 2: 1152, 3: 1152 },
+      2.5: { 1: 384, 2: 1152, 3: 1152 }
+    };
+
+    // 找第一个有效 MPEG 同步字
+    let found = false;
+    let version, layer, bitrateIndex, sampleRateIndex, padding;
+    while (offset < buffer.length - 4) {
+      if (buffer[offset] === 0xFF && (buffer[offset + 1] & 0xE0) === 0xE0) {
+        const b1 = buffer[offset + 1];
+        const b2 = buffer[offset + 2];
+        const verBits = (b1 >> 3) & 0x03;
+        const layerBits = (b1 >> 1) & 0x03;
+        bitrateIndex = (b2 >> 4) & 0x0F;
+        sampleRateIndex = (b2 >> 2) & 0x03;
+        padding = (b2 >> 1) & 0x01;
+
+        if (verBits === 3) version = 1;
+        else if (verBits === 2) version = 2;
+        else if (verBits === 0) version = 2.5;
+        else { offset++; continue; }
+
+        if (layerBits === 3) layer = 1;
+        else if (layerBits === 2) layer = 2;
+        else if (layerBits === 1) layer = 3;
+        else { offset++; continue; }
+
+        if (bitrateIndex === 0 || bitrateIndex === 15) { offset++; continue; }
+        if (sampleRateIndex === 3) { offset++; continue; }
+
+        found = true;
+        break;
+      }
+      offset++;
+    }
+    if (!found) return null;
+
+    // 检查 Xing/VBR 头
+    const vbrOffset = offset + (version === 1 ? (layer === 3 ? 36 : 32) : (layer === 3 ? 21 : 17));
+    if (vbrOffset + 12 < buffer.length) {
+      const xingId = buffer.toString('ascii', vbrOffset, vbrOffset + 4);
+      if (xingId === 'Xing' || xingId === 'Info') {
+        const frameCount = buffer.readUInt32BE(vbrOffset + 8);
+        if (frameCount > 0) {
+          const sr = sampleRateTable[version]?.[sampleRateIndex];
+          const spf = samplesPerFrame[version]?.[layer];
+          if (sr && spf) {
+            return frameCount * spf / sr;
+          }
+        }
+      }
+    }
+
+    // CBR 回退：文件大小 / 比特率
+    const bitrate = bitrateTable[version]?.[layer]?.[bitrateIndex];
+    const sr = sampleRateTable[version]?.[sampleRateIndex];
+    const spf = samplesPerFrame[version]?.[layer];
+    if (!bitrate || !sr || !spf) return null;
+
+    const frameSize = Math.floor(spf / 8 * bitrate * 1000 / sr + padding);
+    const dataSize = buffer.length - offset;
+    const frameCount = Math.floor(dataSize / frameSize);
+    return frameCount * spf / sr;
+  }
+
+  /**
+   * 从 zip 内 questions 目录提取 mp3 时长，计算预设听力用时
+   * 算法: 每个 questions 目录 = sum(durations) × 2 + 基准值(360)，取所有目录最小值
+   * 计算值 < 1080 时不预设
+   */
+  async calcListenTimePresetFromZip(zipPath) {
+    // 检查缓存（1 分钟有效期）
+    if (this.listenTimePresetCache[zipPath]) {
+      const cached = this.listenTimePresetCache[zipPath];
+      if (Date.now() - cached.ts < 60 * 1000) {
+        return cached;
+      }
+    }
+
+    // zip 文件不存在时直接返回失败
+    if (!fs.existsSync(zipPath)) {
+      return { success: false, error: 'zip_missing', message: 'ZIP 文件不存在: ' + zipPath };
+    }
+
+    const StreamZip = require('node-stream-zip');
+    const zip = new StreamZip.async({ file: zipPath });
+    const entries = await zip.entries();
+
+    // 自动搜索所有 questions 子目录下的 mp3 文件，按目录分组
+    const questionsGroups = new Map();
+    for (const entry of Object.values(entries)) {
+      if (entry.isDirectory) continue;
+      const name = entry.name;
+      // 匹配 questions*/ 下任意层子目录中的 .mp3 文件
+      const mp3Match = name.match(/^(questions[^/]*\/).*\.mp3$/i);
+      if (mp3Match) {
+        const dirKey = mp3Match[1];
+        if (!questionsGroups.has(dirKey)) questionsGroups.set(dirKey, []);
+        questionsGroups.get(dirKey).push(entry);
+      }
+    }
+
+    const LISTEN_TIME_BASELINE = 360;
+    const LISTEN_TIME_MIN_THRESHOLD = 1080;
+    const dirResults = [];
+
+    for (const [dirKey, mp3Entries] of questionsGroups) {
+      const durations = [];
+      for (const entry of mp3Entries) {
+        try {
+          const data = await zip.entryData(entry.name);
+          const dur = this.parseMp3Duration(data);
+          if (dur !== null && dur > 0) durations.push(dur);
+        } catch (e) {
+          // 跳过无法解析的 mp3
+        }
+      }
+      if (durations.length === 0) continue;
+      const sumDurations = durations.reduce((a, b) => a + b, 0);
+      const calc = Math.round(sumDurations * 2 + LISTEN_TIME_BASELINE);
+      dirResults.push({
+        dir: dirKey,
+        mp3Count: durations.length,
+        sumDurations: Math.round(sumDurations * 10) / 10,
+        calc
+      });
+    }
+
+    await zip.close();
+
+    if (dirResults.length === 0) {
+      const result = { success: false, error: 'no_mp3_found', message: 'ZIP 内未找到 questions 目录下的 mp3 文件', ts: Date.now() };
+      this.listenTimePresetCache[zipPath] = result;
+      return result;
+    }
+
+    const minResult = dirResults.reduce((a, b) => a.calc < b.calc ? a : b);
+
+    // 计算值小于 1080 秒时不预设
+    if (minResult.calc < LISTEN_TIME_MIN_THRESHOLD) {
+      const result = {
+        success: false, error: 'below_threshold',
+        message: `预设计算值 ${minResult.calc}秒 < ${LISTEN_TIME_MIN_THRESHOLD}秒，不预设`,
+        calculatedSeconds: minResult.calc,
+        detail: { questionsDirs: dirResults, baseline: LISTEN_TIME_BASELINE, selectedDir: minResult.dir, totalDirs: dirResults.length },
+        ts: Date.now()
+      };
+      this.listenTimePresetCache[zipPath] = result;
+      return result;
+    }
+
+    const result = {
+      success: true,
+      seconds: minResult.calc,
+      source: 'zip:' + zipPath,
+      detail: {
+        questionsDirs: dirResults,
+        baseline: LISTEN_TIME_BASELINE,
+        selectedDir: minResult.dir,
+        totalDirs: dirResults.length
+      },
+      ts: Date.now()
+    };
+
+    this.listenTimePresetCache[zipPath] = result;
+    return result;
+  }
+
   // 扫描目录结构（只统计文件后缀数量）
   // 解压ZIP文件并提取答案（交给answer.js处理）
   async extractZipFile(zipPath, ansDir) {
     try {
+      // 缓存 zip 路径并立即计算听力时间预设（Q1：处理时即计算，不依赖文件后续存在）
+      this.lastZipPath = zipPath;
+      this.calcListenTimePresetFromZip(zipPath).catch(e => {
+        console.error('听力时间预设计算失败:', e.message);
+      });
+
       if (!fs.existsSync(zipPath)) {
         throw new Error(`ZIP文件不存在: ${zipPath}`);
       }

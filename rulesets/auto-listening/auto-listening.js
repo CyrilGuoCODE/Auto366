@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Beta 自动基础听力
+// @name         自动基础听力RC
 // @namespace    http://tampermonkey.net/
-// @version      5.0
-// @description  自动获取答案与填答，开发者面板支持搜索测试与队列管理
+// @version      6.0
+// @description  重建算法驱动的自动填答，开发者面板支持搜索测试与控分设置
 // @match        *://*/*
 // @grant        none
 // ==/UserScript==
@@ -48,14 +48,10 @@
         answerList: [],
         answerLoading: false,
         answerError: null,
-        autoFillRunning: false,
-        autoFillIndex: 0,
-        completionRate: (function() { var v = parseInt(localStorage.getItem('a366_completion_rate')); return (!isNaN(v) && v >= 0 && v <= 100) ? v : 100; })(),
-        accuracyRate: (function() { var v = parseInt(localStorage.getItem('a366_accuracy_rate')); return (!isNaN(v) && v >= 0 && v <= 100) ? v : 100; })(),
-        _skipIndices: null,
-        _wrongIndices: null,
-        _fillPlan: null,
-        // ===== 听力时间修改（"内置-自动基础听力"子规则）=====
+        targetWrongCount: 0,
+        fullDisplay: false,
+        rebuildResults: [],
+        // 听力时间修改
         listenTimeEnabled: localStorage.getItem('a366_listentime_enabled') === 'true',
         listenTimeSeconds: (function() {
             var raw = localStorage.getItem('a366_listentime_seconds');
@@ -69,7 +65,6 @@
     let devPanel = null;
     let inputEl = null;
     let resultsContainer = null;
-    let answerListContainer = null;
     let logContent = null;
 
     // ==========================================
@@ -101,7 +96,7 @@
 
         container.innerHTML = `
             <div id="a366-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--a366-bg-secondary);border-radius:8px 8px 0 0;border-bottom:1px solid var(--a366-border);cursor:move;user-select:none;">
-                <span style="font-weight:600;font-size:14px;color:var(--a366-primary);">Beta 自动基础听力</span>
+                <span style="font-weight:600;font-size:14px;color:var(--a366-primary);">自动基础听力RC</span>
                 <div style="display:flex;gap:6px;align-items:center;">
                     <button id="a366-dev-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 10px;font-size:11px;cursor:pointer;font-weight:500;">Develop</button>
                     <button id="a366-minimize" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;">_</button>
@@ -115,10 +110,9 @@
                     </div>
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                         <button id="a366-auto-fill-all" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">一键填答</button>
-                        <button id="a366-stop-auto-fill" style="background:var(--a366-danger);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">停止</button>
                         <button id="a366-jiaojuan-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">交卷</button>
                         <button id="a366-auto-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">自动听力</button>
-                        <button id="a366-auto-settings" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;display:flex;align-items:center;gap:4px;" title="填答设置"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0;"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/></svg>设置</button>
+                        <button id="a366-score-btn" style="background:#17a2b8;color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">控分</button>
                     </div>
                 </div>
             </div>
@@ -136,14 +130,13 @@
                     <button id="a366-log-clear" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:1px 6px;font-size:10px;cursor:pointer;">清空</button>
                 </div>
                 <div id="a366-log-content" style="height:120px;overflow-y:auto;padding:4px 10px 6px;font-size:11px;font-family:'Consolas','Courier New','PingFang SC',monospace;background:var(--a366-bg);">
-                    <div style="color:var(--a366-success);">自动基础听力已就绪</div>
+                    <div style="color:var(--a366-success);">自动基础听力RC 已就绪</div>
                     <div style="color:var(--a366-text-secondary);">填答 | 交卷 | 自动</div>
                 </div>
             </div>
         `;
 
         document.body.appendChild(container);
-        createAccuracyModal();
         createDevPanel();
 
         logContent = document.getElementById('a366-log-content');
@@ -162,15 +155,17 @@
             }
         });
         document.getElementById('a366-auto-btn').addEventListener('click', executeAuto);
-        document.getElementById('a366-auto-settings').addEventListener('click', toggleAccuracySettings);
-        document.getElementById('a366-auto-fill-all').addEventListener('click', startAutoFillAll);
-        document.getElementById('a366-stop-auto-fill').addEventListener('click', stopAutoFill);
+        document.getElementById('a366-score-btn').addEventListener('click', () => {
+            if (!state.devPanelVisible) toggleDevPanel();
+            switchDevTab('dev-score');
+        });
+        document.getElementById('a366-auto-fill-all').addEventListener('click', rebuildFillAll);
         document.getElementById('a366-log-clear').addEventListener('click', () => {
             state.logEntries = [];
             logContent.innerHTML = '';
         });
 
-        // ===== 时间修改 UI 绑定（分+秒，换算成总秒数）=====
+        // 时间修改 UI 绑定
         const ltEnable = document.getElementById('a366-listentime-enable');
         const ltMin = document.getElementById('a366-listentime-min');
         const ltSec = document.getElementById('a366-listentime-sec');
@@ -233,10 +228,45 @@
 
         makeDraggable(container, document.getElementById('a366-header'));
         autoFetchAnswers();
-        pushListenTime();
+
+        // 注入阶段自动拉取预设时间（仅当用户未手动设置时）
+        if (state.listenTimeSeconds === null) {
+            fetchPresetListenTime();
+        } else {
+            addLog('[时间预设] 用户已手动设置，跳过自动预设', 'info');
+            pushListenTime();
+        }
     }
 
-    // 把"启用/秒数"状态经本地 bucket server 推给代理层（代理层据此改 tasksJson.seconds 并重算 ut）
+    // 从代理层拉取基于 zip 内 mp3 时长自动计算的预设听力用时
+    async function fetchPresetListenTime() {
+        try {
+            const res = await fetch(BUCKET_URL + '/listen-time-preset', { cache: 'no-cache' });
+            const data = await res.json();
+            if (data.success && Number.isFinite(data.seconds) && data.seconds > 0) {
+                state.listenTimeSeconds = data.seconds;
+                localStorage.setItem('a366_listentime_seconds', String(data.seconds));
+                // 更新 UI 输入框
+                const ltMin = document.getElementById('a366-listentime-min');
+                const ltSec = document.getElementById('a366-listentime-sec');
+                if (ltMin && ltSec) {
+                    const abs = Math.abs(data.seconds);
+                    ltMin.value = String(Math.floor(abs / 60));
+                    ltSec.value = String(Math.round(abs % 60));
+                }
+                const dirInfo = data.detail ? `（${data.detail.totalDirs} 个 questions 目录，选 ${data.detail.selectedDir}）` : '';
+                addLog('[时间预设] 已自动设为 ' + data.seconds + '秒' + dirInfo, 'success');
+            } else {
+                addLog('[时间预设] 无可用预设：' + (data.message || '未知原因'), 'warn');
+            }
+        } catch (e) {
+            addLog('[时间预设] 拉取失败：' + e.message, 'warn');
+        } finally {
+            pushListenTime();
+        }
+    }
+
+    // 把"启用/秒数"状态经本地 bucket server 推给代理层
     function pushListenTime() {
         const payload = {
             enabled: state.listenTimeEnabled === true,
@@ -266,6 +296,10 @@
         }
     }
 
+    // ==========================================
+    // 开发者面板（3个tab）
+    // ==========================================
+
     function createDevPanel() {
         devPanel = document.createElement('div');
         devPanel.id = 'a366-dev-panel';
@@ -284,7 +318,6 @@
             z-index: 1000000;
             font-family: var(--a366-font, sans-serif);
             font-size: 13px;
-            display: none;
             flex-direction: column;
             overflow: hidden;
             ${CSS_VARS}
@@ -292,18 +325,20 @@
 
         devPanel.innerHTML = `
             <div id="a366-dev-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--a366-bg-secondary);border-radius:8px 8px 0 0;border-bottom:1px solid var(--a366-border);cursor:move;user-select:none;">
-                <span style="font-weight:600;font-size:14px;color:var(--a366-info);"开发者面板</span>
+                <span style="font-weight:600;font-size:14px;color:var(--a366-info);">自动基础听力RC</span>
                 <button id="a366-dev-close" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;">✕</button>
             </div>
             <div style="display:flex;border-bottom:1px solid var(--a366-border);background:var(--a366-bg-secondary);">
                 <button class="a366-dev-tab active" data-tab="dev-search" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-primary);border-bottom:2px solid var(--a366-primary);transition:all 0.15s;">搜索测试</button>
-                <button class="a366-dev-tab" data-tab="dev-answers" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-text-secondary);border-bottom:2px solid transparent;transition:all 0.15s;">答案列表</button>
+                <button class="a366-dev-tab" data-tab="dev-rebuild" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-text-secondary);border-bottom:2px solid transparent;transition:all 0.15s;">重建结果</button>
+                <button class="a366-dev-tab" data-tab="dev-score" style="flex:1;padding:8px 0;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--a366-text-secondary);border-bottom:2px solid transparent;transition:all 0.15s;">控分设置</button>
             </div>
             <div id="a366-dev-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;">
                 <div id="a366-dev-tab-search" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
                     <div style="display:flex;gap:6px;">
                         <input id="a366-search-input" type="text" placeholder="输入精确匹配的文本..." style="flex:1;padding:8px 10px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);background:var(--a366-bg);color:var(--a366-text);font-size:13px;outline:none;font-family:var(--a366-font);">
                         <button id="a366-search-btn" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">搜索</button>
+                        <button id="a366-search-h24-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">24</button>
                     </div>
                     <div style="font-size:11px;color:var(--a366-text-secondary);padding:2px 0;">匹配方式：文本精确 | 点击方式：原生 .click()</div>
                     <div id="a366-results" style="min-height:30px;max-height:200px;overflow-y:auto;border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:6px;background:var(--a366-bg);"></div>
@@ -312,14 +347,19 @@
                         <div style="color:var(--a366-text-muted);text-align:center;padding:6px;font-size:11px;">队列为空</div>
                     </div>
                 </div>
-                <div id="a366-dev-tab-answers" style="padding:12px;display:none;flex-direction:column;gap:8px;">
-                    <div style="display:flex;gap:6px;align-items:center;">
-                        <button id="a366-fetch-answers" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">获取答案</button>
-                        <span id="a366-answer-status" style="font-size:11px;color:var(--a366-text-secondary);"></span>
-                    </div>
-                    <div id="a366-answer-info" style="font-size:11px;color:var(--a366-text-secondary);display:none;padding:6px 8px;background:var(--a366-primary-light);border-radius:var(--a366-radius-sm);border:1px solid var(--a366-primary);"></div>
-                    <div id="a366-answer-list" style="flex:1;overflow-y:auto;max-height:320px;display:flex;flex-direction:column;gap:6px;">
-                        <div style="color:var(--a366-text-muted);text-align:center;padding:20px;font-size:12px;">点击「获取答案」从本地服务器加载答案</div>
+                <div id="a366-dev-tab-rebuild" style="padding:12px;display:none;flex-direction:column;gap:8px;">
+                    <div style="font-size:11px;color:var(--a366-text-muted);text-align:center;padding:20px;">获取答案后将自动执行重建</div>
+                </div>
+                <div id="a366-dev-tab-score" style="padding:12px;display:none;flex-direction:column;gap:10px;">
+                    <div id="a366-score-info" style="font-size:12px;font-weight:500;color:var(--a366-text);">请先执行重建</div>
+                    <div id="a366-score-slider-wrap" style="display:none;flex-direction:column;gap:8px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="font-size:11px;color:#6c757d;">0 分</span>
+                            <span id="a366-score-current" style="font-size:18px;font-weight:700;color:var(--a366-primary);">0.0 分</span>
+                            <span style="font-size:11px;color:#6c757d;">30 分</span>
+                        </div>
+                        <input id="a366-score-slider" type="range" min="0" max="30" step="1.5" value="30" style="width:100%;accent-color:var(--a366-primary);">
+                        <div id="a366-score-preview" style="font-size:11px;color:#6c757d;padding:6px 10px;background:#e9ecef;border-radius:4px;text-align:center;"></div>
                     </div>
                 </div>
             </div>
@@ -329,16 +369,18 @@
 
         inputEl = document.getElementById('a366-search-input');
         resultsContainer = document.getElementById('a366-results');
-        answerListContainer = document.getElementById('a366-answer-list');
 
         document.getElementById('a366-dev-close').addEventListener('click', toggleDevPanel);
         document.getElementById('a366-search-btn').addEventListener('click', performSearch);
+        document.getElementById('a366-search-h24-btn').addEventListener('click', searchHeight24);
         inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') performSearch(); });
-        document.getElementById('a366-fetch-answers').addEventListener('click', fetchAnswers);
 
         devPanel.querySelectorAll('.a366-dev-tab').forEach(tab => {
             tab.addEventListener('click', () => switchDevTab(tab.dataset.tab));
         });
+
+        bindScoreSlider();
+        updateScorePreview();
 
         makeDraggable(devPanel, document.getElementById('a366-dev-header'));
     }
@@ -363,7 +405,9 @@
             t.style.fontWeight = isActive ? '500' : '400';
         });
         document.getElementById('a366-dev-tab-search').style.display = tabName === 'dev-search' ? 'flex' : 'none';
-        document.getElementById('a366-dev-tab-answers').style.display = tabName === 'dev-answers' ? 'flex' : 'none';
+        document.getElementById('a366-dev-tab-rebuild').style.display = tabName === 'dev-rebuild' ? 'flex' : 'none';
+        document.getElementById('a366-dev-tab-score').style.display = tabName === 'dev-score' ? 'flex' : 'none';
+        if (tabName === 'dev-score') updateScorePreview();
     }
 
     function toggleCollapse() {
@@ -375,39 +419,40 @@
     }
 
     // ==========================================
-    // 主页填答状态
+    // 主页填答状态（基于 rebuildResults）
     // ==========================================
 
     function renderMainFillSection() {
         const fillStatus = document.getElementById('a366-fill-status');
         if (!fillStatus) return;
 
-        const list = state.answerList;
-        if (list.length === 0) {
+        const questions = state.rebuildResults;
+        const answers = state.answerList;
+
+        if (answers.length === 0 && questions.length === 0) {
             fillStatus.innerHTML = `<div style="color:var(--a366-text-muted);text-align:center;font-size:12px;">${state.answerError ? escapeHtml(state.answerError) : '未获取答案'}</div>`;
             document.getElementById('a366-auto-fill-all').style.display = 'none';
-            document.getElementById('a366-stop-auto-fill').style.display = 'none';
             return;
         }
 
-        // 状态显示只按真实执行状态，初始全为 pending；
-        // 计划仅用于控制执行，不在获取答案/设置变更后预设显示。
-        const filledCount = list.filter(a => a._fillStatus === 'filled').length;
-        const skippedCount = list.filter(a => a._fillStatus === 'skipped').length;
-        const correctCount = list.filter(a => a._fillStatus === 'filled' && a._fillMode !== 'wrong').length;
-        const wrongCount = list.filter(a => a._fillStatus === 'filled' && a._fillMode === 'wrong').length;
-        const pendingCount = list.filter(a => a._fillStatus !== 'filled' && a._fillStatus !== 'skipped').length;
+        if (questions.length === 0) {
+            fillStatus.innerHTML = `<div style="color:var(--a366-text-muted);text-align:center;font-size:12px;">已获取 ${answers.length} 条答案，等待重建...</div>`;
+            document.getElementById('a366-auto-fill-all').style.display = 'none';
+            return;
+        }
+
+        const matchedCount = questions.filter(q => !!q._matchedAnswer).length;
+        const correctOptCount = questions.reduce((sum, q) => sum + q.options.filter(o => o._isCorrect).length, 0);
+        const filledCount = questions.filter(q => q._filled === true).length;
+        const wrongFilledCount = questions.filter(q => q._filled === 'wrong').length;
 
         let badges = '';
-        list.forEach((ans) => {
-            const status = ans._fillStatus || 'pending';
-            if (status === 'filled' && ans._fillMode === 'wrong') {
-                badges += '<span style="color:var(--a366-danger);font-weight:600;">✗</span>';
-            } else if (status === 'filled') {
+        questions.forEach((q) => {
+            if (q._filled === true) {
                 badges += '<span style="color:var(--a366-success);font-weight:600;">✓</span>';
-            } else if (status === 'filling') {
-                badges += '<span style="color:var(--a366-warning);font-weight:600;">●</span>';
-            } else if (status === 'skipped') {
+            } else if (q._filled === 'wrong') {
+                badges += '<span style="color:var(--a366-danger);font-weight:600;">✗</span>';
+            } else if (q._filled === 'skipped') {
                 badges += '<span style="color:var(--a366-text-muted);font-weight:600;">—</span>';
             } else {
                 badges += '<span style="color:var(--a366-text-muted);">○</span>';
@@ -416,20 +461,13 @@
 
         fillStatus.innerHTML = `
             <div style="font-size:12px;color:var(--a366-text);margin-bottom:6px;">
-                已获取 <b>${list.length}</b> 条答案 | 填答 <b style="color:var(--a366-success);">${filledCount}</b>/${list.length}${skippedCount > 0 ? ' | <span style="color:var(--a366-text-muted);">跳过 ' + skippedCount + '</span>' : ''}${wrongCount > 0 || correctCount > 0 ? ' | <span style="color:var(--a366-success);">答对 ' + correctCount + '</span> <span style="color:var(--a366-danger);">答错 ' + wrongCount + '</span>' : ''}${pendingCount > 0 ? ' | <span style="color:var(--a366-text-muted);">待填 ' + pendingCount + '</span>' : ''}
+                重建 <b>${questions.length}</b> 题 | 匹配 <b style="color:var(--a366-success);">${matchedCount}</b> 题 | 正确选项 <b style="color:var(--a366-success);">${correctOptCount}</b> 个${filledCount > 0 ? ' | 已填 <b style="color:var(--a366-success);">' + filledCount + '</b>' : ''}${wrongFilledCount > 0 ? ' | <span style="color:var(--a366-danger);">答错 ' + wrongFilledCount + '</span>' : ''}
             </div>
             <div style="font-size:15px;letter-spacing:2px;word-break:break-all;line-height:1.8;">${badges}</div>
         `;
 
         const fillAllBtn = document.getElementById('a366-auto-fill-all');
-        const stopBtn = document.getElementById('a366-stop-auto-fill');
-        if (state.autoFillRunning) {
-            fillAllBtn.style.display = 'none';
-            stopBtn.style.display = '';
-        } else {
-            fillAllBtn.style.display = list.length > 0 ? '' : 'none';
-            stopBtn.style.display = 'none';
-        }
+        fillAllBtn.style.display = questions.length > 0 ? '' : 'none';
     }
 
     // ==========================================
@@ -476,6 +514,505 @@
         }
     }
 
+    function searchHeight24(silent = false) {
+        if (!silent) {
+            addLog('搜索所有高度为24的选项...', 'info');
+        }
+
+        const allElements = document.querySelectorAll('body *');
+        const matchedResults = [];
+
+        allElements.forEach(el => {
+            if (el === container || container.contains(el) || el.contains(container)) return;
+            if (devPanel && (el === devPanel || devPanel.contains(el) || el.contains(devPanel))) return;
+            try {
+                const rect = el.getBoundingClientRect();
+                if (Math.round(rect.height) === 24 && rect.width > 0) {
+                    matchedResults.push(buildElementInfo(el, '高度=24'));
+                }
+            } catch(e) {}
+        });
+
+        state.currentResults = matchedResults;
+
+        if (!silent) {
+            if (matchedResults.length === 0) {
+                addLog('未找到高度为24的可见元素', 'warn');
+                resultsContainer.innerHTML = `<div style="color:var(--a366-text-muted);text-align:center;padding:12px;font-size:12px;">未找到匹配元素</div>`;
+            } else {
+                addLog(`共找到 ${matchedResults.length} 个高度为24的元素`, 'success');
+                renderResults(matchedResults);
+            }
+        }
+    }
+
+    function exportResults() {
+        const results = state.currentResults;
+        if (!results || results.length === 0) {
+            addLog('没有搜索结果可导出', 'warn');
+            return;
+        }
+
+        const lines = results.map((info, i) => {
+            const parts = [
+                `#${i + 1}`,
+                `<${info.tag}>`,
+                info.id ? `id=${info.id}` : '',
+                info.className ? `class=${info.className}` : '',
+                info.text ? `text="${info.text}"` : '',
+                `visible=${info.visible}`,
+                info.disabled ? 'disabled=true' : '',
+                `size=${info.size}`,
+                `position=${info.position}`,
+                info.type ? `type=${info.type}` : '',
+                info.name ? `name=${info.name}` : '',
+                info.role ? `role=${info.role}` : '',
+                info.ariaLabel ? `aria-label=${info.ariaLabel}` : '',
+                `strategy=${info.strategy}`,
+            ];
+            return parts.filter(Boolean).join(' | ');
+        });
+
+        const header = `自动基础听力RC - 搜索结果导出 (${results.length} 条) - ${new Date().toLocaleString('zh-CN')}`;
+        const content = header + '\n' + '='.repeat(header.length) + '\n\n' + lines.join('\n');
+
+        addLog('正在导出搜索结果...', 'info');
+
+        fetch(BUCKET_URL + '/save-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        })
+        .then(res => res.json())
+        .then(result => {
+            if (result.success) {
+                addLog('搜索结果已导出到: ' + result.path, 'success');
+            } else {
+                addLog('导出失败: ' + (result.error || '未知错误'), 'error');
+            }
+        })
+        .catch(err => {
+            addLog('导出失败: ' + err.message, 'error');
+        });
+    }
+
+    // ==========================================
+    // 题库重建算法（5阶段）
+    // ==========================================
+
+    function rebuildQuestions() {
+        const results = state.currentResults;
+        if (!results || results.length === 0) {
+            addLog('请先执行搜索（如"高度24"）再点重建', 'warn');
+            return;
+        }
+
+        addLog(`开始重建，输入元素 ${results.length} 个`, 'info');
+
+        const elements = [];
+        results.forEach((info, i) => {
+            const el = info.element;
+            if (!el || !document.contains(el)) return;
+            const rect = el.getBoundingClientRect();
+            const cls = (typeof el.className === 'string' ? el.className : '');
+            if (!cls) return;
+            elements.push({
+                index: i,
+                element: el,
+                className: cls,
+                text: (el.textContent || '').trim(),
+                x: Math.round(rect.left),
+                y: Math.round(rect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+            });
+        });
+
+        addLog(`有效元素 ${elements.length} 个（有 className）`, 'info');
+
+        // ===== 阶段一：X轴聚类，识别有效区域 =====
+        const optMarkEls = elements.filter(e => e.className.includes('u3-opt-mark'));
+        if (optMarkEls.length === 0) {
+            addLog('未找到 u3-opt-mark 元素，无法重建', 'warn');
+            return;
+        }
+
+        const xClusters = [];
+        optMarkEls.forEach(e => {
+            let found = false;
+            for (const cluster of xClusters) {
+                if (Math.abs(e.x - cluster.centerX) <= 50) {
+                    cluster.xs.push(e.x);
+                    cluster.centerX = cluster.xs.reduce((a, b) => a + b, 0) / cluster.xs.length;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) xClusters.push({ centerX: e.x, xs: [e.x] });
+        });
+        xClusters.sort((a, b) => a.centerX - b.centerX);
+        addLog(`阶段一：X轴聚类 ${xClusters.length} 个区域`, 'info');
+
+        // ===== 阶段二：按区域分组，区域内按Y排序 =====
+        const regionElements = [];
+        xClusters.forEach(cluster => {
+            const inRegion = elements.filter(e => {
+                for (const cx of cluster.xs) {
+                    if (Math.abs(e.x - cx) <= 50) return true;
+                }
+                return false;
+            });
+            inRegion.sort((a, b) => a.y - b.y || a.x - b.x);
+            regionElements.push(...inRegion);
+        });
+        addLog(`阶段二：有效区域内元素 ${regionElements.length} 个`, 'info');
+
+        // ===== 阶段三+四：题组分割 + 选项归组 =====
+        const questions = [];
+        let i = 0;
+        while (i < regionElements.length) {
+            const elem = regionElements[i];
+
+            if (elem.className.includes('u3-qst-num')) {
+                const qNum = parseInt(elem.text, 10);
+                if (isNaN(qNum)) { i++; continue; }
+
+                let qText = '';
+                for (let j = i + 1; j < regionElements.length; j++) {
+                    const candidate = regionElements[j];
+                    if (candidate.className.includes('u3-qst-text') && Math.abs(candidate.y - elem.y) <= 5) {
+                        qText = candidate.text;
+                        break;
+                    }
+                }
+
+                const q = { number: qNum, text: qText, options: [], _numElement: elem.element };
+                i++;
+
+                while (q.options.length < 3 && i < regionElements.length) {
+                    const cur = regionElements[i];
+                    if (cur.className.includes('u3-qst-num')) break;
+
+                    if (cur.className.includes('u3-opt-mark')) {
+                        const mark = cur.text;
+                        let content = '';
+                        let contentElement = null;
+                        for (let j = i + 1; j < regionElements.length; j++) {
+                            const cand = regionElements[j];
+                            if (cand.className.includes('u3-opt-cont') && Math.abs(cand.y - cur.y) <= 5) {
+                                content = cand.text;
+                                contentElement = cand.element;
+                                break;
+                            }
+                        }
+                        q.options.push({
+                            mark: mark,
+                            content: content,
+                            _markElement: cur.element,
+                            _contentElement: contentElement,
+                            _isCorrect: false,
+                        });
+                    }
+                    i++;
+                }
+                questions.push(q);
+            } else {
+                i++;
+            }
+        }
+        addLog(`阶段三/四：重建出 ${questions.length} 道题`, 'info');
+
+        // ===== 阶段五：跨区域去重 =====
+        const deduped = [];
+        const seen = new Set();
+        questions.forEach(q => {
+            if (!seen.has(q.number)) {
+                seen.add(q.number);
+                deduped.push(q);
+            } else {
+                const existing = deduped.find(d => d.number === q.number);
+                if (q.options.length > existing.options.length) {
+                    deduped[deduped.indexOf(existing)] = q;
+                }
+            }
+        });
+        deduped.sort((a, b) => a.number - b.number);
+        addLog(`阶段五：去重后 ${deduped.length} 道题`, 'info');
+
+        // ===== 正确选项匹配 =====
+        if (state.answerList.length > 0) {
+            let matchCount = 0;
+            deduped.forEach(q => {
+                const match = state.answerList.find(a => {
+                    const aqText = (a.questionText || a.question || '').trim();
+                    return aqText && normalizeText(aqText) === normalizeText(q.text);
+                });
+                if (match) {
+                    const answerContent = match.answer || '';
+                    const dotIdx = answerContent.indexOf('.');
+                    const correctContent = dotIdx >= 0 ? answerContent.substring(dotIdx + 1).trim() : answerContent.trim();
+                    q.options.forEach(opt => {
+                        if (normalizeText(opt.content) === normalizeText(correctContent)) {
+                            opt._isCorrect = true;
+                        }
+                    });
+                    q._matchedAnswer = match;
+                    matchCount++;
+                }
+            });
+            addLog(`正确选项匹配：${matchCount}/${deduped.length} 题`, matchCount > 0 ? 'success' : 'warn');
+        } else {
+            addLog('答案列表为空，无法标记正确选项', 'warn');
+        }
+
+        // ===== 页面DOM标记 =====
+        deduped.forEach(q => {
+            q.options.forEach(opt => {
+                if (opt._isCorrect && opt._markElement && document.contains(opt._markElement)) {
+                    opt._markElement.style.outline = '3px solid var(--a366-success)';
+                    opt._markElement.style.background = 'var(--a366-success-light)';
+                }
+                if (opt._isCorrect && opt._contentElement && document.contains(opt._contentElement)) {
+                    opt._contentElement.style.outline = '3px solid var(--a366-success)';
+                    opt._contentElement.style.background = 'var(--a366-success-light)';
+                }
+            });
+        });
+
+        state.rebuildResults = deduped;
+        renderRebuildResults();
+        updateScorePreview();
+        renderMainFillSection();
+    }
+
+    function renderRebuildResults() {
+        const tabContainer = document.getElementById('a366-dev-tab-rebuild');
+        if (!tabContainer) return;
+
+        const questions = state.rebuildResults;
+        if (questions.length === 0) {
+            tabContainer.innerHTML = `<div style="font-size:11px;color:var(--a366-text-muted);text-align:center;padding:20px;">获取答案后将自动执行重建</div>`;
+            return;
+        }
+
+        const matchedCount = questions.filter(q => !!q._matchedAnswer).length;
+        const correctCount = questions.reduce((sum, q) => sum + q.options.filter(o => o._isCorrect).length, 0);
+        let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:11px;color:var(--a366-primary);">重建结果：${questions.length} 道题 | 已匹配 ${matchedCount} 题 | 正确选项 ${correctCount} 个</span>
+            <button id="a366-rebuild-fill-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 10px;font-size:11px;cursor:pointer;font-weight:500;">一键填答</button>
+        </div>`;
+
+        questions.forEach(q => {
+            const hasMatch = !!q._matchedAnswer;
+            const headerColor = hasMatch ? 'var(--a366-success)' : 'var(--a366-text)';
+            html += `
+            <div style="border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:6px 8px;background:var(--a366-bg);margin-bottom:6px;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                    <span style="font-weight:600;color:var(--a366-primary);font-size:12px;">#${q.number}</span>
+                    ${hasMatch ? '<span style="color:var(--a366-success);font-size:10px;">✓ 已匹配</span>' : '<span style="color:var(--a366-text-muted);font-size:10px;">未匹配</span>'}
+                </div>
+                <div style="font-size:12px;color:${headerColor};word-break:break-all;margin-bottom:4px;">${escapeHtml(q.text)}</div>`;
+
+            q.options.forEach(opt => {
+                const optBg = opt._isCorrect ? 'var(--a366-success-light)' : 'var(--a366-bg-secondary)';
+                const optBorder = opt._isCorrect ? 'border-left:3px solid var(--a366-success);' : 'border-left:3px solid transparent;';
+                html += `
+                <div style="${optBorder}padding:3px 8px;background:${optBg};margin:2px 0;border-radius:0 var(--a366-radius-sm) var(--a366-radius-sm) 0;font-size:11px;display:flex;gap:6px;align-items:center;">
+                    <b>${escapeHtml(opt.mark)}</b>
+                    <span style="word-break:break-all;">${escapeHtml(opt.content)}</span>
+                    ${opt._isCorrect ? '<span style="color:var(--a366-success);font-weight:600;">✓</span>' : ''}
+                </div>`;
+            });
+
+            html += `</div>`;
+        });
+
+        tabContainer.innerHTML = html;
+
+        const fillBtn = document.getElementById('a366-rebuild-fill-btn');
+        if (fillBtn) fillBtn.addEventListener('click', rebuildFillAll);
+    }
+
+    // ==========================================
+    // 控分设置 tab
+    // ==========================================
+
+    function updateScorePreview() {
+        const total = state.rebuildResults.length;
+        const info = document.getElementById('a366-score-info');
+        const sliderWrap = document.getElementById('a366-score-slider-wrap');
+        const slider = document.getElementById('a366-score-slider');
+        const currentLabel = document.getElementById('a366-score-current');
+        const preview = document.getElementById('a366-score-preview');
+
+        const targetScore = parseFloat(slider ? slider.value : 0) || 0;
+        if (currentLabel) currentLabel.textContent = targetScore.toFixed(1) + ' 分';
+
+        if (total === 0) {
+            if (info) info.textContent = '请先执行重建';
+            if (sliderWrap) sliderWrap.style.display = 'none';
+            return;
+        }
+
+        const maxScore = total * 1.5;
+        if (info) info.textContent = `满分 ${maxScore.toFixed(1)} 分（${total} 题 × 1.5）`;
+        if (sliderWrap) sliderWrap.style.display = 'flex';
+
+        const correctCount = Math.min(total, Math.round(targetScore / 1.5));
+        const wrongCount = total - correctCount;
+
+        if (preview) preview.innerHTML = `答对：<span style="color:#28a745;">${correctCount} 题</span> | 答错：<span style="color:#dc3545;">${wrongCount} 题</span>`;
+    }
+
+    function bindScoreSlider() {
+        const scoreSlider = document.getElementById('a366-score-slider');
+        if (scoreSlider) {
+            scoreSlider.addEventListener('input', () => { updateScorePreview(); });
+            scoreSlider.addEventListener('change', () => {
+                const total = state.rebuildResults.length;
+                if (total === 0) return;
+                const targetScore = parseFloat(scoreSlider.value) || 0;
+                const correctCount = Math.min(total, Math.round(targetScore / 1.5));
+                const wrongCount = total - correctCount;
+                state.targetWrongCount = wrongCount;
+                addLog(`[控分] 目标得分 ${targetScore.toFixed(1)} 分 | 答对 ${correctCount} | 答错 ${wrongCount}`, 'success');
+                renderMainFillSection();
+            });
+        }
+    }
+
+    // ==========================================
+    // 基于重建结果的一键填答（新算法，含控分）
+    // ==========================================
+
+    function rebuildFillAll() {
+        const questions = state.rebuildResults;
+        if (questions.length === 0) {
+            addLog('[重建填答] 无重建结果，请先获取答案', 'warn');
+            return;
+        }
+
+        const total = questions.length;
+        const wrongCount = state.targetWrongCount || 0;
+        const plan = buildFillPlan(total, wrongCount);
+        addLog(`[重建填答] 控分计划：答对 ${plan.correctCount} | 答错 ${plan.wrongCount}`, 'info');
+
+        let filled = 0, wrongFilled = 0, failed = 0;
+
+        questions.forEach((q, idx) => {
+            const isWrong = plan.wrongSet.has(idx);
+
+            const correctOpt = q.options.find(o => o._isCorrect);
+
+            if (isWrong) {
+                const wrongOpt = q.options.find(o => !o._isCorrect && o._markElement);
+                if (wrongOpt) {
+                    const result = clickOption(wrongOpt, q, 'wrong');
+                    if (result) { wrongFilled++; q._filled = 'wrong'; } else { failed++; }
+                } else {
+                    failed++;
+                    addLog(`[重建填答] #${q.number} 无可答错的选项`, 'warn');
+                }
+                return;
+            }
+
+            if (!correctOpt || !correctOpt._markElement) {
+                failed++;
+                addLog(`[重建填答] #${q.number} 无正确选项或元素不在DOM`, 'warn');
+                return;
+            }
+            const result = clickOption(correctOpt, q, 'correct');
+            if (result) { filled++; q._filled = true; } else { failed++; }
+        });
+
+        addLog(`[重建填答] 完成：答对 ${filled} / 答错 ${wrongFilled} / 失败 ${failed}`, (filled + wrongFilled) > 0 ? 'success' : 'error');
+        renderMainFillSection();
+        renderRebuildResults();
+    }
+
+    // 重建填答的点击选项逻辑
+    function clickOption(opt, q, mode) {
+        const markEl = opt._markElement;
+        const contentEl = opt._contentElement;
+        let clickTarget = null;
+        let clickMethod = '';
+
+        // 策略1：标记元素内找 input
+        if (markEl && document.contains(markEl)) {
+            const input = markEl.querySelector('input[type="radio"], input[type="checkbox"]');
+            if (input) { clickTarget = input; clickMethod = 'mark$>input'; }
+        }
+
+        // 策略2：父级选项容器内找 input
+        if (!clickTarget && markEl && document.contains(markEl)) {
+            let parent = markEl.parentElement;
+            for (let depth = 0; depth < 3 && parent; depth++) {
+                const input = parent.querySelector('input[type="radio"], input[type="checkbox"]');
+                if (input && !isForeignElement(input)) {
+                    clickTarget = input; clickMethod = 'parent(' + depth + ')$>input'; break;
+                }
+                parent = parent.parentElement;
+            }
+        }
+
+        // 策略3：直接点击 mark 元素
+        if (!clickTarget && markEl && document.contains(markEl)) {
+            clickTarget = markEl; clickMethod = 'mark.click';
+        }
+
+        // 策略4：点击 content 元素
+        if (!clickTarget && contentEl && document.contains(contentEl)) {
+            clickTarget = contentEl; clickMethod = 'content.click';
+        }
+
+        if (clickTarget) {
+            try {
+                const outlineColor = mode === 'correct' ? 'var(--a366-success)' : '#dc3545';
+                if (markEl && document.contains(markEl)) {
+                    markEl.style.outline = '3px solid ' + outlineColor;
+                    markEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                clickTarget.click();
+                const modeLabel = mode === 'correct' ? '✓' : '✗';
+                addLog(`[重建填答] #${q.number} ${modeLabel} ${opt.mark} ${escapeHtml(opt.content.substring(0, 30))} → ${clickMethod}`, mode === 'correct' ? 'click' : 'warn');
+                setTimeout(() => {
+                    if (markEl && document.contains(markEl)) markEl.style.outline = '';
+                }, 1000);
+                return true;
+            } catch (e) {
+                addLog(`[重建填答] #${q.number} 点击异常: ${e.message}`, 'error');
+                return false;
+            }
+        } else {
+            addLog(`[重建填答] #${q.number} 无可点击目标`, 'warn');
+            return false;
+        }
+    }
+
+    // ==========================================
+    // 控分计划计算
+    // ==========================================
+
+    function buildFillPlan(total, wrongCount) {
+        const totalNum = Math.max(0, parseInt(total) || 0);
+        const wrongNum = Math.max(0, Math.min(totalNum, parseInt(wrongCount) || 0));
+        const correctCount = totalNum - wrongNum;
+
+        const indices = Array.from({ length: totalNum }, (_, i) => i);
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+
+        const wrongSet = new Set(wrongNum > 0 ? indices.slice(0, wrongNum) : []);
+
+        return { wrongSet, correctCount, wrongCount: wrongNum };
+    }
+
+    // ==========================================
+    // 交卷与自动流程
+    // ==========================================
+
     function submitExam() {
         addLog('开始交卷：搜索提交按钮元素', 'info');
 
@@ -507,6 +1044,172 @@
         });
     }
 
+    function clickStartBtn() {
+        let btn = document.querySelector('.start-btn-text');
+        if (btn) {
+            btn.click();
+            return true;
+        }
+        const allElements = document.querySelectorAll('button, span, div, a');
+        for (const el of allElements) {
+            if (el === container || container.contains(el)) continue;
+            if (devPanel && (el === devPanel || devPanel.contains(el))) continue;
+            const text = (el.textContent || '').trim();
+            if (text === '去做题') {
+                el.click();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function clickConfirmSubmitBtn() {
+        const popups = document.querySelectorAll('.u3compo-popup');
+        for (const popup of popups) {
+            const btnList = popup.querySelector('.u3-button-list.u3-button-double');
+            if (!btnList) continue;
+
+            const btns = btnList.querySelectorAll('.u3-button');
+            for (const btn of btns) {
+                if ((btn.textContent || '').trim() === '交卷') {
+                    btn.click();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    async function waitAndClickConfirmSubmit(maxWait = 5000) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < maxWait) {
+            if (clickConfirmSubmitBtn()) {
+                return true;
+            }
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        return false;
+    }
+
+    async function executeAuto() {
+        addLog('━━━━━━━━ 自动流程开始 ━━━━━━━', 'info');
+
+        const startBtnClicked = clickStartBtn();
+        if (startBtnClicked) {
+            addLog('检测到试题预览页，已点击「去做题」', 'success');
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (state.answerList.length === 0) {
+            await fetchAnswers();
+            if (state.answerList.length === 0) {
+                addLog('获取答案失败，自动流程终止', 'error');
+                return;
+            }
+        }
+
+        if (state.rebuildResults.length === 0) {
+            addLog('重建结果为空，自动流程终止', 'error');
+            return;
+        }
+
+        addLog('开始一键填答', 'info');
+        rebuildFillAll();
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        addLog('开始交卷流程', 'info');
+        submitExam();
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        addLog('等待交卷确认弹窗...', 'info');
+        const confirmed = await waitAndClickConfirmSubmit(5000);
+        if (confirmed) {
+            addLog('已点击确认交卷按钮', 'success');
+        } else {
+            addLog('未检测到交卷确认弹窗', 'warn');
+        }
+
+        addLog('━━━━━━━━ 自动流程结束 ━━━━━━━━', 'info');
+    }
+
+    // ==========================================
+    // 答案获取（获取后自动触发 searchHeight24 → rebuildQuestions）
+    // ==========================================
+
+    async function fetchAnswers() {
+        state.answerLoading = true;
+        state.answerError = null;
+
+        try {
+            const resp = await fetch(BUCKET_URL + ANSWER_PATH);
+
+            if (resp.status === 404) {
+                let errorDetail = '答案尚未提取，请先在主程序中启动代理捕获答案';
+                try {
+                    const errData = await resp.json();
+                    if (errData.error) errorDetail = errData.error;
+                } catch(_) {}
+                throw new Error(errorDetail);
+            }
+
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+            const data = await resp.json();
+
+            let rawAnswers = [];
+            if (Array.isArray(data)) {
+                rawAnswers = data;
+            } else if (data && Array.isArray(data.answers)) {
+                rawAnswers = data.answers;
+            }
+
+            const filtered = rawAnswers.filter(a => TARGET_PATTERNS.includes(a.pattern));
+            state.answerList = filtered;
+
+            if (filtered.length > 0) {
+                addLog(`获取答案成功：${filtered.length} 条听后选择题`, 'success');
+            } else {
+                addLog(`获取到 ${rawAnswers.length} 条答案，但无听后选择题`, 'warn');
+            }
+
+            renderMainFillSection();
+
+            // 获取答案后轮询：每0.2s执行searchHeight24，结果>=240时自动重建
+            if (filtered.length > 0) {
+                updateWaitingLog('等待测试开始...', 'info', 'poll-waiting');
+                const pollTimer = setInterval(() => {
+                    searchHeight24(true); // 静默模式，不输出日志
+                    const count = state.currentResults.length;
+                    if (count >= 240) {
+                        clearInterval(pollTimer);
+                        updateWaitingLog(`已找到 ${count} 个元素，开始重建`, 'success', 'poll-waiting');
+                        rebuildQuestions();
+                    } else {
+                        updateWaitingLog(`等待测试开始... (已找到 ${count} 个)`, 'info', 'poll-waiting');
+                    }
+                }, 200);
+            }
+
+        } catch(e) {
+            state.answerError = e.message;
+            const isNetworkError = e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('fetch');
+            if (isNetworkError) {
+                addLog(`获取答案失败: 无法连接服务器，请确认代理服务器已启动`, 'error');
+            } else {
+                addLog(`获取答案失败: ${escapeHtml(e.message)}`, 'error');
+            }
+            renderMainFillSection();
+        } finally {
+            state.answerLoading = false;
+        }
+    }
+
+    // ==========================================
+    // 搜索结果渲染
+    // ==========================================
+
     function buildElementInfo(el, strategyName) {
         const rect = el.getBoundingClientRect();
         const cs = getComputedStyle(el);
@@ -535,17 +1238,30 @@
 
     function renderResults(results) {
         if (!resultsContainer) return;
-        let html = `<div style="font-size:11px;color:var(--a366-primary);margin-bottom:4px;">匹配结果 (${results.length})</div>`;
+        const full = state.fullDisplay;
+        const fullBtnStyle = full
+            ? 'background:var(--a366-primary);color:#fff;'
+            : 'background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);';
+        let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="font-size:11px;color:var(--a366-primary);">匹配结果 (${results.length})</span>
+            <div style="display:flex;gap:4px;">
+                <button id="a366-rebuild-btn" style="background:var(--a366-warning);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:1px 8px;font-size:10px;cursor:pointer;font-weight:500;">重建</button>
+                <button id="a366-export-results-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:1px 8px;font-size:10px;cursor:pointer;font-weight:500;">导出</button>
+                <button id="a366-full-toggle" style="${fullBtnStyle}border:none;border-radius:var(--a366-radius-sm);padding:1px 8px;font-size:10px;cursor:pointer;font-weight:500;">${full ? '紧凑' : '全量'}</button>
+            </div>
+        </div>`;
         results.forEach((info, i) => {
             const visColor = info.visible ? 'var(--a366-success)' : 'var(--a366-danger)';
+            const clsDisplay = full ? escapeHtml(info.className) : escapeHtml(info.className.substring(0, 50));
+            const textDisplay = full ? escapeHtml(info.text) : escapeHtml(info.text.substring(0, 60));
             html += `
             <div style="border-left:3px solid ${visColor};margin:4px 0;padding:4px 8px;background:var(--a366-bg-secondary);border-radius:0 var(--a366-radius-sm) var(--a366-radius-sm) 0;font-size:11px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <b style="color:var(--a366-primary);">#${i + 1}</b>
                     <span style="color:var(--a366-text-muted);font-size:10px;">${escapeHtml(info.strategy)}</span>
                 </div>
-                <div>&lt;<b>${info.tag}</b>&gt; ${info.id ? '<span style="color:var(--a366-warning);">#' + escapeHtml(info.id) + '</span> ' : ''}<span style="color:var(--a366-text-secondary);">${escapeHtml(info.className.substring(0, 50))}</span></div>
-                <div style="color:var(--a366-text);word-break:break-all;">${escapeHtml(info.text.substring(0, 60)) || '<span style="color:var(--a366-text-muted);">(无文本)</span>'}</div>
+                <div>&lt;<b>${info.tag}</b>&gt; ${info.id ? '<span style="color:var(--a366-warning);">#' + escapeHtml(info.id) + '</span> ' : ''}<span style="color:var(--a366-text-secondary);word-break:break-all;">${clsDisplay}</span></div>
+                <div style="color:var(--a366-text);word-break:break-all;">${textDisplay || '<span style="color:var(--a366-text-muted);">(无文本)</span>'}</div>
                 <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
                     <span style="color:${visColor};">${info.visible ? '可见' : '隐藏'}</span>
                     ${info.disabled ? '<span style="color:var(--a366-danger);">禁用</span>' : ''}
@@ -563,6 +1279,23 @@
             </div>`;
         });
         resultsContainer.innerHTML = html;
+
+        const fullToggle = document.getElementById('a366-full-toggle');
+        if (fullToggle) fullToggle.addEventListener('click', () => {
+            state.fullDisplay = !state.fullDisplay;
+            renderResults(state.currentResults);
+        });
+
+        const exportBtn = document.getElementById('a366-export-results-btn');
+        if (exportBtn) exportBtn.addEventListener('click', exportResults);
+
+        const rebuildBtn = document.getElementById('a366-rebuild-btn');
+        if (rebuildBtn) rebuildBtn.addEventListener('click', () => {
+            rebuildQuestions();
+            switchDevTab('dev-rebuild');
+        });
+
+        updateScorePreview();
 
         resultsContainer.querySelectorAll('.a366-add-queue').forEach(btn => {
             btn.addEventListener('click', (e) => { addToQueue(parseInt(btn.dataset.index)); e.stopPropagation(); });
@@ -701,7 +1434,7 @@
     }
 
     // ==========================================
-    // 测试队列（开发者面板）
+    // 测试队列
     // ==========================================
 
     function addToQueue(resultIndex) {
@@ -829,573 +1562,8 @@
     }
 
     // ==========================================
-    // 答案获取与列表（开发者面板）
+    // 工具函数
     // ==========================================
-
-    async function fetchAnswers() {
-        const statusEl = document.getElementById('a366-answer-status');
-        const fetchBtn = document.getElementById('a366-fetch-answers');
-        if (statusEl) statusEl.textContent = '正在获取...';
-        if (fetchBtn) fetchBtn.disabled = true;
-        state.answerLoading = true;
-        state.answerError = null;
-
-        try {
-            const resp = await fetch(BUCKET_URL + ANSWER_PATH);
-
-            if (resp.status === 404) {
-                let errorDetail = '答案尚未提取，请先在主程序中启动代理捕获答案';
-                try {
-                    const errData = await resp.json();
-                    if (errData.error) errorDetail = errData.error;
-                } catch(_) {}
-                throw new Error(errorDetail);
-            }
-
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-            const data = await resp.json();
-
-            let rawAnswers = [];
-            if (Array.isArray(data)) {
-                rawAnswers = data;
-            } else if (data && Array.isArray(data.answers)) {
-                rawAnswers = data.answers;
-            }
-
-            const filtered = rawAnswers.filter(a => TARGET_PATTERNS.includes(a.pattern));
-            state.answerList = filtered;
-
-            const infoEl = document.getElementById('a366-answer-info');
-            if (infoEl) {
-                infoEl.style.display = 'block';
-                infoEl.innerHTML = `原始答案 ${rawAnswers.length} 条 | 筛选「听后选择」${filtered.length} 条 | 端口: ${BUCKET_URL.replace('http://127.0.0.1:', '')}`;
-            }
-
-            if (filtered.length > 0) {
-                addLog(`获取答案成功：${filtered.length} 条听后选择题`, 'success');
-            } else {
-                addLog(`获取到 ${rawAnswers.length} 条答案，但无听后选择题`, 'warn');
-            }
-
-            renderAnswerList();
-            applyFillPlan();
-            renderMainFillSection();
-            if (statusEl) statusEl.textContent = '';
-
-        } catch(e) {
-            state.answerError = e.message;
-            if (statusEl) statusEl.textContent = '';
-            const isNetworkError = e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('fetch');
-            if (isNetworkError) {
-                addLog(`获取答案失败: 无法连接服务器，请确认代理服务器已启动`, 'error');
-                if (answerListContainer) {
-                    answerListContainer.innerHTML = `<div style="color:var(--a366-danger);text-align:center;padding:20px;font-size:12px;">无法连接服务器<br><span style="color:var(--a366-text-muted);">请确认主程序代理服务器已启动 (${escapeHtml(BUCKET_URL)})</span></div>`;
-                }
-            } else {
-                addLog(`获取答案失败: ${escapeHtml(e.message)}`, 'error');
-                if (answerListContainer) {
-                    answerListContainer.innerHTML = `<div style="color:var(--a366-danger);text-align:center;padding:20px;font-size:12px;">${escapeHtml(e.message)}<br><span style="color:var(--a366-text-muted);">请在主程序中启动代理捕获答案后重试</span></div>`;
-                }
-            }
-            renderMainFillSection();
-        } finally {
-            state.answerLoading = false;
-            if (fetchBtn) fetchBtn.disabled = false;
-        }
-    }
-
-    function renderAnswerList() {
-        if (!answerListContainer) return;
-        const list = state.answerList;
-        if (list.length === 0) {
-            answerListContainer.innerHTML = `<div style="color:var(--a366-text-muted);text-align:center;padding:20px;font-size:12px;">暂无答案数据</div>`;
-            return;
-        }
-
-        let html = '';
-        list.forEach((ans, i) => {
-            const patternColor = ans.pattern === '听后选择-嵌套' ? 'var(--a366-info)' : 'var(--a366-primary)';
-            const patternBg = 'var(--a366-primary-light)';
-            const questionText = ans.questionText || ans.question || '未知题目';
-            const answerText = ans.answer || '无答案';
-            const fillStatus = ans._fillStatus || 'pending';
-
-            let statusBadge = '';
-            if (fillStatus === 'filling') statusBadge = `<span style="color:var(--a366-warning);font-size:10px;">填答中</span>`;
-            else if (fillStatus === 'filled' && ans._fillMode === 'wrong') statusBadge = `<span style="color:var(--a366-danger);font-size:10px;">故意错</span>`;
-            else if (fillStatus === 'filled') statusBadge = `<span style="color:var(--a366-success);font-size:10px;">已填答</span>`;
-            else if (fillStatus === 'skipped') statusBadge = `<span style="color:var(--a366-text-muted);font-size:10px;">已跳过</span>`;
-
-            const borderLeft = fillStatus === 'filled' && ans._fillMode === 'wrong' ? 'border-left:3px solid var(--a366-danger);' : fillStatus === 'filled' ? 'border-left:3px solid var(--a366-success);' : fillStatus === 'skipped' ? 'border-left:3px solid var(--a366-text-muted);' : '';
-            html += `
-            <div style="border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);padding:8px 10px;background:var(--a366-bg);${borderLeft}">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="font-weight:600;color:var(--a366-text);font-size:12px;">#${i + 1}</span>
-                        <span style="background:${patternBg};color:${patternColor};padding:1px 6px;border-radius:var(--a366-radius-sm);font-size:10px;font-weight:500;">${escapeHtml(ans.pattern)}</span>
-                        ${statusBadge}
-                    </div>
-                    <div style="display:flex;gap:4px;">
-                        <button class="a366-fill-one" data-index="${i}" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:2px 8px;font-size:10px;cursor:pointer;">填答</button>
-                        <button class="a366-copy-answer" data-index="${i}" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:2px 8px;font-size:10px;cursor:pointer;">复制</button>
-                    </div>
-                </div>
-                <div style="font-size:12px;color:var(--a366-text);margin-bottom:2px;word-break:break-all;">${escapeHtml(questionText.substring(0, 80))}</div>
-                <div style="font-size:12px;color:var(--a366-success);font-weight:500;word-break:break-all;">${escapeHtml(answerText.substring(0, 80))}</div>
-            </div>`;
-        });
-
-        answerListContainer.innerHTML = html;
-
-        answerListContainer.querySelectorAll('.a366-fill-one').forEach(btn => {
-            btn.addEventListener('click', (e) => { fillOneAnswer(parseInt(btn.dataset.index)); e.stopPropagation(); });
-        });
-        answerListContainer.querySelectorAll('.a366-copy-answer').forEach(btn => {
-            btn.addEventListener('click', (e) => { copyAnswerText(parseInt(btn.dataset.index)); e.stopPropagation(); });
-        });
-    }
-
-    function copyAnswerText(idx) {
-        const ans = state.answerList[idx];
-        if (!ans) return;
-        const text = ans.answer || '';
-        try {
-            navigator.clipboard.writeText(text).then(() => {
-                addLog(`已复制答案 #${idx + 1}`, 'success');
-            }).catch(() => {
-                const ta = document.createElement('textarea');
-                ta.value = text;
-                ta.style.cssText = 'position:fixed;left:-9999px;';
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                addLog(`已复制答案 #${idx + 1}`, 'success');
-            });
-        } catch(e) {
-            addLog(`复制失败: ${escapeHtml(e.message)}`, 'error');
-        }
-    }
-
-    // ==========================================
-    // 填答逻辑
-    // ==========================================
-
-    function fillOneAnswer(idx, forceWrong = false) {
-        const ans = state.answerList[idx];
-        if (!ans) return;
-
-        ans._fillStatus = 'filling';
-        renderAnswerList();
-        renderMainFillSection();
-
-        const answerText = ans.answer || '';
-        const dotIndex = answerText.indexOf('.');
-        const optionId = dotIndex > 0 ? answerText.substring(0, dotIndex).trim() : '';
-        const optionContent = dotIndex >= 0 ? answerText.substring(dotIndex + 1).trim() : answerText.trim();
-
-        if (forceWrong) {
-            addLog(`开始填答 #${idx + 1}（故意选错）: ${escapeHtml((ans.questionText || '').substring(0, 40))}`, 'info');
-            addLog(`  正确答案: "${escapeHtml(optionContent)}"`, 'info');
-
-            const found = findAndClickWrongOption(optionId, optionContent, ans);
-            if (found) {
-                ans._fillStatus = 'filled';
-                ans._fillMode = 'wrong';
-                addLog(`#${idx + 1} 已选择错误选项`, 'success');
-            } else {
-                ans._fillStatus = 'skipped';
-                addLog(`#${idx + 1} 选择错误选项失败，已跳过`, 'warn');
-            }
-        } else {
-            addLog(`开始填答 #${idx + 1}: ${escapeHtml((ans.questionText || '').substring(0, 40))}`, 'info');
-            addLog(`  匹配文本: "${escapeHtml(optionContent)}"`, 'info');
-
-            const found = findAndClickOption(optionId, optionContent, ans);
-            if (found) {
-                ans._fillStatus = 'filled';
-                ans._fillMode = 'correct';
-                addLog(`#${idx + 1} 填答成功`, 'success');
-            } else {
-                ans._fillStatus = 'skipped';
-                addLog(`#${idx + 1} 未找到匹配选项，已跳过`, 'warn');
-            }
-        }
-        renderAnswerList();
-        renderMainFillSection();
-    }
-
-    function findAndClickOption(optionId, optionContent, answerObj) {
-        const pageWrap = document.getElementById('page-wrap');
-        const scope = pageWrap || document.body;
-        const normalizedAnswer = normalizeText(optionContent);
-
-        // 策略1：通过选项类名选择器精确匹配
-        const optionSelectors = [
-            '.option-item', '.option', '.choice-item', '.choice', '.answer-item', '.answer',
-            '.question-option', '.exam-option', '.select-option', '.item-option'
-        ];
-        for (const selector of optionSelectors) {
-            const items = scope.querySelectorAll(selector);
-            for (const item of items) {
-                if (isForeignElement(item)) continue;
-                if (normalizeText(item.textContent) === normalizedAnswer) {
-                    addLog(`  通过选项选择器 ${selector} 匹配点击`, 'click');
-                    item.style.outline = '3px solid var(--a366-success)';
-                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    setTimeout(() => { item.style.outline = ''; }, 1500);
-                    item.click();
-                    return true;
-                }
-            }
-        }
-
-        // 策略2：全局文本搜索兜底
-        const allElements = scope.querySelectorAll('*');
-        const candidates = [];
-        for (const el of allElements) {
-            if (isForeignElement(el)) continue;
-            try {
-                const text = (el.textContent || '').trim();
-                if (normalizeText(text) === normalizedAnswer) {
-                    const tag = el.tagName.toLowerCase();
-                    if (['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag)) {
-                        const rect = el.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {
-                            candidates.push({ element: el, height: Math.round(rect.height) });
-                        }
-                    }
-                }
-            } catch(e) {}
-        }
-
-        if (candidates.length === 0) return false;
-
-        let target;
-        const height24 = candidates.filter(c => c.height === 24);
-        if (height24.length > 0) {
-            target = height24[0].element;
-            addLog(`  通过搜索匹配点击: 高度=${24} (${candidates.length}个候选)`, 'click');
-        } else {
-            candidates.sort((a, b) => a.height - b.height);
-            target = candidates[0].element;
-            addLog(`  通过搜索匹配点击: 最小高度=${candidates[0].height} (${candidates.length}个候选)`, 'click');
-        }
-
-        target.style.outline = '3px solid var(--a366-success)';
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => { target.style.outline = ''; }, 1500);
-        target.click();
-        return true;
-    }
-
-    function findAndClickWrongOption(optionId, optionContent, answerObj) {
-        const pageWrap = document.getElementById('page-wrap');
-        const scope = pageWrap || document.body;
-        const normalizedAnswer = normalizeText(optionContent);
-        const optionSelectors = [
-            '.option-item', '.option', '.choice-item', '.choice', '.answer-item', '.answer',
-            '.question-option', '.exam-option', '.select-option', '.item-option'
-        ];
-
-        // 辅助：找元素内最合适的点击目标（radio/checkbox 优先，避免只点到字母标签）
-        function getClickTarget(el) {
-            if (!el) return null;
-            const input = el.querySelector('input[type="radio"], input[type="checkbox"]');
-            if (input) return input;
-            const text = (el.textContent || '').trim();
-            // 如果当前元素文本只是选项字母（如 "A" / "A."），向上找到完整选项元素
-            if (/^[A-Da-d](\.|\))?$/.test(text)) {
-                let parent = el.parentElement;
-                while (parent && parent !== document.body) {
-                    const parentInput = parent.querySelector('input[type="radio"], input[type="checkbox"]');
-                    if (parentInput) return parentInput;
-                    const parentText = (parent.textContent || '').trim();
-                    if (isOptionElement(parent) && parentText.length > text.length + 1) {
-                        return parent;
-                    }
-                    parent = parent.parentElement;
-                }
-            }
-            return el;
-        }
-
-        // 辅助：判断元素是否属于选项元素
-        function isOptionElement(el) {
-            return optionSelectors.some(sel => el.matches && el.matches(sel));
-        }
-
-        // 辅助：向上找到完整选项元素（含 input 或文本包含当前元素且更长的选项祖先）
-        function findOptionRoot(el) {
-            // 方法1：找包含 input 的最小祖先
-            let current = el;
-            while (current && current !== document.body) {
-                if (current.querySelector('input[type="radio"], input[type="checkbox"]')) {
-                    return current;
-                }
-                current = current.parentElement;
-            }
-
-            // 方法2：向上找到文本包含 el.textContent 且更长、并匹配选项选择器的祖先
-            let best = el;
-            let bestText = (el.textContent || '').trim();
-            let parent = el.parentElement;
-            while (parent && parent !== document.body) {
-                const parentText = (parent.textContent || '').trim();
-                if (parentText.length > bestText.length && parentText.includes(bestText)) {
-                    if (isOptionElement(parent)) {
-                        best = parent;
-                        bestText = parentText;
-                    }
-                }
-                parent = parent.parentElement;
-            }
-            return best;
-        }
-
-        // ===== 第一步：定位文本匹配的元素 =====
-        let textMatchEl = null;
-        for (const selector of optionSelectors) {
-            const items = scope.querySelectorAll(selector);
-            for (const item of items) {
-                if (isForeignElement(item)) continue;
-                if (normalizeText(item.textContent) === normalizedAnswer) {
-                    textMatchEl = item;
-                    break;
-                }
-            }
-            if (textMatchEl) break;
-        }
-
-        // 兜底：全局文本搜索
-        if (!textMatchEl) {
-            const allElements = scope.querySelectorAll('*');
-            const correctCandidates = [];
-            for (const el of allElements) {
-                if (isForeignElement(el)) continue;
-                const text = (el.textContent || '').trim();
-                if (normalizeText(text) === normalizedAnswer) {
-                    const tag = el.tagName.toLowerCase();
-                    if (['div', 'span', 'li', 'label', 'button', 'a', 'p'].includes(tag)) {
-                        const rect = el.getBoundingClientRect();
-                        if (rect.width > 0 && rect.height > 0) {
-                            correctCandidates.push(el);
-                        }
-                    }
-                }
-            }
-            if (correctCandidates.length === 0) {
-                addLog('  未找到正确选项元素，无法选择错误选项', 'warn');
-                return false;
-            }
-            const height24 = correctCandidates.filter(c => Math.round(c.getBoundingClientRect().height) === 24);
-            textMatchEl = height24.length > 0 ? height24[0] : correctCandidates.sort((a, b) => a.getBoundingClientRect().height - b.getBoundingClientRect().height)[0];
-        }
-
-        // ===== 第二步：将文本元素提升为完整选项元素 =====
-        const correctOption = findOptionRoot(textMatchEl);
-        addLog('  定位到正确答案选项元素', 'info');
-
-        const correctRect = correctOption.getBoundingClientRect();
-        const correctTag = correctOption.tagName;
-        const correctHeight = Math.round(correctRect.height);
-        const correctInput = correctOption.querySelector('input[type="radio"], input[type="checkbox"]');
-
-        // ===== 第三步：收集同一道题目的其他选项元素 =====
-        let wrongCandidates = [];
-
-        // 策略 A-1：通过 input name 分组直接定位同题其他选项（最可靠）
-        if (correctInput) {
-            const inputName = correctInput.getAttribute('name');
-            if (inputName) {
-                const sameNameInputs = Array.from(scope.querySelectorAll('input[type="radio"], input[type="checkbox"]')).filter(input => input.getAttribute('name') === inputName);
-                const otherInputs = sameNameInputs.filter(input => input !== correctInput && !correctOption.contains(input));
-                if (otherInputs.length > 0) {
-                    wrongCandidates = otherInputs.map(input => {
-                        const el = input.closest(optionSelectors.join(',')) || input.parentElement || input;
-                        const rect = el.getBoundingClientRect();
-                        return {
-                            element: el,
-                            source: 'input-name',
-                            hasInput: true,
-                            distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
-                        };
-                    });
-                    addLog(`  通过 input name="${inputName}" 找到 ${otherInputs.length} 个其他选项`, 'info');
-                }
-            }
-        }
-
-        // 策略 A-2：如果正确选项内部有 input，找同一选项组（同一父容器）内其他含 input 的兄弟
-        if (wrongCandidates.length === 0 && correctInput) {
-            let groupContainer = correctOption.parentElement;
-            for (let i = 0; i < 4 && groupContainer; i++) {
-                const siblings = Array.from(groupContainer.children).filter(child => {
-                    if (child === correctOption || correctOption.contains(child) || child.contains(correctOption)) return false;
-                    if (isForeignElement(child)) return false;
-                    const input = child.querySelector('input[type="radio"], input[type="checkbox"]');
-                    if (!input) return false;
-                    const text = (child.textContent || '').trim();
-                    if (text.length === 0) return false;
-                    if (normalizeText(text) === normalizedAnswer) return false;
-                    return true;
-                });
-                if (siblings.length > 0) {
-                    wrongCandidates = siblings.map(el => {
-                        const rect = el.getBoundingClientRect();
-                        return {
-                            element: el,
-                            source: 'input-sibling',
-                            hasInput: true,
-                            distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
-                        };
-                    });
-                    addLog(`  通过 input 兄弟找到 ${siblings.length} 个其他选项`, 'info');
-                    break;
-                }
-                groupContainer = groupContainer.parentElement;
-            }
-        }
-
-        // 策略 B：在所有匹配选项选择器的元素中，按与正确答案的位置接近程度筛选
-        if (wrongCandidates.length === 0) {
-            let allOptions = [];
-            for (const selector of optionSelectors) {
-                scope.querySelectorAll(selector).forEach(el => {
-                    if (!isForeignElement(el) && !allOptions.includes(el)) allOptions.push(el);
-                });
-            }
-
-            wrongCandidates = allOptions
-                .filter(el => {
-                    if (el === correctOption || el.contains(correctOption) || correctOption.contains(el)) return false;
-                    const text = (el.textContent || '').trim();
-                    if (text.length === 0) return false;
-                    if (normalizeText(text) === normalizedAnswer) return false;
-                    const rect = el.getBoundingClientRect();
-                    if (rect.width <= 0 || rect.height <= 0) return false;
-                    const horizontalOverlap = rect.left < correctRect.right && rect.right > correctRect.left;
-                    const verticalDist = Math.abs(rect.top - correctRect.top);
-                    return horizontalOverlap && verticalDist < 250;
-                })
-                .map(el => {
-                    const rect = el.getBoundingClientRect();
-                    return {
-                        element: el,
-                        source: 'option-list',
-                        hasInput: !!el.querySelector('input[type="radio"], input[type="checkbox"]'),
-                        distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
-                    };
-                });
-
-            if (wrongCandidates.length > 0) {
-                addLog(`  从候选选项中筛选出 ${wrongCandidates.length} 个同题错误选项`, 'info');
-            }
-        }
-
-        // 策略 C：基于 DOM 兄弟结构兜底（child 必须是完整选项元素）
-        if (wrongCandidates.length === 0) {
-            let parent = correctOption.parentElement;
-            for (let i = 0; i < 4 && parent; i++) {
-                const children = Array.from(parent.children);
-                const others = children.filter(child => {
-                    if (child === correctOption || correctOption.contains(child) || child.contains(correctOption)) return false;
-                    if (isForeignElement(child)) return false;
-                    const rect = child.getBoundingClientRect();
-                    if (rect.width <= 0 || rect.height <= 0) return false;
-                    const text = (child.textContent || '').trim();
-                    if (text.length === 0) return false;
-                    if (normalizeText(text) === normalizedAnswer) return false;
-                    // 必须是完整选项元素：匹配选项选择器 或 包含 input
-                    const isValidOption = isOptionElement(child) || child.querySelector('input[type="radio"], input[type="checkbox"]');
-                    if (!isValidOption) return false;
-                    return true;
-                });
-                if (others.length > 0) {
-                    wrongCandidates = others.map(el => {
-                        const rect = el.getBoundingClientRect();
-                        return {
-                            element: el,
-                            source: 'sibling',
-                            hasInput: !!el.querySelector('input[type="radio"], input[type="checkbox"]'),
-                            distance: Math.abs(rect.top - correctRect.top) + Math.abs(rect.left - correctRect.left) * 0.3
-                        };
-                    });
-                    addLog(`  通过兄弟结构找到 ${others.length} 个其他选项`, 'info');
-                    break;
-                }
-                parent = parent.parentElement;
-            }
-        }
-
-        // 策略 D：全局外观相似性兜底
-        if (wrongCandidates.length === 0) {
-            const allElements = scope.querySelectorAll('*');
-            for (const el of allElements) {
-                if (isForeignElement(el)) continue;
-                if (el === correctOption || el.contains(correctOption) || correctOption.contains(el)) continue;
-                const rect = el.getBoundingClientRect();
-                if (rect.width <= 0 || rect.height <= 0) continue;
-                const text = (el.textContent || '').trim();
-                if (text.length === 0) continue;
-                if (normalizeText(text) === normalizedAnswer) continue;
-
-                const tag = el.tagName;
-                if (tag !== correctTag && !['DIV', 'SPAN', 'LI', 'LABEL', 'BUTTON', 'A', 'P'].includes(tag)) continue;
-
-                const heightDiff = Math.abs(Math.round(rect.height) - correctHeight);
-                const hasOptionClass = optionSelectors.some(sel => el.matches && el.matches(sel));
-                if (heightDiff > 8 && !hasOptionClass) continue;
-
-                const horizontalOverlap = rect.left < correctRect.right && rect.right > correctRect.left;
-                const verticalDist = Math.abs(rect.top - correctRect.top);
-                if (!horizontalOverlap && verticalDist > 80) continue;
-                if (verticalDist > 200) continue;
-
-                wrongCandidates.push({
-                    element: el,
-                    source: 'similar',
-                    hasInput: !!el.querySelector('input[type="radio"], input[type="checkbox"]'),
-                    distance: verticalDist + Math.abs(rect.left - correctRect.left) * 0.3
-                });
-            }
-            if (wrongCandidates.length > 0) {
-                addLog(`  通过全局相似性找到 ${wrongCandidates.length} 个候选`, 'info');
-            }
-        }
-
-        if (wrongCandidates.length === 0) {
-            addLog('  未找到与正确选项相似的其他选项', 'warn');
-            return false;
-        }
-
-        // 排序：优先含 input，再按 source 优先级，最后按距离
-        const srcRank = { 'input-name': 0, 'input-sibling': 1, 'option-list': 2, 'sibling': 3, 'similar': 4 };
-        wrongCandidates.sort((a, b) => {
-            if (a.hasInput && !b.hasInput) return -1;
-            if (!a.hasInput && b.hasInput) return 1;
-            if (srcRank[a.source] !== srcRank[b.source]) return srcRank[a.source] - srcRank[b.source];
-            return a.distance - b.distance;
-        });
-
-        // 在最近的 1-3 个里随机选一个
-        const poolSize = Math.min(3, wrongCandidates.length);
-        const picked = wrongCandidates[Math.floor(Math.random() * poolSize)];
-        const targetEl = picked.element;
-        const clickTarget = getClickTarget(targetEl);
-        const targetText = (targetEl.textContent || '').trim().substring(0, 30);
-        addLog(`  选择错误选项: "${escapeHtml(targetText)}"`, 'click');
-
-        targetEl.style.outline = '3px solid var(--a366-danger)';
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => { targetEl.style.outline = ''; }, 1500);
-        if (clickTarget && clickTarget !== targetEl) {
-            addLog('  通过内部 input 触发选择', 'info');
-        }
-        clickTarget.click();
-        return true;
-    }
 
     function isForeignElement(el) {
         if (!el) return true;
@@ -1411,551 +1579,6 @@
             .replace(/\s+/g, ' ')
             .trim();
     }
-
-    // ==========================================
-    // 自动填答
-    // ==========================================
-
-    // 统一计算填答计划：哪些跳过、哪些答错，仅保证数量与设置一致，题号随机分布
-    function buildFillPlan(total, completionRate, accuracyRate) {
-        const totalNum = Math.max(0, parseInt(total) || 0);
-        const compNum = Math.max(0, Math.min(100, parseInt(completionRate) || 0));
-        const accNum = Math.max(0, Math.min(100, parseInt(accuracyRate) || 0));
-
-        const fillCount = Math.max(0, Math.ceil(totalNum * compNum / 100));
-        const skipCount = totalNum - fillCount;
-        const correctCount = fillCount > 0 ? Math.max(0, Math.ceil(fillCount * accNum / 100)) : 0;
-        const wrongCount = fillCount - correctCount;
-
-        // 随机打乱所有题目索引
-        const indices = Array.from({ length: totalNum }, (_, i) => i);
-        for (let i = indices.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [indices[i], indices[j]] = [indices[j], indices[i]];
-        }
-
-        // 前 skipCount 个 → 跳过
-        const skipSet = new Set(skipCount > 0 ? indices.slice(0, skipCount) : []);
-
-        // 剩余的 → 填答，其中前 wrongCount 个 → 答错
-        const fillIndices = indices.slice(skipCount);
-        const wrongSet = new Set(wrongCount > 0 ? fillIndices.slice(0, wrongCount) : []);
-
-        return { skipSet, wrongSet, fillCount, skipCount, correctCount, wrongCount };
-    }
-
-    // 根据当前答案列表和设置重新生成/同步填答计划，并预置每道题的期望状态
-    function applyFillPlan() {
-        const total = state.answerList.length;
-        if (total === 0) {
-            state._fillPlan = null;
-            state._skipIndices = null;
-            state._wrongIndices = null;
-            return;
-        }
-        const plan = buildFillPlan(total, state.completionRate, state.accuracyRate);
-        state._fillPlan = plan;
-        state._skipIndices = plan.skipSet;
-        state._wrongIndices = plan.wrongSet;
-
-        // 只有在非自动填答时才重置所有答案的执行状态，避免正在执行时修改设置打乱已填状态
-        if (!state.autoFillRunning) {
-            state.answerList.forEach(ans => {
-                ans._fillStatus = 'pending';
-                delete ans._fillMode;
-            });
-        } else {
-            addLog('[计划] 自动填答进行中，设置已更新，后续题目按新计划执行，已填状态保留', 'warn');
-        }
-
-        addLog(`[计划] 完成率 ${state.completionRate}% / 正确率 ${state.accuracyRate}% | 跳过索引 [${Array.from(plan.skipSet).map(i => i + 1).join(',')}] | 答错索引 [${Array.from(plan.wrongSet).map(i => i + 1).join(',')}]`, 'info');
-    }
-
-    function startAutoFillAll() {
-        if (state.answerList.length === 0) return;
-        if (state.autoFillRunning) {
-            addLog('自动填答已在运行，忽略重复启动', 'warn');
-            return;
-        }
-
-        // 每次开始前重新同步计划，确保与当前设置和答案列表完全一致
-        applyFillPlan();
-
-        state.autoFillRunning = true;
-        state.autoFillIndex = 0;
-
-        const total = state.answerList.length;
-        const plan = state._fillPlan;
-
-        addLog(`开始一键自动填答，共 ${total} 题（完成率 ${state.completionRate}%：填答 ${plan.fillCount} 题，跳过 ${plan.skipCount} 题 | 正确率 ${state.accuracyRate}%：答对 ${plan.correctCount} 题，答错 ${plan.wrongCount} 题）`, 'info');
-
-        document.getElementById('a366-auto-fill-all').style.display = 'none';
-        document.getElementById('a366-stop-auto-fill').style.display = '';
-
-        autoFillNext();
-    }
-
-    function autoFillNext() {
-        if (!state.autoFillRunning || state.autoFillIndex >= state.answerList.length) {
-            stopAutoFill();
-            if (state.autoFillIndex >= state.answerList.length) {
-                addLog('一键自动填答完毕', 'success');
-            }
-            return;
-        }
-
-        const idx = state.autoFillIndex;
-        try {
-            const isSkip = state._skipIndices && state._skipIndices.has(idx);
-            const isWrong = state._wrongIndices && state._wrongIndices.has(idx);
-            addLog(`[执行] #${idx + 1} 跳过=${isSkip} 故意错=${isWrong}`, 'info');
-
-            // 完成率 < 100% 时跳过部分题目
-            if (isSkip) {
-                state.answerList[idx]._fillStatus = 'skipped';
-                addLog(`#${idx + 1} 已跳过（完成率控制）`, 'info');
-                state.autoFillIndex++;
-                renderAnswerList();
-                renderMainFillSection();
-                setTimeout(() => autoFillNext(), 20);
-                return;
-            }
-            fillOneAnswer(idx, isWrong);
-            state.autoFillIndex++;
-            setTimeout(() => autoFillNext(), 50);
-        } catch (e) {
-            addLog(`#${idx + 1} 执行异常：${escapeHtml(e.message)}，已跳过并继续`, 'error');
-            if (state.answerList[idx]) state.answerList[idx]._fillStatus = 'skipped';
-            state.autoFillIndex++;
-            setTimeout(() => autoFillNext(), 50);
-        }
-    }
-
-    function stopAutoFill() {
-        state.autoFillRunning = false;
-        document.getElementById('a366-auto-fill-all').style.display = '';
-        document.getElementById('a366-stop-auto-fill').style.display = 'none';
-        renderMainFillSection();
-        addLog('自动填答已停止', 'warn');
-    }
-
-    // ==========================================
-    // 交卷与自动流程
-    // ==========================================
-
-    function clickStartBtn() {
-        let btn = document.querySelector('.start-btn-text');
-        if (btn) {
-            btn.click();
-            return true;
-        }
-        const allElements = document.querySelectorAll('button, span, div, a');
-        for (const el of allElements) {
-            if (el === container || container.contains(el)) continue;
-            if (devPanel && (el === devPanel || devPanel.contains(el))) continue;
-            const text = (el.textContent || '').trim();
-            if (text === '去做题') {
-                el.click();
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    function clickConfirmSubmitBtn() {
-        const popups = document.querySelectorAll('.u3compo-popup');
-        for (const popup of popups) {
-            const btnList = popup.querySelector('.u3-button-list.u3-button-double');
-            if (!btnList) continue;
-
-            const btns = btnList.querySelectorAll('.u3-button');
-            for (const btn of btns) {
-                if ((btn.textContent || '').trim() === '交卷') {
-                    btn.click();
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    async function waitAndClickConfirmSubmit(maxWait = 5000) {
-        const startTime = Date.now();
-        while (Date.now() - startTime < maxWait) {
-            if (clickConfirmSubmitBtn()) {
-                return true;
-            }
-            await new Promise(resolve => setTimeout(resolve, 200));
-        }
-        return false;
-    }
-
-    async function executeAuto() {
-        if (state.autoFillRunning) {
-            addLog('自动流程已在运行，忽略重复启动', 'warn');
-            return;
-        }
-
-        addLog('━━━━━━━━ 自动流程开始 ━━━━━━━', 'info');
-
-        const startBtnClicked = clickStartBtn();
-        if (startBtnClicked) {
-            addLog('检测到试题预览页，已点击「去做题」', 'success');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-
-        if (state.answerList.length === 0) {
-            await fetchAnswers();
-            if (state.answerList.length === 0) {
-                addLog('获取答案失败，自动流程终止', 'error');
-                return;
-            }
-        }
-
-        document.getElementById('a366-auto-fill-all').style.display = 'none';
-        document.getElementById('a366-stop-auto-fill').style.display = '';
-
-        await new Promise((resolve) => {
-            state.autoFillRunning = true;
-            state.autoFillIndex = 0;
-
-            const total = state.answerList.length;
-            applyFillPlan();
-            const plan = state._fillPlan;
-
-            addLog(`开始自动填答，共 ${total} 题（完成率 ${state.completionRate}%：填答 ${plan.fillCount} 题，跳过 ${plan.skipCount} 题 | 正确率 ${state.accuracyRate}%：答对 ${plan.correctCount} 题，答错 ${plan.wrongCount} 题）`, 'info');
-
-            function checkFillComplete() {
-                if (!state.autoFillRunning || state.autoFillIndex >= state.answerList.length) {
-                    state.autoFillRunning = false;
-                    document.getElementById('a366-auto-fill-all').style.display = '';
-                    document.getElementById('a366-stop-auto-fill').style.display = 'none';
-                    addLog('自动填答完毕', 'success');
-                    resolve();
-                    return;
-                }
-                setTimeout(checkFillComplete, 200);
-            }
-
-            autoFillNext();
-            checkFillComplete();
-        });
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        addLog('开始交卷流程', 'info');
-        submitExam();
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        addLog('等待交卷确认弹窗...', 'info');
-        const confirmed = await waitAndClickConfirmSubmit(5000);
-        if (confirmed) {
-            addLog('已点击确认交卷按钮', 'success');
-        } else {
-            addLog('未检测到交卷确认弹窗', 'warn');
-        }
-
-        addLog('━━━━━━━━ 自动流程结束 ━━━━━━━━', 'info');
-    }
-
-    // ==========================================
-    // 日志
-    // ==========================================
-
-    function addLog(message, type = 'info') {
-        const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-        state.logEntries.push({ time, message, type });
-
-        if (!logContent) return;
-
-        const colors = {
-            info: 'var(--a366-text-secondary)',
-            success: 'var(--a366-success)',
-            warn: '#e67e22',
-            error: 'var(--a366-danger)',
-            match: 'var(--a366-info)',
-            click: '#6f42c1',
-            action: '#e67e22',
-            queue: '#e67e22',
-        };
-        const color = colors[type] || colors.info;
-
-        const div = document.createElement('div');
-        div.style.cssText = `padding:1px 0;border-bottom:1px solid var(--a366-border);color:${color};word-break:break-all;`;
-        div.innerHTML = `<span style="color:var(--a366-text-muted);">[${time}]</span> ${message}`;
-        logContent.appendChild(div);
-        logContent.scrollTop = logContent.scrollHeight;
-    }
-
-    // ==========================================
-    // 正确率设置
-    // ==========================================
-
-    function restoreAccuracyRate() {
-        try {
-            const val = localStorage.getItem('a366_accuracy_rate');
-            if (val !== null) {
-                const rate = parseInt(val);
-                if (!isNaN(rate) && rate >= 0 && rate <= 100) {
-                    state.accuracyRate = rate;
-                }
-            }
-        } catch(e) {}
-        try {
-            const val = localStorage.getItem('a366_completion_rate');
-            if (val !== null) {
-                const rate = parseInt(val);
-                if (!isNaN(rate) && rate >= 0 && rate <= 100) {
-                    state.completionRate = rate;
-                }
-            }
-        } catch(e) {}
-    }
-
-    function saveAccuracyRate(rate) {
-        state.accuracyRate = rate;
-        try {
-            localStorage.setItem('a366_accuracy_rate', rate.toString());
-        } catch(e) {}
-    }
-
-    function saveCompletionRate(rate) {
-        state.completionRate = rate;
-        try {
-            localStorage.setItem('a366_completion_rate', rate.toString());
-        } catch(e) {}
-    }
-
-    function createAccuracyModal() {
-        restoreAccuracyRate();
-
-        const modal = document.createElement('div');
-        modal.id = 'a366-accuracy-modal';
-        modal.style.cssText = `
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1000001;
-            background: rgba(0,0,0,0.5);
-            font-family: var(--a366-font, sans-serif);
-        `;
-
-        modal.innerHTML = `
-            <div id="a366-accuracy-panel" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#ffffff;border-radius:8px;border:1px solid #dee2e6;box-shadow:0 8px 32px rgba(0,0,0,0.2);width:400px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;">
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8f9fa;border-bottom:1px solid #dee2e6;">
-                    <span style="font-weight:600;font-size:14px;color:#212529;">填答设置</span>
-                    <button id="a366-accuracy-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#6c757d;padding:0 4px;line-height:1;">✕</button>
-                </div>
-                <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
-                    <div>
-                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">完成率 — 填答的题目占总题数的比例</div>
-                        <div style="display:flex;gap:8px;">
-                            <button class="a366-completion-quick" data-rate="60" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">60%</button>
-                            <button class="a366-completion-quick" data-rate="80" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">80%</button>
-                            <button class="a366-completion-quick" data-rate="90" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">90%</button>
-                            <button class="a366-completion-quick" data-rate="100" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">100%</button>
-                        </div>
-                        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-                            <input id="a366-completion-input" type="number" min="0" max="100" value="${state.completionRate}" style="flex:1;padding:8px 10px;border:1px solid #dee2e6;border-radius:6px;background:#ffffff;color:#212529;font-size:13px;outline:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;text-align:center;box-sizing:border-box;">
-                            <span style="font-size:14px;color:#6c757d;font-weight:500;">%</span>
-                        </div>
-                    </div>
-                    <div style="border-top:1px solid #dee2e6;padding-top:14px;">
-                        <div style="font-size:12px;color:#6c757d;margin-bottom:8px;">正确率 — 已填答题中答对的比例</div>
-                        <div style="display:flex;gap:8px;">
-                            <button class="a366-accuracy-quick" data-rate="70" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">70%</button>
-                            <button class="a366-accuracy-quick" data-rate="80" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">80%</button>
-                            <button class="a366-accuracy-quick" data-rate="90" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">90%</button>
-                            <button class="a366-accuracy-quick" data-rate="100" style="flex:1;min-width:0;box-sizing:border-box;padding:10px 4px;background:#e9ecef;color:#212529;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;transition:all 0.15s;text-align:center;">100%</button>
-                        </div>
-                        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-                            <input id="a366-accuracy-input" type="number" min="0" max="100" value="${state.accuracyRate}" style="flex:1;padding:8px 10px;border:1px solid #dee2e6;border-radius:6px;background:#ffffff;color:#212529;font-size:13px;outline:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;text-align:center;box-sizing:border-box;">
-                            <span style="font-size:14px;color:#6c757d;font-weight:500;">%</span>
-                        </div>
-                    </div>
-                    <div id="a366-accuracy-preview" style="font-size:11px;color:#6c757d;padding:8px 10px;background:#e9ecef;border-radius:4px;line-height:1.6;">
-                        完成率：${state.completionRate}% | 正确率：${state.accuracyRate}%<br>
-                        <span style="color:#17a2b8;">获取答案后将自动计算填答/跳过/正确/错误题数</span>
-                    </div>
-                    <div style="display:flex;gap:8px;justify-content:flex-end;">
-                        <button id="a366-accuracy-cancel" style="padding:8px 20px;background:#e9ecef;color:#6c757d;border:1px solid #dee2e6;border-radius:6px;font-size:13px;cursor:pointer;">取消</button>
-                        <button id="a366-accuracy-save" style="padding:8px 20px;background:#007bff;color:#ffffff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500;">确定</button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-
-        const completionInput = document.getElementById('a366-completion-input');
-        const accuracyInput = document.getElementById('a366-accuracy-input');
-
-        // 完成率快捷按钮
-        const completionQuickBtns = modal.querySelectorAll('.a366-completion-quick');
-        completionQuickBtns.forEach(btn => {
-            btn.addEventListener('mouseenter', () => {
-                btn.style.background = '#e7f1ff';
-                btn.style.borderColor = '#007bff';
-                btn.style.color = '#007bff';
-            });
-            btn.addEventListener('mouseleave', () => {
-                if (parseInt(completionInput.value) !== parseInt(btn.dataset.rate)) {
-                    btn.style.background = '#e9ecef';
-                    btn.style.borderColor = '#dee2e6';
-                    btn.style.color = '#212529';
-                }
-            });
-            btn.addEventListener('click', () => {
-                const rate = parseInt(btn.dataset.rate);
-                completionInput.value = rate;
-                updateAccuracyPreview(parseInt(completionInput.value), parseInt(accuracyInput.value));
-                highlightCompletionBtn(rate);
-            });
-        });
-
-        // 正确率快捷按钮
-        const quickBtns = modal.querySelectorAll('.a366-accuracy-quick');
-        quickBtns.forEach(btn => {
-            btn.addEventListener('mouseenter', () => {
-                btn.style.background = '#e7f1ff';
-                btn.style.borderColor = '#007bff';
-                btn.style.color = '#007bff';
-            });
-            btn.addEventListener('mouseleave', () => {
-                if (parseInt(accuracyInput.value) !== parseInt(btn.dataset.rate)) {
-                    btn.style.background = '#e9ecef';
-                    btn.style.borderColor = '#dee2e6';
-                    btn.style.color = '#212529';
-                }
-            });
-            btn.addEventListener('click', () => {
-                const rate = parseInt(btn.dataset.rate);
-                accuracyInput.value = rate;
-                updateAccuracyPreview(parseInt(completionInput.value), rate);
-                highlightQuickBtn(rate);
-            });
-        });
-
-        completionInput.addEventListener('input', () => {
-            let val = parseInt(completionInput.value);
-            if (isNaN(val)) val = 100;
-            val = Math.max(0, Math.min(100, val));
-            updateAccuracyPreview(val, parseInt(accuracyInput.value));
-            highlightCompletionBtn(val);
-        });
-
-        accuracyInput.addEventListener('input', () => {
-            let val = parseInt(accuracyInput.value);
-            if (isNaN(val)) val = 100;
-            val = Math.max(0, Math.min(100, val));
-            updateAccuracyPreview(parseInt(completionInput.value), val);
-            highlightQuickBtn(val);
-        });
-
-        document.getElementById('a366-accuracy-close').addEventListener('click', () => {
-            modal.style.display = 'none';
-        });
-
-        document.getElementById('a366-accuracy-cancel').addEventListener('click', () => {
-            modal.style.display = 'none';
-        });
-
-        document.getElementById('a366-accuracy-save').addEventListener('click', () => {
-            let compVal = parseInt(completionInput.value);
-            if (isNaN(compVal)) compVal = 100;
-            compVal = Math.max(0, Math.min(100, compVal));
-            let accVal = parseInt(accuracyInput.value);
-            if (isNaN(accVal)) accVal = 100;
-            accVal = Math.max(0, Math.min(100, accVal));
-            saveCompletionRate(compVal);
-            saveAccuracyRate(accVal);
-            applyFillPlan();
-            renderMainFillSection();
-            modal.style.display = 'none';
-            addLog(`设置已更新：完成率 ${compVal}% | 正确率 ${accVal}%`, 'success');
-        });
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.style.display = 'none';
-            }
-        });
-
-        highlightCompletionBtn(state.completionRate);
-        highlightQuickBtn(state.accuracyRate);
-    }
-
-    function updateAccuracyPreview(completionRate, accuracyRate) {
-        const preview = document.getElementById('a366-accuracy-preview');
-        if (!preview) return;
-        const total = state.answerList.length;
-        if (total === 0) {
-            preview.innerHTML = `完成率：${completionRate}% | 正确率：${accuracyRate}%<br><span style="color:#17a2b8;">获取答案后将自动计算填答/跳过/正确/错误题数</span>`;
-        } else {
-            const plan = buildFillPlan(total, completionRate, accuracyRate);
-            preview.innerHTML = `完成率：${completionRate}% | 正确率：${accuracyRate}%<br>总题数：${total} 题<br>填答：<span style="color:#007bff;">${plan.fillCount} 题</span> | 跳过：<span style="color:#6c757d;">${Math.max(0, plan.skipCount)} 题</span><br>答对：<span style="color:#28a745;">${plan.correctCount} 题</span> | 答错：<span style="color:#dc3545;">${plan.wrongCount} 题</span>`;
-        }
-    }
-
-    function highlightQuickBtn(activeRate) {
-        const quickBtns = document.querySelectorAll('.a366-accuracy-quick');
-        quickBtns.forEach(btn => {
-            const rate = parseInt(btn.dataset.rate);
-            if (rate === activeRate) {
-                btn.style.background = '#007bff';
-                btn.style.borderColor = '#007bff';
-                btn.style.color = '#ffffff';
-            } else {
-                btn.style.background = '#e9ecef';
-                btn.style.borderColor = '#dee2e6';
-                btn.style.color = '#212529';
-            }
-        });
-    }
-
-    function highlightCompletionBtn(activeRate) {
-        const quickBtns = document.querySelectorAll('.a366-completion-quick');
-        quickBtns.forEach(btn => {
-            const rate = parseInt(btn.dataset.rate);
-            if (rate === activeRate) {
-                btn.style.background = '#007bff';
-                btn.style.borderColor = '#007bff';
-                btn.style.color = '#ffffff';
-            } else {
-                btn.style.background = '#e9ecef';
-                btn.style.borderColor = '#dee2e6';
-                btn.style.color = '#212529';
-            }
-        });
-    }
-
-    function toggleAccuracySettings() {
-        const modal = document.getElementById('a366-accuracy-modal');
-        if (!modal) return;
-        const isVisible = modal.style.display !== 'none';
-        if (isVisible) {
-            modal.style.display = 'none';
-        } else {
-            const completionInput = document.getElementById('a366-completion-input');
-            const accuracyInput = document.getElementById('a366-accuracy-input');
-            if (completionInput) completionInput.value = state.completionRate;
-            if (accuracyInput) accuracyInput.value = state.accuracyRate;
-            updateAccuracyPreview(state.completionRate, state.accuracyRate);
-            highlightCompletionBtn(state.completionRate);
-            highlightQuickBtn(state.accuracyRate);
-            modal.style.display = 'block';
-        }
-    }
-
-    // ==========================================
-    // 工具函数
-    // ==========================================
 
     function makeDraggable(targetEl, handleEl) {
         if (!handleEl || !targetEl) return;
@@ -1988,6 +1611,68 @@
 
     function escapeHtml(str) {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ==========================================
+    // 日志
+    // ==========================================
+
+    function addLog(message, type = 'info') {
+        const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        state.logEntries.push({ time, message, type });
+
+        if (!logContent) return;
+
+        const colors = {
+            info: 'var(--a366-text-secondary)',
+            success: 'var(--a366-success)',
+            warn: '#e67e22',
+            error: 'var(--a366-danger)',
+            match: 'var(--a366-info)',
+            click: '#6f42c1',
+            action: '#e67e22',
+            queue: '#e67e22',
+            warning: '#e67e22',
+        };
+        const color = colors[type] || colors.info;
+
+        const div = document.createElement('div');
+        div.style.cssText = `padding:1px 0;border-bottom:1px solid var(--a366-border);color:${color};word-break:break-all;`;
+        div.innerHTML = `<span style="color:var(--a366-text-muted);">[${time}]</span> ${message}`;
+        logContent.appendChild(div);
+        logContent.scrollTop = logContent.scrollHeight;
+    }
+
+    // 覆盖式日志（用于轮询等高频场景，避免刷屏）
+    function updateWaitingLog(message, type = 'info', id = 'waiting-log') {
+        const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+
+        if (!logContent) return;
+
+        // 尝试找到已有条目
+        let div = logContent.querySelector(`[data-log-id="${id}"]`);
+
+        const colors = {
+            info: 'var(--a366-text-secondary)',
+            success: 'var(--a366-success)',
+            warn: '#e67e22',
+            error: 'var(--a366-danger)',
+        };
+        const color = colors[type] || colors.info;
+
+        if (div) {
+            // 覆盖更新
+            div.innerHTML = `<span style="color:var(--a366-text-muted);">[${time}]</span> ${message}`;
+            div.style.color = color;
+        } else {
+            // 新建
+            div = document.createElement('div');
+            div.setAttribute('data-log-id', id);
+            div.style.cssText = `padding:1px 0;border-bottom:1px solid var(--a366-border);color:${color};word-break:break-all;`;
+            div.innerHTML = `<span style="color:var(--a366-text-muted);">[${time}]</span> ${message}`;
+            logContent.appendChild(div);
+        }
+        logContent.scrollTop = logContent.scrollHeight;
     }
 
     // ==========================================
