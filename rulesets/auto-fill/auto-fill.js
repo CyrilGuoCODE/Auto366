@@ -722,14 +722,20 @@ async function handleReadAlongQuestions() {
     const activeSlide = document.querySelector('.swiper-slide-active');
     if (!activeSlide) return 0;
 
-    const readAlongElements = activeSlide.querySelectorAll('.partA_word_repeat');
-    if (readAlongElements.length === 0) return 0;
+    // 兼容两种跟读题型容器：.partA_word_repeat（单词跟读）和 .u3-paragraphRepeat（段落跟读/口语跟读）
+    const readAlongElements = [
+        ...activeSlide.querySelectorAll('.partA_word_repeat'),
+        ...activeSlide.querySelectorAll('.u3-paragraphRepeat')
+    ];
+    // 去重（同一元素可能被两个选择器同时匹配）
+    const uniqueReadAlongEls = [...new Set(readAlongElements)];
+    if (uniqueReadAlongEls.length === 0) return 0;
 
-    // 过滤出包含"跟读"文字的元素
+    // 过滤出包含"跟读"或"口语跟读"文字的元素
     const readAlongQuestions = [];
-    for (const el of readAlongElements) {
+    for (const el of uniqueReadAlongEls) {
         const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-        if (nameEl && nameEl.textContent.includes('跟读')) {
+        if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读'))) {
             readAlongQuestions.push(el);
         }
     }
@@ -866,11 +872,16 @@ async function handleReadAlongQuestions() {
         const currentSlide = document.querySelector('.swiper-slide-active');
         if (!currentSlide) return 0;
 
-        const currentReadAlongEls = currentSlide.querySelectorAll('.partA_word_repeat');
+        // 兼容两种跟读题型容器
+        const currentReadAlongEls = [
+            ...currentSlide.querySelectorAll('.partA_word_repeat'),
+            ...currentSlide.querySelectorAll('.u3-paragraphRepeat')
+        ];
+        const currentUniqueEls = [...new Set(currentReadAlongEls)];
         const currentQuestions = [];
-        for (const el of currentReadAlongEls) {
+        for (const el of currentUniqueEls) {
             const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-            if (nameEl && nameEl.textContent.includes('跟读')) {
+            if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读'))) {
                 currentQuestions.push(el);
             }
         }
@@ -894,11 +905,16 @@ async function handleReadAlongQuestions() {
 
                 slideHasWork = true;
 
-                // 提取朗读文本（多选择器回退）
+                // 提取朗读文本（多选择器回退，兼容单词跟读和段落/口语跟读）
                 let readText = '';
                 const readTextSelectors = [
+                    // 段落跟读/口语跟读（u3-paragraphRepeat）
+                    '.u3-paragraphRepeat-content__midPanel-enText',
+                    '.u3-paragraphRepeat-content__midPanel-enText p',
+                    // 单词跟读（u3-wordBlock）
                     '.u3-wordBlock-content__midPanel-enText p',
                     '.u3-wordBlock-content__midPanel-enText',
+                    // 通用回退
                     '.u3-wordBlock-content__enText',
                     '.u3-wordBlock-content p',
                     '.u3-wordBlock-content',
