@@ -333,6 +333,13 @@
               .catch(e => {
                   addLog('[时间修改] 同步失败：连不上本地服务(' + e.message + ')，确认代理已开启', 'warning');
               });
+            // 操作听力面板时，重置填空时间修改，防止两个功能同时启用导致冲突
+            fetch(BUCKET_URL + '/fill-time', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: false, seconds: null }),
+                cache: 'no-cache'
+            }).catch(() => {});
         } catch (e) {
             addLog('[时间修改] 同步异常：' + e.message, 'warning');
         }

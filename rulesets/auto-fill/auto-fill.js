@@ -1380,6 +1380,13 @@ let FillTimeMod = {
               .catch(function(e) {
                   addLogMessage('[时间修改] 同步失败：连不上本地服务(' + e.message + ')，确认代理已开启', 'warning');
               });
+            // 操作填空面板时，重置听力时间修改，防止两个功能同时启用导致冲突
+            fetch(FillTimeMod.bucketBase() + '/listen-time', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: false, seconds: null }),
+                cache: 'no-cache'
+            }).catch(function() {});
         } catch (e) {
             addLogMessage('[时间修改] 同步异常：' + e.message, 'warning');
         }
