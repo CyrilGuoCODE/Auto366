@@ -731,11 +731,11 @@ async function handleReadAlongQuestions() {
     const uniqueReadAlongEls = [...new Set(readAlongElements)];
     if (uniqueReadAlongEls.length === 0) return 0;
 
-    // 过滤出包含"跟读"或"口语跟读"文字的元素
+    // 过滤出包含"跟读"、"口语跟读"或"听读"文字的元素
     const readAlongQuestions = [];
     for (const el of uniqueReadAlongEls) {
         const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-        if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读'))) {
+        if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读'))) {
             readAlongQuestions.push(el);
         }
     }
@@ -881,7 +881,7 @@ async function handleReadAlongQuestions() {
         const currentQuestions = [];
         for (const el of currentUniqueEls) {
             const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-            if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读'))) {
+            if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读'))) {
                 currentQuestions.push(el);
             }
         }

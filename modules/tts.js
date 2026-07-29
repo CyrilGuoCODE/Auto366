@@ -23,6 +23,8 @@ const fs = require('fs-extra');
 const os = require('os');
 const child_process = require('child_process');
 
+const chestnutTts = require('./chestnut-tts');
+
 const VOICE_MAP = {
   Jasper: 0,
   Bella: 1,
@@ -33,6 +35,9 @@ const VOICE_MAP = {
   Leo: 6,
   Kiki: 7,
 };
+
+// 可用引擎列表
+const AVAILABLE_ENGINES = ['auto', 'sherpa-onnx', 'chestnut'];
 
 class TtsManager {
   constructor() {
@@ -49,6 +54,11 @@ class TtsManager {
       voice: 'Jasper',
       speed: 1.0,
     };
+
+    // 引擎选择: 'auto'(优先sherpa-onnx,失败回退chestnut) / 'sherpa-onnx' / 'chestnut'
+    this.engine = 'auto';
+    // 运行时实际使用的引擎（resolve 后的值）
+    this.activeEngine = null;
 
     // 序号 → 磁盘文件路径（不存音频 Buffer，节省内存）
     this.fileIndex = new Map();
@@ -177,6 +187,14 @@ class TtsManager {
               this.selectedModel = found.name;
             }
           }
+          // 恢复引擎选择
+          if (saved.engine && AVAILABLE_ENGINES.includes(saved.engine)) {
+            this.engine = saved.engine;
+          }
+          // 恢复 chestnut 音色
+          if (saved.chestnutVoice) {
+            this.config.chestnutVoice = saved.chestnutVoice;
+          }
         }
       }
     } catch (e) { /* 忽略 */ }
@@ -202,7 +220,7 @@ class TtsManager {
   _cleanCacheDir() {
     try {
       if (fs.existsSync(this.cacheDir)) {
-        const files = fs.readdirSync(this.cacheDir).filter(f => f.endsWith('.wav'));
+        const files = fs.readdirSync(this.cacheDir).filter(f => f.endsWith('.wav') || f.endsWith('.mp3'));
         for (const f of files) {
           fs.unlinkSync(path.join(this.cacheDir, f));
         }
@@ -343,20 +361,70 @@ class TtsManager {
 
   /**
    * 确保引擎已就绪，如未启动则自动启动
+   * @returns {Promise<'sherpa-onnx'|'chestnut'|null>} 就绪的引擎名，null=不可用
    */
   async _ensureEngine() {
-    if (this.initialized) return true;
-    if (this.initializing) {
-      // 正在初始化，等待完成
-      this._log('引擎正在初始化中，请稍候...', 'warning');
-      return false;
+    // 已就绪
+    if (this.activeEngine === 'chestnut') return 'chestnut';
+    if (this.activeEngine === 'sherpa-onnx' && this.initialized) return 'sherpa-onnx';
+
+    const wantChestnut = this.engine === 'chestnut';
+    const wantSherpa = this.engine === 'sherpa-onnx';
+    const wantAuto = this.engine === 'auto';
+
+    // 强制使用 chestnut
+    if (wantChestnut) {
+      this.activeEngine = 'chestnut';
+      this._log('使用 chestnut 在线 TTS 引擎', 'info');
+      return 'chestnut';
     }
 
-    this.initializing = true;
-    this._log('正在启动 TTS 子进程...', 'info');
+    // 尝试 sherpa-onnx
+    if (wantSherpa || wantAuto) {
+      if (this.initializing) {
+        this._log('sherpa-onnx 引擎正在初始化中，请稍候...', 'warning');
+        return null;
+      }
 
-    const success = await this._startWorker();
-    return success;
+      this.initializing = true;
+      this._log('正在启动 sherpa-onnx TTS 子进程...', 'info');
+      const success = await this._startWorker();
+      this.initializing = false;
+
+      if (success) {
+        this.activeEngine = 'sherpa-onnx';
+        this._log('sherpa-onnx 引擎就绪', 'success');
+        return 'sherpa-onnx';
+      }
+
+      // sherpa-onnx 失败
+      if (wantSherpa) {
+        this._log('sherpa-onnx 引擎启动失败，且引擎设置为 sherpa-onnx，不回退', 'error');
+        return null;
+      }
+
+      // auto 模式下回退到 chestnut
+      this._log('sherpa-onnx 引擎不可用，自动回退到 chestnut 在线 TTS', 'warning');
+      this.activeEngine = 'chestnut';
+      return 'chestnut';
+    }
+
+    return null;
+  }
+
+  /**
+   * 使用 chestnut 引擎生成单条音频并写入磁盘
+   * @returns {Promise<{index, filePath}>}
+   */
+  async _generateViaChestnut(text, index) {
+    const voice = this.config.chestnutVoice || 'english';
+    const t0 = Date.now();
+    const result = await chestnutTts.synthLong(text, voice);
+    const ext = result.format || 'mp3';
+    const filePath = path.join(this.cacheDir, `${index}.${ext}`);
+    fs.writeFileSync(filePath, result.audio);
+    this._log(`chestnutTTS #${index}: ${(result.audio.length / 1024).toFixed(0)}KB ${ext} ${Date.now() - t0}ms`, 'info');
+    return { index, filePath };
   }
 
   // ---- 批量为答案生成 TTS ----
@@ -365,8 +433,8 @@ class TtsManager {
 
     if (basePath) this.currentBasePath = basePath;
 
-    const ready = await this._ensureEngine();
-    if (!ready) {
+    const engine = await this._ensureEngine();
+    if (!engine) {
       this._log('引擎未就绪，跳过', 'warning');
       return;
     }
@@ -384,7 +452,7 @@ class TtsManager {
 
     this.isGenerating = true;
     this.generationProgress = { total, generated: 0, skipped: 0 };
-    this._log(`开始生成 ${total} 条语音...`, 'info');
+    this._log(`开始生成 ${total} 条语音 [${engine}]...`, 'info');
 
     for (let i = 0; i < answers.length; i++) {
       const answer = answers[i];
@@ -393,7 +461,12 @@ class TtsManager {
 
       const index = this.nextIndex;
       try {
-        const result = await this._sendToWorker({ text, index });
+        let result;
+        if (engine === 'chestnut') {
+          result = await this._generateViaChestnut(text, index);
+        } else {
+          result = await this._sendToWorker({ text, index });
+        }
         if (result.filePath) {
           this.fileIndex.set(index, result.filePath);
           this.textMap.set(index, text);
@@ -415,7 +488,7 @@ class TtsManager {
 
     // 汇总日志
     const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
-    this._log(`生成完成: ${generated}/${total} 成功, ${skipped} 跳过 (${totalElapsed}s)`, 'success');
+    this._log(`生成完成: ${generated}/${total} 成功, ${skipped} 跳过 (${totalElapsed}s) [${engine}]`, 'success');
 
     this.isGenerating = false;
   }
@@ -424,8 +497,8 @@ class TtsManager {
   async regenerateAll() {
     if (this.textMap.size === 0) return;
 
-    const ready = await this._ensureEngine();
-    if (!ready) {
+    const engine = await this._ensureEngine();
+    if (!engine) {
       this._log('引擎未就绪，跳过重新生成', 'warning');
       return;
     }
@@ -440,7 +513,7 @@ class TtsManager {
     const total = sortedKeys.length;
     const batchStart = Date.now();
 
-    this._log(`开始重新生成 ${total} 条语音...`, 'info');
+    this._log(`开始重新生成 ${total} 条语音 [${engine}]...`, 'info');
 
     this.isGenerating = true;
     this.generationProgress = { total, generated: 0, skipped: 0 };
@@ -450,7 +523,12 @@ class TtsManager {
       const text = this.textMap.get(oldIndex);
       const index = this.nextIndex;
       try {
-        const result = await this._sendToWorker({ text, index });
+        let result;
+        if (engine === 'chestnut') {
+          result = await this._generateViaChestnut(text, index);
+        } else {
+          result = await this._sendToWorker({ text, index });
+        }
         if (result.filePath) {
           newTextMap.set(index, text);
           this.fileIndex.set(index, result.filePath);
@@ -471,7 +549,7 @@ class TtsManager {
 
     this.textMap = newTextMap;
     const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
-    this._log(`重新生成完成: ${generated}/${total} 成功 (${totalElapsed}s)`, 'success');
+    this._log(`重新生成完成: ${generated}/${total} 成功 (${totalElapsed}s) [${engine}]`, 'success');
 
     this.isGenerating = false;
   }
@@ -486,6 +564,20 @@ class TtsManager {
     if (newConfig.speed !== undefined) {
       const s = Math.max(0.5, Math.min(2.0, Number(newConfig.speed)));
       if (this.config.speed !== s) { this.config.speed = s; needRegenerate = true; }
+    }
+    // 引擎切换
+    if (newConfig.engine && AVAILABLE_ENGINES.includes(newConfig.engine) && newConfig.engine !== this.engine) {
+      this.engine = newConfig.engine;
+      this.activeEngine = null; // 重置，下次 _ensureEngine 会重新选择
+      needRegenerate = true;
+      this._log('TTS 引擎切换为: ' + this.engine, 'info');
+    }
+    // chestnut 音色
+    if (newConfig.chestnutVoice) {
+      if (this.config.chestnutVoice !== newConfig.chestnutVoice) {
+        this.config.chestnutVoice = newConfig.chestnutVoice;
+        needRegenerate = true;
+      }
     }
 
     if (needRegenerate && this.textMap.size > 0) {
@@ -503,7 +595,8 @@ class TtsManager {
     if (!pathname.startsWith(outputPrefix)) return false;
 
     const rest = pathname.slice(outputPrefix.length);
-    const match = rest.match(/^(\d+)\.wav$/);
+    // 支持 .wav 和 .mp3 扩展名
+    const match = rest.match(/^(\d+)\.(wav|mp3)$/);
     if (!match) return false;
 
     const index = parseInt(match[1], 10);
@@ -512,14 +605,38 @@ class TtsManager {
     if (filePath && fs.existsSync(filePath)) {
       try {
         const stat = fs.statSync(filePath);
+        const ext = path.extname(filePath).slice(1);
+        const mime = ext === 'mp3' ? 'audio/mpeg' : 'audio/wav';
         res.writeHead(200, {
-          'Content-Type': 'audio/wav',
+          'Content-Type': mime,
           'Access-Control-Allow-Origin': '*',
           'Content-Length': stat.size,
         });
         fs.createReadStream(filePath).pipe(res);
         return true;
       } catch (e) { /* 读取失败走 404 */ }
+    }
+
+    // 兼容：客户端请求 .wav 但实际文件是 .mp3（或反之），按 index 查找任何格式
+    if (!filePath) {
+      for (const ext of ['mp3', 'wav']) {
+        const altPath = path.join(this.cacheDir, `${index}.${ext}`);
+        if (fs.existsSync(altPath)) {
+          try {
+            const stat = fs.statSync(altPath);
+            const mime = ext === 'mp3' ? 'audio/mpeg' : 'audio/wav';
+            res.writeHead(200, {
+              'Content-Type': mime,
+              'Access-Control-Allow-Origin': '*',
+              'Content-Length': stat.size,
+            });
+            fs.createReadStream(altPath).pipe(res);
+            // 同时更新 fileIndex 以便后续请求直接命中
+            this.fileIndex.set(index, altPath);
+            return true;
+          } catch (e) { /* 读取失败走 404 */ }
+        }
+      }
     }
 
     res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -538,7 +655,8 @@ class TtsManager {
         voice: this.config.voice, speed: this.config.speed, basePath,
         availableVoices: Object.keys(VOICE_MAP), voiceMap: VOICE_MAP,
         generatedCount: this.fileIndex.size,
-      }));
+        engine: this.engine, activeEngine: this.activeEngine, availableEngines: AVAILABLE_ENGINES,
+        chestnutVoice: this.config.chestnutVoice || null }));
       return true;
     }
 
@@ -578,6 +696,9 @@ class TtsManager {
       generatedCount: this.fileIndex.size,
       voice: this.config.voice,
       speed: this.config.speed,
+      engine: this.engine,
+      activeEngine: this.activeEngine,
+      chestnutVoice: this.config.chestnutVoice || null,
     }));
     return true;
   }
@@ -585,7 +706,7 @@ class TtsManager {
   async _pushConfigToRenderer() {
     try {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        const json = JSON.stringify(this.config);
+        const json = JSON.stringify({ ...this.config, engine: this.engine });
         await this.mainWindow.webContents.executeJavaScript(
           `localStorage.setItem('tts-config', '${json.replace(/'/g, "\\'")}')`
         );
@@ -604,6 +725,8 @@ class TtsManager {
         availableVoices: Object.keys(VOICE_MAP), voiceMap: VOICE_MAP,
         initialized: this.initialized, generatedCount: this.fileIndex.size,
         modelName: this.selectedModel, availableModels: this.getAvailableModels().map(m => m.name),
+        engine: this.engine, activeEngine: this.activeEngine, availableEngines: AVAILABLE_ENGINES,
+        chestnutVoice: this.config.chestnutVoice || null,
       };
     });
 
@@ -626,6 +749,8 @@ class TtsManager {
         initialized: this.initialized, initializing: this.initializing,
         voice: this.config.voice, speed: this.config.speed,
         basePath, generatedCount: this.fileIndex.size,
+        engine: this.engine, activeEngine: this.activeEngine,
+        chestnutVoice: this.config.chestnutVoice || null,
       };
     });
 
@@ -715,6 +840,7 @@ class TtsManager {
     this.worker = null;
     this.initialized = false;
     this.initializing = false;
+    this.activeEngine = null;
 
     // 拒绝所有未完成的请求
     for (const [id, pending] of this.pendingRequests) {

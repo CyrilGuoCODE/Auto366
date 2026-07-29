@@ -166,6 +166,51 @@ class SettingsUI {
       const voiceSelect = document.getElementById('ttsVoiceSelect');
       const speedInput = document.getElementById('ttsSpeedInput');
       const modelSelect = document.getElementById('ttsModelSelect');
+      const engineSelect = document.getElementById('ttsEngineSelect');
+
+      // chestnut 音色选项
+      const CHESTNUT_VOICES = [
+        ['english',  'English (youxiaomei)'],
+        ['normal',   '中文标准 (you_xiao_shi)'],
+        ['taiyi',    '太乙真人'],
+        ['tianjin',  '天津话 (you_xiao_jin)'],
+      ];
+
+      function populateSherpaVoices(select) {
+        if (!select) return;
+        const opts = [
+          ['Jasper', 'Jasper (男)'], ['Bella', 'Bella (女)'],
+          ['Bruno', 'Bruno (男)'], ['Luna', 'Luna (女)'],
+          ['Hugo', 'Hugo (男)'], ['Rosie', 'Rosie (女)'],
+          ['Leo', 'Leo (男)'], ['Kiki', 'Kiki (女)'],
+        ];
+        select.innerHTML = '';
+        opts.forEach(([v, t]) => {
+          const opt = document.createElement('option');
+          opt.value = v; opt.textContent = t;
+          select.appendChild(opt);
+        });
+      }
+
+      function populateChestnutVoices(select, savedChestnutVoice) {
+        if (!select) return;
+        select.innerHTML = '';
+        CHESTNUT_VOICES.forEach(([v, t]) => {
+          const opt = document.createElement('option');
+          opt.value = v; opt.textContent = t;
+          if (v === savedChestnutVoice) opt.selected = true;
+          select.appendChild(opt);
+        });
+      }
+
+      // 根据引擎切换音色下拉
+      function applyVoiceOptions(engine, savedChestnutVoice) {
+        if (engine === 'chestnut') {
+          populateChestnutVoices(voiceSelect, savedChestnutVoice);
+        } else {
+          populateSherpaVoices(voiceSelect);
+        }
+      }
 
       // 加载可用模型列表
       if (modelSelect && window.electronAPI && window.electronAPI.getTtsModels) {
@@ -188,21 +233,33 @@ class SettingsUI {
 
       // 恢复已保存的值
       if (savedConfig) {
-        if (savedConfig.voice && voiceSelect) {
+        if (savedConfig.voice && voiceSelect && savedConfig.engine !== 'chestnut') {
           voiceSelect.value = savedConfig.voice;
         }
         if (savedConfig.speed !== undefined && speedInput) {
           speedInput.value = savedConfig.speed;
         }
+        if (savedConfig.engine && engineSelect) {
+          engineSelect.value = savedConfig.engine;
+        }
       }
+
+      // 按引擎初始化音色下拉
+      applyVoiceOptions(engineSelect ? engineSelect.value : 'auto', savedConfig ? savedConfig.chestnutVoice : null);
 
       // 保存配置到 localStorage 并同步到主进程
       const saveTtsConfig = () => {
+        const engine = engineSelect ? engineSelect.value : 'auto';
         const config = {
           voice: voiceSelect ? voiceSelect.value : 'Jasper',
           speed: speedInput ? parseFloat(speedInput.value) || 1.0 : 1.0,
           modelName: modelSelect ? modelSelect.value : undefined,
+          engine: engine,
         };
+        // chestnut 模式下额外保存 chestnutVoice
+        if (engine === 'chestnut' && voiceSelect) {
+          config.chestnutVoice = voiceSelect.value;
+        }
         localStorage.setItem('tts-config', JSON.stringify(config));
 
         // 同步到主进程
@@ -240,6 +297,28 @@ class SettingsUI {
       }
       if (speedInput) {
         speedInput.addEventListener('change', saveTtsConfig);
+      }
+      if (engineSelect) {
+        engineSelect.addEventListener('change', () => {
+          const engine = engineSelect.value;
+          const isChestnut = engine === 'chestnut';
+          // 切换音色下拉选项
+          if (isChestnut) {
+            populateChestnutVoices(voiceSelect, savedConfig ? savedConfig.chestnutVoice : null);
+          } else {
+            populateSherpaVoices(voiceSelect);
+            if (savedConfig && savedConfig.voice && !isChestnut) {
+              voiceSelect.value = savedConfig.voice;
+            }
+          }
+          // 隐藏/显示模型选择（chestnut 不需要本地模型）
+          if (modelSelect) modelSelect.closest('.setting-item').style.display = isChestnut ? 'none' : '';
+          saveTtsConfig();
+        });
+        // 初始状态：chestnut 时隐藏模型选择
+        if (savedConfig && savedConfig.engine === 'chestnut') {
+          if (modelSelect) modelSelect.closest('.setting-item').style.display = 'none';
+        }
       }
     } catch (error) {
       console.error('初始化 TTS 设置失败:', error);
