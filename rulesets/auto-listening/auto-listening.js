@@ -59,6 +59,7 @@
             var v = parseInt(raw, 10);
             return Number.isFinite(v) ? v : null;
         })(),
+        presetListenTimeSeconds: null, // 预设计算值（参考值）
     };
 
     let container = null;
@@ -123,6 +124,7 @@
                 <span style="font-size:12px;color:var(--a366-text-secondary);">分</span>
                 <input type="number" id="a366-listentime-sec" step="1" placeholder="-" style="width:50px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>
                 <span style="font-size:12px;color:var(--a366-text-secondary);">秒</span>
+                <button id="a366-listentime-restore" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px;" title="恢复为计算值">参考</button>
             </div>
             <div style="border-top:1px solid var(--a366-border);background:var(--a366-bg-secondary);display:flex;flex-direction:column;flex-shrink:0;">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 10px;">
@@ -224,18 +226,31 @@
             });
             ltMin.addEventListener('change', ltCommit);
             ltSec.addEventListener('change', ltCommit);
+
+            // "参考"按钮：恢复为计算值
+            const ltRestore = document.getElementById('a366-listentime-restore');
+            if (ltRestore) {
+                ltRestore.addEventListener('click', () => {
+                    if (state.presetListenTimeSeconds === null) {
+                        addLog('[时间修改] 无可用参考值', 'warn');
+                        return;
+                    }
+                    state.listenTimeSeconds = state.presetListenTimeSeconds;
+                    localStorage.setItem('a366_listentime_seconds', String(state.presetListenTimeSeconds));
+                    const abs = Math.abs(state.presetListenTimeSeconds);
+                    ltMin.value = String(Math.floor(abs / 60));
+                    ltSec.value = String(Math.round(abs % 60));
+                    addLog('[时间修改] 已恢复为参考值 ' + state.presetListenTimeSeconds + '秒', 'success');
+                    pushListenTime();
+                });
+            }
         }
 
         makeDraggable(container, document.getElementById('a366-header'));
         autoFetchAnswers();
 
-        // 注入阶段自动拉取预设时间（仅当用户未手动设置时）
-        if (state.listenTimeSeconds === null) {
-            fetchPresetListenTime();
-        } else {
-            addLog('[时间预设] 用户已手动设置，跳过自动预设', 'info');
-            pushListenTime();
-        }
+        // 注入阶段自动拉取预设时间（覆盖用户设置）
+        fetchPresetListenTime();
     }
 
     // 从代理层拉取基于 zip 内 mp3 时长自动计算的预设听力用时
@@ -243,7 +258,15 @@
         try {
             const res = await fetch(BUCKET_URL + '/listen-time-preset', { cache: 'no-cache' });
             const data = await res.json();
+
+            // 无论成功与否，保存计算值作为参考
+            const refSeconds = data.seconds || data.calculatedSeconds;
+            if (Number.isFinite(refSeconds) && refSeconds > 0) {
+                state.presetListenTimeSeconds = refSeconds;
+            }
+
             if (data.success && Number.isFinite(data.seconds) && data.seconds > 0) {
+                // 应用到当前设置
                 state.listenTimeSeconds = data.seconds;
                 localStorage.setItem('a366_listentime_seconds', String(data.seconds));
                 // 更新 UI 输入框
@@ -254,10 +277,29 @@
                     ltMin.value = String(Math.floor(abs / 60));
                     ltSec.value = String(Math.round(abs % 60));
                 }
-                const dirInfo = data.detail ? `（${data.detail.totalDirs} 个 questions 目录，选 ${data.detail.selectedDir}）` : '';
-                addLog('[时间预设] 已自动设为 ' + data.seconds + '秒' + dirInfo, 'success');
+                // 详细日志
+                addLog('[时间预设] 已自动设为 ' + data.seconds + '秒', 'success');
+                if (data.detail) {
+                    addLog(`  计算公式：总时长×2+360（baseline）`, 'info');
+                    addLog(`  共 ${data.detail.totalDirs} 个 questions 目录：`, 'info');
+                    if (Array.isArray(data.detail.questionsDirs)) {
+                        data.detail.questionsDirs.forEach(d => {
+                            addLog(`    ${d.dir} → ${d.mp3Count}个mp3，总时长${d.sumDurations}秒，计算${d.calc}秒`, 'info');
+                        });
+                    }
+                    addLog(`  选最小值：${data.detail.selectedDir}`, 'info');
+                }
             } else {
                 addLog('[时间预设] 无可用预设：' + (data.message || '未知原因'), 'warn');
+                if (data.calculatedSeconds) {
+                    addLog(`  计算值 ${data.calculatedSeconds}秒 < 阈值1080秒，可点击"参考"手动应用`, 'info');
+                }
+                if (data.detail && Array.isArray(data.detail.questionsDirs)) {
+                    addLog(`  共 ${data.detail.totalDirs} 个 questions 目录：`, 'info');
+                    data.detail.questionsDirs.forEach(d => {
+                        addLog(`    ${d.dir} → ${d.mp3Count}个mp3，总时长${d.sumDurations}秒，计算${d.calc}秒`, 'info');
+                    });
+                }
             }
         } catch (e) {
             addLog('[时间预设] 拉取失败：' + e.message, 'warn');
@@ -306,8 +348,8 @@
         devPanel.style.cssText = `
             display: none;
             position: fixed;
-            bottom: 20px;
-            left: 20px;
+            bottom: 510px;
+            right: 20px;
             width: 480px;
             max-height: 600px;
             background: var(--a366-bg, #fff);
@@ -351,14 +393,40 @@
                     <div style="font-size:11px;color:var(--a366-text-muted);text-align:center;padding:20px;">获取答案后将自动执行重建</div>
                 </div>
                 <div id="a366-dev-tab-score" style="padding:12px;display:none;flex-direction:column;gap:10px;">
-                    <div id="a366-score-info" style="font-size:12px;font-weight:500;color:var(--a366-text);">请先执行重建</div>
-                    <div id="a366-score-slider-wrap" style="display:none;flex-direction:column;gap:8px;">
+                    <div id="a366-score-info" style="font-size:12px;font-weight:500;color:var(--a366-text);">默认20题，满分30分</div>
+                    <div id="a366-score-slider-wrap" style="display:flex;flex-direction:column;gap:8px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <span style="font-size:11px;color:#6c757d;">0 分</span>
                             <span id="a366-score-current" style="font-size:18px;font-weight:700;color:var(--a366-primary);">0.0 分</span>
                             <span style="font-size:11px;color:#6c757d;">30 分</span>
                         </div>
                         <input id="a366-score-slider" type="range" min="0" max="30" step="1.5" value="30" style="width:100%;accent-color:var(--a366-primary);">
+                        <div id="a366-score-ticks" style="display:flex;justify-content:space-between;align-items:flex-start;padding:0 2px;">
+                            <span class="a366-score-tick" data-score="18" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;min-width:28px;">
+                                <span style="width:1px;height:6px;background:var(--a366-border);"></span>
+                                <span style="font-size:10px;color:var(--a366-text-secondary);margin-top:2px;">18</span>
+                            </span>
+                            <span class="a366-score-tick" data-score="21" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;min-width:28px;">
+                                <span style="width:1px;height:6px;background:var(--a366-border);"></span>
+                                <span style="font-size:10px;color:var(--a366-text-secondary);margin-top:2px;">21</span>
+                            </span>
+                            <span class="a366-score-tick" data-score="24" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;min-width:28px;">
+                                <span style="width:1px;height:6px;background:var(--a366-border);"></span>
+                                <span style="font-size:10px;color:var(--a366-text-secondary);margin-top:2px;">24</span>
+                            </span>
+                            <span class="a366-score-tick" data-score="25.5" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;min-width:28px;">
+                                <span style="width:1px;height:6px;background:var(--a366-border);"></span>
+                                <span style="font-size:10px;color:var(--a366-text-secondary);margin-top:2px;">25.5</span>
+                            </span>
+                            <span class="a366-score-tick" data-score="27" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;min-width:28px;">
+                                <span style="width:1px;height:6px;background:var(--a366-border);"></span>
+                                <span style="font-size:10px;color:var(--a366-text-secondary);margin-top:2px;">27</span>
+                            </span>
+                            <span class="a366-score-tick" data-score="28.5" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;min-width:28px;">
+                                <span style="width:1px;height:6px;background:var(--a366-border);"></span>
+                                <span style="font-size:10px;color:var(--a366-text-secondary);margin-top:2px;">28.5</span>
+                            </span>
+                        </div>
                         <div id="a366-score-preview" style="font-size:11px;color:#6c757d;padding:6px 10px;background:#e9ecef;border-radius:4px;text-align:center;"></div>
                     </div>
                 </div>
@@ -380,6 +448,7 @@
         });
 
         bindScoreSlider();
+        bindScoreTicks();
         updateScorePreview();
 
         makeDraggable(devPanel, document.getElementById('a366-dev-header'));
@@ -838,9 +907,8 @@
     // ==========================================
 
     function updateScorePreview() {
-        const total = state.rebuildResults.length;
+        const total = state.rebuildResults.length || 20;
         const info = document.getElementById('a366-score-info');
-        const sliderWrap = document.getElementById('a366-score-slider-wrap');
         const slider = document.getElementById('a366-score-slider');
         const currentLabel = document.getElementById('a366-score-current');
         const preview = document.getElementById('a366-score-preview');
@@ -848,15 +916,35 @@
         const targetScore = parseFloat(slider ? slider.value : 0) || 0;
         if (currentLabel) currentLabel.textContent = targetScore.toFixed(1) + ' 分';
 
-        if (total === 0) {
-            if (info) info.textContent = '请先执行重建';
-            if (sliderWrap) sliderWrap.style.display = 'none';
-            return;
+        const rebuilt = state.rebuildResults.length > 0;
+        const mismatch = rebuilt && state.rebuildResults.length !== state.answerList.length;
+
+        if (info) {
+            if (!rebuilt) {
+                info.textContent = '默认20题，满分30分（重建后生效）';
+                info.style.color = '';
+            } else if (mismatch) {
+                info.innerHTML = `⚠ 答案${state.answerList.length}条 ≠ 题目${state.rebuildResults.length}题，控分可能不准确`;
+                info.style.color = 'var(--a366-danger)';
+            } else {
+                info.textContent = `满分 ${(total * 1.5).toFixed(1)} 分（${total} 题 × 1.5）`;
+                info.style.color = '';
+            }
         }
 
-        const maxScore = total * 1.5;
-        if (info) info.textContent = `满分 ${maxScore.toFixed(1)} 分（${total} 题 × 1.5）`;
-        if (sliderWrap) sliderWrap.style.display = 'flex';
+        // 答案数≠题数时，主面板操作按钮背景变红警告
+        const btnIds = ['a366-auto-fill-all', 'a366-jiaojuan-btn', 'a366-auto-btn', 'a366-score-btn'];
+        btnIds.forEach(id => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            if (mismatch) {
+                btn.dataset.origBg = btn.dataset.origBg || btn.style.background;
+                btn.style.background = 'var(--a366-danger)';
+            } else if (btn.dataset.origBg) {
+                btn.style.background = btn.dataset.origBg;
+                delete btn.dataset.origBg;
+            }
+        });
 
         const correctCount = Math.min(total, Math.round(targetScore / 1.5));
         const wrongCount = total - correctCount;
@@ -869,8 +957,7 @@
         if (scoreSlider) {
             scoreSlider.addEventListener('input', () => { updateScorePreview(); });
             scoreSlider.addEventListener('change', () => {
-                const total = state.rebuildResults.length;
-                if (total === 0) return;
+                const total = state.rebuildResults.length || 20;
                 const targetScore = parseFloat(scoreSlider.value) || 0;
                 const correctCount = Math.min(total, Math.round(targetScore / 1.5));
                 const wrongCount = total - correctCount;
@@ -879,6 +966,19 @@
                 renderMainFillSection();
             });
         }
+    }
+
+    function bindScoreTicks() {
+        const scoreSlider = document.getElementById('a366-score-slider');
+        devPanel.querySelectorAll('.a366-score-tick').forEach(tick => {
+            tick.addEventListener('click', () => {
+                if (!scoreSlider) return;
+                const score = parseFloat(tick.dataset.score);
+                scoreSlider.value = score;
+                scoreSlider.dispatchEvent(new Event('input'));
+                scoreSlider.dispatchEvent(new Event('change'));
+            });
+        });
     }
 
     // ==========================================

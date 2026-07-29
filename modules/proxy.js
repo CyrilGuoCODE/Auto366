@@ -174,24 +174,36 @@ class ProxyServer {
               return callback();
             }
 
-            // ===== 填空时间修改：改写填空作业提交用时（gzip端点需重新压缩）=====
+            // ===== 填空时间修改：改写填空作业提交用时（gzip端点需先解压再改写再重新压缩）=====
             if (hasFillTime) {
-              const modifiedBody = this.applyFillTimeMod(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
-              zlib.gzip(Buffer.from(modifiedBody, 'utf-8'), (err, compressed) => {
-                if (err) {
-                  this.safeIpcSend('rule-log', { type: 'error', message: `[填空时间] gzip压缩失败: ` + err.message, url: fullUrl });
-                  this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
-                } else {
-                  ctx.proxyToServerRequest.removeHeader('transfer-encoding');
-                  ctx.proxyToServerRequest.setHeader('content-encoding', 'gzip');
-                  ctx.proxyToServerRequest.setHeader('content-length', compressed.length);
-                  ctx.proxyToServerRequest.write(compressed);
-                  if (requestInfo) {
-                    try { requestInfo.requestBody = JSON.stringify(JSON.parse(modifiedBody), null, 2); }
-                    catch (e) { requestInfo.requestBody = modifiedBody; }
+              // gzip/submit 的请求体是应用层 gzip 压缩的二进制流（无 content-encoding 头），
+              // 需要先 gunzip 得到明文，才能交给 applyFillTimeMod 解析改写。
+              const fillTimeProcess = (plainBody) => {
+                const modifiedBody = this.applyFillTimeMod(plainBody, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+                zlib.gzip(Buffer.from(modifiedBody, 'utf-8'), (err, compressed) => {
+                  if (err) {
+                    this.safeIpcSend('rule-log', { type: 'error', message: `[填空时间] gzip压缩失败: ` + err.message, url: fullUrl });
+                    this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
+                  } else {
+                    ctx.proxyToServerRequest.removeHeader('transfer-encoding');
+                    ctx.proxyToServerRequest.setHeader('content-encoding', 'gzip');
+                    ctx.proxyToServerRequest.setHeader('content-length', compressed.length);
+                    ctx.proxyToServerRequest.write(compressed);
+                    if (requestInfo) {
+                      try { requestInfo.requestBody = JSON.stringify(JSON.parse(modifiedBody), null, 2); }
+                      catch (e) { requestInfo.requestBody = modifiedBody; }
+                    }
                   }
+                  return callback();
+                });
+              };
+              // 先尝试 gunzip 解压请求体；若失败则按明文处理（兼容非压缩提交）
+              zlib.gunzip(bodyBuffer, (gzErr, decompressed) => {
+                if (!gzErr && decompressed) {
+                  fillTimeProcess(decompressed.toString('utf-8'));
+                } else {
+                  fillTimeProcess(body);
                 }
-                return callback();
               });
               return;
             }
@@ -1143,7 +1155,6 @@ class ProxyServer {
   }
 
   // ===== 填空时间修改：是否命中作业提交接口 =====
-  // 与听力共用 task/score/submit 接口，但仅在听力时间修改未启用时生效，避免冲突
   shouldApplyFillTime(url, method) {
     if (!this.fillTimeMod || this.fillTimeMod.enabled !== true) return false;
     if (this.fillTimeMod.seconds === null || this.fillTimeMod.seconds === undefined) return false;
@@ -2325,22 +2336,27 @@ class ProxyServer {
     const zip = new StreamZip.async({ file: zipPath });
     const entries = await zip.entries();
 
-    // 自动搜索所有 questions 子目录下的 mp3 文件，按目录分组
+    // 1. 获取 ZIP 内所有 mp3 文件（不限目录）
+    // 2. 按 mp3 文件所在目录的"上三级目录"分组
     const questionsGroups = new Map();
     for (const entry of Object.values(entries)) {
       if (entry.isDirectory) continue;
       const name = entry.name;
-      // 匹配 questions*/ 下任意层子目录中的 .mp3 文件
-      const mp3Match = name.match(/^(questions[^/]*\/).*\.mp3$/i);
-      if (mp3Match) {
-        const dirKey = mp3Match[1];
-        if (!questionsGroups.has(dirKey)) questionsGroups.set(dirKey, []);
-        questionsGroups.get(dirKey).push(entry);
-      }
+      if (!/\.mp3$/i.test(name)) continue;
+      // 取 mp3 所在目录
+      const lastSlash = name.lastIndexOf('/');
+      const fileDir = lastSlash >= 0 ? name.substring(0, lastSlash + 1) : '';
+      // 上三级目录：去掉最后两级
+      const parts = fileDir.split('/').filter(Boolean);
+      // parts.length - 2 表示从文件所在目录向上两级
+      const parentParts = parts.length > 2 ? parts.slice(0, parts.length - 2) : parts;
+      const groupKey = parentParts.length > 0 ? parentParts.join('/') + '/' : '';
+      if (!questionsGroups.has(groupKey)) questionsGroups.set(groupKey, []);
+      questionsGroups.get(groupKey).push(entry);
     }
 
     const LISTEN_TIME_BASELINE = 360;
-    const LISTEN_TIME_MIN_THRESHOLD = 1080;
+    const LISTEN_TIME_FILTER_THRESHOLD = 1000;
     const dirResults = [];
 
     for (const [dirKey, mp3Entries] of questionsGroups) {
@@ -2357,6 +2373,8 @@ class ProxyServer {
       if (durations.length === 0) continue;
       const sumDurations = durations.reduce((a, b) => a + b, 0);
       const calc = Math.round(sumDurations * 2 + LISTEN_TIME_BASELINE);
+      // 过滤小于1000秒的分组
+      if (calc < LISTEN_TIME_FILTER_THRESHOLD) continue;
       dirResults.push({
         dir: dirKey,
         mp3Count: durations.length,
@@ -2368,25 +2386,12 @@ class ProxyServer {
     await zip.close();
 
     if (dirResults.length === 0) {
-      const result = { success: false, error: 'no_mp3_found', message: 'ZIP 内未找到 questions 目录下的 mp3 文件', ts: Date.now() };
+      const result = { success: false, error: 'no_mp3_found', message: 'ZIP 内未找到 mp3 文件', ts: Date.now() };
       this.listenTimePresetCache[zipPath] = result;
       return result;
     }
 
     const minResult = dirResults.reduce((a, b) => a.calc < b.calc ? a : b);
-
-    // 计算值小于 1080 秒时不预设
-    if (minResult.calc < LISTEN_TIME_MIN_THRESHOLD) {
-      const result = {
-        success: false, error: 'below_threshold',
-        message: `预设计算值 ${minResult.calc}秒 < ${LISTEN_TIME_MIN_THRESHOLD}秒，不预设`,
-        calculatedSeconds: minResult.calc,
-        detail: { questionsDirs: dirResults, baseline: LISTEN_TIME_BASELINE, selectedDir: minResult.dir, totalDirs: dirResults.length },
-        ts: Date.now()
-      };
-      this.listenTimePresetCache[zipPath] = result;
-      return result;
-    }
 
     const result = {
       success: true,
