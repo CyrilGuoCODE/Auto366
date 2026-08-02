@@ -446,6 +446,10 @@
                                 <label for="aiApiKeyInput">DeepSeek Key:</label>
                                 <input type="password" id="aiApiKeyInput" class="form-input" placeholder="sk-...">
                             </div>
+                            <div class="setting-item">
+                                <label for="glmApiKeyInput">GLM-TTS Key:</label>
+                                <input type="password" id="glmApiKeyInput" class="form-input" placeholder="智谱API密钥...">
+                            </div>
                         </div>
                         <div class="setting-group">
                             <h4>缓存设置</h4>
@@ -498,6 +502,7 @@
                                     <option value="auto" selected>自动 (优先离线，失败用chestnut)</option>
                                     <option value="sherpa-onnx">sherpa-onnx (离线本地)</option>
                                     <option value="chestnut">chestnut (在线)</option>
+                                    <option value="glm-tts">GLM-TTS (智谱云端)</option>
                                 </select>
                             </div>
                             <div class="setting-item__description">auto: 优先本地sherpa-onnx，不可用时自动回退chestnut在线；chestnut: 无需本地模型，需联网</div>

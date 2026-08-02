@@ -23,6 +23,7 @@
 @import "./features/logs.css";
 @import "./features/tun.css";
 @import "./features/speed.css";
+@import "./features/tts-approval.css";
 
 /* 浮窗/弹窗/覆盖层 */
 @import "./overlay/appreciation.css";

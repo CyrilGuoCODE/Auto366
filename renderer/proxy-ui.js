@@ -223,6 +223,29 @@ class ProxyUI {
           this.logManager.addSuccessLog('DeepSeek Key已更新' + (newKey ? '' : ' (已清空)'));
         });
       }
+
+      // 初始化 GLM-TTS API Key
+      const glmApiKeyInput = document.getElementById('glmApiKeyInput');
+      if (glmApiKeyInput) {
+        const savedGlmApiKey = localStorage.getItem('glm-api-key') || '';
+        glmApiKeyInput.value = savedGlmApiKey;
+        if (savedGlmApiKey && window.electronAPI && window.electronAPI.setGlmApiKey) {
+          window.electronAPI.setGlmApiKey(savedGlmApiKey);
+        }
+
+        glmApiKeyInput.addEventListener('change', async () => {
+          const newKey = glmApiKeyInput.value.trim();
+          localStorage.setItem('glm-api-key', newKey);
+          if (window.electronAPI && window.electronAPI.setGlmApiKey) {
+            try {
+              await window.electronAPI.setGlmApiKey(newKey);
+            } catch (error) {
+              console.error('同步GLM-TTS API Key到主进程失败:', error);
+            }
+          }
+          this.logManager.addSuccessLog('GLM-TTS Key已更新' + (newKey ? '' : ' (已清空)'));
+        });
+      }
     } catch (error) {
       console.error('初始化代理端口设置失败:', error);
     }

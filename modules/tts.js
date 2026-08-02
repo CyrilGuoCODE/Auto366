@@ -24,6 +24,7 @@ const os = require('os');
 const child_process = require('child_process');
 
 const chestnutTts = require('./chestnut-tts');
+const glmTts = require('./glm-tts');
 
 const VOICE_MAP = {
   Jasper: 0,
@@ -37,7 +38,13 @@ const VOICE_MAP = {
 };
 
 // 可用引擎列表
-const AVAILABLE_ENGINES = ['auto', 'sherpa-onnx', 'chestnut'];
+const AVAILABLE_ENGINES = ['auto', 'sherpa-onnx', 'chestnut', 'glm-tts'];
+
+// GLM-TTS 音色映射（友好名 → API voice 参数）
+const GLM_VOICE_MAP = {
+  Jasper: 'tongtong', Bella: 'tongtong', Bruno: 'tongtong', Luna: 'tongtong',
+  Hugo: 'tongtong', Rosie: 'tongtong', Leo: 'tongtong', Kiki: 'tongtong',
+};
 
 class TtsManager {
   constructor() {
@@ -75,6 +82,108 @@ class TtsManager {
     this.rulesManager = null;
     this.appPath = null;
     this.selectedModel = null; // 用户选中的模型文件夹名
+
+    // ===== 预清洗审批队列 =====
+    // 答案到达后先入此队列，等用户审批/修改后再调用 generateForApprovedTexts 生成 wav
+    // 队列项: { index, original, edited, source }
+    //   - index: 1-based 序号，与最终 wav 文件名对应
+    //   - original: 从 answers[i].answer 提取的原始文本
+    //   - edited: 用户审批后的文本（初始 = original）
+    //   - source: 来源元信息（ruleName / url，便于追溯）
+    this.pendingApprovalQueue = [];
+    this.pendingBasePath = null;
+    this.pendingApprovalSource = null;
+  }
+
+  // ---- 预清洗：入队审批 ----
+  // 替代旧 setImmediate(() => generateForAnswers(answers, basePath)) 的直接调用
+  // 此处只做文本抽取 + 入队，不实际生成 wav；后续由审批通过后的 generateForApprovedTexts 真正生成
+  queueForApproval(answers, basePath, sourceInfo) {
+    if (!Array.isArray(answers) || answers.length === 0) {
+      this._log('预清洗入队跳过：答案为空', 'warning');
+      return;
+    }
+    if (basePath) {
+      this.currentBasePath = basePath;
+      this.pendingBasePath = basePath;
+    }
+    this.pendingApprovalSource = sourceInfo || null;
+
+    // 清空旧队列（新一批答案到达意味着旧一批准已过期或已处理）
+    this.pendingApprovalQueue = [];
+
+    // ===== 预清洗钩子（预留，暂不实现） =====
+    // 未来可在此对 originalText 做自动清洗，例如：
+    //   - 多答案分隔符拆分（'a/b/c' → 3 条）
+    //   - 中英文分离
+    //   - 去除题号前缀、HTML 标签、不可朗读字符
+    // 当前实现：直接使用原始文本，仅交给用户审批/修改
+    for (let i = 0; i < answers.length; i++) {
+      const originalText = answers[i].answer || answers[i].content || answers[i].text || '';
+      if (!originalText || !String(originalText).trim()) continue;
+      const item = {
+        index: this.pendingApprovalQueue.length + 1,
+        original: String(originalText),
+        edited: String(originalText),
+        source: sourceInfo || null,
+      };
+      // 钩子占位：futureClean(item)
+      this.pendingApprovalQueue.push(item);
+    }
+
+    this._log(`预清洗入队: ${this.pendingApprovalQueue.length} 条待审批 (basePath=${this.pendingBasePath})`, 'info');
+
+    // 通知渲染进程弹出审批 UI
+    this._notifyApprovalPending();
+  }
+
+  _notifyApprovalPending() {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
+    try {
+      this.mainWindow.webContents.send('tts-approval-pending', {
+        count: this.pendingApprovalQueue.length,
+        basePath: this.pendingBasePath,
+        source: this.pendingApprovalSource,
+      });
+    } catch (e) { /* 忽略 */ }
+  }
+
+  getPendingApprovalQueue() {
+    return {
+      items: this.pendingApprovalQueue.map(it => ({
+        index: it.index,
+        original: it.original,
+        edited: it.edited,
+        source: it.source,
+      })),
+      basePath: this.pendingBasePath,
+      source: this.pendingApprovalSource,
+    };
+  }
+
+  // 用户审批通过后调用：texts 为最终文本数组（顺序与 queue 一致）
+  async generateForApprovedTexts(texts, basePath) {
+    if (!Array.isArray(texts) || texts.length === 0) {
+      this._log('审批通过但文本为空，跳过生成', 'warning');
+      return;
+    }
+    if (basePath) this.currentBasePath = basePath;
+
+    // 用审批后的文本走原始生成流程（复用 generateForAnswers 内部逻辑，构造一个伪 answers 数组）
+    const fakeAnswers = texts.map(t => ({ answer: t }));
+    // 同步回 textMap（regenerateAll 时能复用）
+    this.pendingApprovalQueue = [];
+    this._log(`审批通过: ${fakeAnswers.length} 条文本开始生成`, 'success');
+    await this.generateForAnswers(fakeAnswers, basePath);
+  }
+
+  // 用户取消：丢弃队列
+  clearApprovalQueue() {
+    const n = this.pendingApprovalQueue.length;
+    this.pendingApprovalQueue = [];
+    this.pendingBasePath = null;
+    this.pendingApprovalSource = null;
+    this._log(`审批队列已清空 (${n} 条丢弃)`, 'info');
   }
 
   /**
@@ -194,6 +303,10 @@ class TtsManager {
           // 恢复 chestnut 音色
           if (saved.chestnutVoice) {
             this.config.chestnutVoice = saved.chestnutVoice;
+          }
+          // 恢复 glm-tts 音色
+          if (saved.glmVoice) {
+            this.config.glmVoice = saved.glmVoice;
           }
         }
       }
@@ -366,9 +479,11 @@ class TtsManager {
   async _ensureEngine() {
     // 已就绪
     if (this.activeEngine === 'chestnut') return 'chestnut';
+    if (this.activeEngine === 'glm-tts') return 'glm-tts';
     if (this.activeEngine === 'sherpa-onnx' && this.initialized) return 'sherpa-onnx';
 
     const wantChestnut = this.engine === 'chestnut';
+    const wantGlmTts = this.engine === 'glm-tts';
     const wantSherpa = this.engine === 'sherpa-onnx';
     const wantAuto = this.engine === 'auto';
 
@@ -377,6 +492,13 @@ class TtsManager {
       this.activeEngine = 'chestnut';
       this._log('使用 chestnut 在线 TTS 引擎', 'info');
       return 'chestnut';
+    }
+
+    // 强制使用 glm-tts
+    if (wantGlmTts) {
+      this.activeEngine = 'glm-tts';
+      this._log('使用 GLM-TTS 云端语音合成引擎', 'info');
+      return 'glm-tts';
     }
 
     // 尝试 sherpa-onnx
@@ -427,6 +549,75 @@ class TtsManager {
     return { index, filePath };
   }
 
+  /**
+   * 使用 GLM-TTS 引擎生成单条音频并写入磁盘
+   * @returns {Promise<{index, filePath}>}
+   */
+  async _generateViaGlmTts(text, index) {
+    const voice = this.config.glmVoice || 'tongtong';
+    const t0 = Date.now();
+    const result = await glmTts.synthLong(text, voice);
+    const ext = result.format || 'wav';
+    const filePath = path.join(this.cacheDir, `${index}.${ext}`);
+    fs.writeFileSync(filePath, result.audio);
+    this._log(`GLM-TTS #${index}: ${(result.audio.length / 1024).toFixed(0)}KB ${ext} ${Date.now() - t0}ms`, 'info');
+    return { index, filePath };
+  }
+
+  // ---- 并发池：处理任务数组，限制并发数 ----
+  // 支持暂停/恢复：任务函数内部可通过 this._concurrencyController.pause()/resume() 控制
+  // 用于 glm-tts 失败重试场景（重试期间不拉取新任务）
+  async _runConcurrently(tasks, concurrency, onProgress) {
+    const results = new Array(tasks.length);
+    let idx = 0;
+    let done = 0;
+
+    // 暂停机制：所有 worker 在拉取新任务前等待 gate
+    // 用数组保存所有等待者，resume 时全部唤醒
+    const waiters = [];
+    let paused = false;
+    const waitGate = () => {
+      if (!paused) return Promise.resolve();
+      return new Promise(resolve => { waiters.push(resolve); });
+    };
+    const pause = () => {
+      if (paused) return;
+      paused = true;
+      this._log('[并发池] 暂停拉取新任务，等待重试完成...', 'warning');
+    };
+    const resume = () => {
+      if (!paused) return;
+      paused = false;
+      const toWake = waiters.splice(0);
+      for (const w of toWake) w();
+      this._log('[并发池] 已恢复并发', 'info');
+    };
+    this._concurrencyController = { pause, resume };
+
+    const run = async () => {
+      while (idx < tasks.length) {
+        await waitGate();
+        if (idx >= tasks.length) break;
+        const i = idx++;
+        try {
+          results[i] = await tasks[i]();
+        } catch (e) {
+          results[i] = { error: e };
+        }
+        done++;
+        if (onProgress) onProgress(done, results[i], i);
+      }
+    };
+
+    const workers = [];
+    for (let w = 0; w < Math.min(concurrency, tasks.length); w++) {
+      workers.push(run());
+    }
+    await Promise.all(workers);
+    this._concurrencyController = null;
+    return results;
+  }
+
   // ---- 批量为答案生成 TTS ----
   async generateForAnswers(answers, basePath) {
     if (!answers || !Array.isArray(answers) || answers.length === 0) return;
@@ -452,45 +643,127 @@ class TtsManager {
 
     this.isGenerating = true;
     this.generationProgress = { total, generated: 0, skipped: 0 };
-    this._log(`开始生成 ${total} 条语音 [${engine}]...`, 'info');
+    this._log(`开始生成 ${total} 条语音 [${engine}] (并发3)...`, 'info');
 
+    // 预计算任务列表：过滤空文本，分配序号
+    const tasks = [];
     for (let i = 0; i < answers.length; i++) {
-      const answer = answers[i];
-      const text = answer.answer || answer.content || answer.text || '';
-      if (!text) { skipped++; this.generationProgress.skipped = skipped; continue; }
+      const text = answers[i].answer || answers[i].content || answers[i].text || '';
+      if (!text) { skipped++; continue; }
+      const index = tasks.length + 1;
+      tasks.push({ text, index });
+    }
+    this.generationProgress.skipped = skipped;
 
-      const index = this.nextIndex;
-      try {
-        let result;
-        if (engine === 'chestnut') {
-          result = await this._generateViaChestnut(text, index);
-        } else {
-          result = await this._sendToWorker({ text, index });
+    // 并发执行（并发3）
+    // glm-tts 单条失败时：任务函数内部暂停并发 → 重试最多 2 次（间隔 500ms）→ 仍失败则恢复并发
+    // 主流程结束后还有一次补生成（仅 glm-tts 失败项，串行每项3次）
+    const maxRetries = 2;
+    await this._runConcurrently(
+      tasks.map(({ text, index }) => async () => {
+        // glm-tts 内联重试：失败 → 暂停并发 → 重试 → 恢复并发
+        // 非 glm-tts 引擎无重试
+        let result, lastErr;
+        for (let attempt = 0; attempt <= (engine === 'glm-tts' ? maxRetries : 0); attempt++) {
+          try {
+            if (engine === 'glm-tts') {
+              result = await this._generateViaGlmTts(text, index);
+            } else if (engine === 'chestnut') {
+              result = await this._generateViaChestnut(text, index);
+            } else {
+              result = await this._sendToWorker({ text, index });
+            }
+            if (result && result.filePath) break; // 成功
+          } catch (e) {
+            lastErr = e;
+          }
+          // glm-tts 失败重试：暂停并发 → 等 500ms → 重试
+          if (engine === 'glm-tts' && attempt < maxRetries) {
+            if (this._concurrencyController) this._concurrencyController.pause();
+            this._log(`第 ${index} 条失败，重试 ${attempt + 1}/${maxRetries}...`, 'warning');
+            await new Promise(r => setTimeout(r, 500));
+            // resume 在循环末尾统一处理（见下）
+          }
         }
-        if (result.filePath) {
-          this.fileIndex.set(index, result.filePath);
-          this.textMap.set(index, text);
-          this.nextIndex++;
+        // 重试完成后恢复并发
+        if (this._concurrencyController) this._concurrencyController.resume();
+
+        if (result && result.filePath) {
+          return { index, ...result };
+        }
+        return { index, error: lastErr || new Error('生成失败') };
+      }),
+      3,
+      (_done, result, _i) => {
+        if (result && !result.error && result.filePath) {
+          this.fileIndex.set(result.index, result.filePath);
+          this.textMap.set(result.index, tasks.find(t => t.index === result.index).text);
+          if (result.index >= this.nextIndex) this.nextIndex = result.index + 1;
           generated++;
           this.generationProgress.generated = generated;
+        } else if (result && result.error) {
+          this._log('生成第 ' + result.index + ' 条失败: ' + result.error.message, 'error');
         }
-      } catch (e) {
-        this._log('生成第 ' + index + ' 条失败: ' + e.message, 'error');
+        // 进度日志
+        const processed = generated + skipped + (result && result.error ? 1 : 0);
+        if (processed % 5 === 0 || processed >= total) {
+          const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
+          this._log(`进度 ${generated}/${tasks.length} (${elapsed}s)`, 'info');
+        }
       }
+    );
 
-      // 每 5 条或最后一条时输出进度
-      const processed = generated + skipped;
-      if (processed % 5 === 0 || i === answers.length - 1) {
-        const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
-        this._log(`进度 ${processed}/${total} (${elapsed}s)`, 'info');
+    // 阶段二：补生成（仅 glm-tts 失败项，串行每项3次，使用原序号原文本）
+    // 通过 fileIndex 是否含该序号判断是否仍失败（重试成功的项会被排除）
+    if (engine === 'glm-tts') {
+      const stillFailed = tasks.filter(t => !this.fileIndex.has(t.index));
+      if (stillFailed.length > 0) {
+        const recovered = await this._batchRetryGlm(stillFailed, 3, 500);
+        generated += recovered;
+        this.generationProgress.generated = generated;
       }
     }
 
     // 汇总日志
     const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
-    this._log(`生成完成: ${generated}/${total} 成功, ${skipped} 跳过 (${totalElapsed}s) [${engine}]`, 'success');
+    this._log(`生成完成: ${generated}/${tasks.length} 成功, ${skipped} 跳过 (${totalElapsed}s) [${engine}]`, 'success');
 
     this.isGenerating = false;
+  }
+
+  // glm-tts 失败项补生成：串行执行，每项尝试 maxAttempts 次，间隔 delayMs
+  // 返回成功补回的条数
+  async _batchRetryGlm(failedTasks, maxAttempts = 3, delayMs = 500) {
+    let recovered = 0;
+    for (const task of failedTasks) {
+      let lastErr = null;
+      let success = false;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        this._log(`补生成 #${task.index} 尝试 ${attempt}/${maxAttempts}...`, 'warning');
+        if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+        try {
+          const r = await this._generateViaGlmTts(task.text, task.index);
+          if (r && r.filePath) {
+            this.fileIndex.set(r.index, r.filePath);
+            this.textMap.set(r.index, task.text);
+            if (r.index >= this.nextIndex) this.nextIndex = r.index + 1;
+            recovered++;
+            success = true;
+            this._log(`补生成 #${task.index} 成功`, 'success');
+            break;
+          }
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      if (!success) {
+        this._log(`补生成 #${task.index} ${maxAttempts} 次后仍失败: ${lastErr ? lastErr.message : '未知错误'}`, 'error');
+      }
+    }
+    if (failedTasks.length > 0) {
+      this._log(`补生成结束: ${recovered}/${failedTasks.length} 成功`, recovered > 0 ? 'success' : 'warning');
+    }
+    return recovered;
   }
 
   // ---- 配置变更后重新生成 ----
@@ -508,44 +781,72 @@ class TtsManager {
     this.nextIndex = 1;
 
     const sortedKeys = Array.from(this.textMap.keys()).sort((a, b) => a - b);
-    const newTextMap = new Map();
-    let generated = 0;
     const total = sortedKeys.length;
     const batchStart = Date.now();
 
-    this._log(`开始重新生成 ${total} 条语音 [${engine}]...`, 'info');
+    this._log(`开始重新生成 ${total} 条语音 [${engine}] (并发3)...`, 'info');
 
     this.isGenerating = true;
     this.generationProgress = { total, generated: 0, skipped: 0 };
 
-    for (let i = 0; i < sortedKeys.length; i++) {
-      const oldIndex = sortedKeys[i];
-      const text = this.textMap.get(oldIndex);
-      const index = this.nextIndex;
-      try {
-        let result;
-        if (engine === 'chestnut') {
-          result = await this._generateViaChestnut(text, index);
-        } else {
-          result = await this._sendToWorker({ text, index });
+    // 预分配新序号 1, 2, 3, ...
+    const tasks = sortedKeys.map((oldIndex, i) => ({
+      text: this.textMap.get(oldIndex),
+      oldIndex,
+      index: i + 1,
+    }));
+
+    let generated = 0;
+    const newTextMap = new Map();
+
+    const maxRetries = 2;
+    await this._runConcurrently(
+      tasks.map(({ text, index }) => async () => {
+        let result, lastErr;
+        for (let attempt = 0; attempt <= (engine === 'glm-tts' ? maxRetries : 0); attempt++) {
+          try {
+            if (engine === 'glm-tts') {
+              result = await this._generateViaGlmTts(text, index);
+            } else if (engine === 'chestnut') {
+              result = await this._generateViaChestnut(text, index);
+            } else {
+              result = await this._sendToWorker({ text, index });
+            }
+            if (result && result.filePath) break;
+          } catch (e) {
+            lastErr = e;
+          }
+          if (engine === 'glm-tts' && attempt < maxRetries) {
+            if (this._concurrencyController) this._concurrencyController.pause();
+            this._log(`第 ${index} 条失败，重试 ${attempt + 1}/${maxRetries}...`, 'warning');
+            await new Promise(r => setTimeout(r, 500));
+          }
         }
-        if (result.filePath) {
-          newTextMap.set(index, text);
-          this.fileIndex.set(index, result.filePath);
-          this.nextIndex++;
+        if (this._concurrencyController) this._concurrencyController.resume();
+
+        if (result && result.filePath) {
+          return { index, ...result };
+        }
+        return { index, error: lastErr || new Error('生成失败') };
+      }),
+      3,
+      (_done, result, _i) => {
+        if (result && !result.error && result.filePath) {
+          newTextMap.set(result.index, tasks.find(t => t.index === result.index).text);
+          this.fileIndex.set(result.index, result.filePath);
+          if (result.index >= this.nextIndex) this.nextIndex = result.index + 1;
           generated++;
           this.generationProgress.generated = generated;
+        } else if (result && result.error) {
+          this._log('重新生成第 ' + result.index + ' 条失败: ' + result.error.message, 'error');
         }
-      } catch (e) {
-        this._log('重新生成第 ' + index + ' 条失败: ' + e.message, 'error');
+        const done = generated + (result && result.error ? 1 : 0);
+        if (done % 5 === 0 || done >= total) {
+          const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
+          this._log(`进度 ${generated}/${total} (${elapsed}s)`, 'info');
+        }
       }
-
-      // 每 5 条或最后一条时输出进度
-      if ((i + 1) % 5 === 0 || i === sortedKeys.length - 1) {
-        const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
-        this._log(`进度 ${i + 1}/${total} (${elapsed}s)`, 'info');
-      }
-    }
+    );
 
     this.textMap = newTextMap;
     const totalElapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
@@ -576,6 +877,13 @@ class TtsManager {
     if (newConfig.chestnutVoice) {
       if (this.config.chestnutVoice !== newConfig.chestnutVoice) {
         this.config.chestnutVoice = newConfig.chestnutVoice;
+        needRegenerate = true;
+      }
+    }
+    // glm-tts 音色
+    if (newConfig.glmVoice) {
+      if (this.config.glmVoice !== newConfig.glmVoice) {
+        this.config.glmVoice = newConfig.glmVoice;
         needRegenerate = true;
       }
     }
@@ -656,7 +964,8 @@ class TtsManager {
         availableVoices: Object.keys(VOICE_MAP), voiceMap: VOICE_MAP,
         generatedCount: this.fileIndex.size,
         engine: this.engine, activeEngine: this.activeEngine, availableEngines: AVAILABLE_ENGINES,
-        chestnutVoice: this.config.chestnutVoice || null }));
+        chestnutVoice: this.config.chestnutVoice || null,
+        glmVoice: this.config.glmVoice || null }));
       return true;
     }
 
@@ -699,6 +1008,7 @@ class TtsManager {
       engine: this.engine,
       activeEngine: this.activeEngine,
       chestnutVoice: this.config.chestnutVoice || null,
+      glmVoice: this.config.glmVoice || null,
     }));
     return true;
   }
@@ -727,6 +1037,7 @@ class TtsManager {
         modelName: this.selectedModel, availableModels: this.getAvailableModels().map(m => m.name),
         engine: this.engine, activeEngine: this.activeEngine, availableEngines: AVAILABLE_ENGINES,
         chestnutVoice: this.config.chestnutVoice || null,
+        glmVoice: this.config.glmVoice || null,
       };
     });
 
@@ -743,6 +1054,34 @@ class TtsManager {
       }
     });
 
+    // ===== 预清洗审批 IPC =====
+    // 获取当前待审批队列
+    ipcMain.handle('get-pending-tts-approval', async () => {
+      return this.getPendingApprovalQueue();
+    });
+
+    // 用户审批通过：items 为 [{index, edited}, ...]，按顺序生成 wav
+    ipcMain.handle('approve-tts-queue', async (event, items, basePath) => {
+      try {
+        if (!Array.isArray(items)) {
+          return { success: false, error: '参数 items 必须是数组' };
+        }
+        // 用审批后的 edited 文本作为最终 TTS 输入
+        const texts = items.map(it => (it && it.edited != null ? String(it.edited) : ''));
+        const finalBasePath = basePath || this.pendingBasePath;
+        await this.generateForApprovedTexts(texts, finalBasePath);
+        return { success: true, count: items.length };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    });
+
+    // 用户跳过/取消：清空队列
+    ipcMain.handle('skip-tts-queue', async () => {
+      this.clearApprovalQueue();
+      return { success: true };
+    });
+
     ipcMain.handle('get-tts-status', async () => {
       const basePath = this._getBasePathFromRules();
       return {
@@ -751,6 +1090,7 @@ class TtsManager {
         basePath, generatedCount: this.fileIndex.size,
         engine: this.engine, activeEngine: this.activeEngine,
         chestnutVoice: this.config.chestnutVoice || null,
+        glmVoice: this.config.glmVoice || null,
       };
     });
 

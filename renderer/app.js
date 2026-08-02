@@ -12,6 +12,7 @@ import TutorialManager from './tutorial-ui.js';
 import AgreementUI from './agreement-ui.js';
 import SpeedUI from './speed-ui.js';
 import ThemeUI from './theme-ui.js';
+import TtsApprovalUI from './tts-approval-ui.js';
 
 class Auto366App {
   constructor() {
@@ -28,6 +29,7 @@ class Auto366App {
     this.agreementUI = new AgreementUI();
     this.speedUI = new SpeedUI();
     this.themeUI = new ThemeUI();
+    this.ttsApprovalUI = new TtsApprovalUI(this.logManager);
   }
 
   // 初始化应用
@@ -83,6 +85,9 @@ class Auto366App {
 
       // 初始化 TTS 语音生成设置
       this.settingsUI.initTtsSettings();
+
+      // 初始化 TTS 预清洗审批弹窗
+      this.ttsApprovalUI.init();
 
       // 绑定更新按钮点击事件
       this.bindUpdateButtons();

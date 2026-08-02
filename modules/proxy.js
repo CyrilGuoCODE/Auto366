@@ -791,6 +791,20 @@ class ProxyServer {
     return this.aiApiKey;
   }
 
+  setGlmApiKey(key) {
+    this.glmApiKey = key || '';
+    // 同步到 glm-tts 模块
+    try {
+      const glmTts = require('./glm-tts');
+      glmTts.setApiKey(this.glmApiKey);
+    } catch (e) { /* glm-tts 未加载时忽略 */ }
+    return { success: true };
+  }
+
+  getGlmApiKey() {
+    return this.glmApiKey;
+  }
+
   // 清理HTML标签和转义符号的通用函数
   cleanHtmlText(text) {
     if (!text) return '';
@@ -1656,13 +1670,31 @@ class ProxyServer {
             }
           }
 
-          // ===== TTS 规则：从已提取答案自动触发语音生成 =====
+          // ===== TTS 规则：从已提取答案触发预清洗审批流程 =====
+          // 旧逻辑：直接 setImmediate 调用 generateForAnswers 生成 wav
+          // 新逻辑：先入审批队列，等用户在审批弹窗中确认/修改后再生成
           if (rule.type === 'tts-generate') {
-            if (this.ttsManager) {
+            if (this.ttsManager && typeof this.ttsManager.queueForApproval === 'function') {
               const answers = extracted_answers.answers || [];
               if (Array.isArray(answers) && answers.length > 0) {
                 const basePath = rule.ttsBasePath || '/tts';
-                this.safeIpcSend('rule-log', { type: 'info', message: `[TTS] 检测到 ${answers.length} 个答案，开始生成语音...` });
+                const sourceInfo = rule.name || url;
+                this.safeIpcSend('rule-log', { type: 'info', message: `[TTS] 检测到 ${answers.length} 个答案，已加入预清洗审批队列...` });
+                setImmediate(() => {
+                  try {
+                    this.ttsManager.queueForApproval(answers, basePath, sourceInfo);
+                  } catch (err) {
+                    console.error('TTS 预清洗入队失败:', err);
+                    this.safeIpcSend('rule-log', { type: 'error', message: `[TTS] 预清洗入队失败: ${err.message}` });
+                  }
+                });
+              }
+            } else if (this.ttsManager) {
+              // 兼容回退：旧版 ttsManager 没有 queueForApproval 方法时仍走直接生成
+              const answers = extracted_answers.answers || [];
+              if (Array.isArray(answers) && answers.length > 0) {
+                const basePath = rule.ttsBasePath || '/tts';
+                this.safeIpcSend('rule-log', { type: 'warning', message: `[TTS] 当前 TtsManager 不支持预清洗审批，回退为直接生成` });
                 setImmediate(() => {
                   this.ttsManager.generateForAnswers(answers, basePath).catch(err => {
                     console.error('TTS 生成失败:', err);
@@ -2709,6 +2741,29 @@ class ProxyServer {
 
     ipcMain.handle('get-ai-api-key', () => {
       return this.getAiApiKey();
+    });
+
+    ipcMain.handle('set-glm-api-key', async (event, key) => {
+      try {
+        this.setGlmApiKey(key);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('get-glm-api-key', () => {
+      return this.getGlmApiKey();
+    });
+
+    ipcMain.handle('get-glm-voices', async () => {
+      try {
+        const glmTts = require('./glm-tts');
+        const voices = await glmTts.listVoices();
+        return { success: true, voices };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
     });
 
     ipcMain.handle('import-implant-zip', async (event, sourcePath) => {

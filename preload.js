@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAnswerCaptureEnabled: () => ipcRenderer.invoke('get-answer-capture-enabled'),
   setAiApiKey: (key) => ipcRenderer.invoke('set-ai-api-key', key),
   getAiApiKey: () => ipcRenderer.invoke('get-ai-api-key'),
+  setGlmApiKey: (key) => ipcRenderer.invoke('set-glm-api-key', key),
+  getGlmApiKey: () => ipcRenderer.invoke('get-glm-api-key'),
+  getGlmVoices: () => ipcRenderer.invoke('get-glm-voices'),
 
   // 监听事件
   onProxyStatus: (callback) => ipcRenderer.on('proxy-status', callback),
@@ -125,6 +128,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTtsStatus: () => ipcRenderer.invoke('get-tts-status'),
   getTtsModels: () => ipcRenderer.invoke('get-tts-models'),
   setTtsModel: (modelName) => ipcRenderer.invoke('set-tts-model', modelName),
+
+  // TTS 预清洗审批API
+  getPendingTtsApproval: () => ipcRenderer.invoke('get-pending-tts-approval'),
+  approveTtsQueue: (items, basePath) => ipcRenderer.invoke('approve-tts-queue', items, basePath),
+  skipTtsQueue: () => ipcRenderer.invoke('skip-tts-queue'),
+  onTtsApprovalPending: (callback) => ipcRenderer.on('tts-approval-pending', (event, data) => callback(data)),
 
   // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {

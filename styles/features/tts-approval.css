@@ -1,0 +1,89 @@
+/* TTS 预清洗审批弹窗 */
+
+.tts-approval-modal .tts-approval__content {
+    width: 92%;
+    max-width: 960px;
+    height: 88vh;
+}
+
+.tts-approval__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding: var(--space-lg) var(--space-2xl);
+    flex: 1;
+    min-height: 0;
+    overflow: hidden; /* 由 textarea 内部滚动，避免双层滚动条 */
+}
+
+.tts-approval__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-lg);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-muted);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+}
+
+.tts-approval__meta-item strong {
+    color: var(--color-text);
+    font-weight: var(--font-weight-semibold);
+}
+
+.tts-approval__meta-item code {
+    padding: 1px 6px;
+    background: var(--color-bg-code);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+.tts-approval__hint {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    flex-shrink: 0;
+}
+
+.tts-approval__hint code {
+    padding: 1px 4px;
+    background: var(--color-bg-code);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+}
+
+/* 整段编辑大 textarea：撑满 body 剩余空间 */
+.tts-approval__bulk-textarea {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    padding: var(--space-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    resize: none;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 4;
+}
+
+.tts-approval__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.tts-approval__footer-hint {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    flex: 1;
+}
+
+.tts-approval__footer-actions {
+    display: flex;
+    gap: var(--space-sm);
+}

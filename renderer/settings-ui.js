@@ -156,6 +156,12 @@ class SettingsUI {
   // 初始化 TTS 语音生成设置
   initTtsSettings() {
     try {
+      // 确保 GLM-TTS API Key 已同步到主进程
+      const savedGlmKey = localStorage.getItem('glm-api-key') || '';
+      if (savedGlmKey && window.electronAPI && window.electronAPI.setGlmApiKey) {
+        window.electronAPI.setGlmApiKey(savedGlmKey).catch(() => {});
+      }
+
       // 从 localStorage 读取已保存的配置
       const savedConfig = (() => {
         try {
@@ -174,6 +180,17 @@ class SettingsUI {
         ['normal',   '中文标准 (you_xiao_shi)'],
         ['taiyi',    '太乙真人'],
         ['tianjin',  '天津话 (you_xiao_jin)'],
+      ];
+
+      // GLM-TTS 音色选项
+      const GLM_VOICES = [
+        ['tongtong',  '彤彤（默认女声）'],
+        ['xiaochen',  '小陈'],
+        ['chuichui',  '锤锤'],
+        ['jam',       'jam'],
+        ['kazi',      'kazi'],
+        ['douji',     'douji'],
+        ['luodo',     'luodo'],
       ];
 
       function populateSherpaVoices(select) {
@@ -203,10 +220,49 @@ class SettingsUI {
         });
       }
 
+      async function populateGlmVoices(select, savedGlmVoice) {
+        if (!select) return;
+        select.innerHTML = '';
+
+        // 先填入内置音色
+        GLM_VOICES.forEach(([v, t]) => {
+          const opt = document.createElement('option');
+          opt.value = v; opt.textContent = t;
+          if (v === savedGlmVoice) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        // 从账号拉取克隆音色
+        if (window.electronAPI && window.electronAPI.getGlmVoices) {
+          try {
+            const result = await window.electronAPI.getGlmVoices();
+            if (result.success && result.voices && result.voices.length > 0) {
+              // 添加分隔线
+              const sep = document.createElement('option');
+              sep.disabled = true;
+              sep.textContent = '── 克隆音色 ──';
+              select.appendChild(sep);
+
+              result.voices.forEach((v) => {
+                const opt = document.createElement('option');
+                opt.value = v.voice;
+                opt.textContent = v.voice_name + ' (' + v.voice_type + ')';
+                if (v.voice === savedGlmVoice) opt.selected = true;
+                select.appendChild(opt);
+              });
+            }
+          } catch (e) {
+            console.log('获取GLM克隆音色失败:', e);
+          }
+        }
+      }
+
       // 根据引擎切换音色下拉
-      function applyVoiceOptions(engine, savedChestnutVoice) {
+      function applyVoiceOptions(engine, savedChestnutVoice, savedGlmVoice) {
         if (engine === 'chestnut') {
           populateChestnutVoices(voiceSelect, savedChestnutVoice);
+        } else if (engine === 'glm-tts') {
+          populateGlmVoices(voiceSelect, savedGlmVoice);
         } else {
           populateSherpaVoices(voiceSelect);
         }
@@ -245,7 +301,7 @@ class SettingsUI {
       }
 
       // 按引擎初始化音色下拉
-      applyVoiceOptions(engineSelect ? engineSelect.value : 'auto', savedConfig ? savedConfig.chestnutVoice : null);
+      applyVoiceOptions(engineSelect ? engineSelect.value : 'auto', savedConfig ? savedConfig.chestnutVoice : null, savedConfig ? savedConfig.glmVoice : null);
 
       // 保存配置到 localStorage 并同步到主进程
       const saveTtsConfig = () => {
@@ -259,6 +315,10 @@ class SettingsUI {
         // chestnut 模式下额外保存 chestnutVoice
         if (engine === 'chestnut' && voiceSelect) {
           config.chestnutVoice = voiceSelect.value;
+        }
+        // glm-tts 模式下额外保存 glmVoice
+        if (engine === 'glm-tts' && voiceSelect) {
+          config.glmVoice = voiceSelect.value;
         }
         localStorage.setItem('tts-config', JSON.stringify(config));
 
@@ -302,21 +362,24 @@ class SettingsUI {
         engineSelect.addEventListener('change', () => {
           const engine = engineSelect.value;
           const isChestnut = engine === 'chestnut';
+          const isGlmTts = engine === 'glm-tts';
           // 切换音色下拉选项
           if (isChestnut) {
             populateChestnutVoices(voiceSelect, savedConfig ? savedConfig.chestnutVoice : null);
+          } else if (isGlmTts) {
+            populateGlmVoices(voiceSelect, savedConfig ? savedConfig.glmVoice : null);
           } else {
             populateSherpaVoices(voiceSelect);
-            if (savedConfig && savedConfig.voice && !isChestnut) {
+            if (savedConfig && savedConfig.voice && !isChestnut && !isGlmTts) {
               voiceSelect.value = savedConfig.voice;
             }
           }
-          // 隐藏/显示模型选择（chestnut 不需要本地模型）
-          if (modelSelect) modelSelect.closest('.setting-item').style.display = isChestnut ? 'none' : '';
+          // 隐藏/显示模型选择（在线引擎不需要本地模型）
+          if (modelSelect) modelSelect.closest('.setting-item').style.display = (isChestnut || isGlmTts) ? 'none' : '';
           saveTtsConfig();
         });
-        // 初始状态：chestnut 时隐藏模型选择
-        if (savedConfig && savedConfig.engine === 'chestnut') {
+        // 初始状态：在线引擎时隐藏模型选择
+        if (savedConfig && (savedConfig.engine === 'chestnut' || savedConfig.engine === 'glm-tts')) {
           if (modelSelect) modelSelect.closest('.setting-item').style.display = 'none';
         }
       }
