@@ -21,6 +21,7 @@ let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || fa
 let supportChoiceQuestions = localStorage.getItem('supportChoiceQuestions') === 'true' || false;
 let supportReadAlong = localStorage.getItem('supportReadAlong') === 'true' || false;
 let isReadAlongProcessing = false;
+let isWorking = false; // work() 重入保护：防止间隔小于单次耗时（如80ms）时并发执行导致漏答/跳题
 let readAlongAborted = false;
 let rawAnswerData = [];
 let elementAnswerMap = new Map();
@@ -1031,8 +1032,9 @@ function queryPrepared(root) {
 }
 
 async function work() {
-    if (isReadAlongProcessing) return;
-
+    if (isReadAlongProcessing || isWorking) return;
+    isWorking = true;
+    try {
     const getInputs = (root) => {
         const a = root.getElementsByClassName('u3-input__content--input');
         if (a && a.length) return a;
@@ -1043,12 +1045,28 @@ async function work() {
         if (!el) return false;
         const tag = (el.tagName || '').toLowerCase();
         if (tag === 'input' || tag === 'textarea') {
-            el.value = v;
+            // 原生 setter 赋值，避免直接赋值绕过 Vue 响应式
+            try {
+                const proto = tag === 'input' ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+                Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v);
+            } catch (e) {
+                el.value = v;
+            }
         } else {
             el.textContent = v;
         }
         el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
         el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        // 模拟用户点击输入框：仅设置 value 不会更新页面的"已作答"状态，
+        // 需按 先 mousedown 再 focus 的顺序触发交互序列（已验证）才会被标记已答
+        try {
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+            el.dispatchEvent(new Event('focus', { bubbles: true, cancelable: true }));
+            el.dispatchEvent(new Event('focusin', { bubbles: true, cancelable: true }));
+            el.focus();
+        } catch (e) {}
         return true;
     };
 
@@ -1167,7 +1185,9 @@ async function work() {
         if (activeSlide) {
             const numEl = activeSlide.querySelector('.u3-question-container__ques-order--number');
             const realNum = numEl ? parseInt(numEl.textContent.trim()) : 0;
-            const slideInputs = activeSlide.querySelectorAll('.u3-input__content--input, .u3-input__content');
+            // 只取输入框元素，避免容器 div 与子 input 双重匹配导致 textContent 替换销毁 DOM
+            let slideInputs = activeSlide.querySelectorAll('.u3-input__content--input');
+            if (!slideInputs.length) slideInputs = activeSlide.querySelectorAll('.u3-input__content');
             if (slideInputs.length > 0 && realNum > 0) {
                 modeInputs = Array.from(slideInputs);
                 modePrepared = Array.from(slideInputs).map(() => ({ innerHTML: String(realNum) }));
@@ -1241,6 +1261,9 @@ async function work() {
             nextBtn.click();
             addLogMessage('已点击翻页按钮（下一题）', 'info');
         }
+    }
+    } finally {
+        isWorking = false;
     }
 }
 
