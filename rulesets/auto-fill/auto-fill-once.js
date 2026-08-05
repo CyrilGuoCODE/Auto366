@@ -21,7 +21,8 @@ let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || fa
 let supportChoiceQuestions = localStorage.getItem('supportChoiceQuestions') === 'true' || false;
 let supportReadAlong = localStorage.getItem('supportReadAlong') === 'true' || false;
 let isReadAlongProcessing = false;
-let isWorking = false; // work() 重入保护：防止间隔小于单次耗时（如80ms）时并发执行导致漏答/跳题
+let fillExecMode = localStorage.getItem('fillExecMode') || 'auto'; // 执行模式：auto(按题型自动) | serial(强制串行) | concurrent(强制并发)
+let isWorking = false; // 新题型（u3-input 填空）的 work() 串行重入锁：上一轮未结束时不允许重入
 let readAlongAborted = false;
 let rawAnswerData = [];
 let elementAnswerMap = new Map();
@@ -1032,8 +1033,21 @@ function queryPrepared(root) {
 }
 
 async function work() {
-    if (isReadAlongProcessing || isWorking) return;
-    isWorking = true;
+    if (isReadAlongProcessing) return;
+
+    // 串行判断：需要"点击序列提交已答"的新题型（u3-input 填空）必须串行，
+    // 否则间隔小于单次耗时（如80ms）时 work() 并发重入会导致漏答/跳题；
+    // 旧题型无此提交要求，保持并发以保留流水线效率。
+    // 手动模式（fillExecMode）可覆盖自动判定：serial 强制串行，concurrent 强制并发。
+    const isU3InputPage = !!document.querySelector('.u3-input__content--input');
+    let useSerial;
+    if (fillExecMode === 'serial') useSerial = true;
+    else if (fillExecMode === 'concurrent') useSerial = false;
+    else useSerial = isU3InputPage;
+    if (useSerial) {
+        if (isWorking) return;
+        isWorking = true;
+    }
     try {
     const getInputs = (root) => {
         const a = root.getElementsByClassName('u3-input__content--input');
@@ -1057,16 +1071,17 @@ async function work() {
         }
         el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
         el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-        // 模拟用户点击输入框：仅设置 value 不会更新页面的"已作答"状态，
-        // 需按 先 mousedown 再 focus 的顺序触发交互序列（已验证）才会被标记已答
-        try {
-            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-            el.dispatchEvent(new Event('focus', { bubbles: true, cancelable: true }));
-            el.dispatchEvent(new Event('focusin', { bubbles: true, cancelable: true }));
-            el.focus();
-        } catch (e) {}
+        // 仅新题型（u3-input 填空）需模拟点击序列提交"已作答"；旧题型不派发，避免触发多余交互
+        if (isU3InputPage) {
+            try {
+                el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                el.dispatchEvent(new Event('focus', { bubbles: true, cancelable: true }));
+                el.dispatchEvent(new Event('focusin', { bubbles: true, cancelable: true }));
+                el.focus();
+            } catch (e) {}
+        }
         return true;
     };
 
@@ -1263,7 +1278,7 @@ async function work() {
         }
     }
     } finally {
-        isWorking = false;
+        if (useSerial) isWorking = false;
     }
 }
 
@@ -1878,6 +1893,54 @@ function createAutoFillPanel() {
     presetRow.appendChild(preset2);
     presetRow.appendChild(preset3);
     autoFillPanel.appendChild(presetRow);
+
+    // 执行模式切换：自动（按题型判断）/ 强制串行 / 强制并发
+    const modeRow = document.createElement('div');
+    modeRow.style.display = 'flex';
+    modeRow.style.gap = '4px';
+    modeRow.style.marginBottom = '6px';
+
+    const modeLabel = document.createElement('span');
+    modeLabel.textContent = '模式';
+    modeLabel.style.fontSize = '11px';
+    modeLabel.style.marginRight = '2px';
+    modeLabel.style.color = 'rgba(255,255,255,0.7)';
+    modeRow.appendChild(modeLabel);
+
+    const modeList = [
+        { key: 'auto', label: '自动', title: '按题型自动判断：u3-input 填空串行，旧题型并发' },
+        { key: 'serial', label: '串行', title: '强制串行：每轮作答完（含已答提交）再进下一题，杜绝 80ms 漏答' },
+        { key: 'concurrent', label: '并发', title: '强制并发：work() 可重叠执行（旧题型提速，u3-input 填空可能漏答）' }
+    ];
+    const modeBtns = {};
+    const updateModeUI = () => {
+        for (const m of modeList) {
+            const b = modeBtns[m.key];
+            const active = fillExecMode === m.key;
+            b.style.background = active ? 'rgba(0,122,204,0.8)' : '';
+            b.style.color = active ? '#fff' : '';
+            b.style.border = active ? 'none' : '';
+        }
+    };
+    for (const m of modeList) {
+        const b = document.createElement('button');
+        b.textContent = m.label;
+        b.title = m.title;
+        b.style.flex = '1';
+        b.style.fontSize = '11px';
+        b.style.padding = '4px';
+        b.style.cursor = 'pointer';
+        b.addEventListener('click', () => {
+            fillExecMode = m.key;
+            localStorage.setItem('fillExecMode', m.key);
+            updateModeUI();
+            addLogMessage('执行模式: ' + m.label, 'info');
+        });
+        modeBtns[m.key] = b;
+        modeRow.appendChild(b);
+    }
+    updateModeUI();
+    autoFillPanel.appendChild(modeRow);
 
     // 内容匹配模式复选框
     const matchModeRow = document.createElement('div');
