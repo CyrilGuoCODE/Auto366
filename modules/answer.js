@@ -512,6 +512,82 @@ class AnswerExtractor {
     return answers;
   }
 
+  // 递归查找 correctAnswer.xml.u3enc 和 paper.xml.u3enc 文件
+  findXmlAnswerU3encFiles(dirPath) {
+    const targets = ['correctanswer.xml.u3enc', 'paper.xml.u3enc'];
+    const results = [];
+    try {
+      const items = fs.readdirSync(dirPath);
+      for (const item of items) {
+        const itemPath = path.join(dirPath, item);
+        const stat = fs.statSync(itemPath);
+
+        if (stat.isDirectory()) {
+          results.push(...this.findXmlAnswerU3encFiles(itemPath));
+        } else if (targets.includes(item.toLowerCase())) {
+          results.push(itemPath);
+        }
+      }
+    } catch (error) {
+      console.error(`搜索 XML u3enc 文件失败: ${dirPath}`, error);
+    }
+    return results;
+  }
+
+  // 解密并提取 correctAnswer.xml.u3enc / paper.xml.u3enc 中的答案
+  // 同目录若已存在解密版本，findAnswerFiles 会处理，此处跳过避免重复
+  processXmlU3encFiles(dirPath) {
+    const u3encFiles = this.findXmlAnswerU3encFiles(dirPath);
+    const allAnswers = [];
+    const processedFiles = [];
+    const allFilesContent = [];
+
+    for (const u3encFile of u3encFiles) {
+      const baseName = path.basename(u3encFile).replace(/\.u3enc$/i, '');
+      const dirName = path.dirname(u3encFile);
+      const relativePath = path.relative(dirPath, u3encFile);
+
+      // 同目录已存在解密版本时跳过，避免重复处理
+      if (fs.existsSync(path.join(dirName, baseName))) {
+        console.log(`同目录已存在 ${baseName}，跳过 ${path.basename(u3encFile)}`);
+        continue;
+      }
+
+      console.log(`处理 ${path.basename(u3encFile)} 文件`);
+      try {
+        const encryptedData = fs.readFileSync(u3encFile);
+        const decryptedData = this.cryptoManager.decryptU3enc(encryptedData);
+        if (!decryptedData) {
+          console.log(`解密 ${path.basename(u3encFile)} 失败`);
+          processedFiles.push({ file: relativePath, answerCount: 0, success: false, error: '解密失败' });
+          this.emitLog('error', `${path.basename(u3encFile)}: 解密失败`);
+          continue;
+        }
+        const content = decryptedData.toString('utf-8');
+        allFilesContent.push({ file: relativePath, content });
+
+        // 复用 extractFromXML，传入模拟文件名以触发 correctAnswer/paper 分支
+        const answers = this.extractFromXML(content, baseName);
+        const elementId = this.elementIdFromRelativePath(relativePath);
+        answers.forEach((ans, idx) => {
+          ans.sourceFile = baseName;
+          if (!ans.elementId && elementId) ans.elementId = elementId;
+          if (!Number.isFinite(ans.localIndex)) ans.localIndex = idx;
+        });
+        allAnswers.push(...answers);
+        processedFiles.push({ file: relativePath, answerCount: answers.length, success: true });
+        console.log(`从 ${path.basename(u3encFile)} 解密提取到 ${answers.length} 个答案`);
+        this.emitLog('success', `${path.basename(u3encFile)}: 解密提取 ${answers.length} 个答案`);
+      } catch (error) {
+        console.error(`解析 ${path.basename(u3encFile)} 失败:`, error);
+        processedFiles.push({ file: relativePath, answerCount: 0, success: false, error: error.message });
+        this.emitLog('error', `${path.basename(u3encFile)}: 提取失败 - ${error.message}`);
+      }
+    }
+
+    return { allAnswers, processedFiles, allFilesContent };
+  }
+
   async processZipAnswer(zipPath, ansDir) {
     // 按扩展名去掉后缀；文件名不带 .zip 时另起目录，
     // 否则 extractDir 会等于 zipPath，下一步就把待解压的文件本身删掉了
@@ -668,9 +744,16 @@ class AnswerExtractor {
     const processedFiles = [];
     const allFilesContent = [];
 
+    // 先处理加密的 XML 答案文件（correctAnswer.xml.u3enc / paper.xml.u3enc）
+    // 同目录若已有解密版本，processXmlU3encFiles 内部会跳过，避免重复
+    const xmlU3encResult = this.processXmlU3encFiles(extractDir);
+    allAnswers.push(...xmlU3encResult.allAnswers);
+    processedFiles.push(...xmlU3encResult.processedFiles);
+    allFilesContent.push(...xmlU3encResult.allFilesContent);
+
     const answerFiles = this.findAnswerFiles(extractDir);
 
-    if (answerFiles.length === 0) {
+    if (answerFiles.length === 0 && allAnswers.length === 0) {
       this.emitLog('warning', '未找到可能包含答案的文件');
       return { success: false, message: '未找到可能包含答案的文件', processedFiles: [], allAnswers: [], allFilesContent: [] };
     }
