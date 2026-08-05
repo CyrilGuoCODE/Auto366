@@ -372,7 +372,7 @@ async function fillChoiceQuestions() {
             if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
         }
         if (!questionNum) {
-            const preparedEl = container.querySelector('.u3-input__prepared');
+            const preparedEl = queryPrepared(container);
             if (preparedEl) {
                 const parsed = parseInt(preparedEl.textContent.trim());
                 if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
@@ -388,7 +388,7 @@ async function fillChoiceQuestions() {
         if (!questionNum) {
             let parent = container.parentElement;
             for (let up = 0; up < 5 && parent; up++) {
-                const parentNoEl = parent.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared');
+                const parentNoEl = parent.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared, .u3-input__prepead');
                 if (parentNoEl) {
                     const parsed = parseInt(parentNoEl.textContent.trim());
                     if (!isNaN(parsed) && parsed > 0) {
@@ -1020,6 +1020,16 @@ async function handleReadAlongQuestions() {
     return processedCount;
 }
 
+// 题号元素查找：优先 .u3-input__prepared，找不到回退 .u3-input__prepead（适配新版页面拼写）
+function getPreparedElements(root) {
+    let els = root.getElementsByClassName('u3-input__prepared');
+    if (els.length === 0) els = root.getElementsByClassName('u3-input__prepead');
+    return els;
+}
+function queryPrepared(root) {
+    return root.querySelector('.u3-input__prepared') || root.querySelector('.u3-input__prepead');
+}
+
 async function work() {
     if (isReadAlongProcessing) return;
 
@@ -1055,7 +1065,7 @@ async function work() {
 
     const choiceFilledCount = supportChoiceQuestions ? await fillChoiceQuestions() : 0;
 
-    const preparedElements = document.getElementsByClassName('u3-input__prepared');
+    const preparedElements = getPreparedElements(document);
     const inputElements = getInputs(document);
 
     let filledCount = 0;
@@ -1063,7 +1073,11 @@ async function work() {
     if (contentMatchMode) {
         addLogMessage('使用内容匹配模式', 'info');
         
-        const questionTexts = document.getElementsByClassName('u3-question-text');
+        let questionTexts = document.getElementsByClassName('u3-question-text');
+        if (questionTexts.length === 0) {
+            // 备选：使用 u3-fillblank-base__cont（新版页面无 u3-question-text 时）
+            questionTexts = document.getElementsByClassName('u3-fillblank-base__cont');
+        }
         const processedScopes = new Set();
         
         for (let i = 0; i < questionTexts.length; i++) {
@@ -1080,14 +1094,14 @@ async function work() {
                 processedScopes.add(scopeEl);
 
                 const clone = scopeEl.cloneNode(true);
-                clone.querySelectorAll('input, textarea, button, .u3-option__content, .u3-input__prepared, [contenteditable]').forEach(el => el.remove());
+                clone.querySelectorAll('input, textarea, button, .u3-option__content, .u3-input__prepared, .u3-input__prepead, [contenteditable]').forEach(el => el.remove());
                 const questionText = (clone.textContent || '').replace(/\s+/g, ' ').trim();
                 const cleanQuestionText = questionText.replace(/分值\d+分\s*/g, '').replace(/^\d+[\s\.\)]*/, '').trim();
 
                 const match = findAnswerByContent(cleanQuestionText);
 
                 if (match) {
-                    const preparedElements = scopeEl.getElementsByClassName('u3-input__prepared');
+                    const preparedElements = getPreparedElements(scopeEl);
                     let questionNum = i + 1;
                     
                     if (preparedElements.length > 0) {
@@ -1145,20 +1159,34 @@ async function work() {
         }
     } else {
         addLogMessage('使用题号匹配模式', 'info');
-        
-        for (let i = 0; i < inputElements.length; i++) {
-            if (i >= preparedElements.length) break;
-            
-            const questionNum = parseInt(preparedElements[i].innerHTML);
+
+        // swiper 单题单页：限定在 active slide，用 .u3-question-container__ques-order--number 作为真正题号
+        const activeSlide = document.querySelector('.swiper-slide-active');
+        let modeInputs = Array.from(inputElements);
+        let modePrepared = Array.from(preparedElements);
+        if (activeSlide) {
+            const numEl = activeSlide.querySelector('.u3-question-container__ques-order--number');
+            const realNum = numEl ? parseInt(numEl.textContent.trim()) : 0;
+            const slideInputs = activeSlide.querySelectorAll('.u3-input__content--input, .u3-input__content');
+            if (slideInputs.length > 0 && realNum > 0) {
+                modeInputs = Array.from(slideInputs);
+                modePrepared = Array.from(slideInputs).map(() => ({ innerHTML: String(realNum) }));
+            }
+        }
+
+        for (let i = 0; i < modeInputs.length; i++) {
+            if (i >= modePrepared.length) break;
+
+            const questionNum = parseInt(modePrepared[i].innerHTML);
             if (isNaN(questionNum) || questionNum <= 0) continue;
-            
+
             const multiAnswers = window.multiAnswerMap ? window.multiAnswerMap.get(questionNum) : null;
-            
+
             let currentInputIndex = i;
-            while (currentInputIndex < preparedElements.length && parseInt(preparedElements[currentInputIndex].innerHTML) === questionNum) {
+            while (currentInputIndex < modePrepared.length && parseInt(modePrepared[currentInputIndex].innerHTML) === questionNum) {
                 currentInputIndex++;
             }
-            const inputsSlice = Array.from(inputElements).slice(i, currentInputIndex);
+            const inputsSlice = modeInputs.slice(i, currentInputIndex);
 
             let answersToFill;
             if (multiAnswers && multiAnswers.length > 0) {
@@ -1208,19 +1236,21 @@ async function work() {
     }
 
     if (!readAlongAborted) {
-        const nextBtn = findButtonByText('下一页');
+        const nextBtn = findButtonByText('下一题', '下一页');
         if (nextBtn) {
             nextBtn.click();
-            addLogMessage('已点击翻页按钮（下一页）', 'info');
+            addLogMessage('已点击翻页按钮（下一题）', 'info');
         }
     }
 }
 
-function findButtonByText(text) {
+function findButtonByText(...texts) {
     const candidates = document.querySelectorAll('.x-button, .u3-button, .btn, button');
-    for (const el of candidates) {
-        if (el.textContent.trim() === text && el.offsetParent !== null) {
-            return el;
+    for (const text of texts) {
+        for (const el of candidates) {
+            if (el.textContent.trim() === text && el.offsetParent !== null) {
+                return el;
+            }
         }
     }
     return null;
