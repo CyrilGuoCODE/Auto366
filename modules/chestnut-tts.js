@@ -23,11 +23,9 @@
  * ── 独立测试 ──  node chestnut-tts.js "Hello world, this is a test."   → 生成 out.mp3
  */
 const https = require('https');
-const crypto = require('crypto');
+const { genSn, deviceForm } = require('./dictpen-sign');   // 设备字段+签名, 与 chatnut 共用
 
 const TTS_URL = 'https://dictpen-server.youdao.com/zhiyun/tts';
-const KEYID = 'dictpen_keyid';
-const SECRET = 'K7H0@Mfi6h#68';
 
 // 友好名 -> [真实 voiceName, format]。英文答案朗读用 youxiaomei(英文专用)。
 const VOICES = {
@@ -38,24 +36,6 @@ const VOICES = {
   tianjin:  ['you_xiao_jin',   'wav'],
 };
 
-function genSn() {
-  let s = 'MF';
-  for (let i = 0; i < 14; i++) s += Math.floor(Math.random() * 10);
-  return s;
-}
-const md5 = (s) => crypto.createHash('md5').update(s, 'utf8').digest('hex');
-
-function buildMultipart(fields) {
-  const boundary = '----------------------------' + crypto.randomBytes(8).toString('hex');
-  const parts = [];
-  for (const [k, v] of Object.entries(fields)) {
-    parts.push(Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`, 'utf8'));
-  }
-  parts.push(Buffer.from(`--${boundary}--\r\n`, 'utf8'));
-  return { body: Buffer.concat(parts), boundary };
-}
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 单次尝试(不重试)。timeout 默认随文本长度自适应(短句~2.5s, 长段自动放宽), 只砍真正的慢尾。 */
@@ -64,17 +44,7 @@ function _attempt(text, voice = 'english', opts = {}) {
   const sn = opts.sn || genSn();
   const timeout = opts.timeout || Math.max(2500, Math.ceil((text || '').length * 6));
   const t0 = Date.now();
-  const ms = String(Date.now());
-  const sign = md5(`deviceSn=${sn}&keyid=${KEYID}&mysticTime=${ms}&key=${SECRET}`);
-  const fields = {
-    osAppVersion: '2.34.0', appVersion: '4.34.0', client: 'y02-1',
-    deviceId: sn, deviceSku: 'OVERHEAD_Y02-1_SKU_CHN_PLUS', deviceSn: sn,
-    imei: sn, keyid: KEYID, messageSource: 'yd_gpt_dictpen',
-    mid: 'Linux5.10.160', model: 'YDPX7-6', mysticTime: ms,
-    pointParam: 'deviceSn,keyid,mysticTime', product: 'dictpen', screen: '936x280',
-    sign, q: text, voiceName, format: fmt, volume: '1',
-  };
-  const { body, boundary } = buildMultipart(fields);
+  const { body, boundary } = deviceForm({ q: text, voiceName, format: fmt, volume: '1' }, sn);
   return new Promise((resolve, reject) => {
     const req = https.request(TTS_URL, {
       method: 'POST',
