@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAnswerCaptureEnabled: () => ipcRenderer.invoke('get-answer-capture-enabled'),
   setAiApiKey: (key) => ipcRenderer.invoke('set-ai-api-key', key),
   getAiApiKey: () => ipcRenderer.invoke('get-ai-api-key'),
+  setAiConfig: (cfg) => ipcRenderer.invoke('set-ai-config', cfg),
+  getAiConfig: () => ipcRenderer.invoke('get-ai-config'),
   setGlmApiKey: (key) => ipcRenderer.invoke('set-glm-api-key', key),
   getGlmApiKey: () => ipcRenderer.invoke('get-glm-api-key'),
   getGlmVoices: () => ipcRenderer.invoke('get-glm-voices'),

@@ -197,30 +197,73 @@ class ProxyUI {
         });
       }
 
-      // 初始化AI API Key（与缓存路径相同的保存方式：localStorage + IPC同步）
+      // 初始化 AI 兜底配置（服务商 / 地址 / Key / 模型名；localStorage 持久化 + IPC 同步）
+      // 内置 doubao/qwen/chatnut 走词典笔免费链路，不需要地址和 Key，这几行直接隐藏。
+      const aiPresetSelect = document.getElementById('aiPresetSelect');
+      const aiBaseUrlInput = document.getElementById('aiBaseUrlInput');
       const aiApiKeyInput = document.getElementById('aiApiKeyInput');
-      if (aiApiKeyInput) {
-        // 从 localStorage 读取初始值（持久化记忆）
-        const savedAiApiKey = localStorage.getItem('ai-api-key') || '';
-        aiApiKeyInput.value = savedAiApiKey;
-        // 同步到主进程
-        if (savedAiApiKey && window.electronAPI && window.electronAPI.setAiApiKey) {
-          window.electronAPI.setAiApiKey(savedAiApiKey);
-        }
+      const aiModelInput = document.getElementById('aiModelInput');
+      if (aiPresetSelect && aiBaseUrlInput && aiApiKeyInput && aiModelInput) {
+        const AI_PRESETS = {
+          'doubao':  { baseUrl: '', model: 'doubao',  builtin: true },
+          'qwen':    { baseUrl: '', model: 'qwen',    builtin: true },
+          'chatnut': { baseUrl: '', model: 'chatnut', builtin: true },
+          'custom':  { baseUrl: '', model: '', builtin: false },
+        };
+        const rows = ['aiBaseUrlRow', 'aiApiKeyRow', 'aiModelRow'].map(id => document.getElementById(id));
 
-        aiApiKeyInput.addEventListener('change', async () => {
-          const newKey = aiApiKeyInput.value.trim();
-          // 保存到 localStorage（持久化）
-          localStorage.setItem('ai-api-key', newKey);
-          // 同步到主进程
-          if (window.electronAPI && window.electronAPI.setAiApiKey) {
+        const applyPresetVisibility = (presetKey) => {
+          const p = AI_PRESETS[presetKey] || AI_PRESETS.custom;
+          rows.forEach(el => { if (el) el.style.display = p.builtin ? 'none' : ''; });
+        };
+
+        const pushAiConfig = async () => {
+          const cfg = {
+            key: aiApiKeyInput.value.trim(),
+            baseUrl: aiBaseUrlInput.value.trim(),
+            model: aiModelInput.value.trim(),
+          };
+          localStorage.setItem('ai-api-key', cfg.key);
+          localStorage.setItem('ai-base-url', cfg.baseUrl);
+          localStorage.setItem('ai-model', cfg.model);
+          localStorage.setItem('ai-preset', aiPresetSelect.value);
+          if (window.electronAPI && window.electronAPI.setAiConfig) {
             try {
-              await window.electronAPI.setAiApiKey(newKey);
+              await window.electronAPI.setAiConfig(cfg);
             } catch (error) {
-              console.error('同步AI API Key到主进程失败:', error);
+              console.error('同步AI配置到主进程失败:', error);
             }
+          } else if (window.electronAPI && window.electronAPI.setAiApiKey) {
+            try { await window.electronAPI.setAiApiKey(cfg.key); } catch (e) { /* 旧版回退 */ }
           }
-          this.logManager.addSuccessLog('DeepSeek Key已更新' + (newKey ? '' : ' (已清空)'));
+        };
+
+        // 恢复上次的选择
+        const savedPreset = localStorage.getItem('ai-preset') || 'doubao';
+        aiPresetSelect.value = AI_PRESETS[savedPreset] ? savedPreset : 'doubao';
+        aiApiKeyInput.value = localStorage.getItem('ai-api-key') || '';
+        aiBaseUrlInput.value = localStorage.getItem('ai-base-url') || '';
+        aiModelInput.value = localStorage.getItem('ai-model') || AI_PRESETS[aiPresetSelect.value].model;
+        applyPresetVisibility(aiPresetSelect.value);
+        pushAiConfig();
+
+        aiPresetSelect.addEventListener('change', async () => {
+          const p = AI_PRESETS[aiPresetSelect.value] || AI_PRESETS.custom;
+          // 切到预设时用预设值覆盖；custom 保留用户已填的内容
+          if (aiPresetSelect.value !== 'custom') {
+            aiBaseUrlInput.value = p.baseUrl;
+            aiModelInput.value = p.model;
+          }
+          applyPresetVisibility(aiPresetSelect.value);
+          await pushAiConfig();
+          this.logManager.addSuccessLog('AI 兜底服务商已切换为 ' + aiPresetSelect.options[aiPresetSelect.selectedIndex].text);
+        });
+
+        [aiBaseUrlInput, aiApiKeyInput, aiModelInput].forEach(el => {
+          el.addEventListener('change', async () => {
+            await pushAiConfig();
+            this.logManager.addSuccessLog('AI 兜底配置已更新');
+          });
         });
       }
 

@@ -22,7 +22,9 @@ const STOP_WORDS = new Set([
 
 const BUCKET_MAX_RETRIES = 10;
 const LOG_ROW_HEIGHT = 22;
+// 内置模型实测: doubao~1.1s / qwen~1.2s / chatnut~2.1s, 故内置链路给更宽的超时。
 const AI_TIMEOUT = 3000;
+const AI_TIMEOUT_BUILTIN = 8000;
 const AI_API_URL = 'https://api.deepseek.com/chat/completions';
 const AI_MODEL = 'deepseek-v4-flash';
 
@@ -289,6 +291,9 @@ var State = {
     scoreControlActive: false,
     lastMatchScores: [],
     aiApiKey: '',
+    aiBaseUrl: '',
+    aiModel: '',
+    aiBuiltin: false,
     aiEnabled: localStorage.getItem('aiEnabled') === 'true',
     aiThreshold: parseInt(localStorage.getItem('aiThreshold'), 10) || 50,
     aiWaiting: false,
@@ -1669,9 +1674,42 @@ var AIFallback = {
                     if (data && typeof data.key === 'string') {
                         State.aiApiKey = data.key;
                     }
+                    if (data && typeof data.baseUrl === 'string') { State.aiBaseUrl = data.baseUrl; }
+                    if (data && typeof data.model === 'string') { State.aiModel = data.model; }
+                    State.aiBuiltin = !!(data && data.builtin);
                 })
                 .catch(function() {})
                 .then(function() {
+                    // 内置免费 AI(chatnut*): 协议要签名, 页面里跑不了, 交给主进程代跑
+                    if (State.aiBuiltin) {
+                        var askUrl = 'http://127.0.0.1:' + bucketPort + '/ai-ask';
+                        var ctl = new AbortController();
+                        var tmo = AI_TIMEOUT_BUILTIN;
+                        var tid = setTimeout(function() { ctl.abort(); }, tmo);
+                        fetch(askUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ question: question, candidates: candidates, timeout: tmo }),
+                            signal: ctl.signal
+                        })
+                        .then(function(res) { return res.json(); })
+                        .then(function(d) {
+                            clearTimeout(tid);
+                            if (!d || !d.success) { reject(new Error(d && d.error ? d.error : '内置AI调用失败')); return; }
+                            UI.addLogMessage('[AI兜底] ' + State.aiModel + ' 回复: "' + String(d.text || '').substring(0, 60) + '" (' + d.ms + 'ms)', 'info');
+                            if (d.index >= 0 && d.index < candidates.length) {
+                                UI.addLogMessage('[AI兜底] 解析选项: [' + d.index + '] ' + candidates[d.index], 'info');
+                                resolve(d.index);
+                            } else {
+                                reject(new Error('内置AI未能解析出选项'));
+                            }
+                        })
+                        .catch(function(err) {
+                            clearTimeout(tid);
+                            reject(err.name === 'AbortError' ? new Error('AI请求超时(' + tmo + 'ms)') : err);
+                        });
+                        return;
+                    }
                     if (!State.aiApiKey) {
                         reject(new Error('API Key未设置，请在程序设置→代理设置中配置'));
                         return;
@@ -1689,14 +1727,14 @@ var AIFallback = {
             var controller = new AbortController();
             var timeoutId = setTimeout(function() { controller.abort(); }, AI_TIMEOUT);
 
-            fetch(AI_API_URL, {
+            fetch(State.aiBaseUrl || AI_API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + State.aiApiKey
                 },
                 body: JSON.stringify({
-                    model: AI_MODEL,
+                    model: State.aiModel || AI_MODEL,
                     messages: [
                         { role: 'system', content: systemPrompt },
                         { role: 'user', content: userPrompt }
@@ -1781,7 +1819,14 @@ var Loader = {
             .then(function(data) {
                 if (data && typeof data.key === 'string') {
                     State.aiApiKey = data.key;
-                    UI.addLogMessage('[AI兜底] API Key已从设置同步' + (data.key ? '' : ' (未设置)'), 'info');
+                    if (typeof data.baseUrl === 'string') { State.aiBaseUrl = data.baseUrl; }
+                    if (typeof data.model === 'string') { State.aiModel = data.model; }
+                    State.aiBuiltin = !!data.builtin;
+                    if (State.aiBuiltin) {
+                        UI.addLogMessage('[AI兜底] 使用内置免费 AI: ' + State.aiModel + ' (无需 API Key)', 'info');
+                    } else {
+                        UI.addLogMessage('[AI兜底] API Key已从设置同步' + (data.key ? '' : ' (未设置)'), 'info');
+                    }
                 }
             })
             .catch(function(err) {
@@ -3298,10 +3343,10 @@ var Scheduler = {
             }
         }
 
-        if (State.aiEnabled && State.aiApiKey && bestScore < State.aiThreshold) {
+        if (State.aiEnabled && (State.aiBuiltin || State.aiApiKey) && bestScore < State.aiThreshold) {
             State.aiWaiting = true;
             State.lastMatchedWord = word;
-            UI.addLogMessage('[AI兜底] 算法置信度=' + Math.round(bestScore) + '% < 阈值=' + State.aiThreshold + '%，调用AI (' + AI_MODEL + ')...', 'info');
+            UI.addLogMessage('[AI兜底] 算法置信度=' + Math.round(bestScore) + '% < 阈值=' + State.aiThreshold + '%，调用AI (' + (State.aiModel || AI_MODEL) + ')...', 'info');
 
             var savedWord = word;
             var savedCandidates = l;

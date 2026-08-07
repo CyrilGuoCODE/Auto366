@@ -30,6 +30,8 @@ class ProxyServer {
     this.isCapturing = false;
     this.answerCaptureEnabled = true;
     this.aiApiKey = '';
+    this.aiBaseUrl = '';
+    this.aiModel = 'doubao';   // 默认用内置免费 AI, 实测最快
     // ===== 时间修改（"通用自动PK"子规则，状态由PK面板经 /pk-time 推送）=====
     // 代理层读不到注入页 localStorage，故经本地 bucket server 同步开关/秒数到此。
     this.pkTimeMod = { enabled: false, seconds: null };
@@ -638,7 +640,44 @@ class ProxyServer {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
         });
-        res.end(JSON.stringify({ key: this.aiApiKey }));
+        // 兼容旧字段 key; 新增 baseUrl/model/builtin 供规则脚本决定走哪条链路
+        res.end(JSON.stringify({
+          key: this.aiApiKey,
+          baseUrl: this.aiBaseUrl,
+          model: this.aiModel,
+          builtin: this.isBuiltinAiModel(),
+        }));
+        return;
+      }
+
+      // 内置免费 AI(chatnut): 规则脚本跑在被注入的页面里, 拿不到 Node 模块,
+      // 故由主进程代跑, 页面只管 POST 题目和候选项过来。
+      if (req.method === 'POST' && pathname === '/ai-ask') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          const send = (code, obj) => {
+            res.writeHead(code, {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify(obj));
+          };
+          try {
+            const { question, candidates, timeout } = JSON.parse(body || '{}');
+            if (!question || !Array.isArray(candidates) || !candidates.length) {
+              return send(400, { success: false, error: 'question/candidates 缺失' });
+            }
+            const chatnut = require('./chatnut');
+            const r = await chatnut.askChoice(question, candidates, {
+              model: this.aiModel || 'doubao',
+              timeout: timeout || undefined,
+            });
+            send(200, { success: true, index: r.index, text: r.text, ms: r.ms });
+          } catch (e) {
+            send(500, { success: false, error: e.message });
+          }
+        });
         return;
       }
 
@@ -789,6 +828,29 @@ class ProxyServer {
 
   getAiApiKey() {
     return this.aiApiKey;
+  }
+
+  // AI 兜底完整配置: 地址 + Key + 模型名。内置模型(chatnut*)不需要地址和 Key。
+  setAiConfig(cfg) {
+    cfg = cfg || {};
+    if (typeof cfg.key === 'string') this.aiApiKey = cfg.key;
+    if (typeof cfg.baseUrl === 'string') this.aiBaseUrl = cfg.baseUrl;
+    if (typeof cfg.model === 'string') this.aiModel = cfg.model;
+    return { success: true };
+  }
+
+  getAiConfig() {
+    return {
+      key: this.aiApiKey,
+      baseUrl: this.aiBaseUrl,
+      model: this.aiModel,
+      builtin: this.isBuiltinAiModel(),
+    };
+  }
+
+  // 这三个 = 走内置免费链路, 不需要用户填地址/Key; 其余按自定义 OpenAI 兼容服务处理
+  isBuiltinAiModel() {
+    return ['chatnut', 'qwen', 'doubao'].indexOf(String(this.aiModel || '').toLowerCase()) >= 0;
   }
 
   setGlmApiKey(key) {
@@ -2741,6 +2803,19 @@ class ProxyServer {
 
     ipcMain.handle('get-ai-api-key', () => {
       return this.getAiApiKey();
+    });
+
+    ipcMain.handle('set-ai-config', async (event, cfg) => {
+      try {
+        this.setAiConfig(cfg);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle('get-ai-config', () => {
+      return this.getAiConfig();
     });
 
     ipcMain.handle('set-glm-api-key', async (event, key) => {

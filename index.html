@@ -441,11 +441,35 @@
                             </div>
                         </div>
                         <div class="setting-group">
-                            <h4>API Key</h4>
+                            <h4>AI 兜底</h4>
                             <div class="setting-item">
-                                <label for="aiApiKeyInput">DeepSeek Key:</label>
+                                <label for="aiPresetSelect">服务商:</label>
+                                <select id="aiPresetSelect" class="form-input">
+                                    <optgroup label="内置免费">
+                                        <option value="doubao">doubao</option>
+                                        <option value="qwen">qwen</option>
+                                        <option value="chatnut">chatnut</option>
+                                    </optgroup>
+                                    <optgroup label="自定义">
+                                        <option value="custom">自定义</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="setting-item" id="aiBaseUrlRow">
+                                <label for="aiBaseUrlInput">API 地址:</label>
+                                <input type="text" id="aiBaseUrlInput" class="form-input" placeholder="https://api.deepseek.com/chat/completions">
+                            </div>
+                            <div class="setting-item" id="aiApiKeyRow">
+                                <label for="aiApiKeyInput">API Key:</label>
                                 <input type="password" id="aiApiKeyInput" class="form-input" placeholder="sk-...">
                             </div>
+                            <div class="setting-item" id="aiModelRow">
+                                <label for="aiModelInput">模型名称:</label>
+                                <input type="text" id="aiModelInput" class="form-input" placeholder="模型名称">
+                            </div>
+                        </div>
+                        <div class="setting-group">
+                            <h4>音色克隆</h4>
                             <div class="setting-item">
                                 <label for="glmApiKeyInput">GLM-TTS Key:</label>
                                 <input type="password" id="glmApiKeyInput" class="form-input" placeholder="智谱API密钥...">
