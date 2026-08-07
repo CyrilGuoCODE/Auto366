@@ -186,6 +186,35 @@ class TtsManager {
     this._log(`审批队列已清空 (${n} 条丢弃)`, 'info');
   }
 
+  // 从 textMap 把已有文本重新入审批队列（引擎/音色/模型/速度切换时，
+  // 若存在未审批内容，不允许直接 regenerateAll 绕过审批，而是重新弹窗审批）
+  _requeueFromTextMap(sourceHint) {
+    if (this.textMap.size === 0) return false;
+    // 清理已生成缓存和索引，但保留 textMap 作为源数据
+    this._cleanCacheDir();
+    this.fileIndex.clear();
+    this.nextIndex = 1;
+
+    const sortedKeys = Array.from(this.textMap.keys()).sort((a, b) => a - b);
+    const source = sourceHint || '重新生成前审批';
+    this.pendingApprovalQueue = [];
+    for (const oldIndex of sortedKeys) {
+      const text = String(this.textMap.get(oldIndex) || '');
+      if (!text.trim()) continue;
+      this.pendingApprovalQueue.push({
+        index: this.pendingApprovalQueue.length + 1,
+        original: text,
+        edited: text,
+        source: source,
+      });
+    }
+    this.pendingBasePath = this.currentBasePath;
+    this.pendingApprovalSource = source;
+    this._log(`${source}: 检测到 ${this.pendingApprovalQueue.length} 条待审批文本，已重新入队审批，不直接生成`, 'info');
+    this._notifyApprovalPending();
+    return true;
+  }
+
   /**
    * 扫描 TTS 模型目录，返回可用模型列表
    */
@@ -770,6 +799,14 @@ class TtsManager {
   async regenerateAll() {
     if (this.textMap.size === 0) return;
 
+    // ===== 审批守卫：存在未审批内容时，不直接生成，改为重新入审批队列 =====
+    // pendingApprovalQueue 非空 = 上一批答案仍在等待审批，不应绕过审批直接重新生成
+    if (this.pendingApprovalQueue.length > 0) {
+      this._log(`重新生成取消：存在 ${this.pendingApprovalQueue.length} 条待审批内容，需先完成审批`, 'warning');
+      this._notifyApprovalPending();
+      return;
+    }
+
     const engine = await this._ensureEngine();
     if (!engine) {
       this._log('引擎未就绪，跳过重新生成', 'warning');
@@ -858,19 +895,21 @@ class TtsManager {
   // ---- 更新配置 ----
   updateConfig(newConfig) {
     let needRegenerate = false;
+    let changeType = null;
 
     if (newConfig.voice && VOICE_MAP[newConfig.voice] !== undefined) {
-      if (this.config.voice !== newConfig.voice) { this.config.voice = newConfig.voice; needRegenerate = true; }
+      if (this.config.voice !== newConfig.voice) { this.config.voice = newConfig.voice; needRegenerate = true; changeType = changeType || '音色切换'; }
     }
     if (newConfig.speed !== undefined) {
       const s = Math.max(0.5, Math.min(2.0, Number(newConfig.speed)));
-      if (this.config.speed !== s) { this.config.speed = s; needRegenerate = true; }
+      if (this.config.speed !== s) { this.config.speed = s; needRegenerate = true; changeType = changeType || '语速切换'; }
     }
     // 引擎切换
     if (newConfig.engine && AVAILABLE_ENGINES.includes(newConfig.engine) && newConfig.engine !== this.engine) {
       this.engine = newConfig.engine;
       this.activeEngine = null; // 重置，下次 _ensureEngine 会重新选择
       needRegenerate = true;
+      changeType = '引擎切换(' + this.engine + ')';
       this._log('TTS 引擎切换为: ' + this.engine, 'info');
     }
     // chestnut 音色
@@ -878,6 +917,7 @@ class TtsManager {
       if (this.config.chestnutVoice !== newConfig.chestnutVoice) {
         this.config.chestnutVoice = newConfig.chestnutVoice;
         needRegenerate = true;
+        changeType = changeType || ('Chestnut音色切换(' + newConfig.chestnutVoice + ')');
       }
     }
     // glm-tts 音色
@@ -885,11 +925,19 @@ class TtsManager {
       if (this.config.glmVoice !== newConfig.glmVoice) {
         this.config.glmVoice = newConfig.glmVoice;
         needRegenerate = true;
+        changeType = changeType || ('GLM音色切换(' + newConfig.glmVoice + ')');
       }
     }
 
     if (needRegenerate && this.textMap.size > 0) {
-      this.regenerateAll().catch(e => { this._log('重新生成失败: ' + e.message, 'error'); });
+      // ===== 审批守卫：配置变更（引擎/音色/语速）不直接 regenerateAll 绕过审批 =====
+      // 只要有 textMap 就意味着这批内容曾审批通过过，但在切换引擎/音色时
+      // 仍要求重新审批，确保生成参数（新引擎/新音色）与内容匹配、不静默重新生成。
+      const requeued = this._requeueFromTextMap(changeType || '配置变更');
+      if (!requeued) {
+        // textMap 为空时才走旧的直接 regenerateAll
+        this.regenerateAll().catch(e => { this._log('重新生成失败: ' + e.message, 'error'); });
+      }
     }
 
     return needRegenerate;
@@ -1141,8 +1189,11 @@ class TtsManager {
           if (ok) {
             this._log('TTS 引擎已用新模型重新加载', 'success');
 
-            // 清理旧缓存，用新模型重新生成已有语音
+            // ===== 审批守卫：切换 sherpa-onnx 模型不直接 regenerateAll 绕过审批 =====
+            // 有 textMap 时重新入审批队列，用户确认后再生成；textMap 空则直接 regenerateAll。
             if (this.textMap.size > 0) {
+              this._requeueFromTextMap('Sherpa模型切换(' + modelName + ')');
+            } else {
               this._log('正在用新模型重新生成语音...', 'info');
               await this.regenerateAll();
             }
