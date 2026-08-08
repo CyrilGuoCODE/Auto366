@@ -173,6 +173,7 @@ class SettingsUI {
       const speedInput = document.getElementById('ttsSpeedInput');
       const modelSelect = document.getElementById('ttsModelSelect');
       const engineSelect = document.getElementById('ttsEngineSelect');
+      const approvalEnabled = document.getElementById('ttsApprovalEnabled');
 
       // chestnut 音色选项
       const CHESTNUT_VOICES = [
@@ -299,6 +300,17 @@ class SettingsUI {
           engineSelect.value = savedConfig.engine;
         }
       }
+      if (approvalEnabled) {
+        approvalEnabled.checked = !savedConfig || savedConfig.approvalEnabled !== false;
+      }
+      // 主进程每次启动都会用默认配置初始化；把用户上次保存的审批开关立即同步过去，
+      // 否则界面虽显示“关闭”，本次启动仍会按默认值弹审批框。
+      if (savedConfig && window.electronAPI && window.electronAPI.saveTtsConfig) {
+        window.electronAPI.saveTtsConfig({
+          ...savedConfig,
+          approvalEnabled: savedConfig.approvalEnabled !== false,
+        }).catch(() => {});
+      }
 
       // 按引擎初始化音色下拉
       applyVoiceOptions(engineSelect ? engineSelect.value : 'auto', savedConfig ? savedConfig.chestnutVoice : null, savedConfig ? savedConfig.glmVoice : null);
@@ -311,6 +323,7 @@ class SettingsUI {
           speed: speedInput ? parseFloat(speedInput.value) || 1.0 : 1.0,
           modelName: modelSelect ? modelSelect.value : undefined,
           engine: engine,
+          approvalEnabled: approvalEnabled ? approvalEnabled.checked : true,
         };
         // chestnut 模式下额外保存 chestnutVoice
         if (engine === 'chestnut' && voiceSelect) {
@@ -357,6 +370,9 @@ class SettingsUI {
       }
       if (speedInput) {
         speedInput.addEventListener('change', saveTtsConfig);
+      }
+      if (approvalEnabled) {
+        approvalEnabled.addEventListener('change', saveTtsConfig);
       }
       if (engineSelect) {
         engineSelect.addEventListener('change', () => {

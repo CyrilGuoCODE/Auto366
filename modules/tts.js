@@ -25,6 +25,7 @@ const child_process = require('child_process');
 
 const chestnutTts = require('./chestnut-tts');
 const glmTts = require('./glm-tts');
+const ttsClean = require('./tts-clean');
 
 const VOICE_MAP = {
   Jasper: 0,
@@ -60,6 +61,8 @@ class TtsManager {
     this.config = {
       voice: 'Jasper',
       speed: 1.0,
+      // 默认要求用户检查预清洗文本；设置中关闭后，允许标记过的规则自动生成。
+      approvalEnabled: true,
     };
 
     // 引擎选择: 'auto'(优先sherpa-onnx,失败回退chestnut) / 'sherpa-onnx' / 'chestnut'
@@ -93,12 +96,14 @@ class TtsManager {
     this.pendingApprovalQueue = [];
     this.pendingBasePath = null;
     this.pendingApprovalSource = null;
+    // 审批通过后队列会清空，这份清单留着供规则集查询（见 handleTtsManifestRequest）
+    this.manifest = [];
   }
 
   // ---- 预清洗：入队审批 ----
   // 替代旧 setImmediate(() => generateForAnswers(answers, basePath)) 的直接调用
   // 此处只做文本抽取 + 入队，不实际生成 wav；后续由审批通过后的 generateForApprovedTexts 真正生成
-  queueForApproval(answers, basePath, sourceInfo) {
+  queueForApproval(answers, basePath, sourceInfo, options) {
     if (!Array.isArray(answers) || answers.length === 0) {
       this._log('预清洗入队跳过：答案为空', 'warning');
       return;
@@ -112,26 +117,81 @@ class TtsManager {
     // 清空旧队列（新一批答案到达意味着旧一批准已过期或已处理）
     this.pendingApprovalQueue = [];
 
-    // ===== 预清洗钩子（预留，暂不实现） =====
-    // 未来可在此对 originalText 做自动清洗，例如：
-    //   - 多答案分隔符拆分（'a/b/c' → 3 条）
-    //   - 中英文分离
-    //   - 去除题号前缀、HTML 标签、不可朗读字符
-    // 当前实现：直接使用原始文本，仅交给用户审批/修改
-    for (let i = 0; i < answers.length; i++) {
-      const originalText = answers[i].answer || answers[i].content || answers[i].text || '';
-      if (!originalText || !String(originalText).trim()) continue;
-      const item = {
-        index: this.pendingApprovalQueue.length + 1,
-        original: String(originalText),
-        edited: String(originalText),
-        source: sourceInfo || null,
-      };
-      // 钩子占位：futureClean(item)
-      this.pendingApprovalQueue.push(item);
+    // ===== 预清洗 =====
+    // 见 modules/tts-clean.js：去断句标记、听后回答从 children 取答案、转述取范例段。
+    // compact 会额外过滤选择题并去重重排，只有明确要求时才开 —— 作业跟读那条链路
+    // 按下标取 wav，重排会错位。
+    const compact = !!(options && options.compact);
+    let cleaned = [];
+    let cleanFailed = false;
+    try {
+      cleaned = ttsClean.cleanAnswersForTts(answers, { compact });
+    } catch (e) {
+      this._log(`预清洗失败，回退为原始文本: ${e.message}`, 'warning');
+      cleaned = [];
+      cleanFailed = true;
     }
 
-    this._log(`预清洗入队: ${this.pendingApprovalQueue.length} 条待审批 (basePath=${this.pendingBasePath})`, 'info');
+    // compact 下清洗出 0 条不是失败，是这份卷子没有要念的题（例如整卷只有听后选择）。
+    // 这种情况必须彻底不弹审批框 —— 否则基础听力卷也会被拉进朗读流程。
+    if (compact && !cleanFailed && !cleaned.length) {
+      this.manifest = [];
+      this._log(`预清洗：${answers.length} 条答案里没有需要朗读的题，跳过 TTS`, 'info');
+      return;
+    }
+
+    if (cleaned.length) {
+      this.manifest = [];
+      for (const c of cleaned) {
+        if (!c.text || !c.text.trim()) continue;
+        const src = answers[c.meta.origIndex] || {};
+        const raw = src.answer || src.content || src.text || '';
+        const index = this.pendingApprovalQueue.length + 1;
+        this.pendingApprovalQueue.push({
+          index,
+          original: String(raw),
+          edited: c.text,
+          source: sourceInfo || null,
+          meta: c.meta,
+        });
+        // 审批通过后队列会被清空，但规则集还要靠 meta 把 wav 跟题目对上号，
+        // 所以在这里另存一份清单
+        this.manifest.push({ index, text: c.text, meta: c.meta });
+      }
+    } else {
+      this.manifest = [];
+      // 清洗没产出（异常或答案结构不认识）时按原样入队，保证链路不断
+      for (let i = 0; i < answers.length; i++) {
+        const originalText = answers[i].answer || answers[i].content || answers[i].text || '';
+        if (!originalText || !String(originalText).trim()) continue;
+        this.pendingApprovalQueue.push({
+          index: this.pendingApprovalQueue.length + 1,
+          original: String(originalText),
+          edited: String(originalText),
+          source: sourceInfo || null,
+        });
+      }
+    }
+
+    const dropped = answers.length - this.pendingApprovalQueue.length;
+    this._log(
+      `预清洗入队: ${this.pendingApprovalQueue.length} 条待审批` +
+      (dropped > 0 ? ` (原 ${answers.length} 条, 合并/过滤 ${dropped} 条)` : '') +
+      ` (basePath=${this.pendingBasePath})`,
+      'info'
+    );
+
+    // 自动听说是单按钮考试流程：清洗规则已经限定只保留需要朗读的题，
+    // 若仍等待主窗口里的另一个审批弹窗，用户进入考试后会整卷录到静音。
+    // 仅显式配置 autoApprove 的规则自动确认，作业跟读等其他规则保持人工审批。
+    if (options && options.autoApprove && this.config.approvalEnabled === false) {
+      const texts = this.pendingApprovalQueue.map(item => item.edited);
+      const autoBasePath = this.pendingBasePath;
+      this._log(`自动听说: 已自动确认 ${texts.length} 条清洗文本，立即开始生成`, 'success');
+      this.generateForApprovedTexts(texts, autoBasePath)
+        .catch(error => this._log(`自动听说 TTS 生成失败: ${error.message}`, 'error'));
+      return;
+    }
 
     // 通知渲染进程弹出审批 UI
     this._notifyApprovalPending();
@@ -169,8 +229,27 @@ class TtsManager {
     }
     if (basePath) this.currentBasePath = basePath;
 
+    // 空文本会被 generateForAnswers 跳过（序号只按非空文本递增），
+    // 清单如果还按原下标编号就会跟 wav 错位，所以两边都先剔掉空的。
+    const kept = [];
+    for (let i = 0; i < texts.length; i++) {
+      const t = texts[i];
+      if (!t || !String(t).trim()) continue;
+      kept.push({ text: String(t), meta: (this.manifest && this.manifest[i] && this.manifest[i].meta) || null });
+    }
+    if (!kept.length) {
+      this._log('审批通过但文本全为空，跳过生成', 'warning');
+      return;
+    }
+
     // 用审批后的文本走原始生成流程（复用 generateForAnswers 内部逻辑，构造一个伪 answers 数组）
-    const fakeAnswers = texts.map(t => ({ answer: t }));
+    const fakeAnswers = kept.map(k => ({ answer: k.text }));
+
+    // 用户可能在审批弹窗里改过文本，按位置回填清单，meta 保持不变
+    if (Array.isArray(this.manifest) && this.manifest.length) {
+      this.manifest = kept.map((k, i) => ({ index: i + 1, text: k.text, meta: k.meta }));
+    }
+
     // 同步回 textMap（regenerateAll 时能复用）
     this.pendingApprovalQueue = [];
     this._log(`审批通过: ${fakeAnswers.length} 条文本开始生成`, 'success');
@@ -289,8 +368,14 @@ class TtsManager {
     this.mainWindow = mainWindow;
   }
 
-  _getBasePathFromRules() {
-    if (!this.rulesManager) return '/tts';
+  /*
+   * 所有启用中的 tts-generate 规则各自的 basePath。
+   * 必须收集全部而不是只取第一个：作业(/fill-tts)和听说(/listening-tts)
+   * 可以同时启用，只认第一个的话另一个的 output/status/list 全部 404。
+   */
+  _getTtsBasePaths() {
+    const out = [];
+    if (!this.rulesManager) return ['/tts'];
     try {
       const rulesets = this.rulesManager.getRules();
       for (const ruleset of rulesets) {
@@ -299,12 +384,27 @@ class TtsManager {
           if (rule.type === 'tts-generate' && rule.enabled !== false) {
             let bp = (rule.ttsBasePath || '/tts').trim();
             if (!bp.startsWith('/')) bp = '/' + bp;
-            return bp;
+            if (out.indexOf(bp) < 0) out.push(bp);
           }
         }
       }
     } catch (e) { /* 忽略 */ }
-    return '/tts';
+    return out.length ? out : ['/tts'];
+  }
+
+  /* 正在生成的那一份优先，其次第一个已配置的 */
+  _getBasePathFromRules() {
+    const all = this._getTtsBasePaths();
+    if (this.currentBasePath && all.indexOf(this.currentBasePath) >= 0) return this.currentBasePath;
+    return all[0];
+  }
+
+  /* pathname 命中任一已配置 basePath + suffix 时返回该 basePath，否则 null */
+  _matchTtsPath(pathname, suffix) {
+    for (const bp of this._getTtsBasePaths()) {
+      if (pathname === bp + suffix) return bp;
+    }
+    return null;
   }
 
   async _syncConfigFromRenderer() {
@@ -904,6 +1004,9 @@ class TtsManager {
       const s = Math.max(0.5, Math.min(2.0, Number(newConfig.speed)));
       if (this.config.speed !== s) { this.config.speed = s; needRegenerate = true; changeType = changeType || '语速切换'; }
     }
+    if (typeof newConfig.approvalEnabled === 'boolean') {
+      this.config.approvalEnabled = newConfig.approvalEnabled;
+    }
     // 引擎切换
     if (newConfig.engine && AVAILABLE_ENGINES.includes(newConfig.engine) && newConfig.engine !== this.engine) {
       this.engine = newConfig.engine;
@@ -946,9 +1049,11 @@ class TtsManager {
   // ---- Bucket Server 端点处理 ----
 
   handleTtsOutputRequest(pathname, res) {
-    const basePath = this._getBasePathFromRules();
-    const outputPrefix = basePath + '/output/';
-    if (!pathname.startsWith(outputPrefix)) return false;
+    let outputPrefix = null;
+    for (const bp of this._getTtsBasePaths()) {
+      if (pathname.startsWith(bp + '/output/')) { outputPrefix = bp + '/output/'; break; }
+    }
+    if (!outputPrefix) return false;
 
     const rest = pathname.slice(outputPrefix.length);
     // 支持 .wav 和 .mp3 扩展名
@@ -1001,9 +1106,8 @@ class TtsManager {
   }
 
   handleTtsSettingRequest(req, res, pathname) {
-    const basePath = this._getBasePathFromRules();
-    const settingPath = basePath + '/setting';
-    if (pathname !== settingPath) return false;
+    const basePath = this._matchTtsPath(pathname, '/setting');
+    if (!basePath) return false;
 
     if (req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -1039,9 +1143,7 @@ class TtsManager {
   }
 
   handleTtsStatusRequest(pathname, res) {
-    const basePath = this._getBasePathFromRules();
-    const statusPath = basePath + '/status';
-    if (pathname !== statusPath) return false;
+    if (!this._matchTtsPath(pathname, '/status')) return false;
 
     const progress = this.generationProgress;
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -1057,6 +1159,37 @@ class TtsManager {
       activeEngine: this.activeEngine,
       chestnutVoice: this.config.chestnutVoice || null,
       glmVoice: this.config.glmVoice || null,
+    }));
+    return true;
+  }
+
+  /*
+   * {basePath}/list —— 朗读清单
+   * 规则集用它把页面上的题目跟 {index}.wav 对上号：朗读类按 text 匹配页面文本，
+   * 听后回答按 meta.question 匹配，两者都不中时按 meta.paperSeq 顺序兜底。
+   */
+  handleTtsManifestRequest(pathname, res) {
+    const basePath = this._matchTtsPath(pathname, '/list');
+    if (!basePath) return false;
+
+    // 整批 TTS 可能要生成几十秒，但前面的题通常早已落盘。
+    // 把逐题就绪状态交给规则集，不能用全局 ready 把已生成音频一起封住。
+    const readyIndexes = Array.from(this.fileIndex.keys())
+      .filter(index => Number.isInteger(index))
+      .sort((a, b) => a - b);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({
+      basePath,
+      generating: this.isGenerating,
+      ready: !this.isGenerating && this.fileIndex.size > 0,
+      partialReady: readyIndexes.length > 0,
+      generatedCount: readyIndexes.length,
+      readyIndexes,
+      approvalEnabled: this.config.approvalEnabled !== false,
+      approvalPending: this.pendingApprovalQueue.length > 0 &&
+        !this.isGenerating && readyIndexes.length === 0,
+      count: Array.isArray(this.manifest) ? this.manifest.length : 0,
+      items: Array.isArray(this.manifest) ? this.manifest : [],
     }));
     return true;
   }
@@ -1086,6 +1219,7 @@ class TtsManager {
         engine: this.engine, activeEngine: this.activeEngine, availableEngines: AVAILABLE_ENGINES,
         chestnutVoice: this.config.chestnutVoice || null,
         glmVoice: this.config.glmVoice || null,
+        approvalEnabled: this.config.approvalEnabled !== false,
       };
     });
 

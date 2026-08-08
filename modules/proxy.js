@@ -440,9 +440,14 @@ class ProxyServer {
         req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
           try {
-            const { content } = JSON.parse(body);
+            const { content, name } = JSON.parse(body);
+            if (typeof content !== 'string') {
+              throw new Error('content 必须是字符串');
+            }
             const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-            const safeFilename = `auto-pk-logs-${timestamp}.txt`;
+            // name 由调用方给出，用来区分是哪个规则集导出的；只保留安全字符
+            const tag = String(name || 'auto-pk').replace(/[^\w.-]/g, '').slice(0, 40) || 'auto-pk';
+            const safeFilename = `${tag}-logs-${timestamp}.txt`;
             const logDir = path.join(this.appPath, 'temp');
             if (!fs.existsSync(logDir)) {
               fs.mkdirSync(logDir, { recursive: true });
@@ -705,6 +710,12 @@ class ProxyServer {
         // TTS 状态轮询端点: {basePath}/status
         const statusHandled = this.ttsManager.handleTtsStatusRequest(pathname, res);
         if (statusHandled) return;
+
+        // TTS 朗读清单: {basePath}/list —— 规则集据此把 wav 对应到具体题目
+        if (typeof this.ttsManager.handleTtsManifestRequest === 'function') {
+          const listHandled = this.ttsManager.handleTtsManifestRequest(pathname, res);
+          if (listHandled) return;
+        }
       }
 
       if (pathname === '/') {
@@ -736,7 +747,10 @@ class ProxyServer {
         return;
       }
 
-      if (pathname === '/listening-answer') {
+      // 这几个路径都返回最近一次从试卷 zip 里提取出来的答案。
+      // 它们不走 serverLocate/serverDatas —— 那条路要求命中 answer-upload 规则的
+      // urlUpload，而试卷是随 Pc.zip 下发的，压根不经过 /cn/files/xot。
+      if (pathname === '/listening-answer' || pathname === '/speaking-answer') {
         const ansDir = path.join(this.appPath, 'answers');
         if (fs.existsSync(ansDir)) {
           const files = fs.readdirSync(ansDir)
@@ -1768,10 +1782,22 @@ class ProxyServer {
               if (Array.isArray(answers) && answers.length > 0) {
                 const basePath = rule.ttsBasePath || '/tts';
                 const sourceInfo = rule.name || url;
-                this.safeIpcSend('rule-log', { type: 'info', message: `[TTS] 检测到 ${answers.length} 个答案，已加入预清洗审批队列...` });
+                // ttsCompact: 听说这类一份卷子里混着选择题和口语题的场景开启，
+                // 会过滤选择题、合并重复答案并按卷面顺序重排。作业跟读按下标取 wav，
+                // 不能开，故默认关闭。
+                const ttsOptions = {
+                  compact: rule.ttsCompact === true,
+                  autoApprove: rule.ttsAutoApprove === true,
+                };
+                this.safeIpcSend('rule-log', {
+                  type: 'info',
+                  message: ttsOptions.autoApprove
+                    ? `[TTS] 检测到 ${answers.length} 个答案，预清洗后将自动开始生成...`
+                    : `[TTS] 检测到 ${answers.length} 个答案，已加入预清洗审批队列...`,
+                });
                 setImmediate(() => {
                   try {
-                    this.ttsManager.queueForApproval(answers, basePath, sourceInfo);
+                    this.ttsManager.queueForApproval(answers, basePath, sourceInfo, ttsOptions);
                   } catch (err) {
                     console.error('TTS 预清洗入队失败:', err);
                     this.safeIpcSend('rule-log', { type: 'error', message: `[TTS] 预清洗入队失败: ${err.message}` });
@@ -1905,11 +1931,26 @@ class ProxyServer {
         return responseBody;
       }
 
+      // 注入的脚本跑在页面里，拿不到主进程的配置。bucket 端口是可以改的
+      // （见 setBucketPort），脚本里写死端口一旦用户改过就全链路失联，
+      // 所以在脚本头部塞一段运行时配置，让它自己读。
+      const runtimePrelude =
+        '/* Auto366 注入运行时配置（由代理层在注入时写入） */\n' +
+        'window.__A366__ = ' + JSON.stringify({
+          bucket: 'http://127.0.0.1:' + this.bucketPort,
+          bucketPort: this.bucketPort,
+        }) + ';\n';
+
       for (const htmlFile of htmlFiles) {
         for (const scriptPath of injectScriptPaths) {
           this.injectScriptIntoHtml(htmlFile, path.basename(scriptPath));
           const scriptDest = path.join(path.dirname(htmlFile), path.basename(scriptPath));
-          fs.copyFileSync(scriptPath, scriptDest);
+          try {
+            fs.writeFileSync(scriptDest, runtimePrelude + fs.readFileSync(scriptPath, 'utf-8'), 'utf-8');
+          } catch (e) {
+            // 读写失败时退回原样拷贝，脚本里各自有默认端口兜底
+            fs.copyFileSync(scriptPath, scriptDest);
+          }
         }
       }
 
@@ -2105,6 +2146,19 @@ class ProxyServer {
 
   injectScriptIntoHtml(htmlFilePath, scriptFileName) {
     let content = fs.readFileSync(htmlFilePath, 'utf-8');
+
+    // 听说页会在正文脚本里立刻加载 jquery.recordwave.js / exam-pc-v1.js。
+    // 若仍用 createElement 异步追加，录音库可能先缓存真实 getUserMedia，
+    // 后续再替换 navigator.mediaDevices 已经来不及。直接放到 body 起始处，
+    // 利用普通 script 的解析阻塞语义保证假麦克风先完成接管。
+    if (scriptFileName === 'auto-listening.js') {
+      const directTag = `<script src="./${scriptFileName}"></script>`;
+      if (!content.includes(directTag)) {
+        content = content.replace(/<body(\s[^>]*)?>/i, (bodyTag) => bodyTag + directTag);
+      }
+      fs.writeFileSync(htmlFilePath, content, 'utf-8');
+      return;
+    }
 
     const injectCode = `var s = document.createElement('script');s.src='./${scriptFileName}';document.body.appendChild(s);`;
 

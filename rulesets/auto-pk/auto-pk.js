@@ -1,6 +1,14 @@
 (function() {
 'use strict';
 
+// bucket 端口用户可以改；代理层在注入脚本时把真实地址写进 window.__A366__。
+// 注意不能读 localStorage —— 注入脚本跑在 up366 页面的 origin 下，
+// 跟主程序窗口不是同一个存储区，主程序写进去的值这里根本看不到。
+function a366BucketOrigin() {
+    if (window.__A366__ && window.__A366__.bucket) return window.__A366__.bucket;
+    return 'http://127.0.0.1:5290';
+}
+
 const POS_LIST = ['interj', 'prep', 'pron', 'abbr', 'conj', 'adj', 'adv', 'num', 'art', 'vt', 'vi', 'n', 'v'];
 const POS_ALT = POS_LIST.join('|');
 const POS_ABBREV_PATTERN = new RegExp('^(?:(?:' + POS_ALT + ')(?=\\.|\\s|[\\u4e00-\\u9fff]|$)\\.?\\s*(?:&\\s*(?:' + POS_ALT + ')\\.?\\s*)*)\\s*');
@@ -1668,8 +1676,7 @@ var ScoreControl = {
 var AIFallback = {
     query: function(question, candidates) {
         return new Promise(function(resolve, reject) {
-            var bucketPort = localStorage.getItem('bucket-port') || '5290';
-            var keyUrl = 'http://127.0.0.1:' + bucketPort + '/ai-api-key';
+                        var keyUrl = a366BucketOrigin() + '/ai-api-key';
             fetch(keyUrl, { cache: 'no-cache' })
                 .then(function(res) { return res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status)); })
                 .then(function(data) {
@@ -1684,7 +1691,7 @@ var AIFallback = {
                 .then(function() {
                     // 内置免费 AI(chatnut*): 协议要签名, 页面里跑不了, 交给主进程代跑
                     if (State.aiBuiltin) {
-                        var askUrl = 'http://127.0.0.1:' + bucketPort + '/ai-ask';
+                        var askUrl = a366BucketOrigin() + '/ai-ask';
                         var ctl = new AbortController();
                         var tmo = AI_TIMEOUT_BUILTIN;
                         var tid = setTimeout(function() { ctl.abort(); }, tmo);
@@ -1811,8 +1818,7 @@ var Loader = {
     },
 
     fetchAiApiKey: function() {
-        var bucketPort = localStorage.getItem('bucket-port') || '5290';
-        var keyUrl = 'http://127.0.0.1:' + bucketPort + '/ai-api-key';
+                var keyUrl = a366BucketOrigin() + '/ai-api-key';
         fetch(keyUrl, { cache: 'no-cache' })
             .then(function(res) {
                 if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1839,7 +1845,7 @@ var Loader = {
     loadBucketFromServer: function() {
         Loader.fetchAiApiKey();
         try {
-            var url = State.customBucketUrl || 'http://127.0.0.1:5290/word-pk-answer';
+            var url = State.customBucketUrl || (a366BucketOrigin() + '/word-pk-answer');
             UI.addLogMessage('[加载] 开始请求词库: ' + url, 'info');
             fetch(url, { cache: 'no-cache' })
                 .then(function(res) {
@@ -2001,7 +2007,7 @@ var UI = {
 
         UI.addLogMessage('正在保存日志到桌面...', 'info');
 
-        fetch('http://127.0.0.1:5290/save-log', {
+        fetch(a366BucketOrigin() + '/save-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: logText })
@@ -3767,8 +3773,7 @@ var PkTimeMod = {
     // 网络请求，不经过本注入页的 fetch/XHR——页面层 hook 永远拦不到。
     // 这里只负责把"启用/秒数"状态经本地 bucket server 推给代理层。
     bucketBase: function() {
-        var port = localStorage.getItem('bucket-port') || '5290';
-        return 'http://127.0.0.1:' + port;
+        return a366BucketOrigin();
     },
 
     push: function() {
