@@ -27,7 +27,8 @@
     "enabled": true,
     "urlUpload": "self-api.up366.cn/selfstudy/special/questions",
     "uploadType": "json-xml-extracted",
-    "serverLocate": "/fill-answer"
+    "serverLocate": "/fill-answer",
+    "fillSubmitUrl": "study-api.up366.cn/client/task/score/submit/v2"
   },
   {
     "name": "TTS语音生成",

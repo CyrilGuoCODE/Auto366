@@ -43,6 +43,9 @@ class ProxyServer {
     // 同样改 task/score/submit 的 tasksJson.seconds 并重算 ut，用不同的 salt 以与听力区分
     this.fillTimeMod = { enabled: false, seconds: null };
     this.FILL_TIME_SALT = 'submitTaskToken-pc-987654'; // 与听力共用同一服务端盐值
+    // 当前由最近一次成功触发的 answer-upload 规则指定的特殊填空提交接口。
+    // 仅当规则携带 fillSubmitUrl 字段且 URL 命中时设置；普通填空规则触发后置 null 恢复默认。
+    this.activeFillSubmitUrl = null;
     // ===== 听力时间预设（zip 内 mp3 自动计算）=====
     this.lastZipPath = null;  // 最近一次处理的套题 zip 路径
     this.listenTimePresetCache = {};  // { zipPath: { success, seconds, detail, ts } }
@@ -176,38 +179,46 @@ class ProxyServer {
               return callback();
             }
 
-            // ===== 填空时间修改：改写填空作业提交用时（gzip端点需先解压再改写再重新压缩）=====
+            // ===== 填空时间修改：改写填空作业提交用时 =====
             if (hasFillTime) {
-              // gzip/submit 的请求体是应用层 gzip 压缩的二进制流（无 content-encoding 头），
-              // 需要先 gunzip 得到明文，才能交给 applyFillTimeMod 解析改写。
-              const fillTimeProcess = (plainBody) => {
-                const modifiedBody = this.applyFillTimeMod(plainBody, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
-                zlib.gzip(Buffer.from(modifiedBody, 'utf-8'), (err, compressed) => {
-                  if (err) {
-                    this.safeIpcSend('rule-log', { type: 'error', message: `[填空时间] gzip压缩失败: ` + err.message, url: fullUrl });
-                    this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
-                  } else {
-                    ctx.proxyToServerRequest.removeHeader('transfer-encoding');
-                    ctx.proxyToServerRequest.setHeader('content-encoding', 'gzip');
-                    ctx.proxyToServerRequest.setHeader('content-length', compressed.length);
-                    ctx.proxyToServerRequest.write(compressed);
-                    if (requestInfo) {
-                      try { requestInfo.requestBody = JSON.stringify(JSON.parse(modifiedBody), null, 2); }
-                      catch (e) { requestInfo.requestBody = modifiedBody; }
+              const isGzipFillSubmit = fullUrl.includes('task/score/gzip/submit');
+              if (isGzipFillSubmit) {
+                // gzip/submit 的请求体是应用层 gzip 压缩的二进制流（无 content-encoding 头），
+                // 需要先 gunzip 得到明文，才能交给 applyFillTimeMod 解析改写。
+                const fillTimeProcess = (plainBody) => {
+                  const modifiedBody = this.applyFillTimeMod(plainBody, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+                  zlib.gzip(Buffer.from(modifiedBody, 'utf-8'), (err, compressed) => {
+                    if (err) {
+                      this.safeIpcSend('rule-log', { type: 'error', message: `[填空时间] gzip压缩失败: ` + err.message, url: fullUrl });
+                      this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
+                    } else {
+                      ctx.proxyToServerRequest.removeHeader('transfer-encoding');
+                      ctx.proxyToServerRequest.setHeader('content-encoding', 'gzip');
+                      ctx.proxyToServerRequest.setHeader('content-length', compressed.length);
+                      ctx.proxyToServerRequest.write(compressed);
+                      if (requestInfo) {
+                        try { requestInfo.requestBody = JSON.stringify(JSON.parse(modifiedBody), null, 2); }
+                        catch (e) { requestInfo.requestBody = modifiedBody; }
+                      }
                     }
+                    return callback();
+                  });
+                };
+                // 先尝试 gunzip 解压请求体；若失败则按明文处理（兼容非压缩提交）
+                zlib.gunzip(bodyBuffer, (gzErr, decompressed) => {
+                  if (!gzErr && decompressed) {
+                    fillTimeProcess(decompressed.toString('utf-8'));
+                  } else {
+                    fillTimeProcess(body);
                   }
-                  return callback();
                 });
-              };
-              // 先尝试 gunzip 解压请求体；若失败则按明文处理（兼容非压缩提交）
-              zlib.gunzip(bodyBuffer, (gzErr, decompressed) => {
-                if (!gzErr && decompressed) {
-                  fillTimeProcess(decompressed.toString('utf-8'));
-                } else {
-                  fillTimeProcess(body);
-                }
-              });
-              return;
+                return;
+              } else {
+                // 特殊提交接口（如 /submit/v2）：普通请求体，直接改写后写回，不做 gzip 解压/重压缩
+                const modifiedBody = this.applyFillTimeMod(body, fullUrl, ctx.clientToProxyRequest.headers['content-type']);
+                this.writeModifiedFormBody(ctx, modifiedBody, requestInfo);
+                return callback();
+              }
             }
 
             if (ctx.clientToProxyRequest.headers['content-type'] && ctx.clientToProxyRequest.headers['content-type'].includes('application/json')) {
@@ -1231,13 +1242,17 @@ class ProxyServer {
   }
 
   // ===== 填空时间修改：是否命中作业提交接口 =====
+  // 默认接口: task/score/gzip/submit（gzip 压缩提交）
+  // 特殊接口: 由最近一次 answer-upload 规则通过 fillSubmitUrl 字段指定（如 /submit/v2）
   shouldApplyFillTime(url, method) {
     if (!this.fillTimeMod || this.fillTimeMod.enabled !== true) return false;
     if (this.fillTimeMod.seconds === null || this.fillTimeMod.seconds === undefined) return false;
     if (method && method !== 'POST') return false;
     // 听力时间修改已启用时不重复处理（听力有独立salt，优先级更高）
     if (this.listenTime && this.listenTime.enabled === true && this.listenTime.seconds !== null) return false;
-    return url.indexOf('task/score/gzip/submit') !== -1;
+    if (url.includes('task/score/gzip/submit')) return true;
+    if (this.activeFillSubmitUrl && url.includes(this.activeFillSubmitUrl)) return true;
+    return false;
   }
 
   // 改写 tasksJson.seconds，用填空专用 salt 重算 ut
@@ -1673,6 +1688,17 @@ class ProxyServer {
           if (!this.isRuleEffective(rule, ruleset)) continue;
           if (rule.type === 'answer-upload') {
             if (!url.includes(rule.urlUpload)) continue;
+
+            // 规则 URL 命中后，记录该规则指定的特殊填空提交接口（若有）。
+            // 无 fillSubmitUrl 字段的普通填空规则会将状态重置为 null，恢复默认 gzip/submit 逻辑。
+            this.activeFillSubmitUrl = rule.fillSubmitUrl || null;
+            this.safeIpcSend('rule-log', {
+              type: 'info',
+              message: this.activeFillSubmitUrl
+                ? `[填空提交模式] 已启用特殊提交接口: ${this.activeFillSubmitUrl}`
+                : `[填空提交模式] 使用默认 gzip/submit 接口`,
+              url
+            });
 
             if (this.analyticsManager) {
               this.analyticsManager.capture('answer_upload_applied', { upload_type: rule.uploadType });
