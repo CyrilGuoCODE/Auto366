@@ -297,6 +297,8 @@ var State = {
     aiEnabled: localStorage.getItem('aiEnabled') === 'true',
     aiThreshold: parseInt(localStorage.getItem('aiThreshold'), 10) || 50,
     aiWaiting: false,
+    // ===== 听音拼词（独立子规则，由按钮控制启停）=====
+    listenSpellEnabled: localStorage.getItem('listenSpellEnabled') === 'true',
     // ===== 时间修改修改（隶属"通用自动PK"，可关可开的子规则）=====
     pkTimeModEnabled: localStorage.getItem('pkTimeModEnabled') === 'true',
     // 秒数：未设置时为 null，面板显示 "-"；int32 全范围
@@ -2897,6 +2899,47 @@ var UI = {
         btnRow.appendChild(reloadBtn);
         UI.autoPkPanel.appendChild(btnRow);
 
+        // 听音拼词切换按钮（独立子规则）
+        var lsRow = document.createElement('div');
+        lsRow.style.display = 'flex';
+        lsRow.style.gap = '6px';
+        lsRow.style.marginTop = '6px';
+
+        var listenSpellBtn = document.createElement('button');
+        listenSpellBtn.id = 'auto-pk-listen-spell';
+        listenSpellBtn.textContent = State.listenSpellEnabled ? '听音拼词: 开' : '听音拼词: 关';
+        listenSpellBtn.title = '开启后，在拼写题页面通过碎片长度+字符匹配度反向匹配词库';
+        listenSpellBtn.style.flex = '1';
+        listenSpellBtn.style.fontSize = '12px';
+        listenSpellBtn.style.padding = '6px';
+        listenSpellBtn.style.cursor = 'pointer';
+        listenSpellBtn.style.color = '#fff';
+        listenSpellBtn.style.border = '1px solid rgba(255,255,255,0.3)';
+        listenSpellBtn.style.borderRadius = '3px';
+        listenSpellBtn.style.background = State.listenSpellEnabled ? 'rgba(33,150,243,0.7)' : 'rgba(255,255,255,0.2)';
+
+        function updateListenSpellBtn() {
+            listenSpellBtn.textContent = State.listenSpellEnabled ? '听音拼词: 开' : '听音拼词: 关';
+            listenSpellBtn.style.background = State.listenSpellEnabled ? 'rgba(33,150,243,0.7)' : 'rgba(255,255,255,0.2)';
+        }
+
+        listenSpellBtn.addEventListener('click', function() {
+            State.listenSpellEnabled = !State.listenSpellEnabled;
+            localStorage.setItem('listenSpellEnabled', String(State.listenSpellEnabled));
+            updateListenSpellBtn();
+            // 开启时若调度器未运行，自动启动，避免用户还要单独点"开始PK"
+            if (State.listenSpellEnabled && !State.autoPkIntervalId) {
+                Scheduler.start();
+            }
+            UI.addLogMessage('[听音拼词] ' + (State.listenSpellEnabled ? '已启用' : '已禁用'), 'info');
+        });
+
+        lsRow.appendChild(listenSpellBtn);
+        UI.autoPkPanel.appendChild(lsRow);
+
+        // 暴露刷新函数给 updateStatus 使用
+        UI.updateListenSpellBtn = updateListenSpellBtn;
+
         document.body.appendChild(UI.autoPkPanel);
 
         var isDragging = false;
@@ -2953,6 +2996,9 @@ var UI = {
             } else {
                 scoreProgressEl.textContent = '';
             }
+        }
+        if (typeof UI.updateListenSpellBtn === 'function') {
+            UI.updateListenSpellBtn();
         }
     }
 };
@@ -3278,9 +3324,201 @@ var SpellPk = {
     }
 };
 
+// ============================================================
+// 听音拼词模块 —— 在无文字题面（仅音频）的拼写题中，
+// 通过对词库的长度（高权重）+字符匹配度比对，反向推断目标单词，
+// 再复用 SpellPk.findFragmentSequence 排序碎片、SpellPk._clickSequence 点击。
+// 与 SpellPk 共享 .u3-spell 页面 DOM，但匹配策略不同：
+//   拼写PK: 读中文题面 → 索引词库 → 拼碎片
+//   听音拼词: 无题面 → 碎片聚合 → 长度+字符相似度匹配词库 → 拼碎片
+// 去重复用 SpellPk.lastAnsweredKey（_clickSequence 完成后会自动清空）。
+// ============================================================
+var ListenSpell = {
+    busy: false,  // 做题流程中标志（含动画播放期，屏蔽轮询）
+
+    // 字符多重集交集大小（同一字符按最少出现次数计入）
+    _charOverlap: function(a, b) {
+        var counts = {};
+        for (var i = 0; i < a.length; i++) {
+            var ch = a[i];
+            counts[ch] = (counts[ch] || 0) + 1;
+        }
+        var overlap = 0;
+        for (var j = 0; j < b.length; j++) {
+            var c = b[j];
+            if (counts[c] && counts[c] > 0) {
+                overlap++;
+                counts[c]--;
+            }
+        }
+        return overlap;
+    },
+
+    // 综合相似度：长度（高权重 60%）+ 字符匹配（40%）
+    scoreCandidate: function(word, fragConcat) {
+        var wNorm = (word || '').toLowerCase().replace(/[\s.\-_,;:!?']/g, '');
+        var fNorm = (fragConcat || '').toLowerCase().replace(/[\s.\-_,;:!?']/g, '');
+        if (!wNorm || !fNorm) return 0;
+
+        var maxLen = Math.max(wNorm.length, fNorm.length);
+        if (maxLen === 0) return 0;
+
+        // 长度得分：完全一致=100，差异越大扣分越多
+        var lenDiff = Math.abs(wNorm.length - fNorm.length);
+        var lengthScore = (1 - lenDiff / maxLen) * 100;
+
+        // 字符匹配得分：多重集交集 / 最大长度
+        var overlap = ListenSpell._charOverlap(wNorm, fNorm);
+        var charScore = (overlap / maxLen) * 100;
+
+        return lengthScore * 0.6 + charScore * 0.4;
+    },
+
+    // 从词库中匹配最相似的单词
+    matchWord: function(fragments) {
+        if (!State.jsonData || !State.jsonData.words) return null;
+        var fragConcat = '';
+        for (var i = 0; i < fragments.length; i++) {
+            fragConcat += fragments[i].text;
+        }
+        if (!fragConcat) return null;
+
+        var bestWord = null;
+        var bestScore = 0;
+        var words = State.jsonData.words;
+        for (var w = 0; w < words.length; w++) {
+            var wordStr = words[w].word;
+            if (!wordStr) continue;
+            var score = ListenSpell.scoreCandidate(wordStr, fragConcat);
+            if (score > bestScore) {
+                bestScore = score;
+                bestWord = wordStr;
+            }
+        }
+        return bestWord ? { word: bestWord, score: bestScore } : null;
+    },
+
+    isActive: function() {
+        // 用户开启 且 当前页面是 u3-spell 拼写题页面
+        return !!State.listenSpellEnabled
+            && !!document.querySelector('.u3-spell.u3-page-pking__pk-core');
+    },
+
+    auto: function() {
+        if (!ListenSpell.isActive()) return false;
+
+        // 做题流程中（含动画播放）：不轮询，等独立轮询解除 busy 后恢复
+        if (ListenSpell.busy) return true;
+
+        var activeIdx = SpellPk.getActiveQuestionIndex();
+        var dedupeKey = 'ls_' + activeIdx;
+        // 做题流程中（key 未被 _clickSequence 清空）：不再轮询，直接返回
+        if (dedupeKey === SpellPk.lastAnsweredKey) return true;
+
+        // 轮询碎片是否存在：不存在则静默继续轮询
+        var fragments = SpellPk.getAnswerFragments();
+        if (fragments.length === 0) return true;
+
+        UI.addLogMessage('[听音拼词] 第' + (activeIdx + 1) + '题，碎片数=' + fragments.length, 'info');
+
+        var fragTexts = [];
+        for (var fi = 0; fi < fragments.length; fi++) {
+            fragTexts.push(fragments[fi].text);
+        }
+        UI.addLogMessage('[听音拼词] 可用碎片: ' + JSON.stringify(fragTexts), 'info');
+
+        // 词库匹配：长度（高权重）+ 字符匹配度
+        var match = ListenSpell.matchWord(fragments);
+        if (!match) {
+            UI.addLogMessage('[听音拼词] 词库匹配失败', 'warning');
+            SpellPk.lastAnsweredKey = dedupeKey;
+            return true;
+        }
+
+        UI.addLogMessage('[听音拼词] 匹配: ' + match.word + ' (相似度=' + Math.round(match.score) + '%)', 'match');
+
+        // 按词库正确拼写顺序排序碎片（复用已有方法）
+        var sequence = SpellPk.findFragmentSequence(match.word, fragments);
+
+        // 拼不出则尝试 DOM complex-content 答案
+        if (!sequence) {
+            var complexContents = document.querySelectorAll('.u3-spell__complex-content');
+            if (complexContents.length > activeIdx) {
+                var domAnswer = (complexContents[activeIdx].textContent || '').trim();
+                if (domAnswer && domAnswer !== match.word) {
+                    UI.addLogMessage('[听音拼词] 词库答案"' + match.word + '"拼不出碎片，尝试DOM答案"' + domAnswer + '"', 'info');
+                    sequence = SpellPk.findFragmentSequence(domAnswer, fragments);
+                }
+            }
+        }
+
+        // 已填入部分补齐剩余
+        if (!sequence) {
+            var activeFillList = document.querySelectorAll('.u3-spell__fill-list');
+            var currentFillList = activeFillList.length > activeIdx ? activeFillList[activeIdx] : null;
+            if (currentFillList) {
+                var filledBlanks = currentFillList.querySelectorAll('.u3-spell__fill-blank');
+                var filledText = '';
+                for (var fb = 0; fb < filledBlanks.length; fb++) {
+                    var blankText = (filledBlanks[fb].textContent || '').trim();
+                    if (blankText) filledText += blankText;
+                }
+                if (filledText) {
+                    var normFunc = function(s) { return s.toLowerCase().replace(/[\s.\-_,;:!?']/g, ''); };
+                    var answerNorm = normFunc(match.word);
+                    var filledNorm = normFunc(filledText);
+                    if (answerNorm.startsWith(filledNorm) && filledNorm.length < answerNorm.length) {
+                        var remaining = match.word.substring(filledText.length);
+                        UI.addLogMessage('[听音拼词] 已填入"' + filledText + '"，匹配剩余"' + remaining + '"', 'info');
+                        sequence = SpellPk.findFragmentSequence(remaining, fragments);
+                    }
+                }
+            }
+        }
+
+        if (!sequence) {
+            UI.addLogMessage('[听音拼词] 无法从碎片拼出 "' + match.word + '"', 'warning');
+            SpellPk.lastAnsweredKey = dedupeKey;
+            return true;
+        }
+
+        SpellPk.lastAnsweredKey = dedupeKey;
+        State.matchCount++;
+
+        // 屏蔽轮询，防止 _clickSequence 完成后动画未播完时读到残留碎片
+        ListenSpell.busy = true;
+        SpellPk._clickSequence(sequence, 0);
+
+        // 独立轮询：等待碎片真正消失或题目切换或超时，才解除 busy 恢复轮询
+        var pollCount = 0;
+        var maxPoll = 100; // 最多等 10 秒（100 × 100ms）
+        var animPoll = setInterval(function() {
+            pollCount++;
+            var curFrags = SpellPk.getAnswerFragments();
+            var curIdx = SpellPk.getActiveQuestionIndex();
+            if (curFrags.length === 0 || curIdx !== activeIdx || pollCount >= maxPoll) {
+                clearInterval(animPoll);
+                ListenSpell.busy = false;
+                if (pollCount >= maxPoll && curFrags.length > 0 && curIdx === activeIdx) {
+                    UI.addLogMessage('[听音拼词] 等待碎片消失/题目切换超时，恢复轮询', 'warning');
+                }
+            }
+        }, 100);
+
+        UI.updateStatus();
+        return true;
+    }
+};
+
 var Scheduler = {
     auto: function() {
         if (State.aiWaiting) return;
+
+        // 听音拼词优先检测（用户开启时优先于普通拼写PK）
+        if (ListenSpell.isActive()) {
+            ListenSpell.auto();
+            return;
+        }
 
         // 拼写PK优先检测
         if (SpellPk.isActive()) {
