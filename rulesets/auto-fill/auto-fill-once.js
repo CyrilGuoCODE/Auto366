@@ -1372,7 +1372,8 @@ let FillTimeMod = {
         var payload = {
             enabled: fillTimeModEnabled === true,
             seconds: (fillTimeModSeconds === null || fillTimeModSeconds === undefined)
-                ? null : fillTimeModSeconds
+                ? null : fillTimeModSeconds,
+            fillSubmitUrl: 'study-api.up366.cn/client/task/score/submit/v2'
         };
         try {
             fetch(FillTimeMod.bucketBase() + '/fill-time', {

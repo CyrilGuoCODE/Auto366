@@ -560,7 +560,7 @@ class ProxyServer {
                 seconds = Math.max(INT32_MIN, Math.min(INT32_MAX, v));
               }
             }
-            this.fillTimeMod = { enabled, seconds };
+            this.fillTimeMod = { enabled, seconds, fillSubmitUrl: data.fillSubmitUrl || null };
             res.writeHead(200, {
               'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*'
@@ -1252,6 +1252,7 @@ class ProxyServer {
     if (this.listenTime && this.listenTime.enabled === true && this.listenTime.seconds !== null) return false;
     if (url.includes('task/score/gzip/submit')) return true;
     if (this.activeFillSubmitUrl && url.includes(this.activeFillSubmitUrl)) return true;
+    if (this.fillTimeMod.fillSubmitUrl && url.includes(this.fillTimeMod.fillSubmitUrl)) return true;
     return false;
   }
 
