@@ -2634,6 +2634,9 @@
 
     function isSpeakingPaper(answers) {
         const kinds = new Set(answers.map(a => a.pattern || ''));
+        // 听说卷必然包含「听后转述」；答案里没有转述就一律按听力面板处理，
+        // 即使混入了听后回答/朗读短文等口语题型，也不进听说界面。
+        if (![...kinds].some(k => k.indexOf('转述') >= 0)) return false;
         return SPEAK_PATTERNS.some(p => [...kinds].some(k => k.indexOf(p) >= 0));
     }
 
