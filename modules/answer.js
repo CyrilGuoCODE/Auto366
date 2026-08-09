@@ -2052,6 +2052,12 @@ class AnswerExtractor {
               if (attachmentAnswers.length === 0 && writing && writing.modelEssays.length > 0) {
                 attachmentAnswers = writing.modelEssays;
               }
+              // 听读类题目（单词/语块/句子听读）：attachment 里通常没有 <answers>，
+              // 要朗读的文本在 <text><paragraph><sentences><content> 中，
+              // 不补上这段，这类卷子的答案会大面积缺失
+              if (attachmentAnswers.length === 0) {
+                attachmentAnswers = this.readXmlTagList(decodedAttachment, ['content']);
+              }
             } catch (e) {
               console.log('解析attachment失败:', e);
             }
@@ -2200,6 +2206,17 @@ class AnswerExtractor {
         ans.sourceFile !== 'correctAnswer.xml' &&
         !(ans.sourceFile === 'paper.xml' && ans.isQuestionMeta)
       );
+      // paper.xml 已从 attachment 提取到答案的题，同 elementId 的 answer.json
+      // 是同一题的重复来源，去掉以免同一题出现两条、题号错位
+      const paperAnswerElementIds = new Set(
+        otherAnswers
+          .filter(ans => ans.sourceFile === 'paper.xml')
+          .map(ans => String(ans.elementId || '').toUpperCase())
+      );
+      const dedupedOthers = otherAnswers.filter(ans =>
+        ans.sourceFile === 'paper.xml' ||
+        !paperAnswerElementIds.has(String(ans.elementId || '').toUpperCase())
+      );
 
       // elementId -> 题目信息，大小写不敏感（目录名与 xml 里的写法不总是一致）
       const paperByElement = new Map();
@@ -2267,7 +2284,7 @@ class AnswerExtractor {
       });
 
       // 2) 其余答案（各题目录下的 answer.json、questionData.js 等）按试卷顺序归位
-      const mergedOthers = otherAnswers.map((ans, index) => {
+      const mergedOthers = dedupedOthers.map((ans, index) => {
         const matchingQuestion = lookupPaper(ans, null);
         return {
           ...ans,
@@ -2295,14 +2312,15 @@ class AnswerExtractor {
     }
   }
 
-  // 统一编号：correctAnswer 已经拿到试卷真实题号就沿用，其余（跟读句子等）按试卷顺序连续编号。
+  // 统一编号：correctAnswer / paper 已经拿到试卷真实题号就沿用，其余（跟读句子等）按试卷顺序连续编号。
   // 编号必须全局唯一——auto-fill 用「第N题」建索引，重号会让后面的答案被直接丢弃。
   assignQuestionNumbers(answers) {
     if (!Array.isArray(answers) || answers.length === 0) return answers;
 
     const usedNumbers = new Set();
     for (const ans of answers) {
-      if (ans.sourceFile === 'correctAnswer.xml' && Number.isFinite(ans.questionNo) && !usedNumbers.has(ans.questionNo)) {
+      if ((ans.sourceFile === 'correctAnswer.xml' || ans.sourceFile === 'paper.xml') &&
+          Number.isFinite(ans.questionNo) && !usedNumbers.has(ans.questionNo)) {
         usedNumbers.add(ans.questionNo);
       }
     }
@@ -2319,7 +2337,8 @@ class AnswerExtractor {
 
     return answers.map(ans => {
       let questionNo;
-      if (ans.sourceFile === 'correctAnswer.xml' && Number.isFinite(ans.questionNo)) {
+      if ((ans.sourceFile === 'correctAnswer.xml' || ans.sourceFile === 'paper.xml') &&
+          Number.isFinite(ans.questionNo)) {
         questionNo = ans.questionNo;
       } else {
         questionNo = takeNextNumber();
