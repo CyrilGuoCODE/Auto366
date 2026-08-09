@@ -14,5 +14,14 @@
     "targetFileName": "Pc.zip",
     "injectScript": "auto-listening.js",
     "downloadTimeout": 30000
+  },
+  {
+    "name": "口语朗读TTS",
+    "type": "tts-generate",
+    "description": "听说卷的口语题生成朗读音频，灌进页面录音；基础听力卷不会触发",
+    "enabled": true,
+    "ttsBasePath": "/listening-tts",
+    "ttsCompact": true,
+    "ttsAutoApprove": true
   }
 ]

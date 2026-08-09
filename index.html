@@ -555,6 +555,17 @@
                                 <input type="number" id="ttsSpeedInput" class="form-input" value="1.0" step="0.1" min="0.5" max="2.0" placeholder="1.0">
                             </div>
                             <div class="setting-item__description">语速范围 0.5 ~ 2.0，1.0 为正常语速，默认 1.0</div>
+                            <div class="setting-item">
+                                <div class="setting-item__content">
+                                    <label>
+                                        <input type="checkbox" id="ttsApprovalEnabled" checked>
+                                        <span>生成前审批朗读文本</span>
+                                    </label>
+                                    <div class="setting-item__description">
+                                        开启时弹出文本审批窗口，确认后生成；关闭时自动听力会直接生成 TTS
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="setting-group">
                             <h4>规则设置</h4>

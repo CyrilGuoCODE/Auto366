@@ -5,6 +5,14 @@ let autoFillIntervalId = null;
 let autoFillDelay = 200;
 let autoFillPanel = null;
 let customBucketUrl = localStorage.getItem('customFillBucketUrl') || '';  // 自定义词库URL
+
+// bucket 端口用户可以改；代理层在注入脚本时把真实地址写进 window.__A366__。
+// 注意不能读 localStorage —— 注入脚本跑在 up366 页面的 origin 下，
+// 跟主程序窗口不是同一个存储区，主程序写进去的值这里根本看不到。
+function a366BucketOrigin() {
+    if (window.__A366__ && window.__A366__.bucket) return window.__A366__.bucket;
+    return 'http://127.0.0.1:5290';
+}
 let logPanel = null;  // 日志面板
 let logMessages = [];  // 日志消息数组
 let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || false;
@@ -29,7 +37,7 @@ const FILL_TIME_INT32_MAX = 2147483647;
 
 function loadBucketFromServer() {
     try {
-        const url = customBucketUrl || 'http://127.0.0.1:5290/fill-answer';
+        const url = customBucketUrl || (a366BucketOrigin() + '/fill-answer');
         fetch(url, { cache: 'no-cache' })
             .then(res => {
                 if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -749,7 +757,7 @@ async function handleReadAlongQuestions() {
     // 直接从 fill-answer 端点获取原始答案数据（不依赖 rawAnswerData，避免 sourceFile 过滤问题）
     let directAnswers = [];
     try {
-        const url = customBucketUrl || 'http://127.0.0.1:5290/fill-answer';
+        const url = customBucketUrl || (a366BucketOrigin() + '/fill-answer');
         const res = await fetch(url, { cache: 'no-cache' });
         if (res.ok) {
             const data = await res.json();
@@ -1347,14 +1355,17 @@ function stopAutoFill() {
 // 代理层据此改写 fill 提交的 duration（落库时 ×1000 转毫秒）
 let FillTimeMod = {
     bucketBase: function() {
-        // 从 customBucketUrl 提取 origin；为空时回退默认端口
+        // 从 customBucketUrl 提取 origin
         // 不用 new URL() 以兼容 local:// 等 protocol
         var full = customBucketUrl || '';
         if (full) {
             var m = full.match(/^(https?:\/\/[^\/]+)/);
             if (m) return m[1];
         }
-        return 'http://127.0.0.1:5290';
+        // 没有自定义地址时用代理层注入的真实端口。bucket 端口是可以改的，
+        // 写死 5290 一旦用户改过就全链路失联。
+        if (window.__A366__ && window.__A366__.bucket) return window.__A366__.bucket;
+        return a366BucketOrigin();
     },
     push: function() {
         var payload = {
@@ -1572,7 +1583,7 @@ function exportLogs() {
 
     addLogMessage('正在保存日志到桌面...', 'info');
 
-    fetch('http://127.0.0.1:5290/save-log', {
+    fetch(a366BucketOrigin() + '/save-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: logText })

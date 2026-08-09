@@ -10,7 +10,10 @@
 (function() {
     'use strict';
 
-    const BUCKET_URL = 'http://127.0.0.1:5290';
+    // bucket 端口用户可以改；代理层在注入脚本时把真实地址写进 window.__A366__。
+    // 不能读 localStorage —— 注入脚本跑在 up366 页面的 origin 下，
+    // 跟主程序窗口不是同一个存储区。
+    const BUCKET_URL = (window.__A366__ && window.__A366__.bucket) || 'http://127.0.0.1:5290';
     const ANSWER_PATH = '/listening-answer';
     const TARGET_PATTERNS = ['听后选择-嵌套', '听后选择-整体'];
 
@@ -1786,9 +1789,891 @@
     // 初始化
     // ==========================================
 
+    // ==========================================
+    // 听说卷（北京中考听说考试）
+    //
+    // 跟基础听力是两种卷子，共用这一个规则集，开机按答案题型自动挑界面：
+    //   基础听力 —— 整卷只有听后选择，走上面那套重建+填答
+    //   听说     —— 6 道听后选择 + 十几道口语题，走下面这套
+    //
+    // 口语题这边有个关键结论：考试模式下页面上**没有录音按钮**。
+    // 实测导出的结构里，partB 容器内可见的只有题干，
+    // u3-sent-record / u3-qst-record / u3-myRecord 全部 visible=0（那是答完后的回放面板）。
+    // 底部 examBar 显示「请听题」并自动播音——整场考试是线性自动流程，
+    // 到点自己开录。所以不能靠点按钮。页面通常只 getUserMedia 一次、整场复用同一条流，
+    // 真正逐题发生的是 MediaRecorder.start/stop；考试栏的「请答题」再作为兼容兜底。
+    // ==========================================
+
+    const SPK = {
+        // 取自真机导出的结构
+        subChoice: '.u3compo-singlechoice-zc',
+        qText:     '.u3-qst-text-cont',   // 干净题干，不含得分/参考答案/听力原文
+        opt:       '.u3-qst-opt',
+        optCont:   '.u3-opt-cont',        // 选项正文，不含 A./B./C. 前缀
+        optRadio:  '.u3-qst-opt-radio',
+        selected:  'u3-selected',
+        speakHost: '.u3compo-partB-zc, .u3compo-partC-zc, .u3compo-repeat-zc',
+        slide:     '.swiper-slide-active',
+        barTitle:  '.examBar-title',
+    };
+
+    const SPEAK_PATTERNS = ['听后回答', '朗读短文', '听后转述', 'JSON句子跟读模式', '口语跟读', '故事复述'];
+
+    function spkVisible(el) {
+        if (!el || !el.getBoundingClientRect) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    }
+
+    // swiper 会把非当前页横向移出屏幕，但它们仍有 width/height，spkVisible 会误判为可见。
+    // 录音相位和当前题都必须按“与视口相交”判断，不能取 DOM 里的第一个。
+    function spkOnScreen(el) {
+        if (!spkVisible(el)) return false;
+        const r = el.getBoundingClientRect();
+        const w = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || Infinity;
+        const h = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || Infinity;
+        return r.right > 0 && r.bottom > 0 && r.left < w && r.top < h;
+    }
+
+    function spkText(el) {
+        return ((el && (el.innerText || el.textContent)) || '').trim().replace(/\s+/g, ' ');
+    }
+
+    function spkClick(el) {
+        if (!el) return;
+        for (const t of ['mousedown', 'mouseup', 'click']) {
+            el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
+        }
+    }
+
+    const Speaking = {
+        answers: [], choices: [], manifest: [], used: new Set(),
+        readyIndexes: new Set(), ttsGenerating: false,
+        approvalPending: false, approvalWarned: false,
+        audioCache: new Map(), audioFailures: new Set(),
+        running: false, armed: false, micReady: false, recorderActive: false,
+        gumCount: 0,
+        recording: false, starting: false,
+        source: null, currentIndex: null, recordSeq: 0,
+        ctx: null, gain: null, dest: null, stream: null, tracks: null,
+        origGUM: null, origStop: null,
+        origRecorderStart: null, origRecorderStop: null, origRecorderPause: null,
+        stopBlocked: 0, readyPromise: null,
+        _barObs: null, _barTimer: null, _phaseTimer: null, _choiceTimer: null,
+
+        /* ---------- 选择题 ---------- */
+
+        norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); },
+
+        /* 答案里的字母不可信：卷面写着「作答时选项随机乱序」，只比正文 */
+        normOpt(s) {
+            return this.norm(String(s || '').replace(/^\s*[A-D]\s*[.、．]\s*/, ''));
+        },
+
+        answerForQuestion(qText) {
+            const q = this.norm(qText);
+            if (!q) return null;
+            let best = null, score0 = 0;
+            for (const a of this.choices) {
+                const c = this.norm(a.question || a.questionText);
+                if (!c) continue;
+                let s = 0;
+                if (c === q) s = 100;
+                else if (q.indexOf(c) >= 0 || c.indexOf(q) >= 0) {
+                    s = Math.min(c.length, q.length) / Math.max(c.length, q.length) * 90;
+                }
+                if (s > score0) { score0 = s; best = a; }
+            }
+            return score0 >= 60 ? best : null;
+        },
+
+        fillChoices(quiet) {
+            if (!this.choices.length) {
+                if (!quiet) addLog('听说: 还没有听后选择的答案' + (this.answers.length ? '（这份卷子里没有）' : '（答案还没到）'), 'warn');
+                return 0;
+            }
+            // 选择题的各页通常已经在 DOM 里，只是非当前页被 swiper 隐藏。
+            // 这里不能 filter(spkVisible)，否则“一键答题”只会填当前屏的一题。
+            const subs = [...document.querySelectorAll(SPK.subChoice)]
+                .filter(sub => sub.querySelector(SPK.qText) && sub.querySelector(SPK.opt));
+            if (!subs.length) {
+                if (!quiet) addLog('听说: 页面上还没有选择题，进入对应部分后会自动重试', 'warn');
+                return 0;
+            }
+
+            let done = 0, skip = 0, miss = 0;
+            for (const sub of subs) {
+                if (sub.querySelector('.' + SPK.selected)) { skip++; continue; }
+
+                // 必须用 .u3-qst-text-cont。整块 innerText 会把隐藏的
+                // 「得分/参考答案/听力原文」也带出来，题干就对不上答案了。
+                const qEl = sub.querySelector(SPK.qText);
+                const qText = qEl ? spkText(qEl) : spkText(sub).split(/[A-D]\s*[.、．]/)[0];
+                const ans = this.answerForQuestion(qText);
+                if (!ans) {
+                    miss++;
+                    if (!quiet) addLog('听说: 题干没对上答案「' + qText.slice(0, 36) + '」', 'warn');
+                    continue;
+                }
+
+                const want = this.normOpt(ans.answer);
+                const opts = [...sub.querySelectorAll(SPK.opt)];
+                const textOfOpt = o => {
+                    const c = o.querySelector(SPK.optCont);
+                    return this.normOpt(c ? spkText(c) : spkText(o));
+                };
+                const target = opts.find(o => textOfOpt(o) === want)
+                    || opts.find(o => { const t = textOfOpt(o); return t && (t.indexOf(want) >= 0 || want.indexOf(t) >= 0); });
+
+                if (!target) {
+                    miss++;
+                    if (!quiet) {
+                        addLog('听说: 选项没找到「' + ans.answer + '」，页面上是 ' +
+                            opts.map(o => spkText(o.querySelector(SPK.optCont) || o)).join(' / '), 'warn');
+                    }
+                    continue;
+                }
+
+                spkClick(target.querySelector(SPK.optRadio) || target);
+                const ok = !!sub.querySelector('.' + SPK.selected);
+                done++;
+                if (!quiet) addLog('听说: ' + (ok ? '已选 ' : '点了但无选中态 ') + spkText(target), ok ? 'success' : 'warn');
+            }
+            if (!quiet) {
+                addLog('听说: 选择题 ' + done + ' 题' + (skip ? '，' + skip + ' 题已答' : '') +
+                    (miss ? '，' + miss + ' 题未处理' : ''), done || skip ? 'success' : 'warn');
+            }
+            return done;
+        },
+
+        startChoiceWatcher() {
+            if (this._choiceTimer) return;
+            this._choiceTimer = setInterval(() => {
+                if (this.running) this.fillChoices(true);
+            }, 700);
+        },
+
+        stopChoiceWatcher() {
+            if (this._choiceTimer) clearInterval(this._choiceTimer);
+            this._choiceTimer = null;
+        },
+
+        /* ---------- 朗读清单 ---------- */
+
+        acceptManifest(d, quiet) {
+            if (!d || !(d.count > 0) || !Array.isArray(d.items) || !d.items.length) return false;
+            this.manifest = d.items;
+            this.ttsGenerating = !!d.generating;
+            this.readyIndexes = new Set(Array.isArray(d.readyIndexes) ? d.readyIndexes : []);
+            this.approvalPending = !!d.approvalPending;
+            if (!this.approvalPending) this.approvalWarned = false;
+            if (!quiet) {
+                const generated = Number.isFinite(d.generatedCount) ? d.generatedCount : this.readyIndexes.size;
+                addLog('听说: 朗读清单 ' + this.manifest.length + ' 条，当前已生成 ' + generated + ' 条' +
+                    (this.ttsGenerating ? '（继续后台生成）' : ''), 'success');
+                if (this.approvalPending) {
+                    addLog('听说: TTS 尚未生成，请在 Auto366 的审批窗口确认；也可在设置中关闭“生成前审批朗读文本”', 'warn');
+                    this.setStatus('等待 TTS 审批 · 确认生成后将自动接入');
+                    this.approvalWarned = true;
+                }
+            }
+            return true;
+        },
+
+        async refreshManifest(quiet) {
+            try {
+                const r = await fetch(BUCKET_URL + '/listening-tts/list', { cache: 'no-cache' });
+                if (!r.ok) return false;
+                return this.acceptManifest(await r.json(), quiet);
+            } catch (e) { return false; }
+        },
+
+        async loadManifest() {
+            for (let i = 0; i < 60; i++) {
+                if (!this.running) return false;
+                let d = null;
+                try {
+                    const r = await fetch(BUCKET_URL + '/listening-tts/list', { cache: 'no-cache' });
+                    if (r.ok) d = await r.json();
+                } catch (e) { /* 端点还没起 */ }
+                // ready=false 只表示整批还没生成完；items 和已落盘 wav 已经可以使用。
+                if (this.acceptManifest(d, false)) return true;
+                if (d && d.generating) { if (i % 5 === 0) addLog('听说: TTS 生成中…', 'info'); }
+                else if (d && d.count === 0) { if (i === 0) addLog('听说: TTS 清单为空，需先在审批弹窗确认', 'warn'); }
+                else if (!d && i === 0) { addLog('听说: 连不上 ' + BUCKET_URL + '/listening-tts/list', 'warn'); }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            addLog('听说: 等 TTS 清单超时', 'error');
+            return false;
+        },
+
+        /* 当前这一页要说的内容：朗读题显示原文，听后回答显示问题 */
+        currentTexts() {
+            const slides = [...document.querySelectorAll(SPK.slide)];
+            const roots = slides.length ? slides.filter(spkOnScreen) : [];
+            const activeRoots = roots.length ? roots : (slides.length ? slides : [document]);
+            const hosts = [];
+            const seen = new Set();
+            for (const root of activeRoots) {
+                for (const host of [...root.querySelectorAll(SPK.speakHost)]) {
+                    if (!seen.has(host)) { seen.add(host); hosts.push(host); }
+                }
+            }
+            // 某些模板把 active 类挂在内层 swiper；找不到口语容器时退回全页的屏幕内节点。
+            if (!hosts.length) {
+                for (const host of [...document.querySelectorAll(SPK.speakHost)]) {
+                    if (!seen.has(host)) { seen.add(host); hosts.push(host); }
+                }
+            }
+            const onScreen = hosts.filter(spkOnScreen);
+            const picked = onScreen.length ? onScreen : hosts;
+            return [...new Set(picked.map(spkText).filter(Boolean))];
+        },
+
+        currentText() {
+            return this.currentTexts()[0] || '';
+        },
+
+        matchCurrent(allowFallback) {
+            const texts = this.currentTexts();
+            // 组合题一页有两道 partB。第一题用完后，必须继续尝试第二个题干，
+            // 不能永远拿 querySelector 返回的第一道题。
+            for (const text of texts) {
+                const found = this.match(text, false);
+                if (found) return { ...found, pageText: text };
+            }
+            if (allowFallback) {
+                for (const text of texts) {
+                    const found = this.match(text, true);
+                    if (found) return { ...found, pageText: text };
+                }
+            }
+            return null;
+        },
+
+        match(pageText, allowFallback) {
+            const p = this.norm(pageText);
+            if (p) {
+                let best = null, s0 = 0, len0 = 0;
+                for (const it of this.manifest) {
+                    if (this.used.has(it.index)) continue;
+                    for (const cand of [it.text, it.meta && it.meta.question]) {
+                        const c = this.norm(cand);
+                        if (!c || c.length < 6) continue;
+                        let s = 0;
+                        if (c === p) s = 100;
+                        else if (p.indexOf(c) >= 0) s = 95;
+                        else if (c.indexOf(p) >= 0) s = p.length / c.length * 90;
+                        // 同分取更长的：朗读短文整篇里含着每个单句
+                        if (s > s0 || (s === s0 && s > 0 && c.length > len0)) { s0 = s; best = it; len0 = c.length; }
+                    }
+                }
+                if (best && s0 >= 55) return { item: best, how: '文本匹配 ' + s0.toFixed(0) + '%' };
+            }
+            // 页面尚未切到口语题时绝不能盲取下一条，否则会把音频灌到等待页，
+            // 并且让真正的问题永远被判成“已用”。只有已经拿到口语正文时才允许顺序兜底。
+            if (allowFallback && p) {
+                for (const it of this.manifest) if (!this.used.has(it.index)) return { item: it, how: '顺序兜底' };
+            }
+            return null;
+        },
+
+        async ensureAudioGraph(resume) {
+            if (!this.ctx || this.ctx.state === 'closed') {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.gain = this.ctx.createGain();
+                this.gain.gain.value = 1.0;
+                this.dest = this.ctx.createMediaStreamDestination();
+                this.gain.connect(this.dest);
+                this.stream = this.dest.stream;
+                this.tracks = new Set(this.stream.getAudioTracks());
+            }
+            // early hook 阶段可能还没有用户手势，只创建并交出稳定的 stream；
+            // 真正点“自动答题”或开始播放时再 resume。
+            if (resume !== false && this.ctx.state === 'suspended') await this.ctx.resume();
+        },
+
+        async fetchAudio(item) {
+            if (this.audioCache.has(item.index)) return this.audioCache.get(item.index);
+            const r = await fetch(BUCKET_URL + '/listening-tts/output/' + item.index + '.wav', { cache: 'no-cache' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const buf = await r.arrayBuffer();
+            const audio = await this.ctx.decodeAudioData(buf);
+            this.audioCache.set(item.index, audio);
+            this.readyIndexes.add(item.index);
+            this.audioFailures.delete(item.index);
+            return audio;
+        },
+
+        async fetchAudioUntilReady(item, seq) {
+            let attempts = 0;
+            while (this.recording && seq === this.recordSeq) {
+                try {
+                    const audio = await this.fetchAudio(item);
+                    if (attempts) addLog('听说: #' + item.index + ' 音频已生成，等待后成功接入', 'success');
+                    return audio;
+                } catch (e) {
+                    attempts++;
+                    const transient = /HTTP 404|Failed to fetch|fetch/i.test(e.message || '');
+                    if (!transient) throw e;
+                    if (attempts === 1) {
+                        addLog('听说: #' + item.index + ' 仍在生成，本题录音窗口内持续等待…', 'info');
+                    }
+                    if (attempts % 4 === 0) await this.refreshManifest(true);
+                    await new Promise(r => setTimeout(r, 250));
+                }
+            }
+            return null;
+        },
+
+        async preloadAudio() {
+            if (!this.manifest.length && !await this.loadManifest()) return false;
+            if (this.approvalPending) return false;
+            await this.ensureAudioGraph();
+
+            const pending = this.manifest.filter(it => !this.audioCache.has(it.index) &&
+                (!this.ttsGenerating || this.readyIndexes.has(it.index)));
+            if (!pending.length) {
+                if (this.ttsGenerating) addLog('听说: 清单已接收，音频将按生成进度逐题接入', 'info');
+                return this.manifest.length > 0;
+            }
+            addLog('听说: 预载并解码 ' + pending.length + ' 条朗读音频…', 'info');
+            this.setStatus('选择题已处理 · 正在预载朗读音频 0/' + pending.length);
+
+            let cursor = 0, done = 0, failed = 0;
+            const worker = async () => {
+                while (cursor < pending.length && this.running) {
+                    const item = pending[cursor++];
+                    try {
+                        await this.fetchAudio(item);
+                        done++;
+                    } catch (e) {
+                        failed++;
+                        this.audioFailures.add(item.index);
+                        addLog('听说: 预载 #' + item.index + ' 失败 ' + e.message, 'warn');
+                    }
+                    this.setStatus('选择题已处理 · 正在预载朗读音频 ' + (done + failed) + '/' + pending.length);
+                }
+            };
+            await Promise.all(Array.from({ length: Math.min(6, pending.length) }, worker));
+            if (!this.running) return false;
+            addLog('听说: 朗读音频已就绪 ' + done + ' 条' + (failed ? '，' + failed + ' 条将在开录时重试' : ''),
+                failed ? 'warn' : 'success');
+            return done > 0 || this.audioCache.size > 0;
+        },
+
+        prepareAudio() {
+            if (!this.readyPromise) {
+                this.readyPromise = (async () => {
+                    if (!this.manifest.length && !await this.loadManifest()) return false;
+                    return this.preloadAudio();
+                })();
+            }
+            return this.readyPromise;
+        },
+
+        /* ---------- 假麦克风 ---------- */
+
+        async arm(early) {
+            if (this.armed) {
+                if (!early) await this.ensureAudioGraph(true);
+                if (this.running) this.watchBar();
+                return true;
+            }
+            if (early) this.ensureAudioGraph(false);
+            else await this.ensureAudioGraph(true);
+            this.stopBlocked = 0;
+
+            const self = this;
+            this.origGUM = navigator.mediaDevices.getUserMedia;
+            navigator.mediaDevices.getUserMedia = function(c) {
+                if (c && c.audio) {
+                    // 真页面通常整场只取一次流；这里只负责换成假麦克风，
+                    // 每一题的开始必须看 MediaRecorder.start 或考试栏相位。
+                    self.gumCount++;
+                    if (!self.micReady) addLog('听说: 页面已接管假麦克风', 'success');
+                    self.micReady = true;
+                    return Promise.resolve(self.stream);
+                }
+                return self.origGUM.call(this, c);
+            };
+
+            // 有些实现会在每题结束时 stop track；挡住它，保证下一题还能复用。
+            this.origStop = MediaStreamTrack.prototype.stop;
+            MediaStreamTrack.prototype.stop = function() {
+                if (self.tracks.has(this)) {
+                    self.stopBlocked++;
+                    // jquery.recordwave 会在内部重置时 stop track。这里只拦截，
+                    // 不能把它当成本题录音结束，否则刚起播的答案会被立即掐掉。
+                    addLog('听说: 已保护假麦克风轨道 #' + self.stopBlocked, 'info');
+                    return;
+                }
+                return self.origStop.call(this);
+            };
+
+            // 关键修复：getUserMedia 可能整场只调一次，MediaRecorder.start/stop
+            // 才会每道口语题各调一次。旧实现因此永远只能灌第一题。
+            if (typeof MediaRecorder !== 'undefined' && MediaRecorder.prototype) {
+                const proto = MediaRecorder.prototype;
+                this.origRecorderStart = proto.start;
+                this.origRecorderStop = proto.stop;
+                this.origRecorderPause = proto.pause;
+
+                proto.start = function(...args) {
+                    const ours = self.ownsRecorder(this);
+                    const result = self.origRecorderStart.apply(this, args);
+                    if (ours) {
+                        self.recorderActive = true;
+                        setTimeout(() => {
+                            const phase = self.currentBarText();
+                            // 听后回答可能整组只 start 一次，而且 start 发生在“请听题”。
+                            // 有明确相位时交给活动考试栏逐题触发；没有考试栏才直接兜底。
+                            if (!phase || /请答题|开始作答|正在录音|录音中/.test(phase)) {
+                                self.onRecordStart('MediaRecorder.start');
+                            }
+                        }, 0);
+                    }
+                    return result;
+                };
+                proto.stop = function(...args) {
+                    const ours = self.ownsRecorder(this);
+                    const result = self.origRecorderStop.apply(this, args);
+                    if (ours) {
+                        self.recorderActive = false;
+                        setTimeout(() => self.onRecordStop('MediaRecorder.stop'), 0);
+                    }
+                    return result;
+                };
+                if (typeof this.origRecorderPause === 'function') {
+                    proto.pause = function(...args) {
+                        const ours = self.ownsRecorder(this);
+                        const result = self.origRecorderPause.apply(this, args);
+                        if (ours) {
+                            self.recorderActive = false;
+                            setTimeout(() => self.onRecordStop('MediaRecorder.pause'), 0);
+                        }
+                        return result;
+                    };
+                }
+            } else {
+                addLog('听说: 页面没有原生 MediaRecorder，将按考试栏相位灌音', 'warn');
+            }
+
+            this.armed = true;
+            if (!early) addLog('听说: 已挂假麦克风，等待每题进入录音阶段', 'success');
+            if (this.running) this.watchBar();
+            return true;
+        },
+
+        ownsRecorder(recorder) {
+            if (!recorder) return false;
+            if (recorder.stream === this.stream) return true;
+            const tracks = recorder.stream && recorder.stream.getAudioTracks && recorder.stream.getAudioTracks();
+            return !!(tracks && tracks.some(t => this.tracks && this.tracks.has(t)));
+        },
+
+        disarm() {
+            if (!this.armed) return;
+            this.onRecordStop('停止自动答题');
+            this.stopChoiceWatcher();
+            if (this._phaseTimer) clearTimeout(this._phaseTimer);
+            this._phaseTimer = null;
+            if (this._barTimer) clearInterval(this._barTimer);
+            this._barTimer = null;
+            if (this._barObs) this._barObs.disconnect();
+            this._barObs = null;
+
+            if (typeof MediaRecorder !== 'undefined' && MediaRecorder.prototype) {
+                const proto = MediaRecorder.prototype;
+                if (this.origRecorderStart) proto.start = this.origRecorderStart;
+                if (this.origRecorderStop) proto.stop = this.origRecorderStop;
+                if (this.origRecorderPause) proto.pause = this.origRecorderPause;
+            }
+            if (this.origStop) {
+                MediaStreamTrack.prototype.stop = this.origStop;
+                for (const t of (this.tracks || [])) { try { this.origStop.call(t); } catch (e) { /* 已 ended */ } }
+            }
+            if (this.origGUM) navigator.mediaDevices.getUserMedia = this.origGUM;
+            if (this.ctx && this.ctx.state !== 'closed') { try { this.ctx.close(); } catch (e) { /* 已关 */ } }
+            this.ctx = this.gain = this.dest = this.stream = null;
+            this.tracks = null; this.origGUM = this.origStop = null;
+            this.origRecorderStart = this.origRecorderStop = this.origRecorderPause = null;
+            this.audioCache.clear();
+            this.readyPromise = null;
+            this.micReady = false;
+            this.recorderActive = false;
+            this.armed = false;
+            addLog('听说: 已卸载假麦克风（挡下 ' + this.stopBlocked + ' 次 track.stop）', 'info');
+            this.paintBtn();
+        },
+
+        stopPlaying(reason) {
+            const oldSource = this.source;
+            if (oldSource) {
+                try { oldSource.stop(); } catch (e) { /* 已停 */ }
+                try { oldSource.disconnect(); } catch (e) { /* 已断 */ }
+            }
+            this.source = null;
+            if (this.currentIndex != null) {
+                addLog('听说: #' + this.currentIndex + ' 灌音结束' + (reason ? '（' + reason + '）' : ''), 'info');
+            }
+            this.currentIndex = null;
+        },
+
+        async onRecordStart(reason) {
+            if (!this.armed || !this.running || this.recording || this.starting || this.source) return;
+            this.recording = true;
+            this.starting = true;
+            const seq = ++this.recordSeq;
+
+            try {
+                // 全批次预载在后台进行，当前录音窗口绝不能等待它全部结束。
+                // 清单尚未到时只做一次即时刷新，随后按当前题逐项等待 wav。
+                await this.refreshManifest(true);
+                if (!this.recording || seq !== this.recordSeq) return;
+                if (this.approvalPending) {
+                    if (!this.approvalWarned) {
+                        addLog('听说: 当前题无法灌音：TTS 仍在等待审批，请先确认生成', 'warn');
+                        this.approvalWarned = true;
+                    }
+                    this.setStatus('等待 TTS 审批 · 当前口语题保持静音');
+                    this.recording = false;
+                    return;
+                }
+
+                // 题卡和“请答题”往往不是同一帧更新，最多等 1.5 秒让当前题稳定。
+                let pageText = '', m = null;
+                for (let i = 0; i < 15 && this.recording && seq === this.recordSeq; i++) {
+                    m = this.matchCurrent(i >= 10);
+                    pageText = m ? m.pageText : (this.currentTexts()[0] || '');
+                    if (m) break;
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                if (!this.recording || seq !== this.recordSeq) return;
+                if (!m) {
+                    // 选择题阶段也可能出现“请答题”，没有口语容器时保持静音即可。
+                    if (pageText) addLog('听说: 当前口语题没有匹配到朗读清单，保持静音', 'warn');
+                    this.recording = false;
+                    return;
+                }
+
+                let audio;
+                try {
+                    audio = await this.fetchAudioUntilReady(m.item, seq);
+                } catch (e) {
+                    addLog('听说: 取/解码 #' + m.item.index + ' 失败 ' + e.message + '，本题不标记为已用', 'error');
+                    this.recording = false;
+                    return;
+                }
+                if (!audio || !this.recording || seq !== this.recordSeq) return;
+
+                // 下载或解码期间如果题卡已经切走，不得把旧答案播到新题。
+                const now = this.matchCurrent(false);
+                if (now && now.item.index !== m.item.index) {
+                    addLog('听说: 题卡已切换，取消即将播放的 #' + m.item.index, 'warn');
+                    this.recording = false;
+                    return;
+                }
+
+                // 考试的“请等待”阶段可能让 AudioContext 再次 suspended；每题开播前恢复。
+                await this.ensureAudioGraph(true);
+                if (!this.recording || seq !== this.recordSeq) return;
+                const src = this.ctx.createBufferSource();
+                src.buffer = audio;
+                // 与已经验证可用的 auto-fill 保持一致：录音窗口内持续有信号，
+                // 由考试栏/录音器结束事件负责 stop，避免时序偏差只录到静音。
+                src.loop = true;
+                src.connect(this.gain);
+                this.source = src;
+                this.currentIndex = m.item.index;
+                src.start();
+                // 只有真正 start 成功后才算已用。旧代码在 fetch 前就 add，翻页即永久漏题。
+                this.used.add(m.item.index);
+                const track = this.stream && this.stream.getAudioTracks()[0];
+                addLog('听说: 开录 → #' + m.item.index + '（' + reason + '，' + m.how + '，' +
+                    audio.duration.toFixed(1) + 's，取流 ' + this.gumCount + ' 次，AudioContext ' +
+                    this.ctx.state + (track ? '，track ' + track.readyState : '') +
+                    '）「' + m.item.text.slice(0, 46) + '」', 'success');
+            } catch (e) {
+                this.recording = false;
+                addLog('听说: 启动灌音失败 ' + e.message, 'error');
+            } finally {
+                this.starting = false;
+            }
+        },
+
+        onRecordStop(reason) {
+            if (!this.recording && !this.starting && !this.source && this.currentIndex == null) return;
+            this.recording = false;
+            this.starting = false;
+            this.recordSeq++;
+            this.stopPlaying(reason);
+        },
+
+        handleBarPhase(text) {
+            if (!this.running || !text) return;
+            if (this._phaseTimer) clearTimeout(this._phaseTimer);
+            this._phaseTimer = null;
+
+            if (/请答题|开始作答|正在录音|录音中/.test(text)) {
+                // MediaRecorder 被第三方库封装时的兜底。稍等 250ms，让题卡先完成切换。
+                this._phaseTimer = setTimeout(() => {
+                    if (this.currentTexts().length) this.onRecordStart('考试栏:' + text);
+                }, 250);
+            } else if (/请稍等|请等待|请听题|播放|准备|结束|完成/.test(text)) {
+                this.onRecordStop('考试栏:' + text);
+            }
+        },
+
+        currentBarText() {
+            const bars = [...document.querySelectorAll(SPK.barTitle)].filter(b => spkText(b));
+            if (!bars.length) return '';
+            const onScreen = bars.filter(spkOnScreen);
+            return spkText((onScreen.length ? onScreen : bars)[0]);
+        },
+
+        /*
+         * 页面为每个大题各放一套 examBar，document.querySelector 取到的通常是屏幕外第一套。
+         * 这里持续选择与视口相交的活动栏；同一栏内题干切换也重新触发一次。
+         */
+        watchBar() {
+            if (this._barTimer) return;
+            let last = '', lastQuestion = '';
+            const poll = () => {
+                if (!this.running) return;
+                const t = this.currentBarText();
+                const question = this.currentTexts().join(' || ');
+                const answerPhase = /请答题|开始作答|正在录音|录音中/.test(t);
+
+                if (t !== last) {
+                    if (t) {
+                        addLog('听说: 活动考试栏「' + t + '」', 'info');
+                        this.handleBarPhase(t);
+                    } else if (/请答题|开始作答|正在录音|录音中/.test(last)) {
+                        this.onRecordStop('活动考试栏离开');
+                    }
+                } else if (answerPhase && question && question !== lastQuestion) {
+                    // 某些组合题保持“请答题”不变，只替换内部题干。
+                    this.onRecordStop('题卡切换');
+                    this.handleBarPhase(t);
+                }
+                last = t;
+                lastQuestion = question;
+            };
+            poll();
+            this._barTimer = setInterval(poll, 100);
+        },
+
+        paintBtn() {
+            const b = document.getElementById('a366-spk-auto');
+            if (!b) return;
+            b.textContent = this.running ? '停止自动答题' : '自动答题';
+            b.style.background = this.running ? 'var(--a366-danger)' : 'var(--a366-primary)';
+            b.setAttribute('aria-pressed', this.running ? 'true' : 'false');
+        },
+
+        setStatus(text) {
+            const st = document.getElementById('a366-spk-status');
+            if (st) st.textContent = text;
+        },
+
+        /* ---------- 界面 ---------- */
+
+        createUI() {
+            container = document.createElement('div');
+            container.id = 'a366-panel';
+            container.style.cssText = 'position:fixed;bottom:20px;right:20px;width:340px;z-index:999999;' +
+                'background:var(--a366-bg);border:1px solid var(--a366-border);border-radius:var(--a366-radius-lg);' +
+                'box-shadow:var(--a366-shadow);font-size:13px;font-family:var(--a366-font);color:var(--a366-text);' +
+                'display:flex;flex-direction:column;' + CSS_VARS;
+
+            container.innerHTML =
+                '<div id="a366-header" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--a366-border);background:var(--a366-bg-secondary);cursor:move;border-radius:var(--a366-radius-lg) var(--a366-radius-lg) 0 0;">' +
+                  '<span style="font-weight:600;color:var(--a366-primary);">自动听说</span>' +
+                  '<button id="a366-minimize" style="background:var(--a366-bg-tertiary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:2px 8px;font-size:11px;cursor:pointer;">_</button>' +
+                '</div>' +
+                '<div id="a366-body" style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;">' +
+                  '<div id="a366-spk-status" style="padding:6px 8px;background:var(--a366-bg-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);font-size:12px;color:var(--a366-text-secondary);">—</div>' +
+                  '<button id="a366-spk-auto" style="width:100%;background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:600;">自动答题</button>' +
+                  '<div style="font-size:11px;color:var(--a366-text-muted);line-height:1.5;">先填写全部听后选择，再预载朗读音频；页面真正进入每题录音阶段时才自动送入对应答案。</div>' +
+                '</div>' +
+                '<div style="border-top:1px solid var(--a366-border);background:var(--a366-bg-secondary);border-radius:0 0 var(--a366-radius-lg) var(--a366-radius-lg);">' +
+                  '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 12px;">' +
+                    '<span style="font-size:11px;color:var(--a366-text-secondary);">操作日志</span>' +
+                    '<button id="a366-log-clear" style="background:var(--a366-bg-tertiary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:1px 6px;font-size:10px;cursor:pointer;">清空</button>' +
+                  '</div>' +
+                  '<div id="a366-log-content" style="height:150px;overflow-y:auto;padding:4px 12px 8px;font-size:11px;font-family:Consolas,monospace;background:var(--a366-bg);"></div>' +
+                '</div>';
+
+            document.body.appendChild(container);
+            logContent = document.getElementById('a366-log-content');
+
+            document.getElementById('a366-spk-auto').addEventListener('click', () => {
+                if (this.running) this.stopAuto();
+                else this.runAuto();
+            });
+            document.getElementById('a366-log-clear').addEventListener('click', () => { logContent.innerHTML = ''; });
+            document.getElementById('a366-minimize').addEventListener('click', () => {
+                const b = document.getElementById('a366-body');
+                b.style.display = b.style.display === 'none' ? 'flex' : 'none';
+            });
+            makeDraggable(container, document.getElementById('a366-header'));
+
+            this.setAnswers(this.answers);
+            addLog('规则集 v8（听说界面，' + (this.detectedBy || '答案题型') + '）· bucket ' + BUCKET_URL +
+                (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
+            if (this.answers.length) {
+                const kinds = {};
+                this.answers.forEach(a => { kinds[a.pattern] = (kinds[a.pattern] || 0) + 1; });
+                addLog('题型: ' + Object.keys(kinds).map(k => k + ' ' + kinds[k]).join(' / '), 'info');
+            } else {
+                addLog('听说: 答案还没解出来，后台继续拉…', 'info');
+            }
+        },
+
+        setAnswers(answers) {
+            this.answers = Array.isArray(answers) ? answers : [];
+            this.choices = this.answers.filter(a => /听后选择/.test(a.pattern || ''));
+            if (!this.running) this.setStatus('听说卷 · 共 ' + this.answers.length + ' 条 · 选择题 ' + this.choices.length + ' 道');
+        },
+
+        /* 靠页面结构进来的时候答案还没解出来，后台接着拉 */
+        async waitAnswers(maxMs) {
+            const deadline = Date.now() + (maxMs || 60000);
+            while (Date.now() < deadline) {
+                await new Promise(r => setTimeout(r, 1000));
+                const a = await probeAnswers();
+                if (a.length) {
+                    this.setAnswers(a);
+                    const kinds = {};
+                    a.forEach(x => { kinds[x.pattern] = (kinds[x.pattern] || 0) + 1; });
+                    addLog('听说: 答案已到 ' + a.length + ' 条 —— ' +
+                        Object.keys(kinds).map(k => k + ' ' + kinds[k]).join(' / '), 'success');
+                    return true;
+                }
+            }
+            addLog('听说: 一直没拿到答案，选择题填不了（灌音不受影响）', 'warn');
+            return false;
+        },
+
+        async runAuto() {
+            if (this.running) return;
+            this.running = true;
+            this.paintBtn();
+            this.setStatus('正在启动自动答题…');
+            addLog('听说: 自动答题启动，先处理选择题，再准备口语音频', 'info');
+
+            try {
+                // 先接管麦克风，避免用户点下按钮后页面恰好申请真麦克风。
+                await this.arm();
+                if (!this.answers.length) await this.waitAnswers(15000);
+                if (!this.running) return;
+
+                const filled = this.fillChoices(false);
+                this.startChoiceWatcher();
+                this.setStatus('选择题已处理' + (filled ? ' ' + filled + ' 道' : '') + ' · 等待朗读音频');
+
+                const ready = await this.prepareAudio();
+                if (!this.running) return;
+                if (ready) {
+                    this.setStatus('自动答题运行中 · 朗读清单已接收 · 已缓存 ' + this.audioCache.size + ' 条');
+                    addLog('听说: 自动答题已就绪；整批未完成也会按题接入，当前 wav 晚到会在录音窗口内追赶', 'success');
+                } else {
+                    if (this.approvalPending) {
+                        this.setStatus('选择题自动处理正常 · TTS 等待审批');
+                        addLog('听说: 尚未确认生成 TTS；请处理审批窗口，选择题仍会继续自动填写', 'warn');
+                    } else {
+                        this.setStatus('选择题自动处理正常 · 朗读音频尚未就绪');
+                        addLog('听说: 朗读音频未就绪；选择题仍会继续自动填写', 'warn');
+                    }
+                }
+            } catch (e) {
+                addLog('听说: 自动答题启动失败 ' + e.message, 'error');
+                this.stopAuto();
+            }
+        },
+
+        stopAuto() {
+            if (!this.running && !this.armed) return;
+            this.running = false;
+            this.recordSeq++;
+            this.stopChoiceWatcher();
+            if (this.armed) this.disarm();
+            this.setStatus('自动答题已停止 · 已完成口语 ' + this.used.size + ' 条');
+            this.paintBtn();
+        },
+
+        init(answers, by) {
+            this.detectedBy = by || '';
+            this.setAnswers(answers);
+            const earlyMic = this.arm(true);
+            this.createUI();
+            earlyMic.then(() => addLog('听说: 已提前接管麦克风，页面已取流 ' + this.gumCount + ' 次，等待自动答题启动', 'success'))
+                .catch(e => addLog('听说: 提前接管麦克风失败 ' + e.message, 'error'));
+            if (!this.answers.length) this.waitAnswers(60000);
+        },
+    };
+
+    // 页面在 DOMContentLoaded 前就开始异步加载 jquery.recordwave.js，它可能先缓存麦克风。
+    // 因此不能等用户点击按钮或模式识别完成；脚本一执行就先交出稳定的假流。
+    Speaking.arm(true).catch(() => { /* init/runAuto 会再次尝试并显示错误 */ });
+
+    // ==========================================
+    // 初始化：先看这份卷子是什么，再决定挂哪套界面
+    // ==========================================
+
+    async function probeAnswers() {
+        try {
+            const r = await fetch(BUCKET_URL + ANSWER_PATH, { cache: 'no-cache' });
+            if (!r.ok) return [];
+            const d = await r.json();
+            const list = (d && (d.answers || d.data || d)) || [];
+            return Array.isArray(list) ? list : [];
+        } catch (e) { return []; }
+    }
+
+    function isSpeakingPaper(answers) {
+        const kinds = new Set(answers.map(a => a.pattern || ''));
+        return SPEAK_PATTERNS.some(p => [...kinds].some(k => k.indexOf(p) >= 0));
+    }
+
+    /* 页面上有口语题容器 —— 答案接口还没准备好时的第二个判据 */
+    function domLooksSpeaking() {
+        return [...document.querySelectorAll(SPK.speakHost)].some(spkVisible);
+    }
+
+    // 注入时机比页面渲染早，答案也要等代理层把试卷 zip 解完，
+    // 所以两个判据都轮询：谁先给出肯定答复就按它挑界面。
+    // 都没结果时退回基础听力界面（原本的行为）。
+    async function detectMode(maxMs) {
+        const deadline = Date.now() + maxMs;
+        let answers = [];
+        while (Date.now() < deadline) {
+            answers = await probeAnswers();
+            if (answers.length) {
+                return { mode: isSpeakingPaper(answers) ? 'speaking' : 'listening', answers, by: '答案题型' };
+            }
+            if (domLooksSpeaking()) return { mode: 'speaking', answers: [], by: '页面结构' };
+            await new Promise(r => setTimeout(r, 500));
+        }
+        return { mode: 'listening', answers: [], by: '超时兜底' };
+    }
+
+    async function boot() {
+        const d = await detectMode(8000);
+        if (d.mode === 'speaking') {
+            // 结构判出来的情况下答案可能还在路上，Speaking 自己会再补拉一次
+            Speaking.init(d.answers, d.by);
+        } else {
+            createUI();
+            addLog('规则集 v8（基础听力界面，' + d.by + '）· bucket ' + BUCKET_URL +
+                (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
+        }
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', createUI);
+        document.addEventListener('DOMContentLoaded', boot);
     } else {
-        createUI();
+        boot();
     }
 })();
