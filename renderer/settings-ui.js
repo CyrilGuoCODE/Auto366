@@ -174,6 +174,8 @@ class SettingsUI {
       const modelSelect = document.getElementById('ttsModelSelect');
       const engineSelect = document.getElementById('ttsEngineSelect');
       const approvalEnabled = document.getElementById('ttsApprovalEnabled');
+      const modelItem = modelSelect ? modelSelect.closest('.setting-item') : null;
+      const voiceItem = voiceSelect ? voiceSelect.closest('.setting-item') : null;
 
       // chestnut 音色选项
       const CHESTNUT_VOICES = [
@@ -393,6 +395,13 @@ class SettingsUI {
         if (engine === 'glm-tts' && voiceSelect) {
           config.glmVoice = voiceSelect.value;
         }
+        // auto 模式：不使用自定义音色/模型，回退到默认
+        if (engine === 'auto') {
+          config.voice = 'Jasper';
+          config.modelName = undefined;
+          config.chestnutVoice = undefined;
+          config.glmVoice = undefined;
+        }
         localStorage.setItem('tts-config', JSON.stringify(config));
 
         // 同步到主进程
@@ -439,6 +448,7 @@ class SettingsUI {
           const engine = engineSelect.value;
           const isChestnut = engine === 'chestnut';
           const isGlmTts = engine === 'glm-tts';
+          const isAuto = engine === 'auto';
           // 切换音色下拉选项
           if (isChestnut) {
             populateChestnutVoices(voiceSelect, savedConfig ? savedConfig.chestnutVoice : null);
@@ -446,18 +456,20 @@ class SettingsUI {
             populateGlmVoices(voiceSelect, savedConfig ? savedConfig.glmVoice : null);
           } else {
             populateSherpaVoices(voiceSelect);
-            if (savedConfig && savedConfig.voice && !isChestnut && !isGlmTts) {
+            if (savedConfig && savedConfig.voice && !isAuto) {
               voiceSelect.value = savedConfig.voice;
             }
           }
-          // 隐藏/显示模型选择（在线引擎不需要本地模型）
-          if (modelSelect) modelSelect.closest('.setting-item').style.display = (isChestnut || isGlmTts) ? 'none' : '';
+          // 模型选择：仅 sherpa-onnx 需要手动选
+          if (modelItem) modelItem.style.display = isAuto || isChestnut || isGlmTts ? 'none' : '';
+          // 音色选择：auto 模式用默认音色，隐藏
+          if (voiceItem) voiceItem.style.display = isAuto ? 'none' : '';
           saveTtsConfig();
         });
-        // 初始状态：在线引擎时隐藏模型选择
-        if (savedConfig && (savedConfig.engine === 'chestnut' || savedConfig.engine === 'glm-tts')) {
-          if (modelSelect) modelSelect.closest('.setting-item').style.display = 'none';
-        }
+        // 初始状态：auto 与在线引擎隐藏模型，auto 隐藏音色
+        const initEngine = savedConfig ? savedConfig.engine : 'auto';
+        if (modelItem) modelItem.style.display = (initEngine === 'auto' || initEngine === 'chestnut' || initEngine === 'glm-tts') ? 'none' : '';
+        if (voiceItem) voiceItem.style.display = (initEngine === 'auto') ? 'none' : '';
       }
     } catch (error) {
       console.error('初始化 TTS 设置失败:', error);
