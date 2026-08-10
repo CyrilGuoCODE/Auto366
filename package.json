@@ -72,16 +72,8 @@
         "to": "./"
       },
       {
-        "from": "./resources/tun",
-        "to": "tun"
-      },
-      {
         "from": "./resources/openspeedy",
         "to": "openspeedy"
-      },
-      {
-        "from": "./resources/tts",
-        "to": "tts"
       }
     ],
     "win": {

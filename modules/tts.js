@@ -296,33 +296,41 @@ class TtsManager {
 
   /**
    * 扫描 TTS 模型目录，返回可用模型列表
+   * 优先用户数据目录 ~/.Auto366/resources/tts（下载/迁移后的位置），
+   * 其次兜底安装目录/开发资源目录。
    */
   getAvailableModels() {
-    let ttsRoot;
+    const roots = [];
+    roots.push(path.join(os.homedir(), '.Auto366', 'resources', 'tts'));
     if (app && app.isPackaged) {
-      ttsRoot = path.join(process.resourcesPath, 'tts');
+      roots.push(path.join(process.resourcesPath, 'tts'));
     } else {
-      ttsRoot = path.join(this.appPath || '', 'resources', 'tts');
+      roots.push(path.join(this.appPath || '', 'resources', 'tts'));
     }
 
+    const seen = new Set();
     const models = [];
-    try {
-      if (fs.existsSync(ttsRoot)) {
+    for (const ttsRoot of roots) {
+      try {
+        if (!fs.existsSync(ttsRoot)) continue;
         const dirs = fs.readdirSync(ttsRoot, { withFileTypes: true });
         for (const d of dirs) {
           if (!d.isDirectory()) continue;
-          const dirPath = path.join(ttsRoot, d.name);
+          const name = d.name;
+          if (seen.has(name)) continue;
+          const dirPath = path.join(ttsRoot, name);
           // 检查是否包含必要的模型文件
           const hasOnnx = fs.existsSync(path.join(dirPath, 'model.onnx'))
             || fs.existsSync(path.join(dirPath, 'model.int8.onnx'))
             || fs.existsSync(path.join(dirPath, 'model.fp32.onnx'));
           const hasTokens = fs.existsSync(path.join(dirPath, 'tokens.txt'));
           if (hasOnnx && hasTokens) {
-            models.push({ name: d.name, path: dirPath });
+            seen.add(name);
+            models.push({ name, path: dirPath });
           }
         }
-      }
-    } catch (e) { /* 忽略 */ }
+      } catch (e) { /* 忽略 */ }
+    }
     return models;
   }
 
@@ -348,8 +356,11 @@ class TtsManager {
       this.modelDir = availableModels[0].path;
       this.selectedModel = availableModels[0].name;
     } else {
-      // 回退：尝试硬编码路径
-      if (app && app.isPackaged) {
+      // 回退：尝试硬编码路径（优先用户数据目录，开发时兜底 appPath/resources）
+      const userModel = path.join(os.homedir(), '.Auto366', 'resources', 'tts', 'kitten-micro-en-v0_8');
+      if (fs.existsSync(userModel)) {
+        this.modelDir = userModel;
+      } else if (app && app.isPackaged) {
         this.modelDir = path.join(process.resourcesPath, 'tts', 'kitten-micro-en-v0_8');
       } else {
         this.modelDir = path.join(appPath, 'resources', 'tts', 'kitten-micro-en-v0_8');

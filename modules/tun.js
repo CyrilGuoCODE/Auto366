@@ -7,8 +7,9 @@ const path = require('path');
 // 强制重定向到 Auto366 的 HTTP 代理（127.0.0.1:proxyPort）。
 // 这样无需在天学网客户端中手动设置代理即可完成抓包。
 class TunManager {
-  constructor(proxyServer) {
+  constructor(proxyServer, resourceDownloader) {
     this.proxyServer = proxyServer;
+    this.resourceDownloader = resourceDownloader || null;
     this.mainWindow = null;
     this.mihomoProcess = null;
     this.isRunning = false;
@@ -17,7 +18,7 @@ class TunManager {
     this.configDir = path.join(app.getPath('home'), '.Auto366', 'tun');
     this.configPath = path.join(this.configDir, 'config.yaml');
 
-    // mihomo 与 wintun.dll 资源路径（开发/打包路径不同）
+    // mihomo 与 wintun.dll 资源路径（优先用户数据目录，开发时兜底 appPath/resources）
     this.mihomoPath = this._resolveResourcePath('mihomo-windows-amd64-compatible.exe');
     this.wintunPath = this._resolveResourcePath('wintun.dll');
 
@@ -25,13 +26,16 @@ class TunManager {
     this.selectedProcesses = ['up366.exe'];
   }
 
-  // 解析资源路径（开发模式使用 appPath，打包后使用 process.resourcesPath）
+  // 解析资源路径：优先用户数据目录（下载/迁移后的位置），开发时兜底 appPath/resources
   _resolveResourcePath(filename) {
-    const isDev = !app.isPackaged;
-    if (isDev) {
-      return path.join(app.getAppPath(), 'resources', 'tun', filename);
+    const userPath = path.join(app.getPath('home'), '.Auto366', 'resources', 'tun', filename);
+    if (!app.isPackaged) {
+      const devPath = path.join(app.getAppPath(), 'resources', 'tun', filename);
+      if (fs.existsSync(devPath) && !fs.existsSync(userPath)) {
+        return devPath; // 开发兜底
+      }
     }
-    return path.join(process.resourcesPath, 'tun', filename);
+    return userPath;
   }
 
   // 生成 mihomo 配置文件内容
@@ -128,9 +132,16 @@ ${processRules || '  - MATCH,DIRECT'}
     }
 
     try {
-      // 检查 mihomo 可执行文件
+      // 检查 mihomo 可执行文件；缺失时若有下载器则自动下载
       if (!fs.existsSync(this.mihomoPath)) {
-        return { success: false, message: 'mihomo 可执行文件不存在: ' + this.mihomoPath };
+        if (this.resourceDownloader) {
+          const r = await this.resourceDownloader.ensure('tun');
+          if (!r.ready || !fs.existsSync(this.mihomoPath)) {
+            return { success: false, message: 'TUN 资源未就绪：' + (r.message || '下载失败') };
+          }
+        } else {
+          return { success: false, message: 'mihomo 可执行文件不存在: ' + this.mihomoPath };
+        }
       }
 
       // 检查 wintun.dll

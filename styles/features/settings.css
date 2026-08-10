@@ -15,6 +15,17 @@
     color: var(--color-text);
 }
 
+/* TTS 组字段间距加大，避免拥挤 */
+.setting-group--tts .setting-item {
+    margin-bottom: var(--space-lg);
+}
+
+.setting-group--tts .setting-item__description {
+    margin-top: var(--space-xs);
+    margin-bottom: var(--space-lg);
+    line-height: var(--leading-relaxed);
+}
+
 .setting-item {
     display: flex;
     align-items: center;
@@ -160,4 +171,33 @@
     color: var(--color-text-muted);
     font-size: var(--text-lg);
     line-height: var(--leading-relaxed);
+}
+
+/* A366 资源下载进度条（TTS/TUN） */
+.a366-dl {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.a366-dl__track {
+    flex: 1;
+    height: 8px;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-muted);
+    overflow: hidden;
+}
+
+.a366-dl__fill {
+    height: 100%;
+    width: 0;
+    background: var(--color-primary);
+    transition: width .2s ease;
+}
+
+.a366-dl__status {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
 }

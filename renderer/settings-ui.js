@@ -269,9 +269,64 @@ class SettingsUI {
         }
       }
 
-      // 加载可用模型列表
+      // ===== A366 资源下载：TTS 模型下载入口（无本地模型时显示） =====
+      const showTtsDownloadHint = () => {
+        if (this._ttsHintEl) return;
+        const container = modelSelect && modelSelect.closest('.setting-item');
+        if (!container || !container.parentElement) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'setting-item a366-dl';
+        wrap.innerHTML =
+          '<button type="button" class="btn btn--primary btn--sm" id="ttsModelDownloadBtn">下载模型</button>' +
+          '<div class="a366-dl__track"><div id="ttsModelDownloadFill" class="a366-dl__fill"></div></div>' +
+          '<span class="a366-dl__status" id="ttsModelDownloadStatus"></span>';
+        container.parentElement.insertBefore(wrap, container.nextSibling);
+        this._ttsHintEl = wrap;
+        const btn = wrap.querySelector('#ttsModelDownloadBtn');
+        const fill = wrap.querySelector('#ttsModelDownloadFill');
+        const status = wrap.querySelector('#ttsModelDownloadStatus');
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          status.textContent = '下载中...';
+          const res = await window.electronAPI.downloadA366Resource('tts', {});
+          if (res && res.success) {
+            hideTtsDownloadHint();
+            if (this._ttsLoadModels) this._ttsLoadModels();
+            this.logManager.addSuccessLog('TTS 本地模型下载完成');
+          } else {
+            status.textContent = '下载失败';
+            btn.disabled = false;
+            this.logManager.addErrorLog('TTS 模型下载失败：' + (res ? res.message : '未知错误'));
+          }
+        });
+        if (!this._ttsDlListener) {
+          this._ttsDlListener = (data) => {
+            if (!this._ttsHintEl || !data || data.group !== 'tts') return;
+            const f = this._ttsHintEl.querySelector('#ttsModelDownloadFill');
+            const s = this._ttsHintEl.querySelector('#ttsModelDownloadStatus');
+            if (!f || !s) return;
+            if (data.stage === 'download') {
+              f.style.width = (data.percent || 0) + '%';
+              s.textContent = `${data.percent || 0}%${data.source === 'github' ? '·备用' : ''}`;
+            } else if (data.stage === 'extract') {
+              s.textContent = '解包中...';
+            } else if (data.stage === 'done') {
+              f.style.width = '100%';
+              s.textContent = '下载完成';
+            }
+          };
+          window.electronAPI.onA366DownloadProgress(this._ttsDlListener);
+        }
+      };
+      const hideTtsDownloadHint = () => {
+        if (this._ttsHintEl) { this._ttsHintEl.remove(); this._ttsHintEl = null; }
+      };
+      this._showTtsDownloadHint = showTtsDownloadHint;
+      this._hideTtsDownloadHint = hideTtsDownloadHint;
+
+      // 加载可用模型列表；无本地模型时显示下载入口
       if (modelSelect && window.electronAPI && window.electronAPI.getTtsModels) {
-        window.electronAPI.getTtsModels().then(modelNames => {
+        const loadModels = () => window.electronAPI.getTtsModels().then(modelNames => {
           if (modelNames && modelNames.length > 0) {
             modelSelect.innerHTML = '';
             modelNames.forEach(name => {
@@ -284,8 +339,13 @@ class SettingsUI {
             if (savedConfig && savedConfig.modelName) {
               modelSelect.value = savedConfig.modelName;
             }
+            hideTtsDownloadHint();
+          } else {
+            showTtsDownloadHint();
           }
         }).catch(() => {});
+        loadModels();
+        this._ttsLoadModels = loadModels;
       }
 
       // 恢复已保存的值
@@ -525,8 +585,47 @@ class SettingsUI {
           this._updateTunStatusText();
         }
       });
+
+      // 监听 TUN 依赖下载进度（资源缺失时自动触发）
+      this._tunDownloadAnchor = tunToggle.closest('.setting-item');
+      if (window.electronAPI.onA366DownloadProgress && !this._tunDlListener) {
+        this._tunDlListener = (data) => {
+          if (!data || data.group !== 'tun') return;
+          this._showTunDownloadHint(data);
+        };
+        window.electronAPI.onA366DownloadProgress(this._tunDlListener);
+      }
     } catch (error) {
       console.error('初始化 TUN 设置失败:', error);
+    }
+  }
+
+  // 显示/更新 TUN 依赖下载进度条
+  _showTunDownloadHint(data) {
+    let el = document.getElementById('tunDownloadHint');
+    if (!el) {
+      const anchor = this._tunDownloadAnchor;
+      if (!anchor || !anchor.parentElement) return;
+      el = document.createElement('div');
+      el.id = 'tunDownloadHint';
+      el.className = 'setting-item a366-dl';
+      el.innerHTML =
+        '<div class="a366-dl__track"><div id="tunDownloadFill" class="a366-dl__fill"></div></div>' +
+        '<span class="a366-dl__status" id="tunDownloadStatus"></span>';
+      anchor.parentElement.insertBefore(el, anchor.nextSibling);
+    }
+    const fill = el.querySelector('#tunDownloadFill');
+    const s = el.querySelector('#tunDownloadStatus');
+    if (!fill || !s) return;
+    if (data.stage === 'download') {
+      fill.style.width = (data.percent || 0) + '%';
+      s.textContent = `${data.percent || 0}%${data.source === 'github' ? '·备用' : ''}`;
+    } else if (data.stage === 'extract') {
+      s.textContent = '解包中...';
+    } else if (data.stage === 'done') {
+      fill.style.width = '100%';
+      s.textContent = '下载完成';
+      setTimeout(() => { if (el && el.parentNode) el.parentNode.removeChild(el); }, 1500);
     }
   }
 
