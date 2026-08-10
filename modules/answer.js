@@ -588,6 +588,26 @@ class AnswerExtractor {
     return { allAnswers, processedFiles, allFilesContent };
   }
 
+  // 解压 ZIP 内全部条目：兼容条目名以 / 开头的绝对路径（如 /0/res/xxx.mp3），
+  // 这类路径会被 StreamZip 默认的恶意条目校验拦下，因此关闭该校验后在这里自行做安全处理
+  async extractZipEntries(zip, entries, extractDir) {
+    for (const entry of Object.values(entries)) {
+      if (entry.isDirectory) continue;
+      // 去掉前导 / 或 \，拆分后过滤空段与 . 段，并检查 .. 段防止逃逸解压目录
+      const relPath = entry.name
+        .replace(/^[/\\]+/, '')
+        .split(/[/\\]+/)
+        .filter((seg) => seg && seg !== '.')
+        .join(path.sep);
+      if (relPath.split(path.sep).includes('..')) {
+        throw new Error('Malicious entry: ' + entry.name);
+      }
+      const targetPath = path.join(extractDir, relPath);
+      await fs.ensureDir(path.dirname(targetPath));
+      await zip.extract(entry.name, targetPath);
+    }
+  }
+
   async processZipAnswer(zipPath, ansDir) {
     // 按扩展名去掉后缀；文件名不带 .zip 时另起目录，
     // 否则 extractDir 会等于 zipPath，下一步就把待解压的文件本身删掉了
@@ -601,13 +621,15 @@ class AnswerExtractor {
     }
     fs.ensureDirSync(extractDir);
 
-    const zip = new StreamZip.async({ file: zipPath });
+    // skipEntryNameValidation: 兼容条目名以 / 开头（如 /0/res/xxx.mp3）的合法 ZIP，
+    // 安全性由 extractZipEntries 自行保证
+    const zip = new StreamZip.async({ file: zipPath, skipEntryNameValidation: true });
     const entries = await zip.entries();
     if (Object.keys(entries).length === 0) {
       await zip.close();
       throw new Error('ZIP文件为空或损坏');
     }
-    await zip.extract(null, extractDir);
+    await this.extractZipEntries(zip, entries, extractDir);
     await zip.close();
 
     const extCount = this.scanFileExtensions(extractDir);

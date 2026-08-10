@@ -2508,7 +2508,8 @@ class ProxyServer {
     }
 
     const StreamZip = require('node-stream-zip');
-    const zip = new StreamZip.async({ file: zipPath });
+    // skipEntryNameValidation: 兼容条目名以 / 开头的合法 ZIP（如 /0/res/xxx.mp3）
+    const zip = new StreamZip.async({ file: zipPath, skipEntryNameValidation: true });
     const entries = await zip.entries();
 
     // 1. 获取 ZIP 内所有 mp3 文件（不限目录）
