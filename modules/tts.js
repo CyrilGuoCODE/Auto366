@@ -65,7 +65,7 @@ class TtsManager {
       approvalEnabled: true,
     };
 
-    // 引擎选择: 'auto'(优先sherpa-onnx,失败回退chestnut) / 'sherpa-onnx' / 'chestnut'
+    // 引擎选择: 'auto'(优先在线chestnut,不可用时回退本地sherpa-onnx,无模型则自动下载) / 'sherpa-onnx' / 'chestnut'
     this.engine = 'auto';
     // 运行时实际使用的引擎（resolve 后的值）
     this.activeEngine = null;
@@ -85,6 +85,7 @@ class TtsManager {
     this.rulesManager = null;
     this.appPath = null;
     this.selectedModel = null; // 用户选中的模型文件夹名
+    this.resourceDownloader = null; // 用于 auto 模式下自动下载本地模型
 
     // ===== 预清洗审批队列 =====
     // 答案到达后先入此队列，等用户审批/修改后再调用 generateForApprovedTexts 生成 wav
@@ -296,33 +297,41 @@ class TtsManager {
 
   /**
    * 扫描 TTS 模型目录，返回可用模型列表
+   * 优先用户数据目录 ~/.Auto366/resources/tts（下载/迁移后的位置），
+   * 其次兜底安装目录/开发资源目录。
    */
   getAvailableModels() {
-    let ttsRoot;
+    const roots = [];
+    roots.push(path.join(os.homedir(), '.Auto366', 'resources', 'tts'));
     if (app && app.isPackaged) {
-      ttsRoot = path.join(process.resourcesPath, 'tts');
+      roots.push(path.join(process.resourcesPath, 'tts'));
     } else {
-      ttsRoot = path.join(this.appPath || '', 'resources', 'tts');
+      roots.push(path.join(this.appPath || '', 'resources', 'tts'));
     }
 
+    const seen = new Set();
     const models = [];
-    try {
-      if (fs.existsSync(ttsRoot)) {
+    for (const ttsRoot of roots) {
+      try {
+        if (!fs.existsSync(ttsRoot)) continue;
         const dirs = fs.readdirSync(ttsRoot, { withFileTypes: true });
         for (const d of dirs) {
           if (!d.isDirectory()) continue;
-          const dirPath = path.join(ttsRoot, d.name);
+          const name = d.name;
+          if (seen.has(name)) continue;
+          const dirPath = path.join(ttsRoot, name);
           // 检查是否包含必要的模型文件
           const hasOnnx = fs.existsSync(path.join(dirPath, 'model.onnx'))
             || fs.existsSync(path.join(dirPath, 'model.int8.onnx'))
             || fs.existsSync(path.join(dirPath, 'model.fp32.onnx'));
           const hasTokens = fs.existsSync(path.join(dirPath, 'tokens.txt'));
           if (hasOnnx && hasTokens) {
-            models.push({ name: d.name, path: dirPath });
+            seen.add(name);
+            models.push({ name, path: dirPath });
           }
         }
-      }
-    } catch (e) { /* 忽略 */ }
+      } catch (e) { /* 忽略 */ }
+    }
     return models;
   }
 
@@ -348,8 +357,11 @@ class TtsManager {
       this.modelDir = availableModels[0].path;
       this.selectedModel = availableModels[0].name;
     } else {
-      // 回退：尝试硬编码路径
-      if (app && app.isPackaged) {
+      // 回退：尝试硬编码路径（优先用户数据目录，开发时兜底 appPath/resources）
+      const userModel = path.join(os.homedir(), '.Auto366', 'resources', 'tts', 'kitten-micro-en-v0_8');
+      if (fs.existsSync(userModel)) {
+        this.modelDir = userModel;
+      } else if (app && app.isPackaged) {
         this.modelDir = path.join(process.resourcesPath, 'tts', 'kitten-micro-en-v0_8');
       } else {
         this.modelDir = path.join(appPath, 'resources', 'tts', 'kitten-micro-en-v0_8');
@@ -405,6 +417,10 @@ class TtsManager {
       if (pathname === bp + suffix) return bp;
     }
     return null;
+  }
+
+  setResourceDownloader(dl) {
+    this.resourceDownloader = dl;
   }
 
   async _syncConfigFromRenderer() {
@@ -630,37 +646,87 @@ class TtsManager {
       return 'glm-tts';
     }
 
-    // 尝试 sherpa-onnx
-    if (wantSherpa || wantAuto) {
-      if (this.initializing) {
-        this._log('sherpa-onnx 引擎正在初始化中，请稍候...', 'warning');
-        return null;
+    // 强制使用 sherpa-onnx（不回退）
+    if (wantSherpa) {
+      const ok = await this._ensureSherpaForAuto();
+      if (!ok) this._log('sherpa-onnx 引擎启动失败，且引擎设置为 sherpa-onnx，不回退', 'error');
+      return ok ? 'sherpa-onnx' : null;
+    }
+
+    // auto 模式：优先在线 chestnut，不可用时回退本地 sherpa-onnx（无模型自动下载）
+    if (wantAuto) {
+      if (await this._probeChestnut()) {
+        this.activeEngine = 'chestnut';
+        this._log('使用 chestnut 在线 TTS 引擎', 'info');
+        return 'chestnut';
       }
-
-      this.initializing = true;
-      this._log('正在启动 sherpa-onnx TTS 子进程...', 'info');
-      const success = await this._startWorker();
-      this.initializing = false;
-
-      if (success) {
-        this.activeEngine = 'sherpa-onnx';
-        this._log('sherpa-onnx 引擎就绪', 'success');
-        return 'sherpa-onnx';
-      }
-
-      // sherpa-onnx 失败
-      if (wantSherpa) {
-        this._log('sherpa-onnx 引擎启动失败，且引擎设置为 sherpa-onnx，不回退', 'error');
-        return null;
-      }
-
-      // auto 模式下回退到 chestnut
-      this._log('sherpa-onnx 引擎不可用，自动回退到 chestnut 在线 TTS', 'warning');
-      this.activeEngine = 'chestnut';
-      return 'chestnut';
+      this._log('chestnut 在线不可用，回退到本地 sherpa-onnx', 'warning');
+      const ok = await this._ensureSherpaForAuto(true);
+      return ok ? 'sherpa-onnx' : null;
     }
 
     return null;
+  }
+
+  // 探测在线 chestnut 是否可用
+  async _probeChestnut() {
+    try {
+      const r = await chestnutTts.synth('test', this.config.chestnutVoice || 'english', { timeout: 3000, retries: 1 });
+      return !!(r && r.audio);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 启动本地 sherpa-onnx（无本地模型则自动下载）；useDefault=true 时强制使用默认模型
+  async _ensureSherpaForAuto(useDefault = false) {
+    if (this.initializing) {
+      this._log('sherpa-onnx 引擎正在初始化中，请稍候...', 'warning');
+      return false;
+    }
+
+    // 无本地模型 → 自动下载
+    if (this.getAvailableModels().length === 0) {
+      if (this.resourceDownloader) {
+        this._log('本地无 sherpa-onnx 模型，正在自动下载...', 'warning');
+        try {
+          const r = await this.resourceDownloader.ensure('tts');
+          if (!r.ready) {
+            this._log('TTS 模型自动下载失败: ' + (r.message || '未知错误'), 'error');
+            return false;
+          }
+        } catch (e) {
+          this._log('TTS 模型自动下载失败: ' + e.message, 'error');
+          return false;
+        }
+      } else {
+        this._log('本地无 sherpa-onnx 模型且无下载器', 'error');
+        return false;
+      }
+    }
+
+    // 确保 modelDir 指向有效模型
+    const models = this.getAvailableModels();
+    if (models.length === 0) {
+      this._log('本地无可用 sherpa-onnx 模型', 'error');
+      return false;
+    }
+    if (useDefault || !models.some((m) => m.path === this.modelDir)) {
+      this.modelDir = models[0].path;
+      this.selectedModel = models[0].name;
+    }
+
+    this.initializing = true;
+    this._log('正在启动 sherpa-onnx TTS 子进程...', 'info');
+    const success = await this._startWorker();
+    this.initializing = false;
+    if (success) {
+      this.activeEngine = 'sherpa-onnx';
+      this._log('sherpa-onnx 引擎就绪', 'success');
+      return true;
+    }
+    this._log('sherpa-onnx 引擎启动失败', 'error');
+    return false;
   }
 
   /**

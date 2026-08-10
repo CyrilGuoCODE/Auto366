@@ -518,18 +518,18 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="setting-group">
+                        <div class="setting-group setting-group--tts">
                             <h4>TTS 语音生成</h4>
                             <div class="setting-item">
                                 <label for="ttsEngineSelect">TTS引擎:</label>
                                 <select id="ttsEngineSelect" class="form-input">
-                                    <option value="auto" selected>自动 (优先离线，失败用chestnut)</option>
+                                    <option value="auto" selected>自动 (优先在线chestnut，失败用本地)</option>
                                     <option value="sherpa-onnx">sherpa-onnx (离线本地)</option>
                                     <option value="chestnut">chestnut (在线)</option>
                                     <option value="glm-tts">GLM-TTS (智谱云端)</option>
                                 </select>
                             </div>
-                            <div class="setting-item__description">auto: 优先本地sherpa-onnx，不可用时自动回退chestnut在线；chestnut: 无需本地模型，需联网</div>
+                            <div class="setting-item__description">auto: 优先使用在线chestnut，不可用时回退本地sherpa-onnx（无模型自动下载）；chestnut: 云端模型，需联网</div>
                             <div class="setting-item">
                                 <label for="ttsModelSelect">TTS模型:</label>
                                 <select id="ttsModelSelect" class="form-input">

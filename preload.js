@@ -137,6 +137,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   skipTtsQueue: () => ipcRenderer.invoke('skip-tts-queue'),
   onTtsApprovalPending: (callback) => ipcRenderer.on('tts-approval-pending', (event, data) => callback(data)),
 
+  // A366 资源下载模块API（TTS 模型 / TUN 资源按需下载）
+  getA366Resources: () => ipcRenderer.invoke('get-a366-resources'),
+  downloadA366Resource: (group, opts) => ipcRenderer.invoke('download-a366-resource', group, opts),
+  getA366DownloadStatus: (group) => ipcRenderer.invoke('get-a366-download-status', group),
+  abortA366Download: (group) => ipcRenderer.invoke('abort-a366-download', group),
+  onA366DownloadProgress: (callback) => ipcRenderer.on('a366-download-progress', (event, data) => callback(data)),
+
   // 社区规则集上传下载（通过IPC调用）
   uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
     return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);

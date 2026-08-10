@@ -29,6 +29,8 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [功能优化]优化进程加速卡死问题(By Wutanji)
 - [新功能]自动填空支持跟读朗读题型
 - [BUG修复]修复打包环境下动态注入缓存无法清除
+- [功能优化]加入按需下载TTS和TUN相关资源，并优化包体大小(现在为70mb)(服务器由Submerge提供)
+- [新功能]听力考试模式与模拟模式，现已支持跟读、朗读、听说题目(By Wutanji)
 
 ### BUG问题
 

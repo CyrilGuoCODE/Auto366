@@ -14,6 +14,7 @@ const AgreementManager = require('./modules/agreement');
 const TunManager = require('./modules/tun');
 const SpeedManager = require('./modules/speed-manager');
 const TtsManager = require('./modules/tts');
+const ResourceDownloader = require('./modules/resource-downloader');
 
 const SUPABASE_URL = 'https://myenzpblosjnrtvicdor.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU';
@@ -33,6 +34,7 @@ let agreementManager;
 let tunManager;
 let speedManager;
 let ttsManager;
+let resourceDownloader;
 
 process.on('uncaughtException', (error) => {
   if (error.code === 'ECONNRESET') {
@@ -107,11 +109,14 @@ app.whenReady().then(async () => {
   processMonitor = new ProcessMonitor();
   agreementManager = new AgreementManager();
   agreementManager.init();
-  tunManager = new TunManager(proxyServer);
+  resourceDownloader = new ResourceDownloader();
+  resourceDownloader.init();  // 创建目录 + 迁移旧版 TTS/TUN 资源
+  tunManager = new TunManager(proxyServer, resourceDownloader);
   speedManager = new SpeedManager();
   speedManager.init(app.getAppPath(), mainWindow);
   proxyServer.speedManager = speedManager;  // 代理在关键请求期间对加速做"网络保护"
   ttsManager.init(app.getAppPath(), mainWindow, rulesManager);
+  ttsManager.setResourceDownloader(resourceDownloader);
 
   windowManager.registerIpcHandlers();
   rulesManager.registerIpcHandlers();
@@ -121,6 +126,7 @@ app.whenReady().then(async () => {
   tunManager.registerIpcHandlers(mainWindow);
   speedManager.registerIpcHandlers(mainWindow);
   ttsManager.registerIpcHandlers(mainWindow);
+  resourceDownloader.registerIpcHandlers(mainWindow);
 
   // 注册代理启动/停止的分析追踪
   ipcMain.on('start-answer-proxy', () => {
