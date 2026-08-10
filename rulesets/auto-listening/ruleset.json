@@ -2,5 +2,5 @@
   "name": "内置-自动听力",
   "description": "自动识别听力类型，并自动作答",
   "compatible": false,
-  "version": 8
+  "version": 9
 }

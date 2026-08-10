@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         自动基础听力RC
 // @namespace    http://tampermonkey.net/
-// @version      6.0
+// @version      6.1
 // @description  重建算法驱动的自动填答，开发者面板支持搜索测试与控分设置
 // @match        *://*/*
 // @grant        none
@@ -70,6 +70,92 @@
     let inputEl = null;
     let resultsContainer = null;
     let logContent = null;
+
+    // ==========================================
+    // 时间修改 UI 绑定
+    // 听力/听说共用同一套状态（state.listenTime*）与代理 /listen-time 接口，
+    // 因为两种卷子提交都走 task/score/submit，由代理统一改写用时。
+    // ==========================================
+
+    function bindListenTimeUI() {
+        const ltEnable = document.getElementById('a366-listentime-enable');
+        const ltMin = document.getElementById('a366-listentime-min');
+        const ltSec = document.getElementById('a366-listentime-sec');
+        if (!ltEnable || !ltMin || !ltSec) return;
+
+        const ltSetDisabled = (dis) => {
+            ltMin.disabled = dis; ltSec.disabled = dis;
+            ltMin.style.opacity = dis ? '0.5' : '1';
+            ltSec.style.opacity = dis ? '0.5' : '1';
+        };
+        const ltFillFromTotal = () => {
+            if (state.listenTimeSeconds === null || state.listenTimeSeconds === undefined) {
+                ltMin.value = ''; ltSec.value = ''; return;
+            }
+            const total = state.listenTimeSeconds;
+            const sign = total < 0 ? -1 : 1;
+            const abs = Math.abs(total);
+            ltMin.value = String(Math.floor(abs / 60) * sign);
+            ltSec.value = String((abs % 60) * sign);
+        };
+        const ltCommit = () => {
+            const mRaw = ltMin.value.trim();
+            const sRaw = ltSec.value.trim();
+            if (mRaw === '' && sRaw === '') {
+                state.listenTimeSeconds = null;
+                localStorage.removeItem('a366_listentime_seconds');
+                addLog('[时间修改] 时间已清空（提交不会被修改）', 'info');
+                pushListenTime();
+                return;
+            }
+            let m = mRaw === '' ? 0 : parseInt(mRaw, 10);
+            let s = sRaw === '' ? 0 : parseInt(sRaw, 10);
+            if (!Number.isFinite(m)) m = 0;
+            if (!Number.isFinite(s)) s = 0;
+            let total = m * 60 + s;
+            if (total < -2147483648) total = -2147483648;
+            if (total > 2147483647) total = 2147483647;
+            state.listenTimeSeconds = total;
+            localStorage.setItem('a366_listentime_seconds', String(total));
+            ltFillFromTotal();
+            addLog('[时间修改] 听力提交用时设为 ' + m + '分' + s + '秒 = ' + total + '秒', 'info');
+            pushListenTime();
+        };
+
+        ltEnable.checked = state.listenTimeEnabled;
+        ltSetDisabled(!state.listenTimeEnabled);
+        ltFillFromTotal();
+
+        ltEnable.addEventListener('change', () => {
+            state.listenTimeEnabled = ltEnable.checked;
+            localStorage.setItem('a366_listentime_enabled', String(state.listenTimeEnabled));
+            ltSetDisabled(!state.listenTimeEnabled);
+            addLog('[时间修改] ' + (state.listenTimeEnabled ? '已启用' : '已禁用')
+                + (state.listenTimeEnabled && state.listenTimeSeconds === null ? '（时间未填，提交不会被修改）' : ''),
+                'info');
+            pushListenTime();
+        });
+        ltMin.addEventListener('change', ltCommit);
+        ltSec.addEventListener('change', ltCommit);
+
+        // "参考"按钮：恢复为计算值
+        const ltRestore = document.getElementById('a366-listentime-restore');
+        if (ltRestore) {
+            ltRestore.addEventListener('click', () => {
+                if (state.presetListenTimeSeconds === null) {
+                    addLog('[时间修改] 无可用参考值', 'warn');
+                    return;
+                }
+                state.listenTimeSeconds = state.presetListenTimeSeconds;
+                localStorage.setItem('a366_listentime_seconds', String(state.presetListenTimeSeconds));
+                const abs = Math.abs(state.presetListenTimeSeconds);
+                ltMin.value = String(Math.floor(abs / 60));
+                ltSec.value = String(Math.round(abs % 60));
+                addLog('[时间修改] 已恢复为参考值 ' + state.presetListenTimeSeconds + '秒', 'success');
+                pushListenTime();
+            });
+        }
+    }
 
     // ==========================================
     // UI 创建
@@ -170,84 +256,8 @@
             logContent.innerHTML = '';
         });
 
-        // 时间修改 UI 绑定
-        const ltEnable = document.getElementById('a366-listentime-enable');
-        const ltMin = document.getElementById('a366-listentime-min');
-        const ltSec = document.getElementById('a366-listentime-sec');
-        if (ltEnable && ltMin && ltSec) {
-            const ltSetDisabled = (dis) => {
-                ltMin.disabled = dis; ltSec.disabled = dis;
-                ltMin.style.opacity = dis ? '0.5' : '1';
-                ltSec.style.opacity = dis ? '0.5' : '1';
-            };
-            const ltFillFromTotal = () => {
-                if (state.listenTimeSeconds === null || state.listenTimeSeconds === undefined) {
-                    ltMin.value = ''; ltSec.value = ''; return;
-                }
-                const total = state.listenTimeSeconds;
-                const sign = total < 0 ? -1 : 1;
-                const abs = Math.abs(total);
-                ltMin.value = String(Math.floor(abs / 60) * sign);
-                ltSec.value = String((abs % 60) * sign);
-            };
-            const ltCommit = () => {
-                const mRaw = ltMin.value.trim();
-                const sRaw = ltSec.value.trim();
-                if (mRaw === '' && sRaw === '') {
-                    state.listenTimeSeconds = null;
-                    localStorage.removeItem('a366_listentime_seconds');
-                    addLog('[时间修改] 时间已清空（提交不会被修改）', 'info');
-                    pushListenTime();
-                    return;
-                }
-                let m = mRaw === '' ? 0 : parseInt(mRaw, 10);
-                let s = sRaw === '' ? 0 : parseInt(sRaw, 10);
-                if (!Number.isFinite(m)) m = 0;
-                if (!Number.isFinite(s)) s = 0;
-                let total = m * 60 + s;
-                if (total < -2147483648) total = -2147483648;
-                if (total > 2147483647) total = 2147483647;
-                state.listenTimeSeconds = total;
-                localStorage.setItem('a366_listentime_seconds', String(total));
-                ltFillFromTotal();
-                addLog('[时间修改] 听力提交用时设为 ' + m + '分' + s + '秒 = ' + total + '秒', 'info');
-                pushListenTime();
-            };
-
-            ltEnable.checked = state.listenTimeEnabled;
-            ltSetDisabled(!state.listenTimeEnabled);
-            ltFillFromTotal();
-
-            ltEnable.addEventListener('change', () => {
-                state.listenTimeEnabled = ltEnable.checked;
-                localStorage.setItem('a366_listentime_enabled', String(state.listenTimeEnabled));
-                ltSetDisabled(!state.listenTimeEnabled);
-                addLog('[时间修改] ' + (state.listenTimeEnabled ? '已启用' : '已禁用')
-                    + (state.listenTimeEnabled && state.listenTimeSeconds === null ? '（时间未填，提交不会被修改）' : ''),
-                    'info');
-                pushListenTime();
-            });
-            ltMin.addEventListener('change', ltCommit);
-            ltSec.addEventListener('change', ltCommit);
-
-            // "参考"按钮：恢复为计算值
-            const ltRestore = document.getElementById('a366-listentime-restore');
-            if (ltRestore) {
-                ltRestore.addEventListener('click', () => {
-                    if (state.presetListenTimeSeconds === null) {
-                        addLog('[时间修改] 无可用参考值', 'warn');
-                        return;
-                    }
-                    state.listenTimeSeconds = state.presetListenTimeSeconds;
-                    localStorage.setItem('a366_listentime_seconds', String(state.presetListenTimeSeconds));
-                    const abs = Math.abs(state.presetListenTimeSeconds);
-                    ltMin.value = String(Math.floor(abs / 60));
-                    ltSec.value = String(Math.round(abs % 60));
-                    addLog('[时间修改] 已恢复为参考值 ' + state.presetListenTimeSeconds + '秒', 'success');
-                    pushListenTime();
-                });
-            }
-        }
+        // 时间修改 UI 绑定（听力/听说共用）
+        bindListenTimeUI();
 
         makeDraggable(container, document.getElementById('a366-header'));
         autoFetchAnswers();
@@ -2497,6 +2507,15 @@
                   '<button id="a366-spk-auto" style="width:100%;background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:600;">自动答题</button>' +
                   '<div style="font-size:11px;color:var(--a366-text-muted);line-height:1.5;">先填写全部听后选择，再预载朗读音频；页面真正进入每题录音阶段时才自动送入对应答案。</div>' +
                 '</div>' +
+                '<div style="border-top:1px solid var(--a366-border);padding:8px 10px;display:flex;align-items:center;gap:4px;flex-shrink:0;">' +
+                  '<span style="font-size:12px;font-weight:600;color:var(--a366-text);">时间修改</span>' +
+                  '<input type="checkbox" id="a366-listentime-enable" style="margin:0 4px 0 2px;cursor:pointer;">' +
+                  '<input type="number" id="a366-listentime-min" step="1" placeholder="-" style="width:50px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>' +
+                  '<span style="font-size:12px;color:var(--a366-text-secondary);">分</span>' +
+                  '<input type="number" id="a366-listentime-sec" step="1" placeholder="-" style="width:50px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>' +
+                  '<span style="font-size:12px;color:var(--a366-text-secondary);">秒</span>' +
+                  '<button id="a366-listentime-restore" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px;" title="恢复为计算值">参考</button>' +
+                '</div>' +
                 '<div style="border-top:1px solid var(--a366-border);background:var(--a366-bg-secondary);border-radius:0 0 var(--a366-radius-lg) var(--a366-radius-lg);">' +
                   '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 12px;">' +
                     '<span style="font-size:11px;color:var(--a366-text-secondary);">操作日志</span>' +
@@ -2518,9 +2537,12 @@
                 b.style.display = b.style.display === 'none' ? 'flex' : 'none';
             });
             makeDraggable(container, document.getElementById('a366-header'));
+            // 听说面板复用听力同一套时间修改（状态与代理 /listen-time 接口一致）
+            bindListenTimeUI();
+            fetchPresetListenTime();
 
             this.setAnswers(this.answers);
-            addLog('规则集 v8（听说界面，' + (this.detectedBy || '答案题型') + '）· bucket ' + BUCKET_URL +
+            addLog('规则集 v9（听说界面，' + (this.detectedBy || '答案题型') + '）· bucket ' + BUCKET_URL +
                 (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
             if (this.answers.length) {
                 const kinds = {};
@@ -2669,7 +2691,7 @@
             Speaking.init(d.answers, d.by);
         } else {
             createUI();
-            addLog('规则集 v8（基础听力界面，' + d.by + '）· bucket ' + BUCKET_URL +
+            addLog('规则集 v9（基础听力界面，' + d.by + '）· bucket ' + BUCKET_URL +
                 (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
         }
     }
