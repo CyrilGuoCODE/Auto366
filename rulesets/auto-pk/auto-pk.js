@@ -2925,13 +2925,28 @@ var UI = {
         listenSpellBtn.style.background = State.listenSpellEnabled ? 'rgba(33,150,243,0.7)' : 'rgba(255,255,255,0.2)';
 
         function updateListenSpellBtn() {
-            listenSpellBtn.textContent = State.listenSpellEnabled ? '听音拼词: 开' : '听音拼词: 关';
+            var text = State.listenSpellEnabled ? '听音拼词: 开' : '听音拼词: 关';
+            if (State.listenSpellEnabled) {
+                if (ListenSpell.shouldReverse()) {
+                    text += ' [倒序]';
+                } else if (State.scoreControlEnabled) {
+                    var target = ScoreControl.getTargetCorrect();
+                    if (target > 0) {
+                        text += ' ' + ListenSpell.successCount + '/' + target;
+                    }
+                }
+            }
+            listenSpellBtn.textContent = text;
             listenSpellBtn.style.background = State.listenSpellEnabled ? 'rgba(33,150,243,0.7)' : 'rgba(255,255,255,0.2)';
         }
 
         listenSpellBtn.addEventListener('click', function() {
             State.listenSpellEnabled = !State.listenSpellEnabled;
             localStorage.setItem('listenSpellEnabled', String(State.listenSpellEnabled));
+            // 开启时重置控分计数
+            if (State.listenSpellEnabled) {
+                ListenSpell.successCount = 0;
+            }
             updateListenSpellBtn();
             // 开启时若调度器未运行，自动启动，避免用户还要单独点"开始PK"
             if (State.listenSpellEnabled && !State.autoPkIntervalId) {
@@ -3341,6 +3356,15 @@ var SpellPk = {
 // ============================================================
 var ListenSpell = {
     busy: false,  // 做题流程中标志（含动画播放期，屏蔽轮询）
+    successCount: 0,  // 成功提交题数（碎片消失/题目切换计为成功）
+
+    // 每次做题前动态检查：是否需要做错（倒序拼词）
+    shouldReverse: function() {
+        if (!State.scoreControlEnabled) return false;
+        var target = ScoreControl.getTargetCorrect();
+        if (target <= 0) return false;
+        return ListenSpell.successCount >= target;
+    },
 
     // 字符多重集交集大小（同一字符按最少出现次数计入）
     _charOverlap: function(a, b) {
@@ -3408,6 +3432,71 @@ var ListenSpell = {
         // 用户开启 且 当前页面是 u3-spell 拼写题页面
         return !!State.listenSpellEnabled
             && !!document.querySelector('.u3-spell.u3-page-pking__pk-core');
+    },
+
+    // 倒序拼词专用点击流程：
+    // 1. 点击最后一个碎片（倒序首碎片）
+    // 2. 每次点击后重新获取碎片，与初次获取对比，随机点击匹配的碎片
+    // 3. 点击次数 = 初次碎片数时结束
+    _clickReverseSequence: function(originalSequence) {
+        var totalCount = originalSequence.length;
+        var clickCount = 0;
+        var delay = 1500;
+        var origTexts = [];
+        for (var oi = 0; oi < originalSequence.length; oi++) {
+            origTexts.push(originalSequence[oi].text);
+        }
+
+        // 从末尾向前找文本唯一的碎片作为首碎片（避免后续文本匹配混淆）
+        var firstIdx = totalCount - 1;
+        var textCounts = {};
+        for (var ti = 0; ti < originalSequence.length; ti++) {
+            var t = originalSequence[ti].text;
+            textCounts[t] = (textCounts[t] || 0) + 1;
+        }
+        while (firstIdx > 0 && textCounts[originalSequence[firstIdx].text] > 1) {
+            firstIdx--;
+        }
+        var firstFrag = originalSequence[firstIdx];
+        firstFrag.element.click();
+        clickCount++;
+        UI.addLogMessage('[听音拼词] 点击碎片[' + clickCount + '/' + totalCount + ']: "' + firstFrag.text + '"（倒序首碎片，idx=' + firstIdx + '）', 'info');
+
+        if (clickCount >= totalCount) {
+            setTimeout(function() { SpellPk.lastAnsweredKey = ''; }, State.autoPkDelay || 1000);
+            return;
+        }
+
+        // 后续点击：重新获取碎片，与初次对比，随机点击匹配的碎片
+        var clickInterval = setInterval(function() {
+            var curFragments = SpellPk.getAnswerFragments();
+            var matched = [];
+            for (var i = 0; i < curFragments.length; i++) {
+                for (var j = 0; j < origTexts.length; j++) {
+                    if (curFragments[i].text === origTexts[j]) {
+                        matched.push(curFragments[i]);
+                        break;
+                    }
+                }
+            }
+
+            if (matched.length === 0) {
+                clearInterval(clickInterval);
+                UI.addLogMessage('[听音拼词] 无匹配碎片，停止点击', 'warning');
+                setTimeout(function() { SpellPk.lastAnsweredKey = ''; }, State.autoPkDelay || 1000);
+                return;
+            }
+
+            var frag = matched[Math.floor(Math.random() * matched.length)];
+            frag.element.click();
+            clickCount++;
+            UI.addLogMessage('[听音拼词] 点击碎片[' + clickCount + '/' + totalCount + ']: "' + frag.text + '"（随机）', 'info');
+
+            if (clickCount >= totalCount) {
+                clearInterval(clickInterval);
+                setTimeout(function() { SpellPk.lastAnsweredKey = ''; }, State.autoPkDelay || 1000);
+            }
+        }, delay);
     },
 
     auto: function() {
@@ -3491,9 +3580,14 @@ var ListenSpell = {
         SpellPk.lastAnsweredKey = dedupeKey;
         State.matchCount++;
 
-        // 屏蔽轮询，防止 _clickSequence 完成后动画未播完时读到残留碎片
+        // 屏蔽轮询，防止做题流程中动画未播完时读到残留碎片
         ListenSpell.busy = true;
-        SpellPk._clickSequence(sequence, 0);
+        // 每次做题前检查是否需要做错：若需要则倒序拼词（首碎片倒序，后续重新获取对比随机点击）
+        if (ListenSpell.shouldReverse()) {
+            ListenSpell._clickReverseSequence(sequence);
+        } else {
+            SpellPk._clickSequence(sequence, 0);
+        }
 
         // 独立轮询：等待碎片真正消失或题目切换或超时，才解除 busy 恢复轮询
         var pollCount = 0;
@@ -3505,6 +3599,18 @@ var ListenSpell = {
             if (curFrags.length === 0 || curIdx !== activeIdx || pollCount >= maxPoll) {
                 clearInterval(animPoll);
                 ListenSpell.busy = false;
+                // 碎片消失或题目切换：计为成功提交
+                if (curFrags.length === 0 || curIdx !== activeIdx) {
+                    ListenSpell.successCount++;
+                    // 恰好达到阈值时提示一次（后续 shouldReverse 会自动返回 true）
+                    if (State.scoreControlEnabled) {
+                        var target = ScoreControl.getTargetCorrect();
+                        if (target > 0 && ListenSpell.successCount === target) {
+                            UI.addLogMessage('[听音拼词] 已达控分目标 ' + target + '，后续将倒序拼词', 'warning');
+                        }
+                    }
+                    UI.updateStatus();
+                }
                 if (pollCount >= maxPoll && curFrags.length > 0 && curIdx === activeIdx) {
                     UI.addLogMessage('[听音拼词] 等待碎片消失/题目切换超时，恢复轮询', 'warning');
                 }
