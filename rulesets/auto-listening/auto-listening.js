@@ -54,6 +54,8 @@
         targetWrongCount: 0,
         fullDisplay: false,
         rebuildResults: [],
+        // 两种听力页面共用同一个控制台，只在按钮执行器内部按模式分流。
+        uiMode: 'listening',
         // 听力时间修改
         listenTimeEnabled: localStorage.getItem('a366_listentime_enabled') === 'true',
         listenTimeSeconds: (function() {
@@ -161,7 +163,8 @@
     // UI 创建
     // ==========================================
 
-    function createUI() {
+    function createUI(mode) {
+        state.uiMode = mode === 'speaking' ? 'speaking' : 'listening';
         container = document.createElement('div');
         container.id = 'a366-panel';
         container.style.cssText = `
@@ -186,7 +189,7 @@
 
         container.innerHTML = `
             <div id="a366-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--a366-bg-secondary);border-radius:8px 8px 0 0;border-bottom:1px solid var(--a366-border);cursor:move;user-select:none;">
-                <span style="font-weight:600;font-size:14px;color:var(--a366-primary);">自动基础听力RC</span>
+                <span style="font-weight:600;font-size:14px;color:var(--a366-primary);">自动听力RC</span>
                 <div style="display:flex;gap:6px;align-items:center;">
                     <button id="a366-dev-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 10px;font-size:11px;cursor:pointer;font-weight:500;">Develop</button>
                     <button id="a366-minimize" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;">_</button>
@@ -199,9 +202,8 @@
                         <div style="color:var(--a366-text-muted);text-align:center;font-size:12px;">正在获取答案...</div>
                     </div>
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                        <button id="a366-auto-fill-all" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">一键填答</button>
+                        <button id="a366-auto-fill-all" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">自动听力</button>
                         <button id="a366-jiaojuan-btn" style="background:var(--a366-success);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;">交卷</button>
-                        <button id="a366-auto-btn" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">自动听力</button>
                         <button id="a366-score-btn" style="background:#17a2b8;color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">控分</button>
                     </div>
                 </div>
@@ -221,7 +223,7 @@
                     <button id="a366-log-clear" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:1px 6px;font-size:10px;cursor:pointer;">清空</button>
                 </div>
                 <div id="a366-log-content" style="height:120px;overflow-y:auto;padding:4px 10px 6px;font-size:11px;font-family:'Consolas','Courier New','PingFang SC',monospace;background:var(--a366-bg);">
-                    <div style="color:var(--a366-success);">自动基础听力RC 已就绪</div>
+                    <div style="color:var(--a366-success);">自动听力RC 已就绪</div>
                     <div style="color:var(--a366-text-secondary);">填答 | 交卷 | 自动</div>
                 </div>
             </div>
@@ -245,12 +247,18 @@
                 addLog('未检测到交卷确认弹窗（可能无需确认或已超时）', 'warn');
             }
         });
-        document.getElementById('a366-auto-btn').addEventListener('click', executeAuto);
+        document.getElementById('a366-auto-fill-all').addEventListener('click', () => {
+            if (state.uiMode === 'speaking') {
+                if (Speaking.running) Speaking.stopAuto();
+                else Speaking.runAuto();
+            } else {
+                executeAuto();
+            }
+        });
         document.getElementById('a366-score-btn').addEventListener('click', () => {
             if (!state.devPanelVisible) toggleDevPanel();
             switchDevTab('dev-score');
         });
-        document.getElementById('a366-auto-fill-all').addEventListener('click', rebuildFillAll);
         document.getElementById('a366-log-clear').addEventListener('click', () => {
             state.logEntries = [];
             logContent.innerHTML = '';
@@ -260,7 +268,7 @@
         bindListenTimeUI();
 
         makeDraggable(container, document.getElementById('a366-header'));
-        autoFetchAnswers();
+        if (state.uiMode !== 'speaking') autoFetchAnswers();
 
         // 注入阶段自动拉取预设时间（覆盖用户设置）
         fetchPresetListenTime();
@@ -387,7 +395,7 @@
 
         devPanel.innerHTML = `
             <div id="a366-dev-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--a366-bg-secondary);border-radius:8px 8px 0 0;border-bottom:1px solid var(--a366-border);cursor:move;user-select:none;">
-                <span style="font-weight:600;font-size:14px;color:var(--a366-info);">自动基础听力RC</span>
+                <span style="font-weight:600;font-size:14px;color:var(--a366-info);">自动听力RC</span>
                 <button id="a366-dev-close" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;">✕</button>
             </div>
             <div style="display:flex;border-bottom:1px solid var(--a366-border);background:var(--a366-bg-secondary);">
@@ -927,7 +935,9 @@
     // ==========================================
 
     function updateScorePreview() {
-        const total = state.rebuildResults.length || 20;
+        const speakingMode = state.uiMode === 'speaking';
+        const total = speakingMode ? Math.max(1, Speaking.choices.length) : (state.rebuildResults.length || 20);
+        const pointsPerQuestion = speakingMode ? 30 / total : 1.5;
         const info = document.getElementById('a366-score-info');
         const slider = document.getElementById('a366-score-slider');
         const currentLabel = document.getElementById('a366-score-current');
@@ -937,10 +947,13 @@
         if (currentLabel) currentLabel.textContent = targetScore.toFixed(1) + ' 分';
 
         const rebuilt = state.rebuildResults.length > 0;
-        const mismatch = rebuilt && state.rebuildResults.length !== state.answerList.length;
+        const mismatch = !speakingMode && rebuilt && state.rebuildResults.length !== state.answerList.length;
 
         if (info) {
-            if (!rebuilt) {
+            if (speakingMode) {
+                info.textContent = `听后选择 ${total} 题；控分仅作用于选择题，口语题由平台评分`;
+                info.style.color = '';
+            } else if (!rebuilt) {
                 info.textContent = '默认20题，满分30分（重建后生效）';
                 info.style.color = '';
             } else if (mismatch) {
@@ -953,7 +966,7 @@
         }
 
         // 答案数≠题数时，主面板操作按钮背景变红警告
-        const btnIds = ['a366-auto-fill-all', 'a366-jiaojuan-btn', 'a366-auto-btn', 'a366-score-btn'];
+        const btnIds = ['a366-auto-fill-all', 'a366-jiaojuan-btn', 'a366-score-btn'];
         btnIds.forEach(id => {
             const btn = document.getElementById(id);
             if (!btn) return;
@@ -966,7 +979,7 @@
             }
         });
 
-        const correctCount = Math.min(total, Math.round(targetScore / 1.5));
+        const correctCount = Math.min(total, Math.round(targetScore / pointsPerQuestion));
         const wrongCount = total - correctCount;
 
         if (preview) preview.innerHTML = `答对：<span style="color:#28a745;">${correctCount} 题</span> | 答错：<span style="color:#dc3545;">${wrongCount} 题</span>`;
@@ -977,13 +990,18 @@
         if (scoreSlider) {
             scoreSlider.addEventListener('input', () => { updateScorePreview(); });
             scoreSlider.addEventListener('change', () => {
-                const total = state.rebuildResults.length || 20;
+                const speakingMode = state.uiMode === 'speaking';
+                const total = speakingMode ? Math.max(1, Speaking.choices.length) : (state.rebuildResults.length || 20);
+                const pointsPerQuestion = speakingMode ? 30 / total : 1.5;
                 const targetScore = parseFloat(scoreSlider.value) || 0;
-                const correctCount = Math.min(total, Math.round(targetScore / 1.5));
+                const correctCount = Math.min(total, Math.round(targetScore / pointsPerQuestion));
                 const wrongCount = total - correctCount;
                 state.targetWrongCount = wrongCount;
                 addLog(`[控分] 目标得分 ${targetScore.toFixed(1)} 分 | 答对 ${correctCount} | 答错 ${wrongCount}`, 'success');
-                renderMainFillSection();
+                if (speakingMode) {
+                    Speaking.resetChoicePlan();
+                    Speaking.renderPanelStatus();
+                } else renderMainFillSection();
             });
         }
     }
@@ -1870,10 +1888,18 @@
         origRecorderStart: null, origRecorderStop: null, origRecorderPause: null,
         stopBlocked: 0, readyPromise: null,
         _barObs: null, _barTimer: null, _phaseTimer: null, _choiceTimer: null,
+        choicePlan: null, choicePlanWrong: -1, choicePlanTotal: -1,
 
         /* ---------- 选择题 ---------- */
 
-        norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); },
+        norm(s) {
+            return String(s || '')
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/&(?:nbsp|#160);/gi, ' ')
+                .replace(/&amp;/gi, ' and ')
+                .replace(/&(?:quot|apos|#39);/gi, "'")
+                .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        },
 
         /* 答案里的字母不可信：卷面写着「作答时选项随机乱序」，只比正文 */
         normOpt(s) {
@@ -1885,7 +1911,8 @@
             if (!q) return null;
             let best = null, score0 = 0;
             for (const a of this.choices) {
-                const c = this.norm(a.question || a.questionText);
+                // 高中卷的 question 通常只是「第14题」，真正题干在 questionText。
+                const c = this.norm(a.questionText || a.question);
                 if (!c) continue;
                 let s = 0;
                 if (c === q) s = 100;
@@ -1895,6 +1922,24 @@
                 if (s > score0) { score0 = s; best = a; }
             }
             return score0 >= 60 ? best : null;
+        },
+
+        resetChoicePlan() {
+            this.choicePlan = null;
+            this.choicePlanWrong = -1;
+            this.choicePlanTotal = -1;
+        },
+
+        getChoicePlan() {
+            const total = this.choices.length;
+            const wrong = Math.min(total, state.targetWrongCount || 0);
+            if (!this.choicePlan || this.choicePlanTotal !== total || this.choicePlanWrong !== wrong) {
+                const plan = buildFillPlan(total, wrong);
+                this.choicePlan = new Set([...plan.wrongSet].map(i => this.choices[i]).filter(Boolean));
+                this.choicePlanTotal = total;
+                this.choicePlanWrong = wrong;
+            }
+            return this.choicePlan;
         },
 
         fillChoices(quiet) {
@@ -1911,7 +1956,8 @@
                 return 0;
             }
 
-            let done = 0, skip = 0, miss = 0;
+            const wrongAnswers = this.getChoicePlan();
+            let done = 0, wrongDone = 0, skip = 0, miss = 0;
             for (const sub of subs) {
                 if (sub.querySelector('.' + SPK.selected)) { skip++; continue; }
 
@@ -1932,10 +1978,10 @@
                     const c = o.querySelector(SPK.optCont);
                     return this.normOpt(c ? spkText(c) : spkText(o));
                 };
-                const target = opts.find(o => textOfOpt(o) === want)
+                const correctTarget = opts.find(o => textOfOpt(o) === want)
                     || opts.find(o => { const t = textOfOpt(o); return t && (t.indexOf(want) >= 0 || want.indexOf(t) >= 0); });
 
-                if (!target) {
+                if (!correctTarget) {
                     miss++;
                     if (!quiet) {
                         addLog('听说: 选项没找到「' + ans.answer + '」，页面上是 ' +
@@ -1944,13 +1990,27 @@
                     continue;
                 }
 
+                const shouldWrong = wrongAnswers.has(ans);
+                let target = correctTarget;
+                if (shouldWrong) {
+                    target = opts.find(o => o !== correctTarget && textOfOpt(o)) || correctTarget;
+                    if (target === correctTarget && !quiet) {
+                        addLog('听说: 「' + qText.slice(0, 28) + '」没有可用于控分的错误选项，改为答对', 'warn');
+                    }
+                }
+
                 spkClick(target.querySelector(SPK.optRadio) || target);
                 const ok = !!sub.querySelector('.' + SPK.selected);
                 done++;
-                if (!quiet) addLog('听说: ' + (ok ? '已选 ' : '点了但无选中态 ') + spkText(target), ok ? 'success' : 'warn');
+                if (shouldWrong && target !== correctTarget) wrongDone++;
+                if (!quiet) {
+                    addLog('听说: ' + (ok ? (shouldWrong && target !== correctTarget ? '控分答错 ' : '已选 ') : '点了但无选中态 ') +
+                        spkText(target), ok ? (shouldWrong && target !== correctTarget ? 'warn' : 'success') : 'warn');
+                }
             }
             if (!quiet) {
-                addLog('听说: 选择题 ' + done + ' 题' + (skip ? '，' + skip + ' 题已答' : '') +
+                addLog('听说: 选择题 ' + done + ' 题' + (wrongDone ? '，其中控分答错 ' + wrongDone + ' 题' : '') +
+                    (skip ? '，' + skip + ' 题已答' : '') +
                     (miss ? '，' + miss + ' 题未处理' : ''), done || skip ? 'success' : 'warn');
             }
             return done;
@@ -2475,74 +2535,31 @@
         },
 
         paintBtn() {
-            const b = document.getElementById('a366-spk-auto');
+            const b = document.getElementById('a366-auto-fill-all');
             if (!b) return;
-            b.textContent = this.running ? '停止自动答题' : '自动答题';
-            b.style.background = this.running ? 'var(--a366-danger)' : 'var(--a366-primary)';
+            b.textContent = this.running ? '停止自动听力' : '自动听力';
+            b.style.background = this.running ? 'var(--a366-danger)' : 'var(--a366-info)';
             b.setAttribute('aria-pressed', this.running ? 'true' : 'false');
         },
 
         setStatus(text) {
-            const st = document.getElementById('a366-spk-status');
-            if (st) st.textContent = text;
+            const st = document.getElementById('a366-fill-status');
+            if (st) st.innerHTML = '<div style="font-size:12px;color:var(--a366-text-secondary);">' + escapeHtml(text) + '</div>';
+        },
+
+        renderPanelStatus() {
+            const wrong = Math.min(this.choices.length, state.targetWrongCount || 0);
+            this.setStatus('听说卷 · 共 ' + this.answers.length + ' 条 · 听后选择 ' + this.choices.length +
+                ' 道' + (wrong ? ' · 控分计划答错 ' + wrong + ' 道' : '') +
+                ' · 口语 ' + this.used.size + ' 条已处理');
         },
 
         /* ---------- 界面 ---------- */
 
         createUI() {
-            container = document.createElement('div');
-            container.id = 'a366-panel';
-            container.style.cssText = 'position:fixed;bottom:20px;right:20px;width:340px;z-index:999999;' +
-                'background:var(--a366-bg);border:1px solid var(--a366-border);border-radius:var(--a366-radius-lg);' +
-                'box-shadow:var(--a366-shadow);font-size:13px;font-family:var(--a366-font);color:var(--a366-text);' +
-                'display:flex;flex-direction:column;' + CSS_VARS;
-
-            container.innerHTML =
-                '<div id="a366-header" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--a366-border);background:var(--a366-bg-secondary);cursor:move;border-radius:var(--a366-radius-lg) var(--a366-radius-lg) 0 0;">' +
-                  '<span style="font-weight:600;color:var(--a366-primary);">自动听说</span>' +
-                  '<button id="a366-minimize" style="background:var(--a366-bg-tertiary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:2px 8px;font-size:11px;cursor:pointer;">_</button>' +
-                '</div>' +
-                '<div id="a366-body" style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;">' +
-                  '<div id="a366-spk-status" style="padding:6px 8px;background:var(--a366-bg-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-md);font-size:12px;color:var(--a366-text-secondary);">—</div>' +
-                  '<button id="a366-spk-auto" style="width:100%;background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:600;">自动答题</button>' +
-                  '<div style="font-size:11px;color:var(--a366-text-muted);line-height:1.5;">先填写全部听后选择，再预载朗读音频；页面真正进入每题录音阶段时才自动送入对应答案。</div>' +
-                '</div>' +
-                '<div style="border-top:1px solid var(--a366-border);padding:8px 10px;display:flex;align-items:center;gap:4px;flex-shrink:0;">' +
-                  '<span style="font-size:12px;font-weight:600;color:var(--a366-text);">时间修改</span>' +
-                  '<input type="checkbox" id="a366-listentime-enable" style="margin:0 4px 0 2px;cursor:pointer;">' +
-                  '<input type="number" id="a366-listentime-min" step="1" placeholder="-" style="width:50px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>' +
-                  '<span style="font-size:12px;color:var(--a366-text-secondary);">分</span>' +
-                  '<input type="number" id="a366-listentime-sec" step="1" placeholder="-" style="width:50px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>' +
-                  '<span style="font-size:12px;color:var(--a366-text-secondary);">秒</span>' +
-                  '<button id="a366-listentime-restore" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px;" title="恢复为计算值">参考</button>' +
-                '</div>' +
-                '<div style="border-top:1px solid var(--a366-border);background:var(--a366-bg-secondary);border-radius:0 0 var(--a366-radius-lg) var(--a366-radius-lg);">' +
-                  '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 12px;">' +
-                    '<span style="font-size:11px;color:var(--a366-text-secondary);">操作日志</span>' +
-                    '<button id="a366-log-clear" style="background:var(--a366-bg-tertiary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:1px 6px;font-size:10px;cursor:pointer;">清空</button>' +
-                  '</div>' +
-                  '<div id="a366-log-content" style="height:150px;overflow-y:auto;padding:4px 12px 8px;font-size:11px;font-family:Consolas,monospace;background:var(--a366-bg);"></div>' +
-                '</div>';
-
-            document.body.appendChild(container);
-            logContent = document.getElementById('a366-log-content');
-
-            document.getElementById('a366-spk-auto').addEventListener('click', () => {
-                if (this.running) this.stopAuto();
-                else this.runAuto();
-            });
-            document.getElementById('a366-log-clear').addEventListener('click', () => { logContent.innerHTML = ''; });
-            document.getElementById('a366-minimize').addEventListener('click', () => {
-                const b = document.getElementById('a366-body');
-                b.style.display = b.style.display === 'none' ? 'flex' : 'none';
-            });
-            makeDraggable(container, document.getElementById('a366-header'));
-            // 听说面板复用听力同一套时间修改（状态与代理 /listen-time 接口一致）
-            bindListenTimeUI();
-            fetchPresetListenTime();
-
+            createUI('speaking');
             this.setAnswers(this.answers);
-            addLog('规则集 v9（听说界面，' + (this.detectedBy || '答案题型') + '）· bucket ' + BUCKET_URL +
+            addLog('规则集 v10（听说界面，' + (this.detectedBy || '答案题型') + '）· bucket ' + BUCKET_URL +
                 (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
             if (this.answers.length) {
                 const kinds = {};
@@ -2556,7 +2573,13 @@
         setAnswers(answers) {
             this.answers = Array.isArray(answers) ? answers : [];
             this.choices = this.answers.filter(a => /听后选择/.test(a.pattern || ''));
-            if (!this.running) this.setStatus('听说卷 · 共 ' + this.answers.length + ' 条 · 选择题 ' + this.choices.length + ' 道');
+            this.resetChoicePlan();
+            state.answerList = this.choices.slice();
+            const fillBtn = document.getElementById('a366-auto-fill-all');
+            // 自动听力还负责口语灌音；即使没有选择题也必须可启动。
+            if (fillBtn) fillBtn.style.display = '';
+            if (!this.running) this.renderPanelStatus();
+            updateScorePreview();
         },
 
         /* 靠页面结构进来的时候答案还没解出来，后台接着拉 */
@@ -2691,7 +2714,7 @@
             Speaking.init(d.answers, d.by);
         } else {
             createUI();
-            addLog('规则集 v9（基础听力界面，' + d.by + '）· bucket ' + BUCKET_URL +
+            addLog('规则集 v10（基础听力界面，' + d.by + '）· bucket ' + BUCKET_URL +
                 (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
         }
     }
