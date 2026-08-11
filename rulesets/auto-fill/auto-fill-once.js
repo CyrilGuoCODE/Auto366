@@ -21,8 +21,7 @@ let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || fa
 let supportChoiceQuestions = localStorage.getItem('supportChoiceQuestions') === 'true' || false;
 let supportReadAlong = localStorage.getItem('supportReadAlong') === 'true' || false;
 let isReadAlongProcessing = false;
-let fillExecMode = localStorage.getItem('fillExecMode') || 'auto'; // 执行模式：auto(按题型自动) | serial(强制串行) | concurrent(强制并发)
-let isWorking = false; // 新题型（u3-input 填空）的 work() 串行重入锁：上一轮未结束时不允许重入
+let isWorking = false; // 单执行链重入锁：上一轮 work()（含翻页动画等待）未结束时不允许重入
 let readAlongAborted = false;
 let rawAnswerData = [];
 let elementAnswerMap = new Map();
@@ -1032,23 +1031,11 @@ function queryPrepared(root) {
     return root.querySelector('.u3-input__prepared') || root.querySelector('.u3-input__prepead');
 }
 
-async function work() {
-    if (isReadAlongProcessing) return;
-
-    // 串行判断：需要"点击序列提交已答"的新题型（u3-input 填空）必须串行，
-    // 否则间隔小于单次耗时（如80ms）时 work() 并发重入会导致漏答/跳题；
-    // 旧题型无此提交要求，保持并发以保留流水线效率。
-    // 手动模式（fillExecMode）可覆盖自动判定：serial 强制串行，concurrent 强制并发。
+// 填充当前页：选择题 + 填空（内容匹配/题号匹配），不翻页、不跟读。
+// 抽取为独立函数，供并发模式在翻页动画期间预填下一页复用。
+async function fillCurrentPage() {
     const isU3InputPage = !!document.querySelector('.u3-input__content--input');
-    let useSerial;
-    if (fillExecMode === 'serial') useSerial = true;
-    else if (fillExecMode === 'concurrent') useSerial = false;
-    else useSerial = isU3InputPage;
-    if (useSerial) {
-        if (isWorking) return;
-        isWorking = true;
-    }
-    try {
+
     const getInputs = (root) => {
         const a = root.getElementsByClassName('u3-input__content--input');
         if (a && a.length) return a;
@@ -1105,11 +1092,25 @@ async function work() {
 
     if (contentMatchMode) {
         addLogMessage('使用内容匹配模式', 'info');
-        
-        let questionTexts = document.getElementsByClassName('u3-question-text');
+
+        // 只处理当前 active slide 内的题目：swiper 懒加载时 document 中已渲染多页，
+        // 全文档遍历会让相似度计算量随翻页累积、严重拖慢翻页节奏。
+        // 非 swiper 整卷页面（无 active slide）回退全文档。
+        const activeSlideForMatch = document.querySelector('.swiper-slide-active');
+        let questionTexts = [];
+        if (activeSlideForMatch) {
+            questionTexts = activeSlideForMatch.getElementsByClassName('u3-question-text');
+        }
         if (questionTexts.length === 0) {
             // 备选：使用 u3-fillblank-base__cont（新版页面无 u3-question-text 时）
-            questionTexts = document.getElementsByClassName('u3-fillblank-base__cont');
+            if (activeSlideForMatch) {
+                questionTexts = activeSlideForMatch.getElementsByClassName('u3-fillblank-base__cont');
+            } else {
+                questionTexts = document.getElementsByClassName('u3-question-text');
+                if (questionTexts.length === 0) {
+                    questionTexts = document.getElementsByClassName('u3-fillblank-base__cont');
+                }
+            }
         }
         const processedScopes = new Set();
         
@@ -1264,22 +1265,87 @@ async function work() {
         addLogMessage('已选择 ' + choiceFilledCount + ' 个选择题答案', 'success');
     }
 
-    const readAlongCount = supportReadAlong && contentMatchMode ? await handleReadAlongQuestions() : 0;
+    return filledCount;
+}
 
-    if (readAlongCount > 0) {
-        addLogMessage('本次跟读朗读完成 ' + readAlongCount + ' 题', 'success');
-    }
+async function work() {
+    if (isReadAlongProcessing) return;
 
-    if (!readAlongAborted) {
-        const nextBtn = findButtonByText('下一题', '下一页');
-        if (nextBtn) {
-            nextBtn.click();
-            addLogMessage('已点击翻页按钮（下一题）', 'info');
+    // 单一事件驱动流水线：填当前页 → 立即翻页 → 继续下一页，翻页由"填答完成"触发，
+    // 不再依赖 setInterval 的下一个 tick（消除翻页滞后）。
+    // 实测：swiper 支持动画中连翻（slideTo 后 activeIndex 立即切换、动画自动中断），
+    // 翻页无需等待动画播放完，80ms 缓冲即可继续下一次翻页。
+    if (isWorking) return;
+    isWorking = true;
+    try {
+        // 事件驱动循环：正常在最后一页（turnNextPage 返回 false）或停止时 break
+        for (let i = 0; i < 500; i++) { // 兜底上限，防止异常死循环
+            // 等当前 active slide 渲染完成再填（swiper 懒加载晚于 activeIndex 切换，防漏答）
+            await waitSlideRendered();
+            try {
+                await fillCurrentPage();
+            } catch (e) {
+                // 单页异常不中断整轮翻页，记录日志便于定位
+                addLogMessage('本页填充异常(已跳过,继续翻页): ' + (e && e.message || e), 'error');
+            }
+
+            try {
+                const readAlongCount = supportReadAlong && contentMatchMode ? await handleReadAlongQuestions() : 0;
+                if (readAlongCount > 0) {
+                    addLogMessage('本次跟读朗读完成 ' + readAlongCount + ' 题', 'success');
+                }
+            } catch (e) {
+                addLogMessage('跟读处理异常(已跳过,继续翻页): ' + (e && e.message || e), 'error');
+            }
+
+            if (readAlongAborted) break;
+            if (!(await turnNextPage())) break; // 已到最后一页
+
+            // 实测：无需等待翻页动画播放完，80ms 缓冲即可继续下一次翻页
+            await wait1(80);
         }
-    }
     } finally {
-        if (useSerial) isWorking = false;
+        isWorking = false;
     }
+}
+
+// 翻到下一页：点击"下一页"按钮触发页面自己的翻页逻辑（与 dbd9449 版本一致）。
+// 点击后检测 activeIndex 是否前进判断翻页是否成功（短暂等待容错按钮点击的异步触发），
+// 最后一页时按钮无效、activeIndex 不变 → 返回 false 停止循环。
+async function turnNextPage() {
+    const swiperEl = document.querySelector('.swiper');
+    const swiper = swiperEl && swiperEl.swiper;
+    const before = swiper ? swiper.activeIndex : -1;
+
+    const nextBtn = findButtonByText('下一题', '下一页');
+    if (!nextBtn) return false;
+    nextBtn.click();
+    addLogMessage('已点击翻页按钮（下一页）', 'info');
+
+    // 等待 activeIndex 前进（最多 500ms；最后一页按钮点击无效时 activeIndex 不变）
+    const deadline = Date.now() + 500;
+    while (swiper && Date.now() < deadline && swiper.activeIndex <= before) {
+        await wait1(30);
+    }
+    if (swiper && swiper.activeIndex > before) {
+        addLogMessage('已翻到第 ' + (swiper.activeIndex + 1) + ' 题', 'info');
+        return true;
+    }
+    return false; // activeIndex 未前进 = 已到最后一页
+}
+
+// 等待当前 active slide 渲染完成。
+// swiper 懒加载渲染晚于 activeIndex 切换，不等渲染就填充会漏答；轮询题型元素出现，超时兜底。
+async function waitSlideRendered(timeoutMs = 1000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const activeSlide = document.querySelector('.swiper-slide-active');
+        if (activeSlide && activeSlide.querySelector('.u3-input__content--input, .u3-input__content, .u3-option__content, .partA_word_repeat, .u3-paragraphRepeat, .u3-question-container')) {
+            return true;
+        }
+        await wait1(30);
+    }
+    return false;
 }
 
 function findButtonByText(...texts) {
@@ -1894,54 +1960,6 @@ function createAutoFillPanel() {
     presetRow.appendChild(preset2);
     presetRow.appendChild(preset3);
     autoFillPanel.appendChild(presetRow);
-
-    // 执行模式切换：自动（按题型判断）/ 强制串行 / 强制并发
-    const modeRow = document.createElement('div');
-    modeRow.style.display = 'flex';
-    modeRow.style.gap = '4px';
-    modeRow.style.marginBottom = '6px';
-
-    const modeLabel = document.createElement('span');
-    modeLabel.textContent = '模式';
-    modeLabel.style.fontSize = '11px';
-    modeLabel.style.marginRight = '2px';
-    modeLabel.style.color = 'rgba(255,255,255,0.7)';
-    modeRow.appendChild(modeLabel);
-
-    const modeList = [
-        { key: 'auto', label: '自动', title: '按题型自动判断：u3-input 填空串行，旧题型并发' },
-        { key: 'serial', label: '串行', title: '强制串行：每轮作答完（含已答提交）再进下一题，杜绝 80ms 漏答' },
-        { key: 'concurrent', label: '并发', title: '强制并发：work() 可重叠执行（旧题型提速，u3-input 填空可能漏答）' }
-    ];
-    const modeBtns = {};
-    const updateModeUI = () => {
-        for (const m of modeList) {
-            const b = modeBtns[m.key];
-            const active = fillExecMode === m.key;
-            b.style.background = active ? 'rgba(0,122,204,0.8)' : '';
-            b.style.color = active ? '#fff' : '';
-            b.style.border = active ? 'none' : '';
-        }
-    };
-    for (const m of modeList) {
-        const b = document.createElement('button');
-        b.textContent = m.label;
-        b.title = m.title;
-        b.style.flex = '1';
-        b.style.fontSize = '11px';
-        b.style.padding = '4px';
-        b.style.cursor = 'pointer';
-        b.addEventListener('click', () => {
-            fillExecMode = m.key;
-            localStorage.setItem('fillExecMode', m.key);
-            updateModeUI();
-            addLogMessage('执行模式: ' + m.label, 'info');
-        });
-        modeBtns[m.key] = b;
-        modeRow.appendChild(b);
-    }
-    updateModeUI();
-    autoFillPanel.appendChild(modeRow);
 
     // 内容匹配模式复选框
     const matchModeRow = document.createElement('div');
