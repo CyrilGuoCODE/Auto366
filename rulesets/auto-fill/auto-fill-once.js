@@ -680,7 +680,7 @@ async function handleReadAlongQuestions() {
     const readAlongQuestions = [];
     for (const el of uniqueReadAlongEls) {
         const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-        if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读'))) {
+        if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读') || nameEl.textContent.includes('朗读'))) {
             readAlongQuestions.push(el);
         }
     }
@@ -808,7 +808,7 @@ async function handleReadAlongQuestions() {
         const currentQuestions = [];
         for (const el of currentUniqueEls) {
             const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-            if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读'))) {
+            if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读') || nameEl.textContent.includes('朗读'))) {
                 currentQuestions.push(el);
             }
         }
