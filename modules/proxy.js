@@ -2533,6 +2533,7 @@ class ProxyServer {
 
     const LISTEN_TIME_BASELINE = 360;
     const LISTEN_TIME_FILTER_THRESHOLD = 1000;
+    const LISTEN_TIME_FILTER_MAX = 1380;
     const dirResults = [];
 
     for (const [dirKey, mp3Entries] of questionsGroups) {
@@ -2549,8 +2550,8 @@ class ProxyServer {
       if (durations.length === 0) continue;
       const sumDurations = durations.reduce((a, b) => a + b, 0);
       const calc = Math.round(sumDurations * 2 + LISTEN_TIME_BASELINE);
-      // 过滤小于1000秒的分组
-      if (calc < LISTEN_TIME_FILTER_THRESHOLD) continue;
+      // 过滤不在 [1000, 1380] 区间内的分组（过小或过大都不采用）
+      if (calc < LISTEN_TIME_FILTER_THRESHOLD || calc > LISTEN_TIME_FILTER_MAX) continue;
       dirResults.push({
         dir: dirKey,
         mp3Count: durations.length,

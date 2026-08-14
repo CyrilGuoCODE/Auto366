@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         学习页自动听力RC
+// @name         类填空听力RC
 // @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  学习页听后选择题自动作答：题干文本匹配答案，自动/手动翻页遍历全卷，点击选项内容元素；支持时间修改与控分，答案数≠题目数时可手动清洗答案
+// @version      2.5
+// @description  类填空听力自动作答：题干文本匹配答案，自动/手动翻页遍历全卷，点击选项内容元素；支持时间修改与控分，答案数≠题目数时可手动清洗答案
 // @match        *://*/*
 // @grant        none
 // ==/UserScript==
@@ -284,35 +284,37 @@
     }
 
     // 从代理层拉取预设听力用时（基于 zip 内 mp3 时长自动计算）
+    // 采用区间 [1000, 1380]：越界值（过小/过大）一律不采用
     async function fetchPresetListenTime() {
+        const inRange = v => Number.isFinite(v) && v >= 1000 && v <= 1380;
         try {
             const res = await fetch(BUCKET_URL + '/listen-time-preset', { cache: 'no-cache' });
             const data = await res.json();
-            // 无论成功与否，保存计算值作为参考（参考按钮永远取自动计算值）
-            let refSeconds = data.seconds || data.calculatedSeconds;
-            if (!(Number.isFinite(refSeconds) && refSeconds > 0) && data.detail && Array.isArray(data.detail.questionsDirs)) {
-                // 兜底：代理主字段缺失时，从各目录计算值中取"≥1000 的最小值"
+            // 参考值 = 代理主字段中的合法计算值；非法则从 detail 各目录计算值中取 [1000,1380] 最小值
+            let refSeconds = inRange(data.seconds) ? data.seconds
+                : (inRange(data.calculatedSeconds) ? data.calculatedSeconds : null);
+            if (refSeconds === null && data.detail && Array.isArray(data.detail.questionsDirs)) {
                 const cands = data.detail.questionsDirs
                     .map(d => d.calc)
-                    .filter(v => Number.isFinite(v) && v >= 1000);
+                    .filter(inRange);
                 if (cands.length > 0) refSeconds = Math.min(...cands);
             }
-            if (Number.isFinite(refSeconds) && refSeconds > 0) {
-                state.presetListenTimeSeconds = refSeconds;
-            }
-            if (data.success && Number.isFinite(data.seconds) && data.seconds > 0) {
-                // 预设成功无条件覆盖用户设置（与原版行为一致）
+            if (refSeconds !== null) state.presetListenTimeSeconds = refSeconds;
+
+            if (inRange(data.seconds)) {
+                // 预设成功且取值合法：无条件覆盖用户设置（与原版行为一致）
                 fillTimeModSeconds = data.seconds;
                 localStorage.setItem('fillTimeModSeconds', String(data.seconds));
                 fillTimeModInputs();
                 addLog('[时间预设] 已自动设为 ' + data.seconds + '秒', 'success');
                 if (data.detail && Array.isArray(data.detail.questionsDirs)) {
-                    addLog(`  计算：${data.detail.questionsDirs.map(d => d.dir + '→' + d.calc + 's').join(' | ')}，取 ≥1000 最小值 ${data.seconds}s`, 'info');
+                    addLog(`  计算：${data.detail.questionsDirs.map(d => d.dir + '→' + d.calc + 's').join(' | ')}，取 1000~1380 区间最小值 ${data.seconds}s`, 'info');
                 }
             } else {
-                addLog('[时间预设] 无可用预设：' + (data.message || '未知原因'), 'warn');
-                if (data.calculatedSeconds) {
-                    addLog('  计算值 ' + data.calculatedSeconds + '秒 < 阈值1080秒，可点击"参考"手动应用', 'info');
+                const rejected = (data.seconds !== null && data.seconds !== undefined) ? data.seconds : (data.calculatedSeconds !== null && data.calculatedSeconds !== undefined ? data.calculatedSeconds : null);
+                addLog('[时间预设] 无可用预设：' + (rejected !== null && !inRange(rejected) ? '计算值 ' + rejected + '秒 不在 [1000,1380] 区间，不予采用' : (data.message || '未知原因')), 'warn');
+                if (state.presetListenTimeSeconds !== null) {
+                    addLog('  参考值可用：' + state.presetListenTimeSeconds + '秒（点击"参考"手动应用）', 'info');
                 }
             }
         } catch (e) {
@@ -425,11 +427,18 @@
         return null;
     }
 
-    // 在题目容器内按标记(A/B/C)或内容重新定位可点击的选项内容元素
+    // 在题目容器内按选项内容文本定位可点击元素
+    // （ABC 标记在页面渲染/组件复用过程中可能错位，选项文本是唯一可靠锚点）
     function resolveOptionEl(q, opt) {
         const qc = findQuestionContainer(q.key);
         if (!qc) return null;
         const optEls = qc.querySelectorAll('.u3-option');
+        // 优先按选项内容文本精确匹配
+        for (const oe of optEls) {
+            const ce = oe.querySelector('.u3-option__content');
+            if (ce && normalizeText(ce.textContent) === opt.content) return ce;
+        }
+        // 兜底按标记(A/B/C)匹配
         for (const oe of optEls) {
             const label = oe.querySelector('.u3-option__label');
             if (label && normalizeText(label.textContent) === opt.mark) {
@@ -437,29 +446,19 @@
                 return ce || oe;
             }
         }
-        for (const oe of optEls) {
-            const ce = oe.querySelector('.u3-option__content');
-            if (ce && normalizeText(ce.textContent) === opt.content) return ce;
-        }
         return null;
     }
 
-    // 确认选项元素当前可点击（引用失效时重新定位），并回写缓存
+    // 确认选项元素当前可点击（按文本重新定位），并回写缓存
     function isClickable(q, opt) {
-        let el = opt._contentElement;
-        if (!el || !document.contains(el)) {
-            el = resolveOptionEl(q, opt);
-            if (el) opt._contentElement = el;
-        }
+        const el = resolveOptionEl(q, opt);
+        if (el) opt._contentElement = el;
         return !!el && document.contains(el);
     }
 
     function clickOption(opt, q, mode) {
-        let contentEl = opt._contentElement;
-        if (!contentEl || !document.contains(contentEl)) {
-            contentEl = resolveOptionEl(q, opt);
-            if (contentEl) opt._contentElement = contentEl;
-        }
+        // 每次点击前始终按选项文本重新定位（不依赖可能错位的 ABC 标记/缓存引用）
+        const contentEl = resolveOptionEl(q, opt);
         if (!contentEl || !document.contains(contentEl)) {
             // 容器尚未渲染/已销毁：静默失败，由 fillVisible 汇总并在后续轮询重试
             return false;
@@ -837,7 +836,7 @@
                     <button id="a366-log-clear" style="background:var(--a366-bg-tertiary);color:var(--a366-text-secondary);border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);padding:1px 6px;font-size:10px;cursor:pointer;">清空</button>
                 </div>
                 <div id="a366-log-content" style="height:120px;overflow-y:auto;padding:4px 10px 6px;font-size:11px;font-family:'Consolas','Courier New','PingFang SC',monospace;background:var(--a366-bg);">
-                    <div style="color:var(--a366-success);">自动听力RC（学习页）已就绪</div>
+                    <div style="color:var(--a366-success);">类填空听力RC 已就绪</div>
                     <div style="color:var(--a366-text-secondary);">填答 | 控分</div>
                 </div>
             </div>
@@ -1291,7 +1290,7 @@
     function boot() {
         createUI();
         FillTimeMod.install();
-        addLog('学习页规则集 v2.1 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
+        addLog('类填空听力规则集 v2.5 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
     }
 
     if (document.readyState === 'loading') {
