@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习页自动听力RC
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.1
 // @description  学习页听后选择题自动作答：题干文本匹配答案，自动/手动翻页遍历全卷，点击选项内容元素；支持时间修改与控分，答案数≠题目数时可手动清洗答案
 // @match        *://*/*
 // @grant        none
@@ -288,20 +288,26 @@
         try {
             const res = await fetch(BUCKET_URL + '/listen-time-preset', { cache: 'no-cache' });
             const data = await res.json();
-            // 无论成功与否，保存计算值作为参考
-            const refSeconds = data.seconds || data.calculatedSeconds;
+            // 无论成功与否，保存计算值作为参考（参考按钮永远取自动计算值）
+            let refSeconds = data.seconds || data.calculatedSeconds;
+            if (!(Number.isFinite(refSeconds) && refSeconds > 0) && data.detail && Array.isArray(data.detail.questionsDirs)) {
+                // 兜底：代理主字段缺失时，从各目录计算值中取"≥1000 的最小值"
+                const cands = data.detail.questionsDirs
+                    .map(d => d.calc)
+                    .filter(v => Number.isFinite(v) && v >= 1000);
+                if (cands.length > 0) refSeconds = Math.min(...cands);
+            }
             if (Number.isFinite(refSeconds) && refSeconds > 0) {
                 state.presetListenTimeSeconds = refSeconds;
             }
             if (data.success && Number.isFinite(data.seconds) && data.seconds > 0) {
-                if (fillTimeModSeconds === null || fillTimeModSeconds === undefined) {
-                    // 用户未手动设置过时间：自动应用预设
-                    fillTimeModSeconds = data.seconds;
-                    localStorage.setItem('fillTimeModSeconds', String(data.seconds));
-                    fillTimeModInputs();
-                    addLog('[时间预设] 已自动设为 ' + data.seconds + '秒', 'success');
-                } else {
-                    addLog('[时间预设] 计算值 ' + data.seconds + '秒（已有手动设置，可点击"参考"查看）', 'info');
+                // 预设成功无条件覆盖用户设置（与原版行为一致）
+                fillTimeModSeconds = data.seconds;
+                localStorage.setItem('fillTimeModSeconds', String(data.seconds));
+                fillTimeModInputs();
+                addLog('[时间预设] 已自动设为 ' + data.seconds + '秒', 'success');
+                if (data.detail && Array.isArray(data.detail.questionsDirs)) {
+                    addLog(`  计算：${data.detail.questionsDirs.map(d => d.dir + '→' + d.calc + 's').join(' | ')}，取 ≥1000 最小值 ${data.seconds}s`, 'info');
                 }
             } else {
                 addLog('[时间预设] 无可用预设：' + (data.message || '未知原因'), 'warn');
@@ -1285,7 +1291,7 @@
     function boot() {
         createUI();
         FillTimeMod.install();
-        addLog('学习页规则集 v1.9 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
+        addLog('学习页规则集 v2.1 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
     }
 
     if (document.readyState === 'loading') {

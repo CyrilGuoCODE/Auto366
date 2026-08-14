@@ -2,5 +2,5 @@
   "name": "内置-学习页自动听力",
   "description": "学习页听后选择题自动作答（题干文本匹配答案，自动/手动翻页遍历全卷，点击选项内容元素）",
   "compatible": false,
-  "version": 10
+  "version": 12
 }
