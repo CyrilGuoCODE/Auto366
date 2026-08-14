@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习页自动听力RC
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.9
 // @description  学习页听后选择题自动作答：题干文本匹配答案，自动/手动翻页遍历全卷，点击选项内容元素；支持时间修改与控分，答案数≠题目数时可手动清洗答案
 // @match        *://*/*
 // @grant        none
@@ -53,6 +53,7 @@
         logEntries: [],
         collapsed: false,
         devPanelVisible: false,
+        presetListenTimeSeconds: null, // 预设参考值（zip 内 mp3 计算用时）
     };
 
     let container = null;
@@ -199,7 +200,22 @@
         }
     };
 
-    // 时间修改 UI 绑定（enable 复选框 + 分/秒输入框）
+    // 按 fillTimeModSeconds 填充分/秒输入框（负数符号由分钟承载）
+    function fillTimeModInputs() {
+        const tmMin = document.getElementById('a366-timemod-min');
+        const tmSec = document.getElementById('a366-timemod-sec');
+        if (!tmMin || !tmSec) return;
+        if (fillTimeModSeconds === null || fillTimeModSeconds === undefined) {
+            tmMin.value = ''; tmSec.value = ''; return;
+        }
+        const total = fillTimeModSeconds;
+        const sign = total < 0 ? -1 : 1;
+        const abs = Math.abs(total);
+        tmMin.value = String(Math.floor(abs / 60) * sign);
+        tmSec.value = String((abs % 60) * sign);
+    }
+
+    // 时间修改 UI 绑定（enable 复选框 + 分/秒输入框 + 参考按钮）
     function bindTimeModUI() {
         const tmEnable = document.getElementById('a366-timemod-enable');
         const tmMin = document.getElementById('a366-timemod-min');
@@ -210,16 +226,6 @@
             tmMin.disabled = dis; tmSec.disabled = dis;
             tmMin.style.opacity = dis ? '0.5' : '1';
             tmSec.style.opacity = dis ? '0.5' : '1';
-        };
-        const tmFillFromTotal = () => {
-            if (fillTimeModSeconds === null || fillTimeModSeconds === undefined) {
-                tmMin.value = ''; tmSec.value = ''; return;
-            }
-            const total = fillTimeModSeconds;
-            const sign = total < 0 ? -1 : 1;
-            const abs = Math.abs(total);
-            tmMin.value = String(Math.floor(abs / 60) * sign);
-            tmSec.value = String((abs % 60) * sign);
         };
         const tmCommit = () => {
             const mRaw = tmMin.value.trim();
@@ -240,14 +246,14 @@
             if (total > FILL_TIME_INT32_MAX) total = FILL_TIME_INT32_MAX;
             fillTimeModSeconds = total;
             localStorage.setItem('fillTimeModSeconds', String(total));
-            tmFillFromTotal();
+            fillTimeModInputs();
             addLog('[时间修改] 提交用时设为 ' + m + '分' + s + '秒 = ' + total + '秒', 'info');
             FillTimeMod.push();
         };
 
         tmEnable.checked = fillTimeModEnabled;
         tmSetDisabled(!fillTimeModEnabled);
-        tmFillFromTotal();
+        fillTimeModInputs();
 
         tmEnable.addEventListener('change', () => {
             fillTimeModEnabled = tmEnable.checked;
@@ -259,6 +265,55 @@
         });
         tmMin.addEventListener('change', tmCommit);
         tmSec.addEventListener('change', tmCommit);
+
+        // "参考"按钮：恢复为预设计算值
+        const tmRestore = document.getElementById('a366-timemod-restore');
+        if (tmRestore) {
+            tmRestore.addEventListener('click', () => {
+                if (state.presetListenTimeSeconds === null) {
+                    addLog('[时间修改] 无可用参考值', 'warn');
+                    return;
+                }
+                fillTimeModSeconds = state.presetListenTimeSeconds;
+                localStorage.setItem('fillTimeModSeconds', String(fillTimeModSeconds));
+                fillTimeModInputs();
+                addLog('[时间修改] 已恢复为参考值 ' + state.presetListenTimeSeconds + '秒', 'success');
+                FillTimeMod.push();
+            });
+        }
+    }
+
+    // 从代理层拉取预设听力用时（基于 zip 内 mp3 时长自动计算）
+    async function fetchPresetListenTime() {
+        try {
+            const res = await fetch(BUCKET_URL + '/listen-time-preset', { cache: 'no-cache' });
+            const data = await res.json();
+            // 无论成功与否，保存计算值作为参考
+            const refSeconds = data.seconds || data.calculatedSeconds;
+            if (Number.isFinite(refSeconds) && refSeconds > 0) {
+                state.presetListenTimeSeconds = refSeconds;
+            }
+            if (data.success && Number.isFinite(data.seconds) && data.seconds > 0) {
+                if (fillTimeModSeconds === null || fillTimeModSeconds === undefined) {
+                    // 用户未手动设置过时间：自动应用预设
+                    fillTimeModSeconds = data.seconds;
+                    localStorage.setItem('fillTimeModSeconds', String(data.seconds));
+                    fillTimeModInputs();
+                    addLog('[时间预设] 已自动设为 ' + data.seconds + '秒', 'success');
+                } else {
+                    addLog('[时间预设] 计算值 ' + data.seconds + '秒（已有手动设置，可点击"参考"查看）', 'info');
+                }
+            } else {
+                addLog('[时间预设] 无可用预设：' + (data.message || '未知原因'), 'warn');
+                if (data.calculatedSeconds) {
+                    addLog('  计算值 ' + data.calculatedSeconds + '秒 < 阈值1080秒，可点击"参考"手动应用', 'info');
+                }
+            }
+        } catch (e) {
+            addLog('[时间预设] 拉取失败：' + e.message, 'warn');
+        } finally {
+            FillTimeMod.push();
+        }
     }
 
     // ==========================================
@@ -660,6 +715,54 @@
     }
 
     // ==========================================
+    // 交卷（点击页面提交按钮 + 处理确认弹窗）
+    // ==========================================
+
+    // 在可见弹窗容器中查找确认按钮（文本含 确认/确定/交卷）
+    function findConfirmBtn() {
+        const dialogs = document.querySelectorAll('.el-dialog, .el-message-box, .u3-dialog, .u3-modal, .modal, [class*=dialog], [class*=modal]');
+        for (const d of dialogs) {
+            const r = d.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            const btns = d.querySelectorAll('button');
+            for (const b of btns) {
+                const t = (b.textContent || '').trim();
+                if (/确认|确定|交卷/.test(t) && t.length <= 6) return b;
+            }
+        }
+        return null;
+    }
+
+    async function submitExam() {
+        addLog('开始交卷：查找提交按钮', 'info');
+        let target = null;
+        const selectors = ['.u3-page-foot__examBar--submit', '.u3-nav__qsCardSubmit'];
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) { target = el; break; }
+        }
+        if (!target) {
+            addLog('未找到页面提交按钮，交卷失败', 'warn');
+            return;
+        }
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.click();
+        addLog('已点击提交按钮，等待确认弹窗...', 'info');
+
+        // 轮询确认弹窗（最多 5 秒）
+        for (let i = 0; i < 10; i++) {
+            await sleep(500);
+            const confirm = findConfirmBtn();
+            if (confirm) {
+                confirm.click();
+                addLog('已点击确认交卷', 'success');
+                return;
+            }
+        }
+        addLog('未检测到确认弹窗（可能无需确认或已超时）', 'warn');
+    }
+
+    // ==========================================
     // 主面板 UI
     // ==========================================
 
@@ -702,7 +805,8 @@
                     </div>
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                         <button id="a366-auto-fill-all" style="background:var(--a366-primary);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 14px;font-size:13px;cursor:pointer;font-weight:500;display:none;">开始填答</button>
-                        <button id="a366-parse-btn" style="background:var(--a366-warning);color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">解析题目</button>
+                        <button id="a366-parse-btn" style="background:#87ceeb;color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">解析题目</button>
+                        <button id="a366-submit-btn" style="background:#a8c686;color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">交卷</button>
                         <button id="a366-score-btn" style="background:#17a2b8;color:#fff;border:none;border-radius:var(--a366-radius-md);padding:8px 12px;font-size:13px;cursor:pointer;font-weight:500;">控分</button>
                     </div>
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -719,6 +823,7 @@
                 <span style="font-size:12px;color:var(--a366-text-secondary);">分</span>
                 <input type="number" id="a366-timemod-sec" step="1" placeholder="-" style="width:52px;font-size:12px;text-align:center;padding:3px 4px;border:1px solid var(--a366-border);border-radius:var(--a366-radius-sm);background:var(--a366-bg);color:var(--a366-text);outline:none;" disabled>
                 <span style="font-size:12px;color:var(--a366-text-secondary);">秒</span>
+                <button id="a366-timemod-restore" style="background:var(--a366-info);color:#fff;border:none;border-radius:var(--a366-radius-sm);padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px;" title="恢复为计算值">参考</button>
             </div>
             <div style="border-top:1px solid var(--a366-border);background:var(--a366-bg-secondary);display:flex;flex-direction:column;flex-shrink:0;">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 10px;">
@@ -743,6 +848,7 @@
         document.getElementById('a366-parse-btn').addEventListener('click', () => { rebuildAll(); });
         document.getElementById('a366-page-prev').addEventListener('click', goPrevPage);
         document.getElementById('a366-page-next').addEventListener('click', goNextPage);
+        document.getElementById('a366-submit-btn').addEventListener('click', submitExam);
         document.getElementById('a366-score-btn').addEventListener('click', () => {
             if (!state.devPanelVisible) toggleDevPanel();
             switchDevTab('dev-score');
@@ -755,6 +861,7 @@
         bindTimeModUI();
 
         makeDraggable(container, document.getElementById('a366-header'));
+        fetchPresetListenTime();
         updatePageInfo();
         fetchAnswers();
     }
@@ -1024,17 +1131,25 @@
         const wrongCount = total - correctCount;
         if (preview) preview.innerHTML = `答对：<span style="color:#28a745;">${correctCount} 题</span> | 答错：<span style="color:#dc3545;">${wrongCount} 题</span>`;
 
-        // 答案数≠题数时，主面板操作按钮背景变红警告
-        const btnIds = ['a366-auto-fill-all', 'a366-score-btn'];
+        // 答案数≠题数时，主面板所有操作按钮背景变红，控分按钮文本临时改为"检查答案"
+        const btnIds = ['a366-auto-fill-all', 'a366-score-btn', 'a366-parse-btn', 'a366-submit-btn', 'a366-page-prev', 'a366-page-next'];
         btnIds.forEach(id => {
             const btn = document.getElementById(id);
             if (!btn) return;
             if (mismatch) {
                 btn.dataset.origBg = btn.dataset.origBg || btn.style.background;
                 btn.style.background = 'var(--a366-danger)';
+                if (id === 'a366-score-btn' && !btn.dataset.origText) {
+                    btn.dataset.origText = btn.textContent;
+                    btn.textContent = '检查答案';
+                }
             } else if (btn.dataset.origBg) {
                 btn.style.background = btn.dataset.origBg;
                 delete btn.dataset.origBg;
+                if (id === 'a366-score-btn' && btn.dataset.origText) {
+                    btn.textContent = btn.dataset.origText;
+                    delete btn.dataset.origText;
+                }
             }
         });
 
@@ -1170,7 +1285,7 @@
     function boot() {
         createUI();
         FillTimeMod.install();
-        addLog('学习页规则集 v1.7 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
+        addLog('学习页规则集 v1.9 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
     }
 
     if (document.readyState === 'loading') {
