@@ -13,6 +13,7 @@ const https = require('https');
 const { URL } = require('url');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const { resolveExtractedRoot } = require('./archive-layout');
 const execFileP = promisify(execFile);
 
 // 主源前缀（A366 子域根）
@@ -160,7 +161,7 @@ class ResourceDownloader {
           this.downloadFile(next, dest, { expectedSize, onProgress, isAborted }).then(resolve, reject);
           return;
         }
-        const start = res.statusCode === 206 ? existing : 0;
+        let start = res.statusCode === 206 ? existing : 0;
         // 非 206 时从头写（截断）
         if (res.statusCode !== 206 && existing > 0) {
           fs.truncateSync(dest, 0);
@@ -366,9 +367,11 @@ class ResourceDownloader {
     const extractDir = path.join(downloadDir, 'extracted-' + Date.now());
     await this.extractZip(zipPath, extractDir);
 
-    // 3) 原子替换目标目录
+    // 3) 原子替换目标目录。兼容旧资源包里重复的顶层目录（tun/tun/*）。
+    const extractedRoot = resolveExtractedRoot(extractDir, extractTo);
     if (fs.existsSync(destDir)) fs.removeSync(destDir);
-    fs.renameSync(extractDir, destDir);
+    fs.renameSync(extractedRoot, destDir);
+    if (extractedRoot !== extractDir) fs.removeSync(extractDir);
 
     // 4) 写本地 manifest + 清理临时文件
     this._writeLocalManifest(group, {

@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const { ipcMain, app } = require('electron');
 const fs = require('fs-extra');
 const path = require('path');
+const { generateTunConfig } = require('./tun-config');
 
 // TUN 强制软包模式：通过 mihomo 创建虚拟网卡，将指定进程的流量
 // 强制重定向到 Auto366 的 HTTP 代理（127.0.0.1:proxyPort）。
@@ -13,6 +14,8 @@ class TunManager {
     this.mainWindow = null;
     this.mihomoProcess = null;
     this.isRunning = false;
+    this.isStarting = false;
+    this.lifecycleGeneration = 0;
 
     // 配置目录：~/.Auto366/tun/
     this.configDir = path.join(app.getPath('home'), '.Auto366', 'tun');
@@ -41,83 +44,7 @@ class TunManager {
   // 生成 mihomo 配置文件内容
   _generateConfig() {
     const proxyPort = this.proxyServer ? this.proxyServer.getProxyPort() : 5291;
-
-    // 生成进程匹配规则
-    const processRules = this.selectedProcesses
-      .filter((p) => p && p.trim())
-      .map((p) => `  - PROCESS-NAME,${p.trim()},Auto366Proxy`)
-      .join('\n');
-
-    return `# Auto366 TUN 强制软包模式配置 (自动生成，请勿手动修改)
-mixed-port: 7890
-allow-lan: false
-mode: rule
-log-level: warning
-ipv6: false
-find-process-mode: always
-tcp-concurrent: true
-
-tun:
-  enable: true
-  stack: gvisor
-  dns-hijack:
-    - any:53
-  auto-route: true
-  auto-detect-interface: true
-
-# 流量嗅探：从 TLS SNI / HTTP Host 还原真实域名
-# 关键：确保 HTTPS 流量转发到 Auto366 代理时使用域名而非 IP
-sniffer:
-  enable: true
-  force-dns-mapping: true
-  parse-pure-ip: true
-  sniff:
-    HTTP:
-      ports: [80, 8080-8880]
-      override-destination: true
-    TLS:
-      ports: [443, 8443]
-      override-destination: true
-
-dns:
-  enable: true
-  ipv6: false
-  # fake-ip 模式：mihomo 返回虚假 IP，建立 IP↔域名映射
-  # 确保 mihomo 转发 HTTPS 时一定知道目标域名
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  fake-ip-filter:
-    - "*.lan"
-    - "*.local"
-    - "localhost.ptlogin2.qq.com"
-    - "+.msftconnecttest.com"
-    - "+.msftncsi.com"
-  default-nameserver:
-    - 223.5.5.5
-    - 114.114.114.114
-  nameserver:
-    - 223.5.5.5
-    - 114.114.114.114
-  fallback:
-    - 8.8.8.8
-    - 1.1.1.1
-
-proxies:
-  - name: Auto366Proxy
-    type: http
-    server: 127.0.0.1
-    port: ${proxyPort}
-
-proxy-groups:
-  - name: Auto366Group
-    type: select
-    proxies:
-      - Auto366Proxy
-
-rules:
-${processRules || '  - MATCH,DIRECT'}
-  - MATCH,DIRECT
-`;
+    return generateTunConfig(proxyPort, this.selectedProcesses);
   }
 
   // 启动 TUN（启动 mihomo 进程）
@@ -125,11 +52,17 @@ ${processRules || '  - MATCH,DIRECT'}
     if (this.isRunning) {
       return { success: false, message: 'TUN 模式已在运行中' };
     }
+    if (this.isStarting) {
+      return { success: false, message: 'TUN 模式正在启动中' };
+    }
 
     // 检查 Auto366 代理是否已启动
     if (!this.proxyServer || !this.proxyServer.isRunning) {
       return { success: false, message: '请先启动 Auto366 代理服务器' };
     }
+
+    const generation = ++this.lifecycleGeneration;
+    this.isStarting = true;
 
     try {
       // 检查 mihomo 可执行文件；缺失时若有下载器则自动下载
@@ -142,6 +75,10 @@ ${processRules || '  - MATCH,DIRECT'}
         } else {
           return { success: false, message: 'mihomo 可执行文件不存在: ' + this.mihomoPath };
         }
+      }
+
+      if (generation !== this.lifecycleGeneration || !this.proxyServer.isRunning) {
+        return { success: false, cancelled: true, message: 'TUN 代理增强启动已取消' };
       }
 
       // 检查 wintun.dll
@@ -208,28 +145,47 @@ ${processRules || '  - MATCH,DIRECT'}
       });
 
       this.isRunning = true;
-      // 不发送 tun-status 事件，由 IPC 返回值统一提示（避免重复日志）
+      this.safeIpcSend('tun-status', {
+        type: 'started',
+        message: 'TUN 强制软包模式已启动',
+        running: true
+      });
       return { success: true, message: 'TUN 强制软包模式已启动' };
     } catch (error) {
       this.isRunning = false;
       // 不发送 tun-status 事件，由 IPC 返回值统一提示（避免重复日志）
       return { success: false, message: error.message };
+    } finally {
+      this.isStarting = false;
     }
   }
 
   // 停止 TUN（终止 mihomo 进程）
   stop() {
+    this.lifecycleGeneration += 1;
+    if (this.isStarting && this.resourceDownloader) {
+      this.resourceDownloader.abort('tun');
+    }
+
     if (!this.isRunning || !this.mihomoProcess) {
       this.isRunning = false;
-      return { success: true, message: 'TUN 模式未在运行' };
+      return {
+        success: true,
+        cancelled: this.isStarting,
+        message: this.isStarting ? 'TUN 代理增强启动已取消' : 'TUN 模式未在运行'
+      };
     }
 
     try {
       this.mihomoProcess.kill();
       this.isRunning = false;
       this.mihomoProcess = null;
-      // 不发送 tun-status 事件，由 IPC 返回值统一提示（避免重复日志）
-      // close 事件处理器检查 isRunning=false，不会重复通知
+      this.safeIpcSend('tun-status', {
+        type: 'stopped',
+        message: 'TUN 强制软包模式已停止',
+        running: false
+      });
+      // close 事件处理器检查 isRunning=false，不会重复通知。
       return { success: true, message: 'TUN 强制软包模式已停止' };
     } catch (error) {
       return { success: false, message: error.message };
@@ -250,6 +206,7 @@ ${processRules || '  - MATCH,DIRECT'}
   getStatus() {
     return {
       running: this.isRunning,
+      starting: this.isStarting,
       selectedProcesses: this.getSelectedProcesses()
     };
   }

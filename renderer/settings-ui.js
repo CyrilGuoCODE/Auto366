@@ -1,7 +1,9 @@
 class SettingsUI {
-  constructor(state, logManager) {
+  constructor(state, logManager, proxyEnhancement) {
     this.state = state;
     this.logManager = logManager;
+    this.proxyEnhancement = proxyEnhancement;
+    this._tunRunning = false;
     this._clearBtnLongPressTimer = null;
     this._clearBtnClosingState = false;
     this._clearBtnMouseDown = false;
@@ -538,11 +540,12 @@ class SettingsUI {
 
       // 加载本地进程列表（默认 up366.exe 启用）
       this._tunProcesses = this._loadTunProcesses();
+      tunToggle.checked = this.proxyEnhancement.isEnabled();
 
-      // 从主进程同步当前状态
+      // 从主进程同步实际运行状态；复选框只表示用户的增强偏好。
       try {
         const status = await window.electronAPI.getTunStatus();
-        tunToggle.checked = !!status.running;
+        this._tunRunning = !!status.running;
         if (Array.isArray(status.selectedProcesses) && status.selectedProcesses.length > 0) {
           // 用主进程返回的列表覆盖本地（主进程为权威来源）
           this._tunProcesses = this._mergeTunProcesses(this._tunProcesses, status.selectedProcesses);
@@ -559,20 +562,19 @@ class SettingsUI {
         const enabled = tunToggle.checked;
         try {
           tunToggle.disabled = true;
-          const result = enabled
-            ? await window.electronAPI.startTun()
-            : await window.electronAPI.stopTun();
+          const result = await this.proxyEnhancement.setEnabled(enabled);
           if (!result.success) {
-            this.logManager.addErrorLog(`TUN ${enabled ? '启动' : '停止'}失败: ${result.message}`);
-            tunToggle.checked = !enabled;
+            this.logManager.addErrorLog(`TUN 代理增强${enabled ? '启用' : '关闭'}失败: ${result.message}`);
+            tunToggle.checked = this.proxyEnhancement.isEnabled();
           } else {
-            this.logManager.addSuccessLog(result.message);
-            // 通知控制栏按钮同步状态
-            document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running: enabled } }));
+            this._tunRunning = !!result.running;
+            this.logManager.addSuccessLog(result.message || (enabled
+              ? 'TUN 代理增强已启用'
+              : 'TUN 代理增强已关闭'));
           }
         } catch (error) {
-          this.logManager.addErrorLog(`TUN 操作失败: ${error.message}`);
-          tunToggle.checked = !enabled;
+          this.logManager.addErrorLog(`TUN 代理增强操作失败: ${error.message}`);
+          tunToggle.checked = this.proxyEnhancement.isEnabled();
         } finally {
           tunToggle.disabled = false;
           this._updateTunStatusText();
@@ -588,15 +590,6 @@ class SettingsUI {
           this._handleTunStatusChange(data);
         });
       }
-
-      // 监听控制栏触发的 TUN 状态变化，同步复选框
-      document.addEventListener('tun-state-changed', (e) => {
-        const running = e.detail.running;
-        if (tunToggle.checked !== running) {
-          tunToggle.checked = running;
-          this._updateTunStatusText();
-        }
-      });
 
       // 监听 TUN 依赖下载进度（资源缺失时自动触发）
       this._tunDownloadAnchor = tunToggle.closest('.setting-item');
@@ -801,11 +794,14 @@ class SettingsUI {
     const statusEl = document.getElementById('tunStatusText');
     if (!statusEl) return;
     const toggle = document.getElementById('tunModeEnabled');
-    const running = toggle && toggle.checked;
-    if (running) {
+    const enabled = !!(toggle && toggle.checked);
+    if (this._tunRunning) {
       const enabledNames = this._tunProcesses.filter((p) => p.enabled).map((p) => p.name);
-      statusEl.textContent = `运行中，已重定向进程: ${enabledNames.join(', ') || '无'}`;
+      statusEl.textContent = `代理增强运行中，已重定向进程: ${enabledNames.join(', ') || '无'}`;
       statusEl.className = 'tun-processes__status tun-processes__status--running';
+    } else if (enabled) {
+      statusEl.textContent = '已启用，将在代理启动时自动生效';
+      statusEl.className = 'tun-processes__status tun-processes__status--stopped';
     } else {
       statusEl.textContent = '未启用';
       statusEl.className = 'tun-processes__status tun-processes__status--stopped';
@@ -814,30 +810,17 @@ class SettingsUI {
 
   // 处理主进程状态变化
   _handleTunStatusChange(data) {
-    const toggle = document.getElementById('tunModeEnabled');
-    if (!toggle) return;
-
-    let running = null;
     if (data.type === 'started') {
-      toggle.checked = true;
-      running = true;
-      this.logManager.addSuccessLog(data.message || 'TUN 强制软包模式已启动');
+      this._tunRunning = true;
     } else if (data.type === 'stopped') {
-      toggle.checked = false;
-      running = false;
-      this.logManager.addInfoLog(data.message || 'TUN 强制软包模式已停止');
+      this._tunRunning = false;
     } else if (data.type === 'error') {
       this.logManager.addErrorLog(data.message || 'TUN 错误');
       if (data.running === false) {
-        toggle.checked = false;
-        running = false;
+        this._tunRunning = false;
       }
     }
     this._updateTunStatusText();
-    // 通知控制栏按钮同步状态（仅在主进程主动通知的意外状态变化时）
-    if (running !== null) {
-      document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running } }));
-    }
   }
 
   // 处理清理缓存

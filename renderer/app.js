@@ -13,17 +13,23 @@ import AgreementUI from './agreement-ui.js';
 import SpeedUI from './speed-ui.js';
 import ThemeUI from './theme-ui.js';
 import TtsApprovalUI from './tts-approval-ui.js';
+import ProxyEnhancement from './proxy-enhancement.mjs';
 
 class Auto366App {
   constructor() {
     this.state = new StateManager();
     this.logManager = new LogManager(this.state);
     this.eventManager = new EventManager(this.state);
-    this.proxyUI = new ProxyUI(this.state, this.logManager);
+    this.proxyEnhancement = new ProxyEnhancement({
+      getProxyRunning: () => this.state.isProxyRunning,
+      api: window.electronAPI,
+      storage: window.localStorage
+    });
+    this.proxyUI = new ProxyUI(this.state, this.logManager, this.proxyEnhancement);
     this.answersUI = new AnswersUI(this.state, this.logManager);
     this.rulesUI = new RulesUI(this.state, this.logManager);
     this.communityUI = new CommunityUI(this.state, this.logManager);
-    this.settingsUI = new SettingsUI(this.state, this.logManager);
+    this.settingsUI = new SettingsUI(this.state, this.logManager, this.proxyEnhancement);
     this.fileUI = new FileUI(this.state, this.logManager);
     this.tutorialUI = new TutorialManager(this.state, this.logManager);
     this.agreementUI = new AgreementUI();
