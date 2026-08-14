@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习页自动听力RC
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.7
 // @description  学习页听后选择题自动作答：题干文本匹配答案，自动/手动翻页遍历全卷，点击选项内容元素；支持时间修改与控分，答案数≠题目数时可手动清洗答案
 // @match        *://*/*
 // @grant        none
@@ -80,6 +80,10 @@
             .replace(/[\u201C\u201D]/g, '"')
             .replace(/\s+/g, ' ')
             .trim();
+    }
+
+    function sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
     }
 
     function escapeHtml(str) {
@@ -267,7 +271,8 @@
     // ==========================================
 
     // 扫描当前 DOM 中的题目容器，把新题加入 state.questions（按题干去重）
-    function collectQuestions() {
+    // silent=true 时不输出采集日志（逐页重建时避免刷屏）
+    function collectQuestions(silent) {
         const containers = document.querySelectorAll('.u3-question-container');
         let added = 0;
         containers.forEach((qc, idx) => {
@@ -300,7 +305,7 @@
             state.questions.push({ number, text, key, options });
             added++;
         });
-        if (added > 0) addLog(`采集到 ${added} 道新题，累计 ${state.questions.length} 道`, 'success');
+        if (added > 0 && !silent) addLog(`采集到 ${added} 道新题，累计 ${state.questions.length} 道`, 'success');
         return added;
     }
 
@@ -346,10 +351,56 @@
     // 填答（点击选项内容元素，串行 200ms 间隔）
     // ==========================================
 
+    // 按题干重新定位题目容器（容器可能被 Vue 重建导致引用失效）
+    function findQuestionContainer(key) {
+        const containers = document.querySelectorAll('.u3-question-container');
+        for (const qc of containers) {
+            const ce = qc.querySelector('.u3-question-container__ques-content');
+            if (!ce) continue;
+            const c = ce.cloneNode(true);
+            c.querySelectorAll('.u3-choice, .u3-choice__question--options--option').forEach(el => el.remove());
+            if (normalizeText(c.textContent) === key) return qc;
+        }
+        return null;
+    }
+
+    // 在题目容器内按标记(A/B/C)或内容重新定位可点击的选项内容元素
+    function resolveOptionEl(q, opt) {
+        const qc = findQuestionContainer(q.key);
+        if (!qc) return null;
+        const optEls = qc.querySelectorAll('.u3-option');
+        for (const oe of optEls) {
+            const label = oe.querySelector('.u3-option__label');
+            if (label && normalizeText(label.textContent) === opt.mark) {
+                const ce = oe.querySelector('.u3-option__content');
+                return ce || oe;
+            }
+        }
+        for (const oe of optEls) {
+            const ce = oe.querySelector('.u3-option__content');
+            if (ce && normalizeText(ce.textContent) === opt.content) return ce;
+        }
+        return null;
+    }
+
+    // 确认选项元素当前可点击（引用失效时重新定位），并回写缓存
+    function isClickable(q, opt) {
+        let el = opt._contentElement;
+        if (!el || !document.contains(el)) {
+            el = resolveOptionEl(q, opt);
+            if (el) opt._contentElement = el;
+        }
+        return !!el && document.contains(el);
+    }
+
     function clickOption(opt, q, mode) {
-        const contentEl = opt._contentElement;
+        let contentEl = opt._contentElement;
         if (!contentEl || !document.contains(contentEl)) {
-            addLog(`[填答] #${q.number} 无可点击内容元素`, 'warn');
+            contentEl = resolveOptionEl(q, opt);
+            if (contentEl) opt._contentElement = contentEl;
+        }
+        if (!contentEl || !document.contains(contentEl)) {
+            // 容器尚未渲染/已销毁：静默失败，由 fillVisible 汇总并在后续轮询重试
             return false;
         }
         try {
@@ -367,36 +418,48 @@
         }
     }
 
-    // 填答当前未填答的题目：有匹配答案的按控分预算随机部分答错，未匹配的跳过
+    // 填答当前未填答的题目：有匹配答案的按控分预算随机部分答错，无匹配的跳过，
+    // 元素当前不可定位的（容器未渲染）本轮不动，等后续轮询重试
     async function fillVisible() {
         const pending = state.questions.filter(q => !q._filled);
         if (pending.length === 0) return 0;
 
+        // 无匹配答案的题永久跳过
+        let skipped = 0;
+        pending.forEach(q => {
+            if (!q.options.some(o => o._isCorrect)) { q._filled = 'skipped'; skipped++; }
+        });
+
         const matched = pending.filter(q => q.options.some(o => o._isCorrect));
         if (matched.length === 0) {
-            pending.forEach(q => { q._filled = 'skipped'; });
-            addLog('[填答] 当前题目均无匹配答案，跳过', 'warn');
-            renderFillSection();
+            if (skipped > 0) { renderFillSection(); renderQuestions(); }
             return 0;
         }
 
-        // 从匹配题中随机选 剩余控分预算 道答错
+        // 只填当前可定位元素的题
+        const ready = matched.filter(q => {
+            const opt = q.options.find(o => o._isCorrect);
+            return opt && isClickable(q, opt);
+        });
+        if (ready.length === 0) return 0;
+
+        // 从可填题中随机选 剩余控分预算 道答错
         const budget = Math.max(0, state.targetWrongCount - state.filledWrong);
-        const shuffled = [...matched].sort(() => Math.random() - 0.5);
+        const shuffled = [...ready].sort(() => Math.random() - 0.5);
         const wrongKeys = new Set(shuffled.slice(0, budget).map(q => q.key));
 
-        let filled = 0, wrongFilled = 0, skipped = 0;
-        for (const q of pending) {
+        let filled = 0, wrongFilled = 0;
+        for (const q of ready) {
             const isWrong = wrongKeys.has(q.key);
             const opt = isWrong ? q.options.find(o => !o._isCorrect) : q.options.find(o => o._isCorrect);
             if (!opt) { q._filled = 'skipped'; skipped++; continue; }
             if (clickOption(opt, q, isWrong ? 'wrong' : 'correct')) {
                 q._filled = isWrong ? 'wrong' : true;
                 if (isWrong) { state.filledWrong++; wrongFilled++; } else { filled++; }
-            } else { q._filled = 'skipped'; skipped++; }
+            } else { skipped++; }
             await new Promise(r => setTimeout(r, 200));
         }
-        addLog(`[填答] 本批完成：答对 ${filled} / 答错 ${wrongFilled} / 跳过 ${skipped}`, (filled + wrongFilled) > 0 ? 'success' : 'warn');
+        addLog(`[填答] 本批完成：答对 ${filled} / 答错 ${wrongFilled} / 跳过 ${skipped}${ready.length < matched.length ? '，另有 ' + (matched.length - ready.length) + ' 题等待渲染' : ''}`, (filled + wrongFilled) > 0 ? 'success' : 'warn');
         renderFillSection();
         renderQuestions();
         return filled + wrongFilled;
@@ -443,7 +506,7 @@
         }
     }
 
-    // 采集当前 DOM 题目并匹配答案（被动解析，供"解析题目"按钮与自动填答复用）
+    // 采集当前 DOM 题目并匹配答案（被动解析，供翻页后与自动填答复用）
     function collectAndMatch() {
         const added = collectQuestions();
         if (added > 0 || Object.keys(state.answerIndex).length === 0) matchAnswers();
@@ -451,6 +514,39 @@
         renderQuestions();
         updateScorePreview();
         return state.questions.length;
+    }
+
+    // 逐页重建：翻到第一页，逐页采集题目直到最后一页，再按题号排序展示
+    async function rebuildAll() {
+        const sw = getSwiper();
+        if (!sw) { addLog('未找到 swiper 实例，无法逐页重建', 'warn'); return; }
+
+        const btn = document.getElementById('a366-parse-btn');
+        if (btn) btn.disabled = true;
+        addLog('开始逐页重建：翻到第一页逐页采集题目...', 'info');
+
+        state.questions = [];
+        sw.slideTo(0);
+        await sleep(500);
+
+        let guard = 0;
+        const maxPages = (sw.slides ? sw.slides.length : 30) + 5;
+        while (guard < maxPages) {
+            collectQuestions(true);
+            if (sw.isEnd) break;
+            sw.slideNext();
+            await sleep(500);
+            guard++;
+        }
+        collectQuestions(true); // 最后一页兜底
+
+        matchAnswers();
+        renderFillSection();
+        renderQuestions();
+        updateScorePreview();
+        updatePageInfo();
+        if (btn) btn.disabled = false;
+        addLog(`逐页重建完成：共采集 ${state.questions.length} 题`, 'success');
     }
 
     // ==========================================
@@ -499,15 +595,13 @@
     }
 
     // ==========================================
-    // 自动填答（持续监控：新题渲染出来自动解析并填答，页内题填完后自动翻页）
-    // ==========================================
-
+    // 自动填答：翻到第一页，逐页采集→填答，直到最后一页（每页重新按控分预算随机选错题）
     async function startAutoFill() {
         if (state.autoFillRunning) { stopAutoFill(); return; }
         state.autoFillRunning = true;
         const btn = document.getElementById('a366-auto-fill-all');
         if (btn) { btn.textContent = '停止填答'; btn.style.background = 'var(--a366-danger)'; }
-        addLog('━━━━ 自动填答开始（持续监控新题） ━━━━', 'info');
+        addLog('━━━━ 自动填答开始（翻到第一页逐页作答） ━━━━', 'info');
 
         if (state.answerList.length === 0) {
             await fetchAnswers();
@@ -518,46 +612,43 @@
             }
         }
 
-        collectAndMatch();
-        updatePageInfo();
-        await fillVisible();
+        // 新一轮：重置控分执行状态与题目填答状态，重新匹配
+        state.filledWrong = 0;
+        state.questions.forEach(q => { delete q._filled; });
+        matchAnswers(true);
+        renderFillSection();
+        renderQuestions();
 
-        state.autoFillTimer = setInterval(async () => {
-            if (state.filling) return;
-            state.filling = true;
-            try {
-                const added = collectQuestions();
-                if (added > 0) { matchAnswers(); renderFillSection(); renderQuestions(); }
-                await fillVisible();
-                updatePageInfo();
-                // 翻页条件：DOM 中所有题目容器均已采集且填答（防止跳过刚渲染的新题）
-                const containers = document.querySelectorAll('.u3-question-container');
-                const allHandled = Array.from(containers).every(qc => {
-                    const ce = qc.querySelector('.u3-question-container__ques-content');
-                    if (!ce) return true;
-                    const c = ce.cloneNode(true);
-                    c.querySelectorAll('.u3-choice, .u3-choice__question--options--option').forEach(el => el.remove());
-                    const key = normalizeText(c.textContent);
-                    const q = state.questions.find(qq => qq.key === key);
-                    return q && q._filled;
-                });
-                const sw = getSwiper();
-                if (sw && allHandled) {
-                    if (!sw.isEnd) {
-                        sw.slideNext();
-                        updatePageInfo();
-                        addLog(`当前页已填完，自动翻到第 ${sw.activeIndex + 1} 页`, 'info');
-                    } else {
-                        stopAutoFill();
-                        addLog('已到最后一页，全卷填答完成', 'success');
-                    }
-                }
-            } catch (e) {
-                addLog('自动填答异常: ' + e.message, 'error');
-            } finally {
-                state.filling = false;
-            }
-        }, 800);
+        // 翻到第一页
+        const sw = getSwiper();
+        if (!sw) {
+            stopAutoFill();
+            addLog('未找到 swiper 实例，无法逐页作答', 'error');
+            return;
+        }
+        sw.slideTo(0);
+        await sleep(500);
+
+        let guard = 0;
+        const maxPages = (sw && sw.slides ? sw.slides.length : 30) + 5;
+        while (state.autoFillRunning) {
+            collectQuestions(true);
+            matchAnswers();
+            renderFillSection();
+            renderQuestions();
+            updatePageInfo();
+            await fillVisible();
+            if (!sw || sw.isEnd) break;
+            sw.slideNext();
+            updatePageInfo();
+            await sleep(500);
+            guard++;
+            if (guard >= maxPages) { addLog('逐页作答超过最大页数，停止', 'warn'); break; }
+        }
+        if (state.autoFillRunning) {
+            stopAutoFill();
+            addLog('已到最后一页，全卷填答完成', 'success');
+        }
     }
 
     function stopAutoFill() {
@@ -649,7 +740,7 @@
         document.getElementById('a366-dev-btn').addEventListener('click', toggleDevPanel);
         document.getElementById('a366-minimize').addEventListener('click', toggleCollapse);
         document.getElementById('a366-auto-fill-all').addEventListener('click', () => { startAutoFill(); });
-        document.getElementById('a366-parse-btn').addEventListener('click', collectAndMatch);
+        document.getElementById('a366-parse-btn').addEventListener('click', () => { rebuildAll(); });
         document.getElementById('a366-page-prev').addEventListener('click', goPrevPage);
         document.getElementById('a366-page-next').addEventListener('click', goNextPage);
         document.getElementById('a366-score-btn').addEventListener('click', () => {
@@ -857,7 +948,8 @@
     function renderQuestions() {
         const tabContainer = document.getElementById('a366-dev-tab-questions');
         if (!tabContainer) return;
-        const questions = state.questions;
+        // 按题号顺序展示（state.questions 保持采集顺序，仅显示排序）
+        const questions = [...state.questions].sort((a, b) => a.number - b.number);
         if (questions.length === 0) {
             tabContainer.innerHTML = `<div style="font-size:11px;color:var(--a366-text-muted);text-align:center;padding:20px;">获取答案后将自动解析题目，或点击主面板"解析题目"</div>`;
             return;
@@ -1078,7 +1170,7 @@
     function boot() {
         createUI();
         FillTimeMod.install();
-        addLog('学习页规则集 v1.5 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
+        addLog('学习页规则集 v1.7 · bucket ' + BUCKET_URL + (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
     }
 
     if (document.readyState === 'loading') {
