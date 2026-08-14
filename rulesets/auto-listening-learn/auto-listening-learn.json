@@ -1,0 +1,11 @@
+[
+  {
+    "name": "动态注入",
+    "type": "zip-implant-dynamic",
+    "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
+    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
+    "targetFileName": "Pc.zip",
+    "injectScript": "auto-listening-learn.js",
+    "downloadTimeout": 30000
+  }
+]
