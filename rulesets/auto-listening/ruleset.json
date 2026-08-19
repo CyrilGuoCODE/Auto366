@@ -1,6 +1,6 @@
 {
   "name": "内置-自动听力",
-  "description": "自动识别听力类型，并自动作答",
+  "description": "自动识别听力类型，并自动作答(现已支持初中高中两种听说类型)",
   "compatible": false,
   "version": 10
 }

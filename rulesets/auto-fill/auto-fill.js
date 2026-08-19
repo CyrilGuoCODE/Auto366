@@ -1,30 +1,156 @@
+/*
+ * auto-fill.js
+ * 整合自 auto-fill-once.js 的代码：事件驱动翻页流水线 + 控分(错题) + 跟读朗读播放模式切换。
+ *
+ * 跟读朗读播放模式（控制面板可切换，localStorage 'readAlongPlayMode' 持久化）：
+ *   - once   : audioSource.loop = false，录音等待 = 0.5s + audioDuration + 0.5s
+ *   - loop   : audioSource.loop = true， 录音等待 = audioDuration * 2
+ * 默认 once（单次播放）。
+ */
+
+function a366BucketOrigin() {
+    if (window.__A366__ && window.__A366__.bucket) return window.__A366__.bucket;
+    return 'http://127.0.0.1:5290';
+}
+
+// 跟读朗读播放模式: 'once'(单次) / 'loop'(循环)。默认单次播放。
+let readAlongPlayMode = localStorage.getItem('readAlongPlayMode') === 'loop' ? 'loop' : 'once';
+
+// ===== 跟读朗读音轨劫持：全局单例 + 世代(epoch) 管理 =====
+// 整场自动填答期间复用同一个 AudioContext/stream 与双层劫持，
+// 避免每轮新建/关闭导致"停止后再开始 / 一开始"劫持失效。
+let _afCtx = null;
+let _afGain = null;
+let _afDest = null;
+let _afStream = null;
+let _afOurTracks = null;
+let _afHijacked = false;
+let _afBlockedCount = 0;
+let _afEpoch = 0;         // start/stop 时自增，标记"世代"
+let _afRunningEpoch = 0;  // 当前这轮 handleReadAlongQuestions 进入时的世代
+let _origReadAlongGum = null;
+let _origReadAlongStop = null;
+let _origReadAlongProtoGum = null;
+
+function isOurHijack(fn) {
+    return !!(fn && typeof fn === 'function' && fn.__a366Hijacked__);
+}
+
+// 确保 AudioContext 处于 running（resume 失败不阻塞，避免假音轨无声）
+async function ensureCtxRunning() {
+    if (!_afCtx) return;
+    if (_afCtx.state === 'suspended') {
+        try {
+            await Promise.race([_afCtx.resume(), new Promise(r => setTimeout(r, 800))]);
+        } catch (e) {}
+    }
+}
+
+// 重建全局假音轨（AudioContext + MediaStreamDestination）
+function buildFakeStream() {
+    _afCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _afGain = _afCtx.createGain();
+    _afGain.gain.value = 1.0;
+    _afDest = _afCtx.createMediaStreamDestination();
+    _afGain.connect(_afDest);
+    _afStream = _afDest.stream;
+    _afOurTracks = new Set(_afStream.getAudioTracks());
+}
+
+// 创建/复用全局假音轨，并自检重装劫持（实例 + 原型 + stop 三保险）。
+// 可随时重复调用：上下文被关/音轨已 ended 会整组重建，任一劫持丢失会补装。
+async function ensureReadAlongHijack() {
+    const ctxDead = !_afCtx || _afCtx.state === 'closed';
+    const tracksEnded = _afOurTracks && _afOurTracks.size > 0
+        && [..._afOurTracks].some(t => t.readyState === 'ended');
+    if (ctxDead || tracksEnded) {
+        if (_afCtx && _afCtx.state !== 'closed') { try { _afCtx.close(); } catch (e) {} }
+        buildFakeStream();
+        _afHijacked = false;
+    }
+
+    await ensureCtxRunning();
+
+    // 自检：实例 / 原型 / stop 任一丢失 __a366Hijacked__ 标记（被页面/前一轮还原）就补装
+    const instHijacked = !!(navigator.mediaDevices && isOurHijack(navigator.mediaDevices.getUserMedia));
+    const protoHijacked = !!(window.MediaDevices && MediaDevices.prototype && isOurHijack(MediaDevices.prototype.getUserMedia));
+    const stopHijacked = !!(window.MediaStreamTrack && MediaStreamTrack.prototype && isOurHijack(MediaStreamTrack.prototype.stop));
+
+    if (!instHijacked || !protoHijacked || !stopHijacked || !_afHijacked) {
+        // 重新采集原生实现（跳过我们自己的劫持函数，避免串台/递归）
+        const curInst = navigator.mediaDevices ? navigator.mediaDevices.getUserMedia : null;
+        const curProto = (window.MediaDevices && MediaDevices.prototype) ? MediaDevices.prototype.getUserMedia : null;
+        if (curInst && !isOurHijack(curInst)) _origReadAlongGum = curInst;
+        if (curProto && !isOurHijack(curProto)) _origReadAlongProtoGum = curProto;
+
+        const hijackedGum = async function(constraints) {
+            if (constraints && constraints.audio) return _afStream;
+            // 若页面已把实例换成原生，则用它，否则用保存的原生，避免递归
+            const orig = (this && this.getUserMedia && !isOurHijack(this.getUserMedia))
+                ? this.getUserMedia
+                : (_origReadAlongGum || _origReadAlongProtoGum);
+            if (orig) return orig.call(this, constraints);
+            throw new Error('getUserMedia not supported');
+        };
+        hijackedGum.__a366Hijacked__ = true;
+        if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = hijackedGum;
+        if (window.MediaDevices && MediaDevices.prototype) MediaDevices.prototype.getUserMedia = hijackedGum;
+
+        if (!_origReadAlongStop || isOurHijack(_origReadAlongStop)) {
+            _origReadAlongStop = MediaStreamTrack.prototype.stop;
+        }
+        const hijackedStop = function() {
+            if (_afOurTracks && _afOurTracks.has(this)) {
+                _afBlockedCount++;
+                console.log('[auto-fill] 阻止 track.stop() #' + _afBlockedCount);
+                addLogMessage('跟读朗读: 阻止组件 stop track #' + _afBlockedCount, 'info');
+                return; // 不真正 stop，保持 track live
+            }
+            return _origReadAlongStop.call(this);
+        };
+        hijackedStop.__a366Hijacked__ = true;
+        MediaStreamTrack.prototype.stop = hijackedStop;
+
+        _afHijacked = true;
+    }
+    return { ctx: _afCtx, gain: _afGain, stream: _afStream, ourTracks: _afOurTracks };
+}
+
+// 停止时还原劫持并关闭全局 AudioContext
+function stopReadAlongHijack() {
+    if (_afHijacked) {
+        if (!isOurHijack(_origReadAlongGum) && _origReadAlongGum && navigator.mediaDevices) navigator.mediaDevices.getUserMedia = _origReadAlongGum;
+        if (!isOurHijack(_origReadAlongProtoGum) && _origReadAlongProtoGum && window.MediaDevices && MediaDevices.prototype) MediaDevices.prototype.getUserMedia = _origReadAlongProtoGum;
+        if (!isOurHijack(_origReadAlongStop) && _origReadAlongStop) MediaStreamTrack.prototype.stop = _origReadAlongStop;
+    }
+    _afHijacked = false;
+    if (_afOurTracks && _origReadAlongStop && !isOurHijack(_origReadAlongStop)) {
+        for (const t of _afOurTracks) { try { _origReadAlongStop.call(t); } catch (e) {} }
+    }
+    if (_afCtx && _afCtx.state !== 'closed') { try { _afCtx.close(); } catch (e) {} }
+    _afCtx = null; _afGain = null; _afDest = null; _afStream = null; _afOurTracks = null;
+}
+
 let answers = [];
 let bucketLoaded = false;
 let bucketError = null;
 let autoFillIntervalId = null;
 let autoFillDelay = 200;
 let autoFillPanel = null;
-let customBucketUrl = localStorage.getItem('customFillBucketUrl') || '';  // 自定义词库URL
-
-// bucket 端口用户可以改；代理层在注入脚本时把真实地址写进 window.__A366__。
-// 注意不能读 localStorage —— 注入脚本跑在 up366 页面的 origin 下，
-// 跟主程序窗口不是同一个存储区，主程序写进去的值这里根本看不到。
-function a366BucketOrigin() {
-    if (window.__A366__ && window.__A366__.bucket) return window.__A366__.bucket;
-    return 'http://127.0.0.1:5290';
-}
-let logPanel = null;  // 日志面板
-let logMessages = [];  // 日志消息数组
+let customBucketUrl = localStorage.getItem('customFillBucketUrl') || '';
+let logPanel = null;
+let logMessages = [];
 let contentMatchMode = localStorage.getItem('contentMatchMode') === 'true' || false;
 let supportChoiceQuestions = localStorage.getItem('supportChoiceQuestions') === 'true' || false;
 let supportReadAlong = localStorage.getItem('supportReadAlong') === 'true' || false;
 let isReadAlongProcessing = false;
-let readAlongAborted = false;  // 跟读朗读中断标志
+let isWorking = false; // 单执行链重入锁：上一轮 work()（含翻页动画等待）未结束时不允许重入
+let readAlongAborted = false;
 let rawAnswerData = [];
 let elementAnswerMap = new Map();
-const LOG_ROW_HEIGHT = 22;  // 虚拟滚动行高
+const LOG_ROW_HEIGHT = 22;
 
-// ===== 时间修改（参考 auto-pk / auto-listening，对应本地代理 /fill-time 端点）=====
+// ===== 时间修改 =====
 let fillTimeModEnabled = localStorage.getItem('fillTimeModEnabled') === 'true';
 let fillTimeModSeconds = (function() {
     var raw = localStorage.getItem('fillTimeModSeconds');
@@ -34,6 +160,16 @@ let fillTimeModSeconds = (function() {
 })();
 const FILL_TIME_INT32_MIN = -2147483648;
 const FILL_TIME_INT32_MAX = 2147483647;
+
+// ===== 控分功能：设定错题数量，随机选中题目填入其他题目的答案 =====
+let fillScoreControlEnabled = localStorage.getItem('fillScoreControlEnabled') === 'true';
+let fillScoreControlWrongCount = (function() {
+    var raw = localStorage.getItem('fillScoreControlWrongCount');
+    if (raw === null || raw === '') return 0;
+    var v = parseInt(raw, 10);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+})();
+let wrongQuestionSet = new Set(); // 本轮随机选中的错题题号（1-based）
 
 function loadBucketFromServer() {
     try {
@@ -136,11 +272,8 @@ function loadBucketFromServer() {
                     answers.push(answerMap.get(key));
                 }
 
-                // 将多空题数据存储到全局变量
                 window.multiAnswerMap = multiAnswerMap;
                 window.elementAnswerMap = elementAnswerMap;
-
-                // 题号→答案映射表（用于选择题题号精确匹配）
                 window.questionNumAnswerMap = answerMap;
 
                 bucketLoaded = true;
@@ -162,8 +295,16 @@ function loadBucketFromServer() {
                 addLogMessage('内容匹配模式: ' + (contentMatchMode ? '已启用' : '已禁用'), 'info');
                 addLogMessage('支持选择题: ' + (supportChoiceQuestions ? '已启用' : '已禁用'), 'info');
                 addLogMessage('支持跟读朗读: ' + (supportReadAlong ? '已启用' : '已禁用'), 'info');
+                addLogMessage('跟读朗读播放模式: ' + (readAlongPlayMode === 'once' ? '单次播放' : '循环播放'), 'info');
+
+                // 答案库加载后重建控分计划（若已启用控分）
+                if (fillScoreControlEnabled && fillScoreControlWrongCount > 0 && autoFillIntervalId) {
+                    buildWrongPlan(answers.length || rawAnswerData.length);
+                    if (wrongQuestionSet.size > 0) {
+                        addLogMessage(`[控分] 答案库已加载，随机错 ${wrongQuestionSet.size} 题: 题号 [${[...wrongQuestionSet].sort((a, b) => a - b).join(', ')}]`, 'info');
+                    }
+                }
                 console.log('填空答案库加载成功，共' + answers.length + '个题目');
-                console.log('多空题数据:', multiAnswerMap);
             })
             .catch(err => {
                 bucketLoaded = false;
@@ -211,8 +352,6 @@ function calculateTextSimilarity(text1, text2) {
     if (c1 === c2) return 100;
     if (!c1 || !c2) return 0;
 
-    // 子串匹配：当一个文本是另一个的子串时，给予高分
-    // 解决英文题干→中文答案、中文题干→英文答案的长度差异问题
     const shorter = c1.length <= c2.length ? c1 : c2;
     const longer = c1.length <= c2.length ? c2 : c1;
     if (shorter.length >= 3) {
@@ -232,35 +371,22 @@ function calculateTextSimilarity(text1, text2) {
     return editSim + wordSim;
 }
 
-// 用题面文本匹配答案库中的答案文本（而非题面匹配题面）
 function findAnswerByReadText(readText) {
     if (!rawAnswerData || rawAnswerData.length === 0) return null;
     const normalizedRead = readText.trim().toLowerCase();
     let bestMatch = null;
     let bestScore = 0;
 
-    // 调试：输出答案库内容
-    console.log('[auto-fill] findAnswerByReadText: readText="' + readText + '", rawAnswerData.length=' + rawAnswerData.length);
-    rawAnswerData.forEach((item, index) => {
-        const answerText = (item.answer || '').trim();
-        console.log('[auto-fill]   [' + index + '] answer="' + answerText + '" questionText="' + (item.questionText || '') + '"');
-    });
-
-    rawAnswerData.forEach((item, index) => {
+    rawAnswerData.forEach((item) => {
         const answerText = (item.answer || '').trim();
         const normalizedAnswer = answerText.toLowerCase();
         let score = 0;
 
-        // 1. 精确匹配
         if (normalizedRead === normalizedAnswer) {
             score = 100;
-        }
-        // 2. 答案包含在题面中 或 题面包含在答案中
-        else if (normalizedAnswer.length > 0 && (normalizedRead.includes(normalizedAnswer) || normalizedAnswer.includes(normalizedRead))) {
+        } else if (normalizedAnswer.length > 0 && (normalizedRead.includes(normalizedAnswer) || normalizedAnswer.includes(normalizedRead))) {
             score = Math.min(normalizedRead.length, normalizedAnswer.length) / Math.max(normalizedRead.length, normalizedAnswer.length) * 90;
-        }
-        // 3. 相似度匹配
-        else {
+        } else {
             score = calculateTextSimilarity(readText, answerText);
         }
 
@@ -269,13 +395,12 @@ function findAnswerByReadText(readText) {
             bestMatch = {
                 answer: answerText,
                 similarity: score,
-                index: index,
+                index: item.index,
                 answerIndex: item.answerIndex,
                 questionNum: item.questionNum
             };
         }
     });
-    console.log('[auto-fill] findAnswerByReadText: bestMatch=', bestMatch);
     return bestMatch;
 }
 
@@ -290,7 +415,7 @@ function findAnswerByContent(questionText) {
     rawAnswerData.forEach((item, index) => {
         const matchText = item.questionText || item.question || '';
         const similarity = calculateTextSimilarity(questionText, matchText);
-        if (similarity > bestScore && similarity > 60) { // 提高最低相似度阈值到60%
+        if (similarity > bestScore && similarity > 60) {
             bestScore = similarity;
             let questionNum = 0;
             if (item.question && typeof item.question === 'string') {
@@ -311,7 +436,6 @@ function findAnswerByContent(questionText) {
     return bestMatch;
 }
 
-// 选择题自动选择：遍历所有选项，匹配答案文本后点击
 async function fillChoiceQuestions() {
     let filledCount = 0;
 
@@ -319,7 +443,6 @@ async function fillChoiceQuestions() {
     addLogMessage(`选择题检测: 找到 ${optionElements.length} 个选项元素`, 'info');
     if (optionElements.length === 0) return 0;
 
-    // 按题目分组：从第一个未分组的选项开始，向上找最低的包含>=2个选项的祖先作为容器
     const questionContainers = [];
     const assignedOptions = new Set();
 
@@ -366,23 +489,19 @@ async function fillChoiceQuestions() {
         const options = container.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img');
         if (options.length === 0) continue;
 
-        // 获取题号（多层回退检测）
         let questionNum = 0;
-        // 方法1: 标准题号元素
         const noEl = container.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"]');
         if (noEl) {
             const parsed = parseInt(noEl.textContent.trim());
             if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
         }
-        // 方法2: u3-input__prepared 元素（填空题使用的题号标记）
         if (!questionNum) {
-            const preparedEl = container.querySelector('.u3-input__prepared');
+            const preparedEl = queryPrepared(container);
             if (preparedEl) {
                 const parsed = parseInt(preparedEl.textContent.trim());
                 if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
             }
         }
-        // 方法3: data 属性
         if (!questionNum) {
             const dataNum = container.getAttribute('data-question-no') || container.getAttribute('data-index');
             if (dataNum) {
@@ -390,11 +509,10 @@ async function fillChoiceQuestions() {
                 if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
             }
         }
-        // 方法4: 向上查找父容器中的题号
         if (!questionNum) {
             let parent = container.parentElement;
             for (let up = 0; up < 5 && parent; up++) {
-                const parentNoEl = parent.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared');
+                const parentNoEl = parent.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared, .u3-input__prepead');
                 if (parentNoEl) {
                     const parsed = parseInt(parentNoEl.textContent.trim());
                     if (!isNaN(parsed) && parsed > 0) {
@@ -405,30 +523,24 @@ async function fillChoiceQuestions() {
                 parent = parent.parentElement;
             }
         }
-        // 回退: 使用容器索引
         if (!questionNum) questionNum = qi + 1;
 
-        // 获取题目文本（多层回退），排除选项内的文本
-        // 辅助函数：克隆元素并移除音频播放器等噪音后再取文本
         const getCleanText = (el) => {
             const clone = el.cloneNode(true);
             clone.querySelectorAll('.u3-audioPlayer, [slot*="audio"]').forEach(e => e.remove());
             return clone.textContent.trim();
         };
         let questionText = '';
-        // 方法1: .u3-question-text（排除选项内的）
         const allTextEls = container.querySelectorAll('.u3-question-text');
         for (const textEl of allTextEls) {
             if (textEl.closest('.u3-option__content')) continue;
             questionText = getCleanText(textEl);
             break;
         }
-        // 方法2: .u3-question-stem 或 .u3-stem 或 .u3-choice__question--text
         if (!questionText) {
             const stemEl = container.querySelector('.u3-question-stem, .u3-stem, [class*="question-stem"], .u3-choice__question--text');
             if (stemEl) questionText = getCleanText(stemEl);
         }
-        // 方法3: 向上查找父容器中的题目文本
         if (!questionText) {
             let parent = container.parentElement;
             for (let up = 0; up < 3 && parent; up++) {
@@ -440,17 +552,14 @@ async function fillChoiceQuestions() {
                 parent = parent.parentElement;
             }
         }
-        // 方法4: data 属性
         if (!questionText) {
             questionText = container.getAttribute('data-question-text') || container.getAttribute('data-stem') || '';
         }
 
-        // 收集选项信息：原始文本、清洗文本（去字母前缀）、字母标签
         const optionsData = [];
         let imgOptIndex = 0;
         for (const opt of options) {
             if (opt.classList.contains('u3-option-img')) {
-                // 图片选项：提取文件名，按位置分配字母标签(A=0, B=1, C=2)
                 const img = opt.querySelector('img');
                 const src = img ? (img.getAttribute('src') || '') : '';
                 const filename = src.split('/').pop().split('?')[0];
@@ -470,37 +579,20 @@ async function fillChoiceQuestions() {
         const allChecked = optionsData.every(od => od.element.classList.contains('is-checked'));
         if (allChecked) continue;
 
-        const cleanTextsLower = optionsData.map(od => od.cleanText.replace(/\s+/g, '').toLowerCase());
-
-        // 辅助函数：判断答案文本是否匹配某个选项
-        // answerText: 答案文本（可能短如"scent"，也可能长如"greet the new day with songs"）
-        // optCleanText: 选项清洗后的文本（通常较短，如"scent", "greet", "kingdom"）
         function answerMatchesOption(answerText, optCleanText) {
             const ansLower = answerText.toLowerCase().trim();
             const optLower = optCleanText.toLowerCase().trim();
             const ansClean = ansLower.replace(/\s+/g, '');
             const optClean = optLower.replace(/\s+/g, '');
-
-            // 精确匹配
             if (ansClean === optClean) return true;
-
-            // 答案较短时：答案包含选项（如 "C.beer" → "cbeer" 包含 "beer"）
             if (ansClean.length <= optClean.length + 5 && ansClean.includes(optClean)) return true;
-
-            // 答案比选项长很多时：只有答案以选项文本开头才匹配
-            // 这表示答案是选项的前缀截断（如 "greet" 匹配 "greet the new day with songs"）
-            // 但不会误匹配中间出现的词（如 "scent" 不匹配 "breathe in the sweet scent"）
             if (ansLower.length > optLower.length + 5 && ansLower.startsWith(optLower)) return true;
-
             return false;
         }
 
-        // 辅助函数：从候选项中选择最佳答案
         function pickBestAnswer(candidatesList) {
             if (candidatesList.length === 0) return null;
             if (candidatesList.length === 1) return candidatesList[0].answer;
-
-            // 按相似度降序，相同时优先选更长的答案（更具体的描述，消歧效果更好）
             candidatesList.sort((a, b) => {
                 if (b.score !== a.score) return b.score - a.score;
                 return (b.answer.length || 0) - (a.answer.length || 0);
@@ -508,12 +600,10 @@ async function fillChoiceQuestions() {
             return candidatesList[0].answer;
         }
 
-        // === 策略1: 内容匹配 — 用题目文本在答案库中查找，并验证答案出现在选项中 ===
         let targetAnswer = null;
         let strategyUsed = '';
-        let backendQuestionNum = null;  // 后端题号，用于查 multiAnswerMap
+        let backendQuestionNum = null;
         if (questionText) {
-            // 首先尝试 findAnswerByContent（相似度>60%的最佳匹配）
             const match = findAnswerByContent(questionText);
             if (match) {
                 for (let oi = 0; oi < optionsData.length; oi++) {
@@ -525,7 +615,6 @@ async function fillChoiceQuestions() {
                     }
                 }
             }
-            // 如果最佳匹配的答案不在选项中，遍历所有候选项（相似度>40%）
             if (!targetAnswer) {
                 for (const item of rawAnswerData) {
                     const matchText = item.questionText || item.question || '';
@@ -544,16 +633,11 @@ async function fillChoiceQuestions() {
             }
         }
 
-        // === 策略2: 选项反查 — 严格防止跨题误匹配 ===
-        // 只在以下情况接受候选项：
-        // A) 题目文本存在 且 候选项的题目文本相似度 >= 20%
-        // B) 题目文本不存在 且 答案与选项精确匹配（排除长答案的前缀匹配，防止跨题污染）
         if (!targetAnswer) {
             const candidates = [];
             const hasQText = !!questionText;
             for (const item of rawAnswerData) {
                 if (!item.answer) continue;
-                // 检查答案是否匹配某个选项
                 let matchIndex = -1;
                 for (let oi = 0; oi < optionsData.length; oi++) {
                     if (answerMatchesOption(item.answer, optionsData[oi].cleanText)) {
@@ -564,15 +648,12 @@ async function fillChoiceQuestions() {
                 if (matchIndex === -1) continue;
 
                 if (hasQText) {
-                    // 路径A：题目文本存在时，必须验证相似度 >= 20%
                     const itemQuestionText = item.questionText || item.question || '';
                     if (!itemQuestionText) continue;
                     const score = calculateTextSimilarity(questionText, itemQuestionText);
-                    if (score < 20) continue; // 相似度过低说明是不同题目，拒绝
+                    if (score < 20) continue;
                     candidates.push({ answer: item.answer, score, matchIndex });
                 } else {
-                    // 路径B：题目文本不存在时，只接受精确匹配或短答案包含匹配
-                    // 拒绝长答案的前缀匹配（如 "greet the new day" 不应匹配 "greet"）
                     const itemAns = item.answer.replace(/\s+/g, '').toLowerCase();
                     const optText = optionsData[matchIndex].cleanText.replace(/\s+/g, '').toLowerCase();
                     const isExact = itemAns === optText;
@@ -586,7 +667,6 @@ async function fillChoiceQuestions() {
             if (targetAnswer) strategyUsed = '策略2(选项反查)';
         }
 
-        // === 策略3: 字母标签匹配 — 答案为单字母时直接匹配选项的字母标签 ===
         if (!targetAnswer) {
             for (const item of rawAnswerData) {
                 if (!item.answer) continue;
@@ -602,30 +682,23 @@ async function fillChoiceQuestions() {
             }
         }
 
-        // 如果策略1未设置后端题号，从 rawAnswerData 反查
         if (targetAnswer && !backendQuestionNum) {
             const entry = rawAnswerData.find(item => answerMatchesOption(item.answer, targetAnswer));
             if (entry) backendQuestionNum = entry.questionNum;
         }
 
-        addLogMessage(`选择题 ${questionNum}: 题目="${questionText || '(空)'}", ${strategyUsed ? '策略=' + strategyUsed + ', ' : ''}答案="${targetAnswer || '未找到'}", 后端题号=${backendQuestionNum || '?'}, 选项=[${optionsData.map(od => od.cleanText).join(', ')}]`, 'info');
-
-        // === 收集该题所有正确答案（支持多选题） ===
         let allAnswersForQuestion = [];
-        // 优先用后端题号查 multiAnswerMap（避免 DOM 题号与后端题号不一致）
         const lookupNum = backendQuestionNum || questionNum;
         if (window.multiAnswerMap && window.multiAnswerMap.has(lookupNum)) {
             const multiAnswers = window.multiAnswerMap.get(lookupNum);
             allAnswersForQuestion = multiAnswers.map(a => a.answer).filter(Boolean);
         }
-        // 回退：multiAnswerMap 无数据时使用单选的 targetAnswer
         if (allAnswersForQuestion.length === 0 && targetAnswer) {
             allAnswersForQuestion = [targetAnswer];
         }
 
         if (allAnswersForQuestion.length === 0) continue;
 
-        // === 选择匹配的选项并点击（每个答案匹配一个选项） ===
         let matched = false;
 
         for (const answerText of allAnswersForQuestion) {
@@ -641,12 +714,11 @@ async function fillChoiceQuestions() {
                     addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
                     await wait1(50);
                     matched = true;
-                    break; // 当前答案已匹配，处理下一个答案
+                    break;
                 }
             }
         }
 
-        // 字母回退：未匹配的答案为单字母时按位置选择
         if (!matched) {
             const letterAnswers = allAnswersForQuestion.filter(a => /^[A-Fa-f]$/.test(a.trim()));
             for (const letter of letterAnswers) {
@@ -670,9 +742,8 @@ async function fillChoiceQuestions() {
     return filledCount;
 }
 
-// ===== 跟读朗读题型处理 =====
+// ===== 跟读朗读题型处理（支持单次/循环播放两种模式） =====
 
-// 可中断的 wait：如果 readAlongAborted 被置 true 则立即返回
 function waitInterruptible(ms) {
     return new Promise(resolve => {
         const check = () => { if (readAlongAborted) { resolve(); return; } };
@@ -681,7 +752,6 @@ function waitInterruptible(ms) {
     });
 }
 
-// Vue 兼容的 click：同时派发 mousedown/mouseup/click 事件
 function vueClick(el) {
     if (!el) return;
     const events = ['mousedown', 'mouseup', 'click'];
@@ -690,26 +760,20 @@ function vueClick(el) {
     }
 }
 
-// 等待录音面板出现并获取停止按钮
 async function findStopRecordBtn(parentEl, timeoutMs) {
-    // 录音开始后 Vue 会更新 DOM，panel 从 display:none 变为可见
-    // 需要轮询等待按钮出现且可交互
     const deadline = Date.now() + (timeoutMs || 3000);
     while (Date.now() < deadline) {
-        // 尝试多种选择器：__btn, __btn-circle, __btn-circle-middle
         const btn = parentEl.querySelector('.u3-recorder-panel__btn-circle-middle')
             || parentEl.querySelector('.u3-recorder-panel__btn-circle')
             || parentEl.querySelector('.u3-recorder-panel__btn');
         if (btn && btn.offsetParent !== null) return btn;
         await new Promise(r => setTimeout(r, 100));
     }
-    // 超时后返回最后找到的（即使不可见）
     return parentEl.querySelector('.u3-recorder-panel__btn-circle-middle')
         || parentEl.querySelector('.u3-recorder-panel__btn-circle')
         || parentEl.querySelector('.u3-recorder-panel__btn');
 }
 
-// 使用浏览器 SpeechSynthesis 作为 TTS 回退方案
 function speakWithSpeechSynthesis(text) {
     return new Promise(resolve => {
         const utterance = new SpeechSynthesisUtterance(text);
@@ -721,29 +785,25 @@ function speakWithSpeechSynthesis(text) {
     });
 }
 
-// 跟读朗读题型主处理函数
+// ===== 跟读朗读：复用全局单例劫持（见 ensureReadAlongHijack），按播放模式播放音频 =====
 async function handleReadAlongQuestions() {
     if (!supportReadAlong || !contentMatchMode) return 0;
     if (isReadAlongProcessing) return 0;
 
-    // 检测当前页面是否有跟读题型
     const activeSlide = document.querySelector('.swiper-slide-active');
     if (!activeSlide) return 0;
 
-    // 兼容两种跟读题型容器：.partA_word_repeat（单词跟读）和 .u3-paragraphRepeat（段落跟读/口语跟读）
     const readAlongElements = [
         ...activeSlide.querySelectorAll('.partA_word_repeat'),
         ...activeSlide.querySelectorAll('.u3-paragraphRepeat')
     ];
-    // 去重（同一元素可能被两个选择器同时匹配）
     const uniqueReadAlongEls = [...new Set(readAlongElements)];
     if (uniqueReadAlongEls.length === 0) return 0;
 
-    // 过滤出包含"跟读"、"口语跟读"或"听读"文字的元素
     const readAlongQuestions = [];
     for (const el of uniqueReadAlongEls) {
         const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-        if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读'))) {
+        if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读') || nameEl.textContent.includes('朗读'))) {
             readAlongQuestions.push(el);
         }
     }
@@ -754,7 +814,6 @@ async function handleReadAlongQuestions() {
     readAlongAborted = false;
     let processedCount = 0;
 
-    // 直接从 fill-answer 端点获取原始答案数据（不依赖 rawAnswerData，避免 sourceFile 过滤问题）
     let directAnswers = [];
     try {
         const url = customBucketUrl || (a366BucketOrigin() + '/fill-answer');
@@ -764,7 +823,6 @@ async function handleReadAlongQuestions() {
             if (Array.isArray(data)) {
                 for (let i = 0; i < data.length; i++) {
                     const item = data[i];
-                    // 提取答案文本，兼容多种格式
                     let answerTexts = [];
                     if (Array.isArray(item.multipleAnswers) && item.multipleAnswers.length > 0) {
                         answerTexts = item.multipleAnswers.map(x => String(x).trim()).filter(Boolean);
@@ -786,24 +844,20 @@ async function handleReadAlongQuestions() {
                 }
             }
         }
-        addLogMessage('跟读朗读: 直接获取答案 ' + directAnswers.length + ' 条 (rawAnswerData: ' + rawAnswerData.length + ')', directAnswers.length > 0 ? 'success' : 'warning');
+        addLogMessage('跟读朗读: 直接获取答案 ' + directAnswers.length + ' 条', directAnswers.length > 0 ? 'success' : 'warning');
     } catch (e) {
         addLogMessage('跟读朗读: 获取答案失败: ' + e.message, 'warning');
     }
 
-    // 合并答案源：directAnswers 优先，rawAnswerData 补充
     const allAnswers = directAnswers.length > 0 ? directAnswers : rawAnswerData.map((item, i) => ({
         answer: item.answer,
         index: i,
         answerIndex: item.answerIndex || (i + 1)
     }));
 
-    // 用题面匹配答案（使用合并后的数据源）
     function matchReadTextToAnswer(readText) {
         if (allAnswers.length === 0) return null;
         const normalizedRead = readText.trim().toLowerCase();
-        // 提取题面英文部分："bring about 带来；引起" → "bring about"
-        //                          "sandstorm /ˈsændstɔːm/ n. 沙尘暴" → "sandstorm"
         const englishPart = readText.replace(/[\u4e00-\u9fff].*$/, '').replace(/\s*\/[^a-zA-Z].*$/, '').trim().toLowerCase();
 
         let bestMatch = null;
@@ -814,19 +868,14 @@ async function handleReadAlongQuestions() {
             let score = 0;
 
             if (normalizedRead === normalizedAnswer) {
-                // 1. 完全精确匹配
                 score = 100;
             } else if (englishPart.length > 2 && englishPart === normalizedAnswer) {
-                // 2. 英文部分精确匹配（最常见场景）
                 score = 95;
             } else if (englishPart.length > 2 && normalizedAnswer.length > 2 && englishPart.includes(normalizedAnswer)) {
-                // 3. 答案是英文部分的子串（如英文="bring about", 答案="bring about"）
                 score = (normalizedAnswer.length / englishPart.length) * 90;
             } else if (normalizedAnswer.length > 0 && (normalizedRead.includes(normalizedAnswer) || normalizedAnswer.includes(normalizedRead))) {
-                // 4. 原有子串包含匹配
                 score = Math.min(normalizedRead.length, normalizedAnswer.length) / Math.max(normalizedRead.length, normalizedAnswer.length) * 80;
             } else {
-                // 5. 相似度回退
                 score = calculateTextSimilarity(readText, answerText) * 0.8;
             }
 
@@ -838,49 +887,21 @@ async function handleReadAlongQuestions() {
         return bestMatch;
     }
 
-    // 创建一个全局 AudioContext + MediaStreamDestination，整个流程中 stream 不变
-    const globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (globalAudioCtx.state === 'suspended') await globalAudioCtx.resume();
-    const globalGain = globalAudioCtx.createGain();
-    globalGain.gain.value = 1.0;
-    const globalDest = globalAudioCtx.createMediaStreamDestination();
-    globalGain.connect(globalDest);
-    const globalFakeStream = globalDest.stream;
-    const ourTracks = new Set(globalFakeStream.getAudioTracks());
+    // 复用全局单例劫持并自检重装；记录本世代，用于识别"停止/重启"后失效的旧回调
+    _afRunningEpoch = _afEpoch;
+    const ep = _afRunningEpoch;
+    let setup = await ensureReadAlongHijack();
+    let globalAudioCtx = setup.ctx;
+    let globalGain = setup.gain;
+    let globalFakeStream = setup.stream;
+    let ourTracks = setup.ourTracks;
 
-    // 劫持1: getUserMedia — 返回假流
-    const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
-    navigator.mediaDevices.getUserMedia = async function(constraints) {
-        if (constraints && constraints.audio) {
-            console.log('[auto-fill] getUserMedia → 假流');
-            return globalFakeStream;
-        }
-        return originalGetUserMedia.call(this, constraints);
-    };
-
-    // 劫持2: MediaStreamTrack.stop — 阻止组件 kill 我们的 track
-    // 这是第二题失败的关键根因：组件录音结束后调 track.stop()，
-    // track 变 ended，后续录音即使有新音频也无法通过已死的 track
-    const originalTrackStop = MediaStreamTrack.prototype.stop;
-    let trackStopBlocked = 0;
-    MediaStreamTrack.prototype.stop = function() {
-        if (ourTracks.has(this)) {
-            trackStopBlocked++;
-            console.log('[auto-fill] 阻止 track.stop() #' + trackStopBlocked + ' (readyState=' + this.readyState + ')');
-            addLogMessage('跟读朗读: 阻止组件 stop track #' + trackStopBlocked, 'info');
-            return; // 不真正 stop，保持 track live
-        }
-        return originalTrackStop.call(this);
-    };
-
-    addLogMessage('跟读朗读: 双层劫持就绪 (getUserMedia + track.stop 保护, tracks: ' + ourTracks.size + ')', 'info');
+    addLogMessage('跟读朗读: 双层劫持就绪 (' + (readAlongPlayMode === 'once' ? '单次播放' : '循环播放') + ', tracks: ' + ourTracks.size + ')', 'info');
 
     try {
-        // 只处理当前 active slide 上的跟读朗读题（不翻页，翻页由 work() 统一负责）
         const currentSlide = document.querySelector('.swiper-slide-active');
         if (!currentSlide) return 0;
 
-        // 兼容两种跟读题型容器
         const currentReadAlongEls = [
             ...currentSlide.querySelectorAll('.partA_word_repeat'),
             ...currentSlide.querySelectorAll('.u3-paragraphRepeat')
@@ -889,40 +910,30 @@ async function handleReadAlongQuestions() {
         const currentQuestions = [];
         for (const el of currentUniqueEls) {
             const nameEl = el.querySelector('.u3-question-container__ques-order--name');
-            if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读'))) {
+            if (nameEl && (nameEl.textContent.includes('跟读') || nameEl.textContent.includes('口语跟读') || nameEl.textContent.includes('听读') || nameEl.textContent.includes('朗读'))) {
                 currentQuestions.push(el);
             }
         }
 
         if (currentQuestions.length === 0) {
-            // 当前页没有跟读题，不处理
             return 0;
         }
 
-        // 处理当前 slide 上的每个跟读题
         for (const questionEl of currentQuestions) {
-            if (readAlongAborted) break;
+            if (readAlongAborted || _afEpoch !== ep) break;
 
-                // 检查该题是否已完成（已有录音结果）
                 const recorderBtn = questionEl.querySelector('.u3-recorder-btns__recorder-first');
                 if (!recorderBtn) continue;
 
-                // 如果已经有完成标记，跳过
                 const hasResult = questionEl.querySelector('.u3-recorder-result, .u3-recorder-btns__result');
                 if (hasResult) continue;
 
-                slideHasWork = true;
-
-                // 提取朗读文本（多选择器回退，兼容单词跟读和段落/口语跟读）
                 let readText = '';
                 const readTextSelectors = [
-                    // 段落跟读/口语跟读（u3-paragraphRepeat）
                     '.u3-paragraphRepeat-content__midPanel-enText',
                     '.u3-paragraphRepeat-content__midPanel-enText p',
-                    // 单词跟读（u3-wordBlock）
                     '.u3-wordBlock-content__midPanel-enText p',
                     '.u3-wordBlock-content__midPanel-enText',
-                    // 通用回退
                     '.u3-wordBlock-content__enText',
                     '.u3-wordBlock-content p',
                     '.u3-wordBlock-content',
@@ -939,7 +950,6 @@ async function handleReadAlongQuestions() {
                         }
                     }
                 }
-                // 最后回退：从 questionEl 自身取文本（排除录音按钮等噪音）
                 if (!readText) {
                     const clone = questionEl.cloneNode(true);
                     clone.querySelectorAll('button, .u3-recorder-btns, .u3-recorder-panel, .u3-audioPlayer, [slot*="audio"]').forEach(e => e.remove());
@@ -950,17 +960,14 @@ async function handleReadAlongQuestions() {
                     continue;
                 }
 
-                addLogMessage('跟读朗读: 开始处理第 ' + (processedCount + 1) + ' 题', 'info');
+                addLogMessage(`跟读朗读: 开始处理第 ${processedCount + 1} 题`, 'info');
 
-                // 通过题面文本匹配答案（使用直接获取的答案数据）
-                addLogMessage('跟读朗读: 题面文本 "' + readText + '" (答案库 ' + allAnswers.length + ' 条)', 'info');
                 const answerMatch = matchReadTextToAnswer(readText);
                 let answerIndex = -1;
             if (answerMatch) {
-                answerIndex = answerMatch.index + 1; // rawAnswerData 是 0-based，TTS 文件是 1-based
-                addLogMessage('跟读朗读: 匹配到答案 #' + answerIndex + ' (相似度 ' + answerMatch.similarity.toFixed(0) + '%, 答案: "' + answerMatch.answer + '")', 'info');
+                answerIndex = answerMatch.index + 1;
+                addLogMessage(`跟读朗读: 匹配到答案 #${answerIndex} (相似度 ${answerMatch.similarity.toFixed(0)}%)`, 'info');
             } else {
-                // 回退：用当前 slide 索引
                 const allSlides = document.querySelectorAll('.swiper-slide');
                 for (let si = 0; si < allSlides.length; si++) {
                     if (allSlides[si].classList.contains('swiper-slide-active')) {
@@ -968,19 +975,17 @@ async function handleReadAlongQuestions() {
                         break;
                     }
                 }
-                addLogMessage('跟读朗读: 未匹配答案，回退用 slide #' + answerIndex, 'warning');
+                addLogMessage(`跟读朗读: 未匹配答案，回退用 slide #${answerIndex}`, 'warning');
             }
 
             const base = FillTimeMod.bucketBase();
             let ttsWavData = null;
             let usedFallback = false;
 
-            // 尝试从 TTS 服务获取 WAV 音频
             try {
-                // 先轮询 TTS 状态，等待生成完成
                 let ttsReady = false;
                 for (let poll = 0; poll < 30; poll++) {
-                    if (readAlongAborted) break;
+                    if (readAlongAborted || _afEpoch !== ep) break;
                     const statusRes = await fetch(base + '/fill-tts/status', { cache: 'no-cache' });
                     if (statusRes.ok) {
                         const statusData = await statusRes.json();
@@ -988,44 +993,35 @@ async function handleReadAlongQuestions() {
                             ttsReady = true;
                             break;
                         }
-                        addLogMessage('跟读朗读: TTS生成中，等待...', 'info');
                     }
                     await waitInterruptible(1000);
                 }
 
                 if (ttsReady) {
-                    // 按答案编号获取 WAV 音频
                     const wavRes = await fetch(base + '/fill-tts/output/' + answerIndex + '.wav', { cache: 'no-cache' });
                     if (wavRes.ok) {
                         ttsWavData = await wavRes.arrayBuffer();
-                        addLogMessage('跟读朗读: TTS音频获取成功 (answer #' + answerIndex + ', ' + ttsWavData.byteLength + ' bytes)', 'success');
+                        addLogMessage(`跟读朗读: TTS音频获取成功 (answer #${answerIndex}, ${ttsWavData.byteLength} bytes)`, 'success');
                     } else {
-                        addLogMessage('跟读朗读: TTS音频未找到 (answer #' + answerIndex + ', HTTP ' + wavRes.status + ')，尝试回退', 'warning');
+                        addLogMessage(`跟读朗读: TTS音频未找到 (answer #${answerIndex}, HTTP ${wavRes.status})`, 'warning');
                     }
                 }
             } catch (e) {
                 addLogMessage('跟读朗读: TTS服务异常: ' + e.message, 'warning');
             }
 
-            if (readAlongAborted) break;
+            if (readAlongAborted || _afEpoch !== ep) break;
 
-            // 如果 TTS WAV 不可用，使用 SpeechSynthesis 回退
             if (!ttsWavData) {
                 addLogMessage('跟读朗读: 使用浏览器语音合成回退', 'info');
                 usedFallback = true;
 
-                // 使用 SpeechSynthesis 先播放音频
                 await speakWithSpeechSynthesis(readText);
-
-                // 然后点击录音按钮
                 vueClick(recorderBtn);
-
-                // 使用 SpeechSynthesis 再次播放作为"录音内容"
                 await waitInterruptible(500);
                 await speakWithSpeechSynthesis(readText);
                 await waitInterruptible(500);
 
-                // 点击停止录音
                 const stopBtn = questionEl.querySelector('.u3-recorder-panel__btn');
                 if (stopBtn) {
                     vueClick(stopBtn);
@@ -1038,23 +1034,27 @@ async function handleReadAlongQuestions() {
                 continue;
             }
 
-            // 在全局 AudioContext 上创建 BufferSource 连到 globalGain → globalDest
-            // stream 始终是 globalFakeStream，组件缓存了也不影响
+            const isOnce = readAlongPlayMode !== 'loop';
+            // 每题前重新自检/补装劫持，并刷新全局引用（若音轨已 ended 会整组重建）
+            setup = await ensureReadAlongHijack();
+            globalAudioCtx = setup.ctx;
+            globalGain = setup.gain;
+            globalFakeStream = setup.stream;
+            ourTracks = setup.ourTracks;
             let audioSource = null;
             let audioDuration = 0;
             try {
                 const audioBuffer = await globalAudioCtx.decodeAudioData(ttsWavData);
                 audioSource = globalAudioCtx.createBufferSource();
                 audioSource.buffer = audioBuffer;
-                audioSource.loop = true;
+                // 播放模式：once=单次不循环；loop=循环播放
+                audioSource.loop = !isOnce;
                 audioSource.connect(globalGain);
-                audioSource.start();
+                // 不在此处 start，等录音后再播放
                 audioDuration = audioBuffer.duration;
-                const trackState = globalFakeStream.getAudioTracks().map(t => 'kind=' + t.kind + ',label=' + t.label + ',readyState=' + t.readyState + ',muted=' + t.muted);
-                addLogMessage('跟读朗读: 音频源就绪 (时长 ' + audioDuration.toFixed(1) + 's, ctx.state=' + globalAudioCtx.state + ', tracks=[' + trackState.join(',') + '])', 'success');
+                addLogMessage(`跟读朗读: 音频源就绪 (时长 ${audioDuration.toFixed(1)}s, ${isOnce ? '单次播放' : '循环播放'})`, 'success');
             } catch (e) {
                 addLogMessage('跟读朗读: 解码音频失败: ' + e.message, 'error');
-                // 回退到 SpeechSynthesis
                 await speakWithSpeechSynthesis(readText);
                 vueClick(recorderBtn);
                 await waitInterruptible(500);
@@ -1071,28 +1071,33 @@ async function handleReadAlongQuestions() {
                 continue;
             }
 
-            // 点击录音按钮（getUserMedia 全局劫持中，globalFakeStream 始终相同）
-            const hijackActive = navigator.mediaDevices.getUserMedia !== originalGetUserMedia;
-            addLogMessage('跟读朗读: 点击录音按钮 (劫持' + (hijackActive ? '生效' : '已失效!') + ', stream tracks: ' + globalFakeStream.getAudioTracks().length + ')', 'info');
+            const hijackActive = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+                && navigator.mediaDevices.getUserMedia.__a366Hijacked__);
+            addLogMessage(`跟读朗读: 点击录音按钮 (劫持${hijackActive ? '生效' : '已失效!'})`, 'info');
             vueClick(recorderBtn);
 
-            // 等待录音时长 = 音频时长 × 2不足三秒即为三秒
-            const waitTime = Math.max(Math.ceil(audioDuration * 2 * 1000), 3000);
-            addLogMessage('跟读朗读: 等待录音中... (音频 ' + audioDuration.toFixed(1) + 's, 等待 ' + (waitTime / 1000).toFixed(1) + 's)', 'info');
+            // once: 等 0.5s 后再开始播放音频；loop: 等 1s，确保录音已启动
+            await waitInterruptible(isOnce ? 500 : 1000);
+            if (audioSource) {
+                try { audioSource.start(); } catch(e) {}
+            }
+
+            // 等待录音：once=播放完成后再过 0.5s；loop=音频×2（均最少 1s）
+            const waitTime = isOnce
+                ? Math.ceil(audioDuration * 1000) + 500
+                : Math.max(Math.ceil(audioDuration * 2 * 1000), 1000);
+            addLogMessage(`跟读朗读: 等待录音中... (音频 ${audioDuration.toFixed(1)}s, 共 ${(waitTime / 1000).toFixed(1)}s)`, 'info');
             await waitInterruptible(waitTime);
 
-            // 停止音频源（断开连接，但不关闭 AudioContext，stream 不变）
             if (audioSource) {
                 try { audioSource.stop(); } catch(e) {}
                 try { audioSource.disconnect(); } catch(e) {}
             }
 
-            // 检查 stream track 状态（组件可能 stop 了 track）
             const tracksAfter = globalFakeStream.getAudioTracks();
             const trackStates = tracksAfter.map(t => t.readyState + '/muted=' + t.muted);
             addLogMessage('跟读朗读: 录音后 track 状态: [' + trackStates.join(', ') + ']', 'info');
 
-            // 点击停止录音（等 Vue 更新 DOM 后查找）
             const stopBtn = await findStopRecordBtn(questionEl);
             addLogMessage('跟读朗读: 点击停止录音', 'info');
             if (stopBtn) {
@@ -1102,37 +1107,40 @@ async function handleReadAlongQuestions() {
             }
 
             processedCount++;
-            addLogMessage('跟读朗读: 第 ' + processedCount + ' 题完成', 'success');
+            addLogMessage(`跟读朗读: 第 ${processedCount} 题完成`, 'success');
 
             await waitInterruptible(1500);
-        } // end for (currentQuestions)
+        }
 
         if (processedCount > 0) {
-            addLogMessage('跟读朗读: 共处理 ' + processedCount + ' 个跟读题目', 'success');
+            addLogMessage(`跟读朗读: ${readAlongPlayMode === 'loop' ? '循环' : '单次'}播放 本轮共处理 ${processedCount} 个跟读题目`, 'success');
         }
     } catch (e) {
         addLogMessage('跟读朗读处理异常: ' + e.message, 'error');
     } finally {
-        // 恢复两层劫持 + 真正 stop track + 关闭 AudioContext
-        MediaStreamTrack.prototype.stop = originalTrackStop;
-        // 现在允许真正 stop 我们的 track
-        for (const track of ourTracks) {
-            try { originalTrackStop.call(track); } catch(e) {}
-        }
-        navigator.mediaDevices.getUserMedia = originalGetUserMedia;
-        if (globalAudioCtx.state !== 'closed') {
-            try { globalAudioCtx.close(); } catch(e) {}
-        }
-        addLogMessage('跟读朗读: 劫持已恢复 (阻止了 ' + trackStopBlocked + ' 次 track.stop)', 'info');
+        // 劫持为全局单例跨轮复用，这里不还原、不关闭 AudioContext。
+        // epoch 已变化说明本回调已被停止/重启，静默退出即可，劫持交给新世代。
+        addLogMessage('跟读朗读: 本轮回调结束 (共阻止 ' + _afBlockedCount + ' 次 track.stop)', 'info');
         isReadAlongProcessing = false;
     }
 
     return processedCount;
 }
 
-async function work() {
-    // 跟读朗读处理中时跳过其他工作
-    if (isReadAlongProcessing) return;
+// 题号元素查找：优先 .u3-input__prepared，找不到回退 .u3-input__prepead（适配新版页面拼写）
+function getPreparedElements(root) {
+    let els = root.getElementsByClassName('u3-input__prepared');
+    if (els.length === 0) els = root.getElementsByClassName('u3-input__prepead');
+    return els;
+}
+function queryPrepared(root) {
+    return root.querySelector('.u3-input__prepared') || root.querySelector('.u3-input__prepead');
+}
+
+// 填充当前页：选择题 + 填空（内容匹配/题号匹配），不翻页、不跟读。
+// 抽取为独立函数，供并发模式在翻页动画期间预填下一页复用。
+async function fillCurrentPage() {
+    const isU3InputPage = !!document.querySelector('.u3-input__content--input');
 
     const getInputs = (root) => {
         const a = root.getElementsByClassName('u3-input__content--input');
@@ -1144,12 +1152,29 @@ async function work() {
         if (!el) return false;
         const tag = (el.tagName || '').toLowerCase();
         if (tag === 'input' || tag === 'textarea') {
-            el.value = v;
+            // 原生 setter 赋值，避免直接赋值绕过 Vue 响应式
+            try {
+                const proto = tag === 'input' ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+                Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v);
+            } catch (e) {
+                el.value = v;
+            }
         } else {
             el.textContent = v;
         }
         el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
         el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        // 仅新题型（u3-input 填空）需模拟点击序列提交"已作答"；旧题型不派发，避免触发多余交互
+        if (isU3InputPage) {
+            try {
+                el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                el.dispatchEvent(new Event('focus', { bubbles: true, cancelable: true }));
+                el.dispatchEvent(new Event('focusin', { bubbles: true, cancelable: true }));
+                el.focus();
+            } catch (e) {}
+        }
         return true;
     };
 
@@ -1164,19 +1189,35 @@ async function work() {
         return filledBlanks;
     };
 
-    // ========== 选择题自动选择 ==========
     const choiceFilledCount = supportChoiceQuestions ? await fillChoiceQuestions() : 0;
 
-    // ========== 填空题自动填写（先于跟读，确保同页的填空题不被跳过）==========
-    const preparedElements = document.getElementsByClassName('u3-input__prepared');
+    const preparedElements = getPreparedElements(document);
     const inputElements = getInputs(document);
 
     let filledCount = 0;
 
     if (contentMatchMode) {
         addLogMessage('使用内容匹配模式', 'info');
-        
-        const questionTexts = document.getElementsByClassName('u3-question-text');
+
+        // 只处理当前 active slide 内的题目：swiper 懒加载时 document 中已渲染多页，
+        // 全文档遍历会让相似度计算量随翻页累积、严重拖慢翻页节奏。
+        // 非 swiper 整卷页面（无 active slide）回退全文档。
+        const activeSlideForMatch = document.querySelector('.swiper-slide-active');
+        let questionTexts = [];
+        if (activeSlideForMatch) {
+            questionTexts = activeSlideForMatch.getElementsByClassName('u3-question-text');
+        }
+        if (questionTexts.length === 0) {
+            // 备选：使用 u3-fillblank-base__cont（新版页面无 u3-question-text 时）
+            if (activeSlideForMatch) {
+                questionTexts = activeSlideForMatch.getElementsByClassName('u3-fillblank-base__cont');
+            } else {
+                questionTexts = document.getElementsByClassName('u3-question-text');
+                if (questionTexts.length === 0) {
+                    questionTexts = document.getElementsByClassName('u3-fillblank-base__cont');
+                }
+            }
+        }
         const processedScopes = new Set();
         
         for (let i = 0; i < questionTexts.length; i++) {
@@ -1189,21 +1230,18 @@ async function work() {
             }
 
             if (containerInputs.length > 0) {
-                // 跳过已处理过的容器（填空在题干中间时会有多个 .u3-question-text）
                 if (processedScopes.has(scopeEl)) continue;
                 processedScopes.add(scopeEl);
 
-                // 从整个题目容器获取完整题干文本（包含填空前后的部分）
-                // 克隆后移除 input/textarea/button/选项/题号等非题干元素
                 const clone = scopeEl.cloneNode(true);
-                clone.querySelectorAll('input, textarea, button, .u3-option__content, .u3-input__prepared, [contenteditable]').forEach(el => el.remove());
+                clone.querySelectorAll('input, textarea, button, .u3-option__content, .u3-input__prepared, .u3-input__prepead, [contenteditable]').forEach(el => el.remove());
                 const questionText = (clone.textContent || '').replace(/\s+/g, ' ').trim();
                 const cleanQuestionText = questionText.replace(/分值\d+分\s*/g, '').replace(/^\d+[\s\.\)]*/, '').trim();
 
                 const match = findAnswerByContent(cleanQuestionText);
 
                 if (match) {
-                    const preparedElements = scopeEl.getElementsByClassName('u3-input__prepared');
+                    const preparedElements = getPreparedElements(scopeEl);
                     let questionNum = i + 1;
                     
                     if (preparedElements.length > 0) {
@@ -1236,6 +1274,15 @@ async function work() {
                         answersToFill = [match.answer];
                     }
 
+                    // ===== 控分：该题被选中为错题时，填入相邻题目的答案 =====
+                    if (wrongQuestionSet.has(questionNum)) {
+                        const wrongAns = getWrongAnswersForQuestion(questionNum, answers.length || rawAnswerData.length);
+                        if (wrongAns && wrongAns.length > 0) {
+                            answersToFill = wrongAns;
+                            addLogMessage(`[控分] 题目 ${questionNum} 故意填错: ${wrongAns.join(' / ')}`, 'warning');
+                        }
+                    }
+
                     const filledBlanks = await fillByAnswers(containerInputs, answersToFill);
 
                     filledCount += filledBlanks;
@@ -1252,21 +1299,36 @@ async function work() {
         }
     } else {
         addLogMessage('使用题号匹配模式', 'info');
-        
-        // 题号匹配模式：基于旧版逻辑，直接遍历输入框
-        for (let i = 0; i < inputElements.length; i++) {
-            if (i >= preparedElements.length) break;
-            
-            const questionNum = parseInt(preparedElements[i].innerHTML);
+
+        // swiper 单题单页：限定在 active slide，用 .u3-question-container__ques-order--number 作为真正题号
+        const activeSlide = document.querySelector('.swiper-slide-active');
+        let modeInputs = Array.from(inputElements);
+        let modePrepared = Array.from(preparedElements);
+        if (activeSlide) {
+            const numEl = activeSlide.querySelector('.u3-question-container__ques-order--number');
+            const realNum = numEl ? parseInt(numEl.textContent.trim()) : 0;
+            // 只取输入框元素，避免容器 div 与子 input 双重匹配导致 textContent 替换销毁 DOM
+            let slideInputs = activeSlide.querySelectorAll('.u3-input__content--input');
+            if (!slideInputs.length) slideInputs = activeSlide.querySelectorAll('.u3-input__content');
+            if (slideInputs.length > 0 && realNum > 0) {
+                modeInputs = Array.from(slideInputs);
+                modePrepared = Array.from(slideInputs).map(() => ({ innerHTML: String(realNum) }));
+            }
+        }
+
+        for (let i = 0; i < modeInputs.length; i++) {
+            if (i >= modePrepared.length) break;
+
+            const questionNum = parseInt(modePrepared[i].innerHTML);
             if (isNaN(questionNum) || questionNum <= 0) continue;
-            
+
             const multiAnswers = window.multiAnswerMap ? window.multiAnswerMap.get(questionNum) : null;
-            
+
             let currentInputIndex = i;
-            while (currentInputIndex < preparedElements.length && parseInt(preparedElements[currentInputIndex].innerHTML) === questionNum) {
+            while (currentInputIndex < modePrepared.length && parseInt(modePrepared[currentInputIndex].innerHTML) === questionNum) {
                 currentInputIndex++;
             }
-            const inputsSlice = Array.from(inputElements).slice(i, currentInputIndex);
+            const inputsSlice = modeInputs.slice(i, currentInputIndex);
 
             let answersToFill;
             if (multiAnswers && multiAnswers.length > 0) {
@@ -1274,6 +1336,15 @@ async function work() {
             } else {
                 const answerIndex = questionNum - 1;
                 answersToFill = (answerIndex >= 0 && answerIndex < answers.length) ? [answers[answerIndex]] : [];
+            }
+
+            // ===== 控分：该题被选中为错题时，填入相邻题目的答案 =====
+            if (wrongQuestionSet.has(questionNum)) {
+                const wrongAns = getWrongAnswersForQuestion(questionNum, answers.length || rawAnswerData.length);
+                if (wrongAns && wrongAns.length > 0) {
+                    answersToFill = wrongAns;
+                    addLogMessage(`[控分] 题目 ${questionNum} 故意填错: ${wrongAns.join(' / ')}`, 'warning');
+                }
             }
 
             const filledBlanks = await fillByAnswers(inputsSlice, answersToFill);
@@ -1300,30 +1371,129 @@ async function work() {
         addLogMessage('已选择 ' + choiceFilledCount + ' 个选择题答案', 'success');
     }
 
-    // ========== 跟读朗读题型处理（填空和选择题之后，翻页之前）==========
-    const readAlongCount = supportReadAlong && contentMatchMode ? await handleReadAlongQuestions() : 0;
+    return filledCount;
+}
 
-    if (readAlongCount > 0) {
-        addLogMessage('本次跟读朗读完成 ' + readAlongCount + ' 题', 'success');
-    }
+async function work() {
+    if (isReadAlongProcessing) return;
 
-    // 翻页：找到"下一页"按钮并点击
-    if (!readAlongAborted) {
-        const nextBtn = findButtonByText('下一页');
-        if (nextBtn) {
-            nextBtn.click();
-            addLogMessage('已点击翻页按钮（下一页）', 'info');
+    // 单一事件驱动流水线：填当前页 → 立即翻页 → 继续下一页，翻页由"填答完成"触发，
+    // 不再依赖 setInterval 的下一个 tick（消除翻页滞后）。
+    // 实测：swiper 支持动画中连翻（slideTo 后 activeIndex 立即切换、动画自动中断），
+    // 翻页无需等待动画播放完，80ms 缓冲即可继续下一次翻页。
+    if (isWorking) return;
+    isWorking = true;
+    try {
+        // 事件驱动循环：正常在最后一页（turnNextPage 返回 false）或停止时 break
+        for (let i = 0; i < 500; i++) { // 兜底上限，防止异常死循环
+            // 等当前 active slide 渲染完成再填（swiper 懒加载晚于 activeIndex 切换，防漏答）
+            await waitSlideRendered();
+            try {
+                await fillCurrentPage();
+            } catch (e) {
+                // 单页异常不中断整轮翻页，记录日志便于定位
+                addLogMessage('本页填充异常(已跳过,继续翻页): ' + (e && e.message || e), 'error');
+            }
+
+            try {
+                const readAlongCount = supportReadAlong && contentMatchMode ? await handleReadAlongQuestions() : 0;
+                if (readAlongCount > 0) {
+                    addLogMessage('本次跟读朗读完成 ' + readAlongCount + ' 题', 'success');
+                }
+            } catch (e) {
+                addLogMessage('跟读处理异常(已跳过,继续翻页): ' + (e && e.message || e), 'error');
+            }
+
+            if (readAlongAborted) break;
+            if (!(await turnNextPage())) break; // 已到最后一页
+
+            // 实测：无需等待翻页动画播放完，80ms 缓冲即可继续下一次翻页
+            await wait1(80);
         }
+    } finally {
+        isWorking = false;
     }
 }
 
-// 按按钮文字查找可点击元素
-function findButtonByText(text) {
-    const candidates = document.querySelectorAll('.x-button, .u3-button, .btn, button');
-    for (const el of candidates) {
-        if (el.textContent.trim() === text && el.offsetParent !== null) {
-            return el;
+// 翻到下一页：点击"下一页"按钮触发页面自己的翻页逻辑（与 dbd9449 版本一致）。
+// 点击后检测 activeIndex 是否前进判断翻页是否成功（短暂等待容错按钮点击的异步触发），
+// 最后一页时按钮无效、activeIndex 不变 → 返回 false 停止循环。
+async function turnNextPage() {
+    const swiperEl = document.querySelector('.swiper');
+    const swiper = swiperEl && swiperEl.swiper;
+    const before = swiper ? swiper.activeIndex : -1;
+
+    const nextBtn = findButtonByText('下一题', '下一页');
+    if (!nextBtn) return false;
+    nextBtn.click();
+    addLogMessage('已点击翻页按钮（下一页）', 'info');
+
+    // 等待 activeIndex 前进（最多 500ms；最后一页按钮点击无效时 activeIndex 不变）
+    const deadline = Date.now() + 500;
+    while (swiper && Date.now() < deadline && swiper.activeIndex <= before) {
+        await wait1(30);
+    }
+    if (swiper && swiper.activeIndex > before) {
+        addLogMessage('已翻到第 ' + (swiper.activeIndex + 1) + ' 题', 'info');
+        return true;
+    }
+    return false; // activeIndex 未前进 = 已到最后一页
+}
+
+// 等待当前 active slide 渲染完成。
+// swiper 懒加载渲染晚于 activeIndex 切换，不等渲染就填充会漏答；轮询题型元素出现，超时兜底。
+async function waitSlideRendered(timeoutMs = 1000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const activeSlide = document.querySelector('.swiper-slide-active');
+        if (activeSlide && activeSlide.querySelector('.u3-input__content--input, .u3-input__content, .u3-option__content, .partA_word_repeat, .u3-paragraphRepeat, .u3-question-container')) {
+            return true;
         }
+        await wait1(30);
+    }
+    return false;
+}
+
+function findButtonByText(...texts) {
+    const candidates = document.querySelectorAll('.x-button, .u3-button, .btn, button');
+    for (const text of texts) {
+        for (const el of candidates) {
+            if (el.textContent.trim() === text && el.offsetParent !== null) {
+                return el;
+            }
+        }
+    }
+    return null;
+}
+
+// ===== 控分功能辅助函数 =====
+
+// 从 totalQuestions 个题目中随机选出 wrongCount 个题号作为错题
+function buildWrongPlan(totalQuestions) {
+    wrongQuestionSet = new Set();
+    if (!fillScoreControlEnabled || fillScoreControlWrongCount <= 0 || !totalQuestions || totalQuestions <= 0) return;
+    const wrongNum = Math.min(fillScoreControlWrongCount, totalQuestions);
+    const pool = Array.from({ length: totalQuestions }, (_, i) => i + 1);
+    for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    for (let i = 0; i < wrongNum; i++) wrongQuestionSet.add(pool[i]);
+}
+
+// 获取某题的错误答案：使用相邻题目（题号+1，循环）的答案作为错误答案
+function getWrongAnswersForQuestion(questionNum, totalQuestions) {
+    if (!totalQuestions || totalQuestions <= 0) return null;
+    const nextNum = (questionNum % totalQuestions) + 1;
+    if (window.multiAnswerMap && window.multiAnswerMap.has(nextNum)) {
+        const list = window.multiAnswerMap.get(nextNum);
+        if (list && list.length > 0) return list.map(a => a.answer);
+    }
+    if (window.questionNumAnswerMap && window.questionNumAnswerMap.has(nextNum)) {
+        return [window.questionNumAnswerMap.get(nextNum)];
+    }
+    if (nextNum >= 1 && nextNum <= answers.length) {
+        return [answers[nextNum - 1]];
     }
     return null;
 }
@@ -1335,9 +1505,19 @@ function startAutoFill() {
     }
     readAlongAborted = false;
     isReadAlongProcessing = false;
+
+    // 构建本轮控分计划：随机选出错题
+    const totalQ = answers.length || rawAnswerData.length;
+    buildWrongPlan(totalQ);
+    if (fillScoreControlEnabled && wrongQuestionSet.size > 0) {
+        addLogMessage(`[控分] 本轮随机错 ${wrongQuestionSet.size} 题: 题号 [${[...wrongQuestionSet].sort((a, b) => a - b).join(', ')}]`, 'info');
+    } else if (fillScoreControlEnabled && fillScoreControlWrongCount > 0) {
+        addLogMessage('[控分] 答案库未加载，等加载后自动生成错题计划', 'warning');
+    }
+
     autoFillIntervalId = setInterval(work, autoFillDelay);
     updateAutoFillPanelStatus();
-    addLogMessage('自动填空已启动，间隔: ' + autoFillDelay + 'ms', 'info');
+    addLogMessage('自动填空已启动 [' + '跟读朗读播放模式：' + (readAlongPlayMode === 'once' ? '单次播放' : '循环播放') + '], 间隔: ' + autoFillDelay + 'ms', 'info');
 }
 
 function stopAutoFill() {
@@ -1345,33 +1525,31 @@ function stopAutoFill() {
         clearInterval(autoFillIntervalId);
         autoFillIntervalId = null;
     }
+    _afEpoch++;               // 标记世代变更，令在跑的旧读本回调失效
+    stopReadAlongHijack();    // 还原劫持并关闭全局 AudioContext
     isReadAlongProcessing = false;
     readAlongAborted = true;
     updateAutoFillPanelStatus();
     addLogMessage('自动填空已停止', 'info');
 }
 
-// 时间修改 —— 把"启用/秒数"状态经本地 bucket server 推给代理层
-// 代理层据此改写 fill 提交的 duration（落库时 ×1000 转毫秒）
 let FillTimeMod = {
     bucketBase: function() {
-        // 从 customBucketUrl 提取 origin
-        // 不用 new URL() 以兼容 local:// 等 protocol
         var full = customBucketUrl || '';
         if (full) {
             var m = full.match(/^(https?:\/\/[^\/]+)/);
             if (m) return m[1];
         }
-        // 没有自定义地址时用代理层注入的真实端口。bucket 端口是可以改的，
+        // 没有自定义地址时用代理层注入的真实端口。bucket 端口是可改的，
         // 写死 5290 一旦用户改过就全链路失联。
-        if (window.__A366__ && window.__A366__.bucket) return window.__A366__.bucket;
         return a366BucketOrigin();
     },
     push: function() {
         var payload = {
             enabled: fillTimeModEnabled === true,
             seconds: (fillTimeModSeconds === null || fillTimeModSeconds === undefined)
-                ? null : fillTimeModSeconds
+                ? null : fillTimeModSeconds,
+            fillSubmitUrl: 'study-api.up366.cn/client/task/score/submit/v2'
         };
         try {
             fetch(FillTimeMod.bucketBase() + '/fill-time', {
@@ -1391,7 +1569,6 @@ let FillTimeMod = {
               .catch(function(e) {
                   addLogMessage('[时间修改] 同步失败：连不上本地服务(' + e.message + ')，确认代理已开启', 'warning');
               });
-            // 操作填空面板时，重置听力时间修改，防止两个功能同时启用导致冲突
             fetch(FillTimeMod.bucketBase() + '/listen-time', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1407,7 +1584,6 @@ let FillTimeMod = {
     }
 };
 
-// 注入成功后显示提示文字
 const showSuccessMessage = () => {
     const messageDiv = document.createElement('div');
     messageDiv.style.position = 'fixed';
@@ -1422,7 +1598,7 @@ const showSuccessMessage = () => {
     messageDiv.style.fontWeight = 'bold';
     messageDiv.style.zIndex = '9999';
     messageDiv.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
-    messageDiv.textContent = 'Auto366自动填空注入成功，请点击控制面板的开始填空按钮，并保持天学网在前台运行';
+    messageDiv.textContent = 'Auto366自动填空注入成功，请点击控制面板的开始填空按钮';
     document.body.appendChild(messageDiv);
     setTimeout(() => {
         messageDiv.style.transition = 'opacity 0.5s';
@@ -1435,14 +1611,12 @@ const showSuccessMessage = () => {
     }, 15000);
 };
 
-// 添加日志消息（无容量上限，虚拟滚动渲染）
 function addLogMessage(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
     logMessages.unshift({ timestamp, message, type });
     updateLogPanel();
 }
 
-// 创建日志面板（虚拟滚动 + 导出功能）
 function createLogPanel() {
     if (logPanel) return;
     logPanel = document.createElement('div');
@@ -1509,7 +1683,6 @@ function createLogPanel() {
     header.appendChild(closeBtn);
     logPanel.appendChild(header);
 
-    // 虚拟滚动结构：viewport > spacer + visible
     const logViewport = document.createElement('div');
     logViewport.id = 'auto-fill-log-viewport';
     logViewport.style.height = 'calc(100% - 40px)';
@@ -1564,7 +1737,6 @@ function createLogPanel() {
     });
 }
 
-// 导出日志到桌面
 function exportLogs() {
     if (logMessages.length === 0) {
         addLogMessage('没有日志可导出', 'warning');
@@ -1601,7 +1773,6 @@ function exportLogs() {
     });
 }
 
-// 更新日志面板（触发虚拟滚动渲染）
 function updateLogPanel() {
     if (!logPanel) return;
     const viewport = document.getElementById('auto-fill-log-viewport');
@@ -1609,7 +1780,6 @@ function updateLogPanel() {
     renderVisibleLogs();
 }
 
-// 虚拟滚动渲染可见日志行
 function renderVisibleLogs() {
     const viewport = document.getElementById('auto-fill-log-viewport');
     if (!viewport) return;
@@ -1670,7 +1840,7 @@ function createAutoFillPanel() {
     header.style.marginBottom = '8px';
 
     const titleSpan = document.createElement('span');
-    titleSpan.textContent = '自动填空控制面板';
+    titleSpan.textContent = '自动填空';
     titleSpan.style.fontSize = '14px';
     titleSpan.style.fontWeight = 'bold';
     header.appendChild(titleSpan);
@@ -1793,7 +1963,7 @@ function createAutoFillPanel() {
     logBtn.style.color = '#fff';
     logBtn.style.borderRadius = '3px';
     logBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // 阻止事件冒泡
+        e.stopPropagation();
         if (!logPanel) {
             createLogPanel();
         }
@@ -1949,7 +2119,6 @@ function createAutoFillPanel() {
     matchModeRow.appendChild(matchModeLabel);
     autoFillPanel.appendChild(matchModeRow);
 
-    // 支持选择题复选框（依赖内容匹配模式）
     const supportChoiceRow = document.createElement('div');
     supportChoiceRow.style.cssText = `
         display: flex;
@@ -2007,7 +2176,6 @@ function createAutoFillPanel() {
         supportChoiceCheckbox.style.cursor = enabled ? 'pointer' : 'not-allowed';
         supportChoiceLabel.style.cursor = enabled ? 'pointer' : 'not-allowed';
         if (!enabled) {
-            // 内容匹配关闭时，自动取消支持选择题
             if (supportChoiceQuestions) {
                 supportChoiceQuestions = false;
                 localStorage.setItem('supportChoiceQuestions', 'false');
@@ -2016,7 +2184,6 @@ function createAutoFillPanel() {
         }
         updateSupportChoiceLabel();
 
-        // 同步更新跟读朗读复选框状态
         supportReadAlongCheckbox.disabled = !enabled;
         supportReadAlongRow.style.opacity = enabled ? '1' : '0.5';
         supportReadAlongCheckbox.style.cursor = enabled ? 'pointer' : 'not-allowed';
@@ -2034,14 +2201,12 @@ function createAutoFillPanel() {
 
     updateSupportChoiceLabel();
 
-    // 内容匹配模式变化时同步支持选择题状态
     matchModeCheckbox.addEventListener('change', updateSupportChoiceState);
 
     supportChoiceRow.appendChild(supportChoiceCheckbox);
     supportChoiceRow.appendChild(supportChoiceLabel);
     autoFillPanel.appendChild(supportChoiceRow);
 
-    // 支持跟读朗读复选框（依赖内容匹配模式）
     const supportReadAlongRow = document.createElement('div');
     supportReadAlongRow.style.cssText = `
         display: flex;
@@ -2085,10 +2250,11 @@ function createAutoFillPanel() {
     function updateReadAlongLabel() {
         const enabled = contentMatchMode && supportReadAlong;
         const color = enabled ? '#4caf50' : '#888';
+        const modeText = readAlongPlayMode === 'loop' ? '循环播放' : '单次播放';
         const statusText = supportReadAlong ? (contentMatchMode ? '(开启)' : '(已禁用-需先开启内容匹配)') : '(关闭)';
         supportReadAlongLabel.innerHTML = `
             <span style="color: ${color};">
-                支持跟读朗读(需要先开启内容匹配) ${statusText}
+                支持跟读朗读(需要先开启内容匹配) ${statusText} [${modeText}]
             </span>
         `;
     }
@@ -2099,7 +2265,57 @@ function createAutoFillPanel() {
     supportReadAlongRow.appendChild(supportReadAlongLabel);
     autoFillPanel.appendChild(supportReadAlongRow);
 
-    // TTS 生成进度显示
+    // 跟读朗读播放模式切换（单次播放 / 循环播放）
+    const readAlongModeRow = document.createElement('div');
+    readAlongModeRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 4px 4px 4px 16px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        opacity: ${(contentMatchMode && supportReadAlong) ? '1' : '0.5'};
+    `;
+    const readAlongModeSelect = document.createElement('select');
+    readAlongModeSelect.style.cssText = `
+        font-size: 11px;
+        margin-right: 8px;
+        background: #333;
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 3px;
+    `;
+    ['once', 'loop'].forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m === 'once' ? '单次播放' : '循环播放';
+        if (m === readAlongPlayMode) opt.selected = true;
+        readAlongModeSelect.appendChild(opt);
+    });
+    readAlongModeSelect.disabled = !(contentMatchMode && supportReadAlong);
+    readAlongModeSelect.addEventListener('change', () => {
+        readAlongPlayMode = readAlongModeSelect.value;
+        localStorage.setItem('readAlongPlayMode', readAlongPlayMode);
+        updateReadAlongLabel();
+        addLogMessage('跟读朗读播放模式: ' + (readAlongPlayMode === 'once' ? '单次播放' : '循环播放'), 'info');
+    });
+    const readAlongModeLabel = document.createElement('label');
+    readAlongModeLabel.style.cssText = 'font-size: 11px; flex: 1;';
+    readAlongModeLabel.textContent = '跟读播放模式';
+    readAlongModeRow.appendChild(readAlongModeSelect);
+    readAlongModeRow.appendChild(readAlongModeLabel);
+    autoFillPanel.appendChild(readAlongModeRow);
+
+    // 同步模式开关的可用状态（随 内容匹配/支持跟读 联动禁用）
+    const syncReadAlongModeState = () => {
+        const on = contentMatchMode && supportReadAlong;
+        readAlongModeSelect.disabled = !on;
+        readAlongModeRow.style.opacity = on ? '1' : '0.5';
+    };
+    supportReadAlongCheckbox.addEventListener('change', syncReadAlongModeState);
+    matchModeCheckbox.addEventListener('change', syncReadAlongModeState);
+    syncReadAlongModeState();
+
     const ttsProgressDiv = document.createElement('div');
     ttsProgressDiv.id = 'tts-progress-display';
     ttsProgressDiv.style.cssText = `
@@ -2156,7 +2372,71 @@ function createAutoFillPanel() {
 
     updateTtsProgressVisibility();
 
-    // ===== 时间修改行（参考 auto-pk / auto-listening）=====
+    // ===== 控分功能行 =====
+    const scoreRow = document.createElement('div');
+    scoreRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 4px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        gap: 4px;
+    `;
+
+    const scoreLabel = document.createElement('span');
+    scoreLabel.textContent = '控分';
+    scoreLabel.style.cssText = `font-size: 11px; font-weight: 600; color: #fff; margin-right: 2px;`;
+
+    const scoreEnable = document.createElement('input');
+    scoreEnable.type = 'checkbox';
+    scoreEnable.checked = fillScoreControlEnabled;
+    scoreEnable.style.cssText = `margin: 0 2px; cursor: pointer;`;
+
+    const scoreCountInput = document.createElement('input');
+    scoreCountInput.type = 'number';
+    scoreCountInput.min = '0';
+    scoreCountInput.value = String(fillScoreControlWrongCount);
+    scoreCountInput.placeholder = '错题数';
+    scoreCountInput.style.cssText = `
+        width: 52px; font-size: 11px; text-align: center;
+        background: rgba(255,255,255,0.2); color: #fff;
+        border: 1px solid rgba(255,255,255,0.3); border-radius: 3px;
+        padding: 2px 4px;
+    `;
+    scoreCountInput.disabled = !fillScoreControlEnabled;
+    scoreCountInput.style.opacity = fillScoreControlEnabled ? '1' : '0.5';
+
+    const scoreHint = document.createElement('span');
+    scoreHint.textContent = '随机错题';
+    scoreHint.style.cssText = `font-size: 10px; color: #ccc;`;
+
+    scoreEnable.addEventListener('change', () => {
+        fillScoreControlEnabled = scoreEnable.checked;
+        localStorage.setItem('fillScoreControlEnabled', String(fillScoreControlEnabled));
+        scoreCountInput.disabled = !fillScoreControlEnabled;
+        scoreCountInput.style.opacity = fillScoreControlEnabled ? '1' : '0.5';
+        addLogMessage('[控分] ' + (fillScoreControlEnabled ? '已启用' : '已禁用')
+            + (fillScoreControlEnabled && fillScoreControlWrongCount <= 0 ? '（请先填写错题数量）' : ''), 'info');
+    });
+
+    scoreCountInput.addEventListener('change', () => {
+        const v = parseInt(scoreCountInput.value, 10);
+        if (Number.isFinite(v) && v >= 0) {
+            fillScoreControlWrongCount = v;
+            localStorage.setItem('fillScoreControlWrongCount', String(v));
+            addLogMessage(`[控分] 错题数量设为 ${v} 题`, 'info');
+        } else {
+            scoreCountInput.value = String(fillScoreControlWrongCount);
+        }
+    });
+
+    scoreRow.appendChild(scoreLabel);
+    scoreRow.appendChild(scoreEnable);
+    scoreRow.appendChild(scoreCountInput);
+    scoreRow.appendChild(scoreHint);
+    autoFillPanel.appendChild(scoreRow);
+
     const timeModRow = document.createElement('div');
     timeModRow.style.cssText = `
         display: flex;
@@ -2305,7 +2585,6 @@ function createAutoFillPanel() {
 
     document.body.appendChild(autoFillPanel);
 
-    // 简单拖拽
     let isDragging = false;
     let offsetX = 0;
     let offsetY = 0;
@@ -2352,7 +2631,7 @@ function updateAutoFillPanelStatus() {
 function initAutoFill() {
     createAutoFillPanel();
     createLogPanel();
-    addLogMessage('系统初始化完成', 'success');
+    addLogMessage('[' + (readAlongPlayMode === 'once' ? '单次播放' : '循环播放') + '] 系统初始化完成', 'success');
     loadBucketFromServer();
     FillTimeMod.install();
 }
