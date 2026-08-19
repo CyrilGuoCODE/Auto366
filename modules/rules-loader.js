@@ -72,6 +72,12 @@ class RulesLoader {
                 rule.injectScript = scriptPath;
               }
             }
+            if (rule.type === 'content-change' && rule.newContentFile && !path.isAbsolute(rule.newContentFile)) {
+              const ccPath = path.join(folderPath, rule.newContentFile);
+              if (fs.existsSync(ccPath)) {
+                rule.newContentFile = ccPath;
+              }
+            }
             return rule;
           });
 

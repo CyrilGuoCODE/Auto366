@@ -19,7 +19,7 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 ## Todo List待办清单
 
-### 新版本(v0.9.6)已完成
+### 新版本(v0.9.7)已完成
 
 - [功能优化]优化XML解析和选择题填充逻辑(By Fish)
 - [功能优化]复杂模式规则管理UI优化
@@ -31,6 +31,12 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 - [BUG修复]修复打包环境下动态注入缓存无法清除
 - [功能优化]加入按需下载TTS和TUN相关资源，并优化包体大小(现在为70mb)(服务器由Submerge提供)
 - [新功能]听力考试模式与模拟模式，现已支持跟读、朗读、听说题目(By Wutanji)
+- [新功能]加入TTS板栗云
+- [新功能]加入百舸争流相关自动化
+- [功能优化]优化听说卷题型判断逻辑(By Fish)
+- [功能优化]优化听说，填空，拼词PK相关逻辑(By Fish)
+- [功能优化]新增自动听力学习规则集，适配类填空型听力(By Fish)
+- [功能优化]重构类填空型听力题目采集与填答逻辑(By Fish)
 
 ### BUG问题
 

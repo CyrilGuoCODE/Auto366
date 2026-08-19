@@ -249,6 +249,12 @@ class ProxyServer {
         })
         let responseBodyRules = this.haveRules(fullUrl, 'response-body');
         ctx.onResponse((ctx, callback) => {
+          // 先记录响应类型与原始编码：下面内容替换会删除 content-encoding 头，
+          // 但 onResponseEnd 解压 buffered 数据时仍需要原始编码，故提前保存。
+          requestInfo.contentType = ctx.serverToProxyResponse.headers['content-type'];
+          requestInfo.contentEncoding = ctx.serverToProxyResponse.headers['content-encoding'];
+          requestInfo.isCompressed = !!requestInfo.contentEncoding;
+
           if (responseBodyRules.includes(2) && ctx.serverToProxyResponse.statusCode !== 200) {
             ctx.serverToProxyResponse.statusCode = 200;
             ctx.serverToProxyResponse.headers['content-type'] = 'application/octet-stream'
@@ -292,28 +298,44 @@ class ProxyServer {
             }
           }
 
+          // 响应替换(内容修改)：只对文本类响应(html/js/css/json/xml等)应用整包替换，
+          // 二进制(wasm/图片/音视频/zip等)直接放行——既避免 utf-8 字符串替换损坏二进制，
+          // 也避免对二进制做无谓的解压重写；文本类替换后内容已解压为明文，去掉压缩与长度头
+          if (responseBodyRules.includes(1)) {
+            const _ct = String(ctx.serverToProxyResponse.headers['content-type'] || '');
+            if (!this.isTextualContentType(_ct)) {
+              responseBodyRules = responseBodyRules.filter(x => x !== 1);
+            } else {
+              delete ctx.serverToProxyResponse.headers['content-encoding'];
+              delete ctx.serverToProxyResponse.headers['content-length'];
+              delete ctx.serverToProxyResponse.headers['content-range'];
+              delete ctx.serverToProxyResponse.headers['accept-ranges'];
+            }
+          }
+
           requestInfo.statusCode = ctx.serverToProxyResponse.statusCode;
           requestInfo.statusMessage = ctx.serverToProxyResponse.statusMessage;
           requestInfo.responseHeaders = ctx.serverToProxyResponse.headers;
-          requestInfo.contentType = ctx.serverToProxyResponse.headers['content-type'];
-          requestInfo.contentEncoding = ctx.serverToProxyResponse.headers['content-encoding'];
-          requestInfo.isCompressed = !!requestInfo.contentEncoding;
           return callback();
         })
         ctx.onResponseData((ctx, chunk, callback) => {
           responseBody.push(chunk)
-          if (responseBodyRules.includes(2) || responseBodyRules.includes(4)) return callback(null, Buffer.from(''));
+          if (responseBodyRules.includes(2) || responseBodyRules.includes(4) || responseBodyRules.includes(1)) return callback(null, Buffer.from(''));
           else return callback(null, chunk);
         })
         ctx.onResponseEnd(async (ctx, callback) => {
           this._speedRelease(ctx);  // 网络保护: 响应结束, 恢复加速
-          let { buffer, text, decompressFailed } = await this.decompressBuffer(Buffer.concat(responseBody), ctx.serverToProxyResponse.headers['content-encoding']);
+          let { buffer, text, decompressFailed } = await this.decompressBuffer(Buffer.concat(responseBody), requestInfo.contentEncoding);
           if (responseBodyRules.includes(2)) {
             buffer = this.applyZipImplantRules(fullUrl, buffer);
             ctx.proxyToClientResponse.write(buffer);
           }
           if (responseBodyRules.includes(4)) {
             buffer = await this.applyDynamicInjectRules(fullUrl, buffer);
+            ctx.proxyToClientResponse.write(buffer);
+          }
+          if (responseBodyRules.includes(1)) {
+            buffer = this.applyContentChangeRules(fullUrl, buffer, requestInfo.contentType);
             ctx.proxyToClientResponse.write(buffer);
           }
           const isJson = /application\/json/.test(requestInfo.contentType);
@@ -466,6 +488,16 @@ class ProxyServer {
             });
             res.end(JSON.stringify({ success: false, error: e.message }));
           }
+        });
+        return;
+      }
+
+      // ===== 通用转发：注入页桥接脚本 request 经此绕开浏览器跨域，把 SDK 请求转发到真实 API =====
+      if (req.method === 'POST' && url.parse(req.url).pathname === '/a366-forward') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          this.forwardApiRequest(body, res);
         });
         return;
       }
@@ -811,6 +843,79 @@ class ProxyServer {
       console.error('处理本地服务器请求失败:', error);
       res.writeHead(500);
       res.end('Internal Server Error');
+    }
+  }
+
+  // 转发注入页桥接脚本发来的 SDK 请求（附带页面 cookie 透传登录态），规避浏览器 CORS
+  async forwardApiRequest(rawBody, res) {
+    const send = (status, obj) => {
+      res.writeHead(status, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(JSON.stringify(obj));
+    };
+    try {
+      const data = JSON.parse(rawBody || '{}');
+      const target = String(data.url || '');
+      if (!/^https?:\/\//i.test(target)) return send(400, { success: false, error: '无效URL' });
+
+      const method = String(data.method || 'GET').toUpperCase();
+      const headers = (data.headers && typeof data.headers === 'object') ? data.headers : {};
+      const h = {};
+      Object.keys(headers).forEach(k => { h[k] = String(headers[k]); });
+      // 页面传入的 cookie 未在 header 中时补上，用于登录态透传
+      if (data.cookie && !h['Cookie']) h['Cookie'] = String(data.cookie);
+
+      const u = url.parse(target);
+      const lib = u.protocol === 'https:' ? https : http;
+      // 诊断日志：转发请求显示在 Auto366 日志面板，便于排查登录态/接口返回
+      this.safeIpcSend('rule-log', {
+        type: 'info',
+        message: `[转发] ${method} ${target}`,
+        url: target,
+        details: `body: ${String(data.body || '').slice(0, 120)}`
+      });
+      const req = lib.request({
+        hostname: u.hostname,
+        port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: u.path,
+        method: method,
+        headers: h,
+        timeout: 30000
+      }, r => {
+        const chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => {
+          const buf = Buffer.concat(chunks);
+          const ctype = String(r.headers['content-type'] || '');
+          let bodyOut = buf.toString('utf-8');
+          if (/^application\/json/i.test(ctype)) {
+            try { bodyOut = JSON.parse(bodyOut); } catch (e) { /* 保留原文 */ }
+          }
+          // 转发结果诊断（状态码 + 接口 code/msg）
+          let diag = `HTTP ${r.statusCode}`;
+          if (bodyOut && typeof bodyOut === 'object') {
+            if (typeof bodyOut.code !== 'undefined') diag += `, code=${bodyOut.code} msg=${String(bodyOut.msg || '')}`;
+            else if (bodyOut.result && typeof bodyOut.result.code !== 'undefined') {
+              diag += `, result.code=${bodyOut.result.code} msg=${String(bodyOut.result.msg || '')}`;
+            }
+          }
+          this.safeIpcSend('rule-log', {
+            type: 'info',
+            message: `[转发结果] ${method} ${target} → ${diag}`,
+            url: target,
+            details: `body: ${String(bodyOut).slice(0, 200)}`
+          });
+          send(200, { status: r.statusCode, headers: r.headers, body: bodyOut });
+        });
+      });
+      req.on('error', e => send(500, { success: false, error: String(e && e.message || e) }));
+      req.on('timeout', () => { req.destroy(new Error('forward timeout')); });
+      if (data.body) req.write(String(data.body));
+      req.end();
+    } catch (e) {
+      send(500, { success: false, error: String(e && e.message || e) });
     }
   }
 
@@ -1624,6 +1729,115 @@ class ProxyServer {
     } catch (error) {
       console.error('提取文件名失败:', error);
       return null;
+    }
+  }
+
+  // 判断响应是否为文本类内容（可安全做字符串替换）。二进制(wasm/图片/音频/视频/zip等)返回 false，
+  // 避免 utf-8 字符串替换损坏二进制；未声明 content-type 时按文本处理，保证内容替换的兼容性。
+  isTextualContentType(contentType) {
+    const s = String(contentType || '').toLowerCase();
+    if (!s) return true;
+    if (s.includes('text/')) return true;              // text/html text/css text/plain text/javascript ...
+    if (s.includes('json')) return true;               // application/json application/ld+json ...
+    if (s.includes('javascript')) return true;         // application/javascript
+    if (s.includes('ecmascript')) return true;
+    if (s.includes('xml')) return true;                // application/xml ...
+    if (s.includes('svg')) return true;                // image/svg+xml
+    if (s.includes('xhtml')) return true;
+    if (s.includes('x-www-form-urlencoded')) return true;
+    return false;
+  }
+
+  // 解析内容替换的文件来源：内置规则的相对路径已由 rules-loader 解析为绝对路径，
+  // 这里兜底按规则集目录/应用目录解析相对路径。
+  resolveContentChangeFile(rule) {
+    if (!rule.newContentFile) return null;
+    if (path.isAbsolute(rule.newContentFile)) return rule.newContentFile;
+    if (rule.rulesetDir) {
+      const p = path.join(rule.rulesetDir, rule.newContentFile);
+      if (fs.existsSync(p)) return p;
+    }
+    const appPathFile = path.resolve(this.appPath, rule.newContentFile);
+    return fs.existsSync(appPathFile) ? appPathFile : null;
+  }
+
+  // 应用响应替换(内容修改)规则：把匹配的响应按 originalContent→newContent 改写；
+  // originalContent 为空字符串表示整页替换（用于游戏页整体替换）；newContentFile 指定时
+  // 运行时动态读取文件内容作为替换源（改动文件即时生效，无需重建规则）。适用于 html/js/css/json
+  // 等文本类内容；二进制已在 onResponse 阶段放行，这里再兜底跳过，避免误伤 css/js/json 之外的资源。
+  applyContentChangeRules(url, responseBody, contentType) {
+    try {
+      if (!this.isTextualContentType(contentType || '')) return responseBody;
+      let text = responseBody.toString('utf-8');
+      let changed = false;
+
+      for (const ruleset of this.rulesManager.getRules()) {
+        if (!ruleset.enabled) continue;
+        for (const rule of ruleset.rules) {
+          if (!this.isRuleEffective(rule, ruleset)) continue;
+          if (rule.type !== 'content-change' || rule.changeType !== 'response-body') continue;
+          if (!rule.urlPattern || !url.includes(rule.urlPattern)) continue;
+
+          // 文件型替换源：动态读取文件内容，文件不存在则跳过该规则（避免把响应清空）
+          let newContent = rule.newContent;
+          if (rule.newContentFile) {
+            const ccFile = this.resolveContentChangeFile(rule);
+            if (ccFile && fs.existsSync(ccFile)) {
+              newContent = fs.readFileSync(ccFile, 'utf-8');
+            } else {
+              console.warn('内容替换文件不存在，跳过规则:', rule.newContentFile);
+              continue;
+            }
+          }
+
+          const modifyRules = Array.isArray(rule.modifyRules) && rule.modifyRules.length
+            ? rule.modifyRules
+            : [{ find: rule.originalContent, replace: newContent }];
+
+          // 整页替换（find 为空）只对 HTML 文档生效：避免 urlPattern 匹配到的该域下
+          // js/css 等资源也被整页替换成 HTML 页面，导致 "Unexpected token '<'"。
+          const ct = String(contentType || '').toLowerCase();
+          const isHtmlDoc = ct.includes('text/html') || ct.includes('application/xhtml+xml');
+
+          let applied = false;
+          for (const mr of modifyRules) {
+            if (!mr || mr.find === undefined) continue;
+            const find = String(mr.find);
+            const replace = mr.replace === undefined ? '' : String(mr.replace);
+            if (find === '' && !isHtmlDoc) continue;
+            if (find === '') {
+              text = replace; // 空 find = 整页替换
+            } else {
+              text = text.split(find).join(replace);
+            }
+            applied = true;
+          }
+          if (applied) {
+            changed = true;
+          } else {
+            continue;
+          }
+
+          this.safeIpcSend('rule-log', {
+            type: 'success',
+            message: `响应替换: "${rule.name}"`,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            url: url
+          });
+        }
+      }
+
+      // 运行时配置注入：把占位符替换为当前 bucket 端口，让页面内联桥用的转发地址与用户设置一致
+      if (text.indexOf('__A366_BUCKET_PORT__') !== -1) {
+        text = text.split('__A366_BUCKET_PORT__').join(String(this.bucketPort || 5290));
+        changed = true;
+      }
+
+      return changed ? Buffer.from(text, 'utf-8') : responseBody;
+    } catch (error) {
+      console.error('应用响应替换规则失败:', error);
+      return responseBody;
     }
   }
 

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "百舸争流大厅注入",
+    "type": "zip-implant",
+    "description": "静态替换 up366 下发的百舸争流(龙舟)大厅包 zip 为本地已注入桌面桥接脚本 auto-boat.js 的包，使大厅页在电脑端浏览器可运行",
+    "enabled": true,
+    "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
+    "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
+    "targetFileName": "jc*.zip",
+    "zipImplant": "auto-boat.zip"
+  },
+  {
+    "name": "内部响应替换",
+    "type": "content-change",
+    "description": "把 regatta.up366.cn 的答题页 HTML 整页替换为内置自动答题页（含桌面桥接 + 自动答题逻辑）；Cocos 资源仍从真实服务器加载",
+    "enabled": true,
+    "urlPattern": "regatta.up366.cn",
+    "changeType": "response-body",
+    "originalContent": "",
+    "newContentFile": "internal-page.html"
+  }
+]

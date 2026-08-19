@@ -250,7 +250,7 @@ class RulesManager {
 
       const COMMON_FIELDS = new Set(['id', 'name', 'type', 'description', 'enabled', 'isBuiltin', 'createdAt', 'updatedAt', 'maxTriggers', 'currentTriggers']);
       const TYPE_FIELDS = {
-        'content-change': ['urlPattern', 'changeType', 'originalContent', 'newContent', 'action', 'modifyRules'],
+        'content-change': ['urlPattern', 'changeType', 'originalContent', 'newContent', 'newContentFile', 'action', 'modifyRules'],
         'zip-implant': ['urlFileinfo', 'urlZip', 'targetFileName', 'zipImplant'],
         'zip-implant-dynamic': ['urlFileinfo', 'urlZip', 'targetFileName', 'injectScript', 'injectScripts', 'downloadTimeout'],
         'answer-upload': ['urlUpload', 'uploadType', 'serverLocate'],
