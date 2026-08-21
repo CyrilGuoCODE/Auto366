@@ -2,6 +2,24 @@ const { spawn } = require('child_process');
 const { ipcMain, app } = require('electron');
 const fs = require('fs-extra');
 const path = require('path');
+const https = require('https');
+const { URL } = require('url');
+
+// ---- GeoIP/GeoSite 数据库 ----
+const GEO_MIRRORS = [
+  'https://gh-proxy.org/',
+  'https://cdn.gh-proxy.org/',
+  'https://axisnow.gh-proxy.org/',
+  'https://ghproxy.net/',
+];
+// 源仓库：MetaCubeX/meta-rules-dat（mihomo 官方 geox 数据库，release 固定 latest 标签）
+const GEO_RELEASE_URL = 'https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/';
+// 最小必要 GeoIP 数据库
+const GEO_DATA_MIN = [
+  { file: 'geoip.metadb', minSize: 1024 * 1024 },
+];
+// 其余数据库：当前暂不下载（TUN 启动后在后台补齐的机制保留，需要时在此列表加入即可）。
+const GEO_DATA_EXTRA = [];
 
 // TUN 强制软包模式：通过 mihomo 创建虚拟网卡，将指定进程的流量
 // 强制重定向到 Auto366 的 HTTP 代理（127.0.0.1:proxyPort）。
@@ -56,6 +74,13 @@ log-level: warning
 ipv6: false
 find-process-mode: always
 tcp-concurrent: true
+
+# GeoIP/GeoSite 数据库：关闭自动更新，由 Auto366 启动时从国内加速镜像预置
+geo-auto-update: false
+geox-url:
+  geoip: "https://gh-proxy.org/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
+  geosite: "https://gh-proxy.org/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  mmdb: "https://gh-proxy.org/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
 
 tun:
   enable: true
@@ -120,6 +145,138 @@ ${processRules || '  - MATCH,DIRECT'}
 `;
   }
 
+  // 从 GitHub 加速镜像下载单个 Geo 数据库文件（支持重定向，写临时文件后原子替换）
+  // onProgress(received, total) 回调用于上报下载进度
+  _downloadGeoFile(file, dest, mirror, onProgress) {
+    return new Promise((resolve, reject) => {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const tmp = dest + '.tmp';
+      try { fs.removeSync(tmp); } catch (e) { /* 忽略 */ }
+
+      const downloadFrom = (url) => {
+        const req = https.get(url, { headers: { 'User-Agent': 'Auto366' } }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            res.resume();
+            downloadFrom(new URL(res.headers.location, url).toString());
+            return;
+          }
+          if (res.statusCode !== 200) {
+            res.resume();
+            reject(new Error(`HTTP ${res.statusCode}`));
+            return;
+          }
+          const total = parseInt(res.headers['content-length'], 10) || 0;
+          let received = 0;
+          const fd = fs.openSync(tmp, 'w');
+          res.on('data', (c) => {
+            fs.writeSync(fd, c, 0, c.length);
+            received += c.length;
+            if (onProgress) onProgress(received, total);
+          });
+          res.on('end', () => {
+            try { fs.closeSync(fd); } catch (e) { /* 忽略 */ }
+            try {
+              // 校验非空/非错误页
+              if (fs.statSync(tmp).size < 1024) {
+                fs.removeSync(tmp);
+                reject(new Error('文件过小，疑似错误响应'));
+                return;
+              }
+              fs.renameSync(tmp, dest);
+              resolve();
+            } catch (e) { reject(e); }
+          });
+          res.on('error', (e) => {
+            try { fs.closeSync(fd); } catch (x) { /* 忽略 */ }
+            try { fs.removeSync(tmp); } catch (x) { /* 忽略 */ }
+            reject(e);
+          });
+        });
+        req.on('error', reject);
+      };
+
+      downloadFrom(mirror + GEO_RELEASE_URL + file);
+    });
+  }
+
+  // 批量确保 Geo 数据库就绪：缺失（或文件过小）时从国内加速镜像下载到配置目录
+  // failOnMissing=true 时任一文件失败即返回失败（用于启动前必须就绪的最小库）；
+  // 否则失败仅告警不中断。下载开始/进度/完成均输出到日志面板
+  async _ensureGeoDataFiles(files, failOnMissing) {
+    if (!fs.existsSync(this.configDir)) fs.mkdirSync(this.configDir, { recursive: true });
+    const missing = [];
+    for (const item of files) {
+      const dest = path.join(this.configDir, item.file);
+      if (fs.existsSync(dest) && fs.statSync(dest).size >= item.minSize) continue;
+
+      this.safeIpcSend('rule-log', { type: 'info', message: `[TUN] 开始下载 Geo 数据库: ${item.file}` });
+
+      let ok = false;
+      let lastErr = null;
+      let lastPct = -1;
+      for (const mirror of GEO_MIRRORS) {
+        try {
+          await this._downloadGeoFile(item.file, dest, mirror, (received, total) => {
+            const pct = total ? Math.min(100, Math.round((received / total) * 100)) : -1;
+            if (pct >= 0 && pct - lastPct >= 2) {
+              lastPct = pct;
+              this.safeIpcSend('rule-log', {
+                type: 'info',
+                message: `[TUN] 下载 ${item.file}: ${pct}%`,
+                details: total
+                  ? `${(received / 1024 / 1024).toFixed(1)}/${(total / 1024 / 1024).toFixed(1)} MB`
+                  : `${(received / 1024 / 1024).toFixed(1)} MB`,
+              });
+            }
+          });
+          this.safeIpcSend('rule-log', {
+            type: 'success',
+            message: `[TUN] Geo 数据库下载完成: ${item.file}`,
+            details: `来源: ${mirror}`,
+          });
+          console.log(`[TUN] 已从镜像下载 Geo 数据库: ${item.file} (${mirror})`);
+          ok = true;
+          break;
+        } catch (e) {
+          lastErr = e;
+          console.warn(`[TUN] 镜像 ${mirror} 下载 ${item.file} 失败: ${e.message}`);
+          this.safeIpcSend('rule-log', {
+            type: 'error',
+            message: `[TUN] 镜像下载失败 ${item.file}`,
+            details: `${mirror}: ${e.message}`,
+          });
+        }
+      }
+      if (!ok) {
+        if (failOnMissing) {
+          missing.push(item.file);
+        } else {
+          console.warn(`[TUN] 数据库 ${item.file} 下载失败（不影响本次运行，下次启动自动重试）: ${lastErr ? lastErr.message : ''}`);
+        }
+      }
+    }
+    if (missing.length) {
+      return { success: false, message: 'Geo 数据库下载失败（国内加速镜像均不可达）: ' + missing.join(', ') };
+    }
+    return { success: true };
+  }
+
+  // 启动前只确保最小必要库（geoip.metadb），保证尽快进入 TUN 运行状态
+  async _ensureGeoDataMin() {
+    return this._ensureGeoDataFiles(GEO_DATA_MIN, true);
+  }
+
+  // 启动成功后后台补齐其余数据库
+  _ensureGeoDataExtra() {
+    this._ensureGeoDataFiles(GEO_DATA_EXTRA, false)
+      .then((r) => {
+        if (!r.success) {
+          console.warn('[TUN] 后台补齐其余 Geo 数据库未完全成功，下次启动将自动重试');
+        }
+      })
+      .catch(() => { /* 忽略后台异常 */ });
+  }
+
   // 启动 TUN（启动 mihomo 进程）
   async start() {
     if (this.isRunning) {
@@ -132,13 +289,20 @@ ${processRules || '  - MATCH,DIRECT'}
     }
 
     try {
-      // 检查 mihomo 可执行文件；缺失时若有下载器则自动下载
+      // 检查 mihomo 可执行文件；缺失时若有下载器则自动下载（进度会通过日志面板展示）
       if (!fs.existsSync(this.mihomoPath)) {
         if (this.resourceDownloader) {
+          this.safeIpcSend('rule-log', { type: 'info', message: '[TUN] 检测到 TUN核心资源 缺失，开始下载 TUN 资源...' });
           const r = await this.resourceDownloader.ensure('tun');
           if (!r.ready || !fs.existsSync(this.mihomoPath)) {
+            this.safeIpcSend('rule-log', {
+              type: 'error',
+              message: '[TUN] TUN 资源下载失败',
+              details: r.message || '未知错误',
+            });
             return { success: false, message: 'TUN 资源未就绪：' + (r.message || '下载失败') };
           }
+          this.safeIpcSend('rule-log', { type: 'success', message: '[TUN] TUN 资源(mihomo/wintun)下载完成' });
         } else {
           return { success: false, message: 'mihomo 可执行文件不存在: ' + this.mihomoPath };
         }
@@ -146,6 +310,7 @@ ${processRules || '  - MATCH,DIRECT'}
 
       // 检查 wintun.dll
       if (!fs.existsSync(this.wintunPath)) {
+        this.safeIpcSend('rule-log', { type: 'error', message: '[TUN] wintun.dll 缺失', details: this.wintunPath });
         return { success: false, message: 'wintun.dll 不存在: ' + this.wintunPath };
       }
 
@@ -157,6 +322,13 @@ ${processRules || '  - MATCH,DIRECT'}
       // 写入配置文件
       const config = this._generateConfig();
       fs.writeFileSync(this.configPath, config, 'utf-8');
+
+      // 预置最小必要 GeoIP 数据库（geoip.metadb），避免 mihomo 启动时从 GitHub 下载失败
+      const geo = await this._ensureGeoDataMin();
+      if (!geo.success) {
+        this.safeIpcSend('rule-log', { type: 'error', message: '[TUN] GeoIP 数据库就绪失败', details: geo.message });
+        return { success: false, message: geo.message };
+      }
 
       // 启动 mihomo，工作目录设为 wintun.dll 所在目录
       // 确保 mihomo 能加载 wintun.dll
@@ -208,6 +380,8 @@ ${processRules || '  - MATCH,DIRECT'}
       });
 
       this.isRunning = true;
+      // 启动成功后后台补齐其余数据库
+      this._ensureGeoDataExtra();
       // 不发送 tun-status 事件，由 IPC 返回值统一提示（避免重复日志）
       return { success: true, message: 'TUN 强制软包模式已启动' };
     } catch (error) {

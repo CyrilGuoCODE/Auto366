@@ -41,6 +41,7 @@ class ResourceDownloader {
     this.lastSource = null;    // 最近一次下载来源 main/github
     this.ready = {};           // group -> bool（迁移/下载完成后置 true）
     this.localManifests = {};  // group -> 本地 manifest 缓存
+    this._lastLogPct = {};     // group/model -> 已上报日志面板的百分比（节流用）
   }
 
   // ------------------------------------------------------------
@@ -232,12 +233,32 @@ class ResourceDownloader {
   }
 
   // ------------------------------------------------------------
-  //  进度上报（推送到渲染进程）
+  //  进度上报（推送到渲染进程 + 日志面板）
   // ------------------------------------------------------------
   _emitProgress(data) {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       try {
         this.mainWindow.webContents.send('a366-download-progress', data);
+      } catch (e) { /* 忽略 */ }
+      // 同步输出到日志面板（按 2% 粒度节流，避免刷屏）
+      try {
+        const key = String(data.group || '') + '/' + String(data.model || '');
+        const prev = this._lastLogPct[key] === undefined ? -1 : this._lastLogPct[key];
+        const isDownload = data.stage === 'download';
+        const isExtract = data.stage === 'extract';
+        const isDone = data.stage === 'done';
+        if (isExtract || isDone || (isDownload && typeof data.percent === 'number' && data.percent - prev >= 2)) {
+          if (isDownload) this._lastLogPct[key] = data.percent;
+          let msg = '';
+          if (isDownload) msg = `[资源下载] ${data.group}${data.model ? '/' + data.model : ''} 下载中 ${data.percent}%`;
+          else if (isExtract) msg = `[资源下载] ${data.group}${data.model ? '/' + data.model : ''} 正在解压`;
+          else msg = `[资源下载] ${data.group}${data.model ? '/' + data.model : ''} 下载完成`;
+          this.mainWindow.webContents.send('rule-log', {
+            type: isDone ? 'success' : 'info',
+            message: msg,
+            details: data.source ? `来源: ${data.source}` : '',
+          });
+        }
       } catch (e) { /* 忽略 */ }
     }
   }
