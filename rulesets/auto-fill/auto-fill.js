@@ -758,9 +758,11 @@ async function fillChoiceQuestions() {
 
         let allAnswersForQuestion = [];
         const lookupNum = backendQuestionNum || questionNum;
-        if (window.multiAnswerMap && window.multiAnswerMap.has(lookupNum)) {
-            const multiAnswers = window.multiAnswerMap.get(lookupNum);
-            allAnswersForQuestion = multiAnswers.map(a => a.answer).filter(Boolean);
+        // 统一走分组友好接口：撞车分区的题号已迁移进 multiAnswerGroups，
+        // 直接读 flat multiAnswerMap 会"看不到"这些答案，导致多选/多空漏填
+        const resolvedChoices = getAnswersForQuestionNum(lookupNum, optionsData.length);
+        if (resolvedChoices && resolvedChoices.length > 0) {
+            allAnswersForQuestion = resolvedChoices.filter(Boolean);
         }
         if (allAnswersForQuestion.length === 0 && targetAnswer) {
             allAnswersForQuestion = [targetAnswer];
@@ -1608,10 +1610,8 @@ function buildWrongPlan(totalQuestions) {
 function getWrongAnswersForQuestion(questionNum, totalQuestions) {
     if (!totalQuestions || totalQuestions <= 0) return null;
     const nextNum = (questionNum % totalQuestions) + 1;
-    if (window.multiAnswerMap && window.multiAnswerMap.has(nextNum)) {
-        const list = window.multiAnswerMap.get(nextNum);
-        if (list && list.length > 0) return list.map(a => a.answer);
-    }
+    const wrongResolved = getAnswersForQuestionNum(nextNum, 0);
+    if (wrongResolved && wrongResolved.length > 0) return wrongResolved;
     if (window.questionNumAnswerMap && window.questionNumAnswerMap.has(nextNum)) {
         return [window.questionNumAnswerMap.get(nextNum)];
     }
