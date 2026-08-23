@@ -185,6 +185,11 @@ function loadBucketFromServer() {
                 elementAnswerMap = new Map();
                 const answerMap = new Map();
                 const multiAnswerMap = new Map(); 
+                // XML 各分区从"第N题"重新编号时会撞车（如完成句子与整句批改都从35开始）。
+                // 同一题号若来自不同 elementId，绝不能合并进同一张答案列表，
+                // 否则整句批改的完整句子会被顺次塞进填空题的输入框。
+                // 撞车的分区改为按 elementId 分组存放，填入时按输入框数量挑最贴合的一组。
+                const multiAnswerGroups = new Map();
 
                 for (let i of data) {
                     if (i.sourceFile === 'correctAnswer.xml') {
@@ -218,6 +223,7 @@ function loadBucketFromServer() {
                         }
 
                         const baseAnswerIndex = Number.isFinite(i.answerIndex) && i.answerIndex > 0 ? i.answerIndex : 1;
+                        const entryItems = [];
                         for (let p = 0; p < parts.length; p++) {
                             const answerText = parts[p];
                             const answerIndex = baseAnswerIndex + p;
@@ -232,7 +238,7 @@ function loadBucketFromServer() {
                                 questionNum: questionNum
                             });
 
-                            multiAnswerMap.get(questionNum).push({
+                            entryItems.push({
                                 answer: answerText,
                                 answerIndex: answerIndex,
                                 elementId: i.elementId
@@ -254,12 +260,45 @@ function loadBucketFromServer() {
                                 answerMap.set(questionNum, answerText);
                             }
                         }
+
+                        // 题号撞车检测：同题号不同 elementId → 转入分组存储
+                        const existFlat = multiAnswerMap.get(questionNum);
+                        if (existFlat && existFlat.length > 0 && existFlat[0].elementId !== i.elementId) {
+                            multiAnswerMap.delete(questionNum);
+                            multiAnswerGroups.set(questionNum, [
+                                { elementId: existFlat[0].elementId, items: existFlat },
+                                { elementId: i.elementId, items: entryItems }
+                            ]);
+                        } else if (multiAnswerGroups.has(questionNum)) {
+                            const groups = multiAnswerGroups.get(questionNum);
+                            let merged = false;
+                            for (const g of groups) {
+                                if (g.elementId === i.elementId) {
+                                    g.items.push(...entryItems);
+                                    merged = true;
+                                    break;
+                                }
+                            }
+                            if (!merged) groups.push({ elementId: i.elementId, items: entryItems });
+                        } else {
+                            if (!multiAnswerMap.has(questionNum)) {
+                                multiAnswerMap.set(questionNum, []);
+                            }
+                            multiAnswerMap.get(questionNum).push(...entryItems);
+                        }
                     }
                 }
 
                 for (let [questionNum, answerList] of multiAnswerMap) {
                     answerList.sort((a, b) => (a.answerIndex || 1) - (b.answerIndex || 1));
                     multiAnswerMap.set(questionNum, answerList);
+                }
+
+                for (let [questionNum, groups] of multiAnswerGroups) {
+                    for (const g of groups) {
+                        g.items.sort((a, b) => (a.answerIndex || 1) - (b.answerIndex || 1));
+                    }
+                    multiAnswerGroups.set(questionNum, groups);
                 }
 
                 for (let [eid, answerList] of elementAnswerMap) {
@@ -273,6 +312,7 @@ function loadBucketFromServer() {
                 }
 
                 window.multiAnswerMap = multiAnswerMap;
+                window.multiAnswerGroups = multiAnswerGroups;
                 window.elementAnswerMap = elementAnswerMap;
                 window.questionNumAnswerMap = answerMap;
 
@@ -281,13 +321,19 @@ function loadBucketFromServer() {
                 updateAutoFillPanelStatus();
                 addLogMessage('填空答案库加载成功，共 ' + answers.length + ' 个题目', 'success');
 
-                const multiBlankCount = Array.from(multiAnswerMap.values()).filter(list => list.length > 1).length;
+                const multiBlankCount = Array.from(multiAnswerMap.values()).filter(list => list.length > 1).length
+                    + Array.from(multiAnswerGroups.values()).reduce((acc, gs) => acc + gs.filter(g => g.items.length > 1).length, 0);
                 if (multiBlankCount > 0) {
                     addLogMessage(`检测到 ${multiBlankCount} 个多空/多选题`, 'info');
                     for (let [qNum, ansList] of multiAnswerMap) {
                         if (ansList.length > 1) {
                             const answerTexts = ansList.map(a => a.answer).join(', ');
                             addLogMessage(`  题${qNum}: ${ansList.length}个答案 → [${answerTexts}]`, 'info');
+                        }
+                    }
+                    for (let [qNum, groups] of multiAnswerGroups) {
+                        for (const g of groups) {
+                            addLogMessage(`  题${qNum}(分区): ${g.items.length}个答案 → [${g.items.map(a => a.answer).join(', ')}]`, 'info');
                         }
                     }
                 }
@@ -434,6 +480,29 @@ function findAnswerByContent(questionText) {
     });
 
     return bestMatch;
+}
+
+// 按题号取答案列表。XML 分区题号撞车时（multiAnswerGroups），同一题号挂着
+// 多个分区的答案组，无法从题号本身区分——改用"输入框数量"挑最贴合的一组：
+// 优先选 items 数不超过输入框数的分组里答案最多的（如3个空的完成句子题
+// 会选中 [lost, his, life] 而不是整句批改的单句答案，反之亦然）。
+function getAnswersForQuestionNum(num, inputCount) {
+    const groups = window.multiAnswerGroups && window.multiAnswerGroups.get(num);
+    if (groups && groups.length > 0) {
+        let best = null;
+        if (inputCount > 0) {
+            for (const g of groups) {
+                const n = g.items.length;
+                if (n <= inputCount && (!best || n > best.items.length)) best = g;
+            }
+        }
+        if (!best) best = groups.reduce((a, b) => (b.items.length > a.items.length ? b : a), groups[0]);
+        addLogMessage(`题${num} 命中 ${groups.length} 个同名分区答案组，按输入框数 ${inputCount} 选用含 ${best.items.length} 个答案的分组`, 'info');
+        return best.items.map(a => a.answer);
+    }
+    const flat = window.multiAnswerMap && window.multiAnswerMap.get(num);
+    if (flat && flat.length > 0) return flat.map(a => a.answer);
+    return null;
 }
 
 async function fillChoiceQuestions() {
@@ -1150,6 +1219,12 @@ async function fillCurrentPage() {
 
     const setElValue = (el, v) => {
         if (!el) return false;
+        // 同一空存在多个可接受答案时（如 laws/aws、ought/ught，写不写首字母都给分），
+        // XML 会把变体用 / 拼在同一答案里；只取第一个变体填入，
+        // 否则 "laws/aws" 会被原样写进空格导致判错
+        if (typeof v === 'string' && v.includes('/')) {
+            v = v.split('/')[0].trim();
+        }
         const tag = (el.tagName || '').toLowerCase();
         if (tag === 'input' || tag === 'textarea') {
             // 原生 setter 赋值，避免直接赋值绕过 Vue 响应式
@@ -1175,6 +1250,13 @@ async function fillCurrentPage() {
                 el.focus();
             } catch (e) {}
         }
+        // 整句批改(U3WholeMark)、半批改(U3HalfMark)等组件在 blur 时才保存答案（"失焦保存"），补发焦点事件
+        if (tag === 'textarea' || el.isContentEditable) {
+            try {
+                el.focus();
+                el.dispatchEvent(new FocusEvent('blur'));
+            } catch (e) {}
+        }
         return true;
     };
 
@@ -1187,6 +1269,44 @@ async function fillCurrentPage() {
             await wait1(50);
         }
         return filledBlanks;
+    };
+
+    // ===== 整句批改(U3WholeMark)：textarea.u3-translate__textarea，中文提示句内容匹配 =====
+    // 该组件的 DOM 与普通填空完全不同（题干在 .u3-translate__text，输入是 textarea），
+    // 常规扫描扫不到，这里独立处理，题号匹配/内容匹配两种模式下都生效。
+    const fillTranslateQuestions = async () => {
+        const areas = document.querySelectorAll('textarea.u3-translate__textarea');
+        if (!areas.length) return 0;
+        let count = 0;
+        for (const ta of areas) {
+            if (ta.readOnly || ta.disabled) continue;
+            // 向上找到同时包含题干文本与输入框的组件根节点
+            let comp = ta.closest('.u3-translate');
+            if (!comp || !comp.querySelector('.u3-translate__text')) {
+                let el = ta.parentElement;
+                while (el && el !== document.body && !el.querySelector('.u3-translate__text')) {
+                    el = el.parentElement;
+                }
+                comp = (el && el !== document.body) ? el : null;
+            }
+            if (!comp) continue;
+            const clone = comp.cloneNode(true);
+            clone.querySelectorAll('textarea, input, button, [contenteditable]').forEach(el => el.remove());
+            const hintText = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!hintText) continue;
+            const cleanHint = hintText.replace(/分值\d+分\s*/g, '').replace(/^\d+[\s\.\)]*/, '').trim();
+            const match = findAnswerByContent(cleanHint);
+            if (!match) {
+                addLogMessage(`整句批改 未匹配到答案: ${cleanHint.substring(0, 40)}...`, 'warning');
+                continue;
+            }
+            if (setElValue(ta, match.answer)) {
+                count++;
+                addLogMessage(`整句批改 填入答案 (相似度: ${Math.round(match.similarity)}%): ${match.answer}`, 'success');
+                await wait1(80);
+            }
+        }
+        return count;
     };
 
     const choiceFilledCount = supportChoiceQuestions ? await fillChoiceQuestions() : 0;
@@ -1262,12 +1382,13 @@ async function fillCurrentPage() {
                         }
                     }
 
-                    if (!answersToFill && window.multiAnswerMap) {
-                        const multiAnswers = window.multiAnswerMap.get(questionNum) || (match.questionNum ? window.multiAnswerMap.get(match.questionNum) : null);
-                        if (multiAnswers && multiAnswers.length > 0) {
-                            answersToFill = multiAnswers.map(item => item.answer);
-                            if (match.questionNum) questionNum = match.questionNum;
+                    if (!answersToFill) {
+                        let resolved = getAnswersForQuestionNum(questionNum, containerInputs.length);
+                        if (!resolved && match.questionNum) {
+                            resolved = getAnswersForQuestionNum(match.questionNum, containerInputs.length);
+                            if (resolved) questionNum = match.questionNum;
                         }
+                        if (resolved) answersToFill = resolved;
                     }
 
                     if (!answersToFill) {
@@ -1322,18 +1443,14 @@ async function fillCurrentPage() {
             const questionNum = parseInt(modePrepared[i].innerHTML);
             if (isNaN(questionNum) || questionNum <= 0) continue;
 
-            const multiAnswers = window.multiAnswerMap ? window.multiAnswerMap.get(questionNum) : null;
-
             let currentInputIndex = i;
             while (currentInputIndex < modePrepared.length && parseInt(modePrepared[currentInputIndex].innerHTML) === questionNum) {
                 currentInputIndex++;
             }
             const inputsSlice = modeInputs.slice(i, currentInputIndex);
 
-            let answersToFill;
-            if (multiAnswers && multiAnswers.length > 0) {
-                answersToFill = multiAnswers.map(item => item.answer);
-            } else {
+            let answersToFill = getAnswersForQuestionNum(questionNum, inputsSlice.length);
+            if (!answersToFill) {
                 const answerIndex = questionNum - 1;
                 answersToFill = (answerIndex >= 0 && answerIndex < answers.length) ? [answers[answerIndex]] : [];
             }
@@ -1359,6 +1476,12 @@ async function fillCurrentPage() {
             
             await wait1(100);
         }
+    }
+
+    try {
+        filledCount += await fillTranslateQuestions();
+    } catch (e) {
+        addLogMessage('整句批改填充异常(已跳过): ' + (e && e.message || e), 'error');
     }
 
     if (filledCount > 0) {
