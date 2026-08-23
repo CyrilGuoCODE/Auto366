@@ -315,6 +315,10 @@ function loadBucketFromServer() {
                 window.multiAnswerGroups = multiAnswerGroups;
                 window.elementAnswerMap = elementAnswerMap;
                 window.questionNumAnswerMap = answerMap;
+                // 对外暴露分组友好接口：外部脚本请迁移到
+                // getAnswersForQuestionNum(num, inputCount, elementId)，
+                // 直读 multiAnswerMap 将看不到撞车分区（multiAnswerGroups）里的答案
+                window.getAnswersForQuestionNum = getAnswersForQuestionNum;
 
                 bucketLoaded = true;
                 bucketError = null;
@@ -486,7 +490,13 @@ function findAnswerByContent(questionText) {
 // 多个分区的答案组，无法从题号本身区分——改用"输入框数量"挑最贴合的一组：
 // 优先选 items 数不超过输入框数的分组里答案最多的（如3个空的完成句子题
 // 会选中 [lost, his, life] 而不是整句批改的单句答案，反之亦然）。
-function getAnswersForQuestionNum(num, inputCount) {
+// 若调用方能提供 elementId（内容匹配等场景），则跳过启发式直接精确匹配。
+function getAnswersForQuestionNum(num, inputCount, elementId) {
+    // ① elementId 精确路径：跨分区绝对无歧义，永远优先于启发式
+    if (elementId && window.elementAnswerMap && window.elementAnswerMap.has(elementId)) {
+        return window.elementAnswerMap.get(elementId).map(a => a.answer);
+    }
+    // ② 撞车分组：按输入框数量挑最贴合的分区组
     const groups = window.multiAnswerGroups && window.multiAnswerGroups.get(num);
     if (groups && groups.length > 0) {
         let best = null;
@@ -661,17 +671,18 @@ async function fillChoiceQuestions() {
 
         function pickBestAnswer(candidatesList) {
             if (candidatesList.length === 0) return null;
-            if (candidatesList.length === 1) return candidatesList[0].answer;
+            if (candidatesList.length === 1) return candidatesList[0];
             candidatesList.sort((a, b) => {
                 if (b.score !== a.score) return b.score - a.score;
                 return (b.answer.length || 0) - (a.answer.length || 0);
             });
-            return candidatesList[0].answer;
+            return candidatesList[0];
         }
 
         let targetAnswer = null;
         let strategyUsed = '';
         let backendQuestionNum = null;
+        let backendElementId = null;
         if (questionText) {
             const match = findAnswerByContent(questionText);
             if (match) {
@@ -680,6 +691,7 @@ async function fillChoiceQuestions() {
                         targetAnswer = optionsData[oi].cleanText;
                         strategyUsed = '策略1(内容匹配 ' + Math.round(match.similarity || 0) + '%)';
                         backendQuestionNum = match.questionNum;
+                        backendElementId = match.elementId || null;
                         break;
                     }
                 }
@@ -694,6 +706,7 @@ async function fillChoiceQuestions() {
                         if (answerMatchesOption(item.answer, optionsData[oi].cleanText)) {
                             targetAnswer = optionsData[oi].cleanText;
                             backendQuestionNum = item.questionNum;
+                            backendElementId = item.elementId || null;
                             break;
                         }
                     }
@@ -721,18 +734,22 @@ async function fillChoiceQuestions() {
                     if (!itemQuestionText) continue;
                     const score = calculateTextSimilarity(questionText, itemQuestionText);
                     if (score < 20) continue;
-                    candidates.push({ answer: item.answer, score, matchIndex });
+                    candidates.push({ answer: item.answer, score, matchIndex, elementId: item.elementId });
                 } else {
                     const itemAns = item.answer.replace(/\s+/g, '').toLowerCase();
                     const optText = optionsData[matchIndex].cleanText.replace(/\s+/g, '').toLowerCase();
                     const isExact = itemAns === optText;
                     const isShort = itemAns.length <= optText.length + 5;
                     if (isExact || isShort) {
-                        candidates.push({ answer: item.answer, score: 0, matchIndex });
+                        candidates.push({ answer: item.answer, score: 0, matchIndex, elementId: item.elementId });
                     }
                 }
             }
-            targetAnswer = pickBestAnswer(candidates);
+            const bestCandidate = pickBestAnswer(candidates);
+            if (bestCandidate) {
+                targetAnswer = bestCandidate.answer;
+                backendElementId = bestCandidate.elementId || null;
+            }
             if (targetAnswer) strategyUsed = '策略2(选项反查)';
         }
 
@@ -759,8 +776,9 @@ async function fillChoiceQuestions() {
         let allAnswersForQuestion = [];
         const lookupNum = backendQuestionNum || questionNum;
         // 统一走分组友好接口：撞车分区的题号已迁移进 multiAnswerGroups，
-        // 直接读 flat multiAnswerMap 会"看不到"这些答案，导致多选/多空漏填
-        const resolvedChoices = getAnswersForQuestionNum(lookupNum, optionsData.length);
+        // 直接读 flat multiAnswerMap 会"看不到"这些答案，导致多选/多空漏填。
+        // 能拿到 elementId 时（策略1/2/反查命中）由接口内部精确匹配，跳过启发式
+        const resolvedChoices = getAnswersForQuestionNum(lookupNum, optionsData.length, backendElementId);
         if (resolvedChoices && resolvedChoices.length > 0) {
             allAnswersForQuestion = resolvedChoices.filter(Boolean);
         }
@@ -1222,9 +1240,11 @@ async function fillCurrentPage() {
     const setElValue = (el, v) => {
         if (!el) return false;
         // 同一空存在多个可接受答案时（如 laws/aws、ought/ught，写不写首字母都给分），
-        // XML 会把变体用 / 拼在同一答案里；只取第一个变体填入，
-        // 否则 "laws/aws" 会被原样写进空格导致判错
-        if (typeof v === 'string' && v.includes('/')) {
+        // XML 会把变体用紧贴的 / 拼在同一答案里；只取第一个变体填入，
+        // 否则 "laws/aws" 会被原样写进空格导致判错。
+        // 注意区分两种语义：带空格的 " / " 是分空分隔符（加载层已按其拆分，
+        // 此处防御性保持原样不截断），紧贴斜杠才是变体分隔符
+        if (typeof v === 'string' && v.includes('/') && !/\s\/\s/.test(v)) {
             v = v.split('/')[0].trim();
         }
         const tag = (el.tagName || '').toLowerCase();
@@ -1252,8 +1272,10 @@ async function fillCurrentPage() {
                 el.focus();
             } catch (e) {}
         }
-        // 整句批改(U3WholeMark)、半批改(U3HalfMark)等组件在 blur 时才保存答案（"失焦保存"），补发焦点事件
-        if (tag === 'textarea' || el.isContentEditable) {
+        // 整句批改(U3WholeMark)、半批改(U3HalfMark)在 blur 时才保存答案（"失焦保存"）。
+        // 仅对这类组件补发焦点事件，其他 textarea/contenteditable 组件保持原行为，
+        // 避免误触发额外校验/提交/弹窗等副作用
+        if (tag === 'textarea' && el.classList && el.classList.contains('u3-translate__textarea')) {
             try {
                 el.focus();
                 el.dispatchEvent(new FocusEvent('blur'));
