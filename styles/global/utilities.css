@@ -39,10 +39,10 @@
 
 .text-muted { color: var(--color-text-muted); }
 .text-heading { color: var(--color-text-heading); }
-.text-primary { color: var(--color-primary); }
-.text-success { color: var(--color-success); }
-.text-danger { color: var(--color-danger); }
-.text-warn { color: var(--color-warn); }
+.text-primary { color: var(--color-text-link); }
+.text-success { color: var(--color-success-text); }
+.text-danger { color: var(--color-error-text); }
+.text-warn { color: var(--color-warn-text); }
 
 .text-xs { font-size: var(--text-xs); }
 .text-sm { font-size: var(--text-sm); }

@@ -96,7 +96,7 @@
 
 .tun-process-item__remove:hover {
     background: var(--color-danger-50);
-    color: var(--color-danger);
+    color: var(--color-error-text);
 }
 
 .tun-processes__status {

@@ -74,11 +74,11 @@ html[data-ui="simple"] .btn--port-change {
     width: var(--space-xl);
     height: var(--space-xl);
     flex-shrink: 0;
-    color: var(--color-warn-500);
+    color: var(--color-warn-text);
 }
 
 .simple-home .update-notification-btn.has-update .update-notification-icon {
-    color: var(--color-success);
+    color: var(--color-success-text);
 }
 
 .simple-home .update-notification-text {
@@ -206,7 +206,7 @@ html[data-ui="simple"] .btn--port-change {
 }
 
 .simple-home__link {
-    color: var(--color-primary);
+    color: var(--color-text-link);
 }
 
 /* ---- 控制面板 - 简单模式特定 ---- */
@@ -505,7 +505,7 @@ html[data-ui="simple"][data-simple-page="menu"] .simple-home__footer {
     bottom: 0;
     z-index: 40;
     padding: 14px var(--space-lg) max(var(--space-md), env(safe-area-inset-bottom, 0px));
-    background: var(--color-white);
+    background: var(--color-bg-panel);
     border: 1px solid var(--color-border);
     border-bottom: none;
     box-sizing: border-box;

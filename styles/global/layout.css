@@ -94,7 +94,7 @@
 
 .sidebar__mode-btn:hover {
     background: var(--color-border);
-    color: var(--color-primary);
+    color: var(--color-text-link);
 }
 
 .main {

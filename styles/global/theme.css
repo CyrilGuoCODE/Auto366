@@ -1,8 +1,7 @@
 /* ===== 颜色模式 (深色主题) =====
- * 语义令牌(--color-bg-page / --color-text / --color-border ...)在 tokens.css 中
- * 全部是 var(--color-gray-*) / var(--color-white) 之类的引用, CSS 变量在使用处
- * 惰性求值, 因此这里只需在 html[data-theme="dark"] 作用域内反转灰阶 + 白/黑,
- * 语义令牌即自动全部翻转; 再针对状态色底/文字单独调深, 保证对比度。
+ * 物理颜色(--color-white / --color-black)永远保持物理含义；深色模式只覆盖
+ * 语义表面、文字、边框与状态色阶。这样主色按钮的白字不会因为主题切换变黑，
+ * 面板也不会依赖“把白色改成黑色”这种容易漏光的隐式技巧。
  * html[data-theme="dark"] 特异性(0,1,1) 高于 :root(0,1,0), 稳定覆盖。
  */
 
@@ -19,26 +18,82 @@ html[data-theme="dark"] {
   --color-gray-800: #e9edf2;
   --color-gray-900: #f5f7fa;
 
-  /* 白/黑对调(白=深底, 黑=浅字); 深底用柔和近黑而非纯黑 */
-  --color-white: #1e2127;
-  --color-black: #f5f7fa;
+  /* 完整主题色阶：浅号位在深色主题中是低亮度染色表面，高号位用于亮色文字。 */
+  --color-primary-50:  #15283a;
+  --color-primary-100: #19334a;
+  --color-primary-200: #204967;
+  --color-primary-300: #29658d;
+  --color-primary-400: #3184bb;
+  --color-primary-500: #1976d2;
+  --color-primary-600: #71bdf8;
+  --color-primary-700: #9ccff9;
+  --color-primary-800: #c3e2fb;
+  --color-primary-900: #e3f2fd;
 
-  /* primary 在深底下略提亮, 保证按钮/高亮可读 */
-  --color-primary-500: #3ea6ff;
-  --color-primary-600: #2f97f0;
-  --color-primary-light: #22303d;
+  --color-danger-50:  #35191e;
+  --color-danger-100: #452027;
+  --color-danger-200: #612b35;
+  --color-danger-300: #823b49;
+  --color-danger-400: #ad5261;
+  --color-danger-500: #c82333;
+  --color-danger-600: #f18792;
+  --color-danger-700: #f4a4ac;
+  --color-danger-800: #f8c5ca;
+
+  --color-success-50:  #122d1d;
+  --color-success-100: #173a25;
+  --color-success-200: #205132;
+  --color-success-300: #2c7044;
+  --color-success-400: #3f965c;
+  --color-success-500: #218838;
+  --color-success-600: #78ce91;
+  --color-success-700: #9adfab;
+
+  --color-warn-50:  #332a12;
+  --color-warn-100: #423617;
+  --color-warn-200: #5d4a1e;
+  --color-warn-300: #7b6328;
+  --color-warn-400: #a68234;
+  --color-warn-500: #8a6d00;
+  --color-warn-600: #edcb70;
+  --color-warn-700: #f5dd9a;
+
+  --color-info-50:  #102c34;
+  --color-info-100: #153943;
+  --color-info-200: #1c505e;
+  --color-info-300: #276d7f;
+  --color-info-400: #3590a5;
+  --color-info-500: #117a8b;
+  --color-info-600: #78cad9;
+
+  --color-primary-light: var(--color-primary-50);
+  --color-primary: #1976d2;
+  --color-primary-hover: #1565c0;
+  --color-primary-active: #0d47a1;
+  --color-danger: #c82333;
+  --color-danger-hover: #a71e2a;
+  --color-success: #218838;
+  --color-success-hover: #176b2b;
+  --color-warn: #8a6d00;
+  --color-warn-hover: #6f5800;
+  --color-info: #117a8b;
+  --color-info-hover: #0e6675;
 
   /* 页面/面板/边框 关键语义直接钉深色值(避免个别引用歧义) */
   --color-bg-page:   #16181c;
   --color-bg-muted:  #1e2127;
   --color-bg-panel:  #1e2127;
+  --color-bg-elevated: #242830;
+  --color-bg-sunken: #121418;
   --color-bg-hover:  #2a2e35;
   --color-border:        #2a2e35;
   --color-border-light:  #23272e;
   --color-border-strong: #3a404a;
   --color-text:         #d4dae1;
-  --color-text-muted:   #8a939f;
+  --color-text-muted:   #98a1ac;
   --color-text-heading: #f5f7fa;
+  --color-text-inverse: #ffffff;
+  --color-text-link: #9ccff9;
 
   /* 状态色: 底色调深, 文字提亮 */
   --color-success-bg: #123020; --color-success-text: #7ee2a0;
@@ -51,7 +106,17 @@ html[data-theme="dark"] {
   --color-toggle-off: #4a4f57;
   --color-border-tutorial: #2a2e35;
   --color-orange-light: #3a2a12;
+  --color-orange: #b8550d;
   --color-blue-light: #12263a;
+  --color-focus-ring: rgba(74, 171, 245, 0.16);
+  --color-focus-ring-strong: rgba(74, 171, 245, 0.32);
+
+  /* 深色表面需要更明确但更柔和的层级阴影。 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.34);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.38);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-2xl: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
 /* 切换主题的一瞬间, 给所有元素同一条过渡, 让背景/文字/边框/图标一起淡变,
@@ -101,7 +166,7 @@ html.theme-switching *::after {
               border-color var(--ease-normal), transform var(--ease-normal);
 }
 .simple-home__theme-btn:hover {
-  color: var(--color-primary);
+  color: var(--color-text-link);
   border-color: var(--color-primary);
   transform: translateY(-1px);
 }

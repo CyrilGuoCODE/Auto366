@@ -36,7 +36,7 @@
     height: 36px;
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border-strong);
-    background: var(--color-white);
+    background: var(--color-bg-panel);
     color: var(--color-text-heading);
     cursor: pointer;
     transition: all var(--ease-fast);
@@ -112,7 +112,7 @@
 /* 危险按钮 */
 .btn--danger {
     background: var(--color-bg-panel);
-    color: var(--color-danger);
+    color: var(--color-error-text);
     border-color: var(--color-danger);
 }
 
@@ -126,7 +126,7 @@
 /* 操作按钮 */
 .btn--action {
     background: var(--color-bg-panel);
-    color: var(--color-primary);
+    color: var(--color-text-link);
     border-color: var(--color-primary);
 }
 
@@ -139,7 +139,7 @@
 
 .btn--action.is-restart {
     background: var(--color-bg-panel);
-    color: var(--color-danger);
+    color: var(--color-error-text);
     border-color: var(--color-danger);
 }
 
@@ -166,7 +166,7 @@
 
 .btn--action.is-closing.is-done i,
 .btn--action.is-closing.is-done span {
-    color: var(--color-danger);
+    color: var(--color-error-text);
 }
 
 /* 进度条 */
@@ -201,7 +201,7 @@
 }
 
 .btn--danger.is-closing.is-done span {
-    color: var(--color-danger);
+    color: var(--color-error-text);
 }
 
 /* 小按钮 */
@@ -255,7 +255,7 @@
 /* 清空按钮 */
 .btn--clear {
     background: transparent;
-    color: var(--color-danger);
+    color: var(--color-error-text);
     border-color: var(--color-danger);
 }
 

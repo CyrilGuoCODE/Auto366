@@ -133,7 +133,7 @@
   text-align: center;
 }
 .speed-page__link {
-  color: var(--color-primary-500);
+  color: var(--color-text-link);
   text-decoration: none;
   cursor: pointer;
 }

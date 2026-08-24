@@ -536,10 +536,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       top: 50px;
       left: 0;
       right: 0;
-      background: #fee2e2;
-      color: #b91c1c;
+      background: var(--color-error-bg);
+      color: var(--color-error-text);
       padding: 16px;
-      border-bottom: 2px solid #b91c1c;
+      border-bottom: 2px solid var(--color-error);
       z-index: 999999;
       font-family: monospace;
       white-space: pre-wrap;

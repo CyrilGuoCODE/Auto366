@@ -62,6 +62,8 @@
     --color-bg-page: var(--color-white);
     --color-bg-muted: var(--color-gray-50);
     --color-bg-panel: var(--color-white);
+    --color-bg-elevated: var(--color-white);
+    --color-bg-sunken: var(--color-gray-50);
     --color-bg-hover: var(--color-gray-100);
     --color-border: var(--color-gray-200);
     --color-border-light: var(--color-gray-100);
@@ -70,6 +72,7 @@
     --color-text-muted: var(--color-gray-500);
     --color-text-heading: var(--color-gray-800);
     --color-text-inverse: var(--color-white);
+    --color-text-link: var(--color-primary-700);
     --color-primary: var(--color-primary-500);
     --color-primary-hover: var(--color-primary-600);
     --color-primary-active: var(--color-primary-700);
@@ -92,7 +95,7 @@
     --color-warn-bg: var(--color-warn-50);
     --color-warn-text: var(--color-warn-700);
     --color-info-bg: var(--color-info-50);
-    --color-info-text: var(--color-info-700);
+    --color-info-text: var(--color-info-600);
 
     /* 阴影颜色 */
     --shadow-color-black-10: rgba(0, 0, 0, 0.1);
@@ -101,6 +104,7 @@
     --shadow-color-success-30: rgba(40, 167, 69, 0.3);
     --shadow-color-overlay: rgba(0, 0, 0, 0.5);
     --shadow-color-white-20: rgba(255, 255, 255, 0.2);
+    --color-overlay-hover: rgba(255, 255, 255, 0.2);
 
     /* 功能色 */
     --color-orange: #fd7e14;

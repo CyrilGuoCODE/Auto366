@@ -115,7 +115,7 @@
 }
 
 .btn--danger-solid.is-closing.is-done span {
-    color: var(--color-danger);
+    color: var(--color-error-text);
 }
 
 .btn__state-closing {
@@ -133,7 +133,7 @@
 }
 
 .btn__state-done span {
-    color: var(--color-danger);
+    color: var(--color-error-text);
 }
 
 .progress-bar {

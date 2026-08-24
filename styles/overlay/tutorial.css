@@ -17,7 +17,7 @@
 .modal--tutorial .modal__greeting {
     font-size: var(--text-5xl);
     font-weight: var(--font-weight-medium);
-    color: #0066ff;
+    color: var(--color-text-link);
     margin: 0 0 var(--space-sm);
     letter-spacing: 1px;
 }
@@ -32,38 +32,38 @@
     width: 72px;
     height: 72px;
     border-radius: var(--radius-full);
-    background: #f0f5ff;
+    background: var(--color-primary-light);
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .modal--tutorial .modal__icon-circle.is-success {
-    background: #e8f5e9;
+    background: var(--color-success-bg);
 }
 
 .modal--tutorial .modal__check-icon {
     font-size: var(--text-3xl);
     font-weight: var(--font-weight-bold);
-    color: #2563eb;
+    color: var(--color-text-link);
     font-style: normal;
 }
 
 .modal--tutorial .modal__icon-circle.is-success .modal__check-icon {
-    color: #16a34a;
+    color: var(--color-success-text);
     font-size: var(--text-4xl);
 }
 
 .modal--tutorial .modal__title {
     font-size: var(--text-4xl);
     font-weight: var(--font-weight-semibold);
-    color: #1e293b;
+    color: var(--color-text-heading);
     margin: 0 0 var(--space-sm);
 }
 
 .modal--tutorial .modal__description {
     font-size: var(--text-lg);
-    color: #64748b;
+    color: var(--color-text-muted);
     margin: 0;
     line-height: var(--leading-loose);
 }
@@ -77,7 +77,7 @@
 .modal--tutorial .modal__mode-card {
     flex: 1;
     padding: var(--space-2xl) var(--space-lg);
-    border: 1px solid #d9e2ec;
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all var(--ease-normal);
@@ -85,20 +85,20 @@
 }
 
 .modal--tutorial .modal__mode-card:hover {
-    border-color: #2563eb;
-    background: #f8faff;
+    border-color: var(--color-primary);
+    background: var(--color-bg-hover);
 }
 
 .modal--tutorial .modal__mode-card.is-selected {
-    border-color: #2563eb;
-    background: #eff6ff;
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
 }
 
 .modal--tutorial .modal__mode-card-icon {
     width: var(--space-3xl);
     height: var(--space-3xl);
     border-radius: var(--radius-lg);
-    background: #f0f5ff;
+    background: var(--color-primary-light);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -107,19 +107,19 @@
 
 .modal--tutorial .modal__mode-card-icon .bi {
     font-size: var(--text-2xl);
-    color: #2563eb;
+    color: var(--color-text-link);
 }
 
 .modal--tutorial .modal__mode-card h3 {
     font-size: var(--text-base);
     font-weight: var(--font-weight-semibold);
-    color: #1e293b;
+    color: var(--color-text-heading);
     margin: 0 0 var(--space-sm);
 }
 
 .modal--tutorial .modal__mode-card p {
     font-size: var(--text-base);
-    color: #64748b;
+    color: var(--color-text-muted);
     margin: 0;
     line-height: var(--leading-relaxed);
 }
@@ -135,8 +135,8 @@
 .modal--tutorial .modal__spinner {
     width: var(--space-3xl);
     height: var(--space-3xl);
-    border: 3px solid #e2e8f0;
-    border-top-color: #2563eb;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
     border-radius: var(--radius-full);
     animation: tutorial-spin 0.8s linear infinite;
 }
@@ -147,14 +147,14 @@
 
 #tutorialCacheStatus {
     font-size: var(--text-lg);
-    color: #64748b;
+    color: var(--color-text-muted);
 }
 
 .modal--tutorial .modal__steps {
     text-align: left;
     margin: var(--space-xl) 0 0;
     padding-left: var(--space-xl);
-    color: #334155;
+    color: var(--color-text);
     font-size: var(--text-lg);
     line-height: 2;
 }
@@ -164,11 +164,11 @@
 }
 
 .modal--tutorial .modal__steps code {
-    background: #f1f5f9;
+    background: var(--color-bg-muted);
     padding: var(--space-2xs) var(--space-xs);
     border-radius: var(--radius-sm);
     font-size: var(--text-base);
-    color: #2563eb;
+    color: var(--color-text-link);
 }
 
 .modal--tutorial .modal__hint {
@@ -177,10 +177,10 @@
     gap: var(--space-sm);
     margin-top: var(--space-xl);
     padding: var(--space-md) var(--space-lg);
-    background: #f8faff;
+    background: var(--color-bg-hover);
     border-radius: var(--radius-md);
     font-size: var(--text-base);
-    color: #2563eb;
+    color: var(--color-text-link);
 }
 
 .modal--tutorial .modal__hint .bi {
@@ -194,7 +194,7 @@
 
 .modal--tutorial .modal__text p {
     font-size: var(--text-lg);
-    color: #334155;
+    color: var(--color-text);
     line-height: 1.7;
     margin: 0 0 var(--space-sm);
 }
@@ -207,10 +207,10 @@
 
 .modal--tutorial .modal__features li {
     font-size: var(--text-lg);
-    color: #334155;
+    color: var(--color-text);
     padding: var(--space-sm) 0 var(--space-sm) var(--space-xl);
     position: relative;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid var(--color-border-light);
 }
 
 .modal--tutorial .modal__features li:last-child {
@@ -226,12 +226,12 @@
     width: 6px;
     height: 6px;
     border-radius: var(--radius-full);
-    background: #2563eb;
+    background: var(--color-primary);
 }
 
 .modal--tutorial .modal__note {
     font-size: var(--text-base) !important;
-    color: #94a3b8 !important;
+    color: var(--color-text-muted) !important;
     margin-top: var(--space-lg) !important;
 }
 
@@ -246,25 +246,25 @@
     flex: 1;
     height: var(--space-3xl);
     padding: 0 var(--space-md);
-    border: 1px solid #d9e2ec;
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     font-size: var(--text-lg);
-    color: #334155;
-    background: #f8fafc;
+    color: var(--color-text);
+    background: var(--color-bg-muted);
     outline: none;
 }
 
 .modal--tutorial .modal__cache-input:focus {
-    border-color: #0066ff;
+    border-color: var(--color-primary);
     background: var(--color-bg-panel);
 }
 
 .modal--tutorial .modal__browse-btn {
     height: var(--space-3xl);
     padding: 0 var(--space-lg);
-    border: 1px solid #0066ff;
+    border: 1px solid var(--color-primary);
     border-radius: var(--radius-md);
-    background: #0066ff;
+    background: var(--color-primary);
     color: var(--color-white);
     font-size: var(--text-lg);
     font-weight: var(--font-weight-medium);
@@ -273,13 +273,13 @@
 }
 
 .modal--tutorial .modal__browse-btn:hover {
-    background: #0052cc;
-    border-color: #0052cc;
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
 }
 
 .modal--tutorial .modal__footer {
     padding: var(--space-xl) var(--space-2xl) 28px;
-    border-top: 1px solid #f1f5f9;
+    border-top: 1px solid var(--color-border-light);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -295,12 +295,12 @@
     width: var(--space-sm);
     height: var(--space-sm);
     border-radius: var(--radius-full);
-    background: #e2e8f0;
+    background: var(--color-border);
     transition: all var(--ease-normal);
 }
 
 .modal__progress-dot.is-active {
-    background: #0066ff;
+    background: var(--color-primary);
     width: var(--space-xl);
     border-radius: var(--radius-sm);
 }
@@ -319,12 +319,12 @@
     cursor: pointer;
     transition: all var(--ease-normal);
     border: none;
-    background: #0066ff;
+    background: var(--color-primary);
     color: var(--color-white);
 }
 
 .modal--tutorial .btn--primary:hover {
-    background: #0052cc;
+    background: var(--color-primary-hover);
 }
 
 .modal--tutorial .btn--ghost {
@@ -336,11 +336,11 @@
     transition: all var(--ease-normal);
     border: none;
     background: var(--color-bg-panel);
-    color: #334155;
-    border: 1px solid #d9e2ec;
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
 }
 
 .modal--tutorial .btn--ghost:hover {
-    background: #f8faff;
-    border-color: #cbd5e1;
+    background: var(--color-bg-hover);
+    border-color: var(--color-border-strong);
 }

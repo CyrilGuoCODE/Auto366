@@ -66,13 +66,13 @@
 #rightLogs .view-panel__controls .btn--clear {
     background: transparent;
     border-color: var(--color-border-strong);
-    color: var(--color-danger);
+    color: var(--color-error-text);
 }
 
 #rightLogs .view-panel__controls .btn--clear:hover {
     background: var(--color-bg-muted);
     border-color: var(--color-danger);
-    color: var(--color-danger-hover);
+    color: var(--color-error-text);
 }
 
 #rightLogs .view-panel__controls .btn--search .bi,
@@ -172,17 +172,17 @@
 }
 
 .log-item--important {
-    color: var(--color-orange);
+    color: var(--color-warn-text);
     font-weight: var(--font-weight-medium);
 }
 
 .log-item--success {
-    color: var(--color-success);
+    color: var(--color-success-text);
     font-weight: var(--font-weight-medium);
 }
 
 .log-item--error {
-    color: var(--color-danger);
+    color: var(--color-error-text);
     font-weight: var(--font-weight-medium);
 }
 
@@ -191,17 +191,17 @@
 }
 
 .log-item--rule-success {
-    color: var(--color-info-500);
+    color: var(--color-info-text);
     font-weight: normal;
 }
 
 .log-item--rule-error {
-    color: var(--color-danger);
+    color: var(--color-error-text);
     font-weight: normal;
 }
 
 .log-item--warning {
-    color: var(--color-warn-500);
+    color: var(--color-warn-text);
     font-weight: var(--font-weight-medium);
 }
 
@@ -246,7 +246,7 @@
 }
 
 .log-detail__item strong {
-    color: var(--color-primary);
+    color: var(--color-text-link);
     margin-right: var(--space-xs);
     font-weight: var(--font-weight-semibold);
 }
@@ -541,7 +541,7 @@
 .logs-container .btn--clear-log {
     background: none;
     border: none;
-    color: var(--color-danger);
+    color: var(--color-error-text);
     cursor: pointer;
     padding: var(--space-xs) var(--space-sm);
     border-radius: var(--radius-sm);
@@ -550,8 +550,8 @@
 }
 
 .logs-container .btn--clear-log:hover {
-    background: #f5f5f5;
-    color: var(--color-danger-hover);
+    background: var(--color-bg-hover);
+    color: var(--color-error-text);
 }
 
 .log-item__time {
@@ -613,5 +613,5 @@
 
 #multiSelectLogsBtn.is-active {
     background: var(--color-primary-500, #2196f3);
-    color: #fff;
+    color: var(--color-text-inverse);
 }

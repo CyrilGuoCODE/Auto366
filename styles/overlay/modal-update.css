@@ -49,7 +49,7 @@
 }
 
 .modal--update .btn--close:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--color-overlay-hover);
 }
 
 .modal--update .modal__version-info {
@@ -82,7 +82,7 @@
 }
 
 .modal--update .modal__version-number.is-highlight {
-    color: var(--color-primary);
+    color: var(--color-text-link);
 }
 
 .modal--update .modal__changelog {

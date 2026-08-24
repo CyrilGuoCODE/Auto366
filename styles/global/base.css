@@ -152,7 +152,7 @@ textarea::placeholder {
     padding: var(--space-sm) var(--space-lg);
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border-strong);
-    background: var(--color-white);
+    background: var(--color-bg-panel);
     color: var(--color-text-heading);
     cursor: pointer;
     transition: all var(--ease-fast);

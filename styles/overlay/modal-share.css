@@ -38,12 +38,12 @@
 }
 
 .modal--share .modal__tips i {
-    color: var(--color-primary);
+    color: var(--color-text-link);
     margin-right: var(--space-xs);
 }
 
 .modal--share .text--success {
-    color: var(--color-success) !important;
+    color: var(--color-success-text) !important;
 }
 
 .modal--share .modal__url-section {

@@ -17,7 +17,7 @@
 
 .badge--stopped {
     background: var(--color-error-bg);
-    color: var(--color-danger-700);
+    color: var(--color-error-text);
 }
 
 .badge--processing {
@@ -32,7 +32,7 @@
 
 .badge--error {
     background: var(--color-error-bg);
-    color: var(--color-danger-700);
+    color: var(--color-error-text);
 }
 
 .badge--enabled {
@@ -42,13 +42,13 @@
 
 .badge--disabled {
     background: var(--color-error-bg);
-    color: var(--color-danger-700);
+    color: var(--color-error-text);
 }
 
 /* 类型徽章 */
 .badge--count {
     background: var(--color-primary-light);
-    color: var(--color-primary);
+    color: var(--color-text-link);
     font-size: var(--text-xs);
     padding: 1px 6px;
     border-radius: var(--radius-full);
@@ -76,7 +76,7 @@
 
 .badge--log-error {
     background: var(--color-error-bg);
-    color: var(--color-danger-700);
+    color: var(--color-error-text);
 }
 
 .badge--log-debug {
@@ -92,7 +92,7 @@
 
 .badge--incompatible {
     background: var(--color-error-bg);
-    color: var(--color-danger-700);
+    color: var(--color-error-text);
 }
 
 /* 圆点徽章 */

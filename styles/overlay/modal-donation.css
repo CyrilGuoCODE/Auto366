@@ -53,7 +53,7 @@
 }
 
 .modal--donation .btn--close:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--color-overlay-hover);
 }
 
 .modal--donation .modal__body {
@@ -71,7 +71,7 @@
     color: var(--color-text-heading);
     border-color: var(--color-border-strong);
     min-width: 160px;
-    background: var(--color-white);
+    background: var(--color-bg-panel);
     white-space: nowrap;
     height: 40px;
 }

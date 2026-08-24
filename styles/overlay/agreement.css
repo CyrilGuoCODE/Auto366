@@ -28,7 +28,7 @@
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  background: var(--color-white);
+  background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
@@ -51,7 +51,7 @@
 .agreement-overlay__header {
   padding: var(--space-xl) var(--space-2xl) var(--space-lg);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-primary-600);
+  background: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -64,13 +64,15 @@
 
 .agreement-overlay__subtitle {
   font-size: var(--text-sm);
-  color: var(--color-primary-100);
+  color: var(--color-text-inverse);
+  opacity: 0.88;
   margin: var(--space-xs) 0 0;
 }
 
 .agreement-overlay__updated {
   font-size: var(--text-xs);
-  color: var(--color-primary-200);
+  color: var(--color-text-inverse);
+  opacity: 0.72;
   margin: var(--space-xs) 0 0;
 }
 
@@ -116,9 +118,9 @@
 }
 
 .agreement-overlay__tab.is-active {
-  color: var(--color-primary);
+  color: var(--color-text-link);
   border-bottom-color: var(--color-primary);
-  background: var(--color-white);
+  background: var(--color-bg-panel);
 }
 
 /* ---- Content ---- */
@@ -127,7 +129,7 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--space-2xl);
-  background: var(--color-white);
+  background: var(--color-bg-panel);
 }
 
 .agreement-overlay__panel {
@@ -184,7 +186,7 @@
 }
 
 .agreement-overlay__panel a {
-  color: var(--color-primary);
+  color: var(--color-text-link);
   text-decoration: none;
 }
 
