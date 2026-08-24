@@ -132,6 +132,8 @@ class Auto366App {
       this.agreementUI.initEventListeners();
       await this.agreementUI.checkAndShow();
 
+      this.logManager.addInfoLog('提示：出现“当前客户端版本过低，请下载最新版客户端后重试！”报错时请在天学网设置中关闭代理并使用Auto366增强模式');
+
       // 追踪应用启动完成
       this.captureEvent('app_initialized');
 

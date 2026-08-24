@@ -1213,20 +1213,21 @@
                     </div>
                 </div>
 
-                <!-- 第4页：代理设置 -->
+                <!-- 第4页：使用前准备（代理 + TUN 模式） -->
                 <div class="modal__page" data-page="3" style="display: none;">
-                    <h2 class="modal__title">天学网代理设置</h2>
-                    <p class="modal__description">请按照以下步骤设置天学网代理：</p>
-                    <ol class="modal__steps">
-                        <li>打开天学网设置页面</li>
-                        <li>选择 <strong>HTTP代理</strong></li>
-                        <li>IP 地址填写：<code>127.0.0.1</code></li>
-                        <li>端口填写：<code>5291</code></li>
-                        <li>点击 <strong>保存</strong></li>
-                    </ol>
+                    <h2 class="modal__title">使用前准备</h2>
+                    <div class="modal__text">
+                        <p>每次使用时，请确认以下两点：</p>
+                        <ul class="modal__features">
+                            <li><strong>开启代理</strong> - 在 Auto366 中启动代理服务器</li>
+                            <li><strong>确保 TUN 模式开启</strong> - 打开"增强模式"开关</li>
+                        </ul>
+                        <p class="modal__note">天学网设置不需要做任何更改。</p>
+                        <p class="modal__note">如果你已经做出了更改，请删除并还原天学网设置。</p>
+                    </div>
                     <div class="modal__hint">
                         <span class="bi bi-info-circle"></span>
-                        <span>设置完成后，你可以点击"下一步"继续</span>
+                        <span>点击"下一步"继续</span>
                     </div>
                 </div>
 
@@ -1234,14 +1235,16 @@
                 <div class="modal__page" data-page="4" style="display: none;">
                     <h2 class="modal__title">规则集使用</h2>
                     <div class="modal__text">
-                        <p>规则集是 Auto366 实现各个功能的模块，我们内置了以下几个功能：</p>
+                        <p>规则集是 Auto366 的功能开关：想自动完成哪种题型，就启用对应的规则集。</p>
                         <ul class="modal__features">
-                            <li><strong>内置-答案获取</strong> - 用于答案获取功能不拦截任何请求</li>
-                            <li><strong>内置-通用自动填空</strong> - 基于请求注入实现的自动填空</li>
-                            <li><strong>内置-自动单词PK</strong> - 利用请求注入实现的自动单词PK</li>
+                            <li><strong>通用自动填空</strong> - 选择题、填空题、跟读朗读题</li>
+                            <li><strong>自动单词PK</strong> - 选择题PK、拼写PK</li>
+                            <li><strong>自动听力</strong> - 初中、高中听说题</li>
+                            <li><strong>类填空听力</strong> - 类填空型听力题</li>
+                            <li><strong>自动百舸争流</strong> - 龙舟/百舸争流活动（请使用旧版天学网）</li>
                         </ul>
-                        <p class="modal__note">你可以在"规则管理"页面中启用或禁用这些规则集。</p>
-                        <p class="modal__note">要用哪个题型用哪个规则集，错误选择需要删除缓存并重启天学网，一次仅启用一个规则集(防止冲突)。</p>
+                        <p class="modal__note">使用方法：打开"规则管理"页面，启用你要用的规则集，然后清除缓存并重启天学网。</p>
+                        <p class="modal__note"><strong>注意：</strong>一次只启用一个规则集，防止冲突；更换规则集时，需先清除缓存并重启天学网。</p>
                     </div>
                 </div>
 

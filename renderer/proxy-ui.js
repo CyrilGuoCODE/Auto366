@@ -97,9 +97,10 @@ class ProxyUI {
     tunBtn.innerHTML = `<i class="bi ${iconClass}"></i><span>增强模式</span>`;
   }
 
-  // 代理启动后自动启动 TUN（若用户已开启自动启动偏好）
+  // 代理启动后自动启动 TUN
   _autoStartTun() {
-    if (localStorage.getItem('tun-autostart') !== 'true') return;
+    const autostart = localStorage.getItem('tun-autostart');
+    if (autostart !== null && autostart !== 'true') return;
     // 延迟一会确保代理完全就绪
     setTimeout(async () => {
       try {
