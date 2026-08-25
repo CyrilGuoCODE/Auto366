@@ -1059,7 +1059,7 @@ async function handleReadAlongQuestions() {
                 }
                 if (!readText) {
                     const clone = questionEl.cloneNode(true);
-                    clone.querySelectorAll('button, .u3-recorder-bts, .u3-recorder-panel, .u3-audioPlayer, [slot*="audio"]').forEach(e => el.remove());
+                    clone.querySelectorAll('button, .u3-recorder-bts, .u3-recorder-panel, .u3-audioPlayer, [slot*="audio"]').forEach(e => e.remove());
                     readText = clone.textContent.trim();
                 }
                 addLogMessage('跟读朗读: readText=' + readText.substring(0, 60) + (readText.length > 60 ? '...' : '') + ' (len=' + readText.length + ')', 'info');
@@ -1746,6 +1746,7 @@ function startAutoFill() {
     }
     readAlongAborted = false;
     isReadAlongProcessing = false;
+    _isFirstReadAlongRecording = true; // 每次启动重置：首次录音需要更长等待覆盖初始化开销
 
     // 构建本轮控分计划：随机选出错题
     const totalQ = answers.length || rawAnswerData.length;
