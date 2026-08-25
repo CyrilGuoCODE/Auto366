@@ -31,6 +31,7 @@ let _afRunningEpoch = 0;  // 当前这轮 handleReadAlongQuestions 进入时的�
 let _origReadAlongGum = null;
 let _origReadAlongStop = null;
 let _origReadAlongProtoGum = null;
+let _isFirstReadAlongRecording = true; // 首次录音需要更长等待(覆盖初始化开销)
 
 function isOurHijack(fn) {
     return !!(fn && typeof fn === 'function' && fn.__a366Hijacked__);
@@ -192,12 +193,18 @@ function loadBucketFromServer() {
                 const multiAnswerGroups = new Map();
 
                 for (let i of data) {
-                    if (i.sourceFile === 'correctAnswer.xml') {
+                    // 全来源接入：阅读回答等新题型的答案可能存于 paper.xml 附件或
+                    // 其他提取模式，不再限定 correctAnswer.xml；
+                    // 非答案行（无 answer/multipleAnswers/questionNo 字段）由下方过滤
+                    if (i.answer !== undefined || i.multipleAnswers !== undefined || i.questionNo !== undefined) {
                         let parts = [];
                         if (Array.isArray(i.multipleAnswers) && i.multipleAnswers.length > 0) {
                             parts = i.multipleAnswers.map(x => String(x).trim()).filter(Boolean);
                         } else if (typeof i.answer === 'string') {
-                            const raw = i.answer.replace(/\s+/g, ' ').trim();
+                            let raw = i.answer.replace(/\s+/g, ' ').trim();
+                            // 多等价完整答案（阅读回答题型，如 "A||B||C"，|| 分隔的是
+                            // 同一空的可接受写法而非不同空）：取首选写入
+                            raw = raw.split('||')[0].trim();
                             if (raw.includes('/')) {
                                 parts = raw.split('/').map(s => s.trim()).filter(Boolean);
                             } else if (raw) {
@@ -206,17 +213,17 @@ function loadBucketFromServer() {
                         }
                         if (parts.length === 0) continue;
 
-                        let questionNum = 1;
-                        if (i.question && typeof i.question === 'string') {
-                            const match = i.question.match(/第(\d+)题/);
-                            if (match) {
-                                questionNum = parseInt(match[1], 10);
+                        // 题号解析：优先显式 questionNo 字段，其次 "第N题" 正则；
+                        // 两者皆无的条目（元数据/附件描述行）直接跳过，防止污染低题号
+                        let questionNum = parseInt(i.questionNo, 10);
+                        if (!Number.isFinite(questionNum) || questionNum <= 0) {
+                            questionNum = 0;
+                            if (i.question && typeof i.question === 'string') {
+                                const m = i.question.match(/第(\d+)题/);
+                                if (m) questionNum = parseInt(m[1], 10);
                             }
                         }
-
-                        if (!questionNum || questionNum <= 0) {
-                            questionNum = i.answerIndex || (answers.length + 1);
-                        }
+                        if (!questionNum || questionNum <= 0) continue;
 
                         if (!multiAnswerMap.has(questionNum)) {
                             multiAnswerMap.set(questionNum, []);
@@ -464,6 +471,9 @@ function findAnswerByContent(questionText) {
 
     rawAnswerData.forEach((item, index) => {
         const matchText = item.questionText || item.question || '';
+        // 题干为单个字母（如"A"/"B"）是答案字母的提取残留，非真实题干；
+        // 参与匹配会在共享同一字母的多道题之间产生歧义命中（答案来回翻转），直接跳过
+        if (/^[A-Fa-f]$/.test(matchText.trim())) return;
         const similarity = calculateTextSimilarity(questionText, matchText);
         if (similarity > bestScore && similarity > 60) {
             bestScore = similarity;
@@ -686,14 +696,23 @@ async function fillChoiceQuestions() {
         if (questionText) {
             const match = findAnswerByContent(questionText);
             if (match) {
+                // 最优匹配：优先完全相等，其次选 cleanText 最长(更具体)的选项，
+                // 避免正确答案 "to look" 被其子串 "look"(DOM 序靠前时)抢先命中
+                let bestOi = -1;
+                let bestExact = false;
+                let bestLen = -1;
                 for (let oi = 0; oi < optionsData.length; oi++) {
-                    if (answerMatchesOption(match.answer, optionsData[oi].cleanText)) {
-                        targetAnswer = optionsData[oi].cleanText;
-                        strategyUsed = '策略1(内容匹配 ' + Math.round(match.similarity || 0) + '%)';
-                        backendQuestionNum = match.questionNum;
-                        backendElementId = match.elementId || null;
-                        break;
-                    }
+                    if (!answerMatchesOption(match.answer, optionsData[oi].cleanText)) continue;
+                    const ansClean = match.answer.toLowerCase().replace(/\s+/g, '');
+                    const optClean = optionsData[oi].cleanText.toLowerCase().replace(/\s+/g, '');
+                    if (ansClean === optClean) { bestOi = oi; bestExact = true; break; }
+                    if (optionsData[oi].cleanText.length > bestLen) { bestOi = oi; bestLen = optionsData[oi].cleanText.length; }
+                }
+                if (bestOi >= 0) {
+                    targetAnswer = optionsData[bestOi].cleanText;
+                    strategyUsed = '策略1(内容匹配 ' + Math.round(match.similarity || 0) + '%)';
+                    backendQuestionNum = match.questionNum;
+                    backendElementId = match.elementId || null;
                 }
             }
             if (!targetAnswer) {
@@ -753,20 +772,10 @@ async function fillChoiceQuestions() {
             if (targetAnswer) strategyUsed = '策略2(选项反查)';
         }
 
-        if (!targetAnswer) {
-            for (const item of rawAnswerData) {
-                if (!item.answer) continue;
-                const trimmed = item.answer.trim();
-                if (!/^[A-Fa-f]$/.test(trimmed)) continue;
-                const letter = trimmed.toUpperCase();
-                const matchIdx = optionsData.findIndex(od => od.letterLabel === letter);
-                if (matchIdx !== -1) {
-                    targetAnswer = optionsData[matchIdx].cleanText;
-                    strategyUsed = '策略3(字母匹配)';
-                    break;
-                }
-            }
-        }
+        // 策略3(字母匹配)已移除：原实现遍历整个答案库找第一条纯字母答案，
+        // 不校验归属题号，导致任何卷内存在字母答案时所有未解析的选择题
+        // 都被强制点同一个字母。字母兜底逻辑已由下方 allAnswersForQuestion
+        // 构建后的 letterAnswers 循环接管（作用域正确限定在本题答案内）。
 
         if (targetAnswer && !backendQuestionNum) {
             const entry = rawAnswerData.find(item => answerMatchesOption(item.answer, targetAnswer));
@@ -791,21 +800,30 @@ async function fillChoiceQuestions() {
         let matched = false;
 
         for (const answerText of allAnswersForQuestion) {
+            // 在所有通过匹配的选项中选最优：完全相等 > cleanText 最长（更具体）。
+            // 避免正确答案 "to look" 被其子串 "look"（DOM 序恰好靠前时）抢先命中
+            let bestIdx = -1;
+            let bestExact = false;
+            let bestLen = -1;
             for (let oi = 0; oi < optionsData.length; oi++) {
                 const od = optionsData[oi];
                 if (od.element.classList.contains('is-checked')) continue;
-                if (answerMatchesOption(answerText, od.cleanText)) {
-                    const clickTarget = od.element.classList.contains('u3-option-img')
-                        ? (od.element.querySelector('.u3-option-img__content') || od.element)
-                        : od.element;
-                    clickTarget.click();
-                    filledCount++;
-                    addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
-                    await wait1(50);
-                    matched = true;
-                    break;
-                }
+                if (!answerMatchesOption(answerText, od.cleanText)) continue;
+                const ansClean = answerText.replace(/\s+/g, '').toLowerCase();
+                const optClean = od.cleanText.replace(/\s+/g, '').toLowerCase();
+                if (ansClean === optClean) { bestIdx = oi; break; }
+                if (!bestExact && od.cleanText.length > bestLen) { bestIdx = oi; bestLen = od.cleanText.length; }
             }
+            if (bestIdx === -1) continue;
+            const od = optionsData[bestIdx];
+            const clickTarget = od.element.classList.contains('u3-option-img')
+                ? (od.element.querySelector('.u3-option-img__content') || od.element)
+                : od.element;
+            clickTarget.click();
+            filledCount++;
+            addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
+            await wait1(50);
+            matched = true;
         }
 
         if (!matched) {
@@ -1041,9 +1059,10 @@ async function handleReadAlongQuestions() {
                 }
                 if (!readText) {
                     const clone = questionEl.cloneNode(true);
-                    clone.querySelectorAll('button, .u3-recorder-btns, .u3-recorder-panel, .u3-audioPlayer, [slot*="audio"]').forEach(e => e.remove());
+                    clone.querySelectorAll('button, .u3-recorder-bts, .u3-recorder-panel, .u3-audioPlayer, [slot*="audio"]').forEach(e => el.remove());
                     readText = clone.textContent.trim();
                 }
+                addLogMessage('跟读朗读: readText=' + readText.substring(0, 60) + (readText.length > 60 ? '...' : '') + ' (len=' + readText.length + ')', 'info');
                 if (!readText) {
                     addLogMessage('跟读朗读: 未找到朗读文本，跳过', 'warning');
                     continue;
@@ -1051,6 +1070,7 @@ async function handleReadAlongQuestions() {
 
                 addLogMessage(`跟读朗读: 开始处理第 ${processedCount + 1} 题`, 'info');
 
+                // 匹配答案：优先完全匹配，其次子串匹配(长readText可能包含多个子答案)
                 const answerMatch = matchReadTextToAnswer(readText);
                 let answerIndex = -1;
             if (answerMatch) {
@@ -1165,10 +1185,29 @@ async function handleReadAlongQuestions() {
             addLogMessage(`跟读朗读: 点击录音按钮 (劫持${hijackActive ? '生效' : '已失效!'})`, 'info');
             vueClick(recorderBtn);
 
-            // once: 等 0.5s 后再开始播放音频；loop: 等 1s，确保录音已启动
-            await waitInterruptible(isOnce ? 500 : 1000);
-            if (audioSource) {
+            // 录音按钮点击是用户手势，此时显式 resume AudioContext（之前非手势时 resume 会被浏览器忽略）
+            if (globalAudioCtx && globalAudioCtx.state !== 'running') {
+                try {
+                    await Promise.race([globalAudioCtx.resume(), new Promise(r => setTimeout(r, 500))]);
+                } catch (e) {}
+            }
+            addLogMessage('跟读朗读: AudioContext 状态=' + (globalAudioCtx ? globalAudioCtx.state : 'null'), 'info');
+
+            // 动态等待：首次录音有 AudioContext/劫持初始化开销，需要更长的等待；
+            // 后续录音初始化已完成，用较短等待即可
+            const preAudioWait = _isFirstReadAlongRecording
+                ? (isOnce ? 1500 : 2000)
+                : (isOnce ? 500 : 1000);
+            addLogMessage('跟读朗读: 等待 ' + preAudioWait + 'ms 后播放音频' + (_isFirstReadAlongRecording ? ' (首次)' : ' (后续)'), 'info');
+            await waitInterruptible(preAudioWait);
+            if (audioSource && globalAudioCtx && globalAudioCtx.state === 'running') {
                 try { audioSource.start(); } catch(e) {}
+            } else if (audioSource) {
+                addLogMessage('跟读朗读: AudioContext 未 running(' + (globalAudioCtx ? globalAudioCtx.state : 'null') + ')，尝试最后 resume', 'warning');
+                try {
+                    await globalAudioCtx.resume();
+                    audioSource.start();
+                } catch(e) {}
             }
 
             // 等待录音：once=播放完成后再过 0.5s；loop=音频×2（均最少 1s）
@@ -1197,6 +1236,8 @@ async function handleReadAlongQuestions() {
 
             processedCount++;
             addLogMessage(`跟读朗读: 第 ${processedCount} 题完成`, 'success');
+            // 首次录音已完成，后续录音用较短等待
+            if (_isFirstReadAlongRecording) _isFirstReadAlongRecording = false;
 
             await waitInterruptible(1500);
         }
@@ -1239,6 +1280,11 @@ async function fillCurrentPage() {
 
     const setElValue = (el, v) => {
         if (!el) return false;
+        // 同一空存在多个等价完整答案时（阅读回答题型，"A||B||C"），
+        // 取首选答案写入，避免整串原样提交判错
+        if (typeof v === 'string' && v.includes('||')) {
+            v = v.split('||')[0].trim();
+        }
         // 同一空存在多个可接受答案时（如 laws/aws、ought/ught，写不写首字母都给分），
         // XML 会把变体用紧贴的 / 拼在同一答案里；只取第一个变体填入，
         // 否则 "laws/aws" 会被原样写进空格导致判错。
@@ -1320,13 +1366,37 @@ async function fillCurrentPage() {
             if (!hintText) continue;
             const cleanHint = hintText.replace(/分值\d+分\s*/g, '').replace(/^\d+[\s\.\)]*/, '').trim();
             const match = findAnswerByContent(cleanHint);
-            if (!match) {
+            let answerText = match ? match.answer : null;
+            let matchInfo = match ? ('相似度: ' + Math.round(match.similarity) + '%') : '';
+            if (!answerText) {
+                // 内容匹配回退：此类题的 questionText 存的是答案本身而非真实题干
+                // （阅读回答/整句批改共用该组件时），拿页面问题比答案文本必然失配。
+                // 改按组件附近的题号直查答案库
+                let numEl = comp.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared, .u3-question-container__ques-order--number');
+                if (!numEl) {
+                    let parent = comp.parentElement;
+                    for (let up = 0; up < 5 && parent && parent !== document.body; up++) {
+                        numEl = parent.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared, .u3-question-container__ques-order--number');
+                        if (numEl) break;
+                        parent = parent.parentElement;
+                    }
+                }
+                const parsedNum = numEl ? parseInt(numEl.textContent.trim(), 10) : NaN;
+                if (Number.isFinite(parsedNum) && parsedNum > 0) {
+                    const resolved = getAnswersForQuestionNum(parsedNum, 1);
+                    if (resolved && resolved.length > 0) {
+                        answerText = resolved[0];
+                        matchInfo = '题号' + parsedNum;
+                    }
+                }
+            }
+            if (!answerText) {
                 addLogMessage(`整句批改 未匹配到答案: ${cleanHint.substring(0, 40)}...`, 'warning');
                 continue;
             }
-            if (setElValue(ta, match.answer)) {
+            if (setElValue(ta, answerText)) {
                 count++;
-                addLogMessage(`整句批改 填入答案 (相似度: ${Math.round(match.similarity)}%): ${match.answer}`, 'success');
+                addLogMessage(`整句批改 填入答案 (${matchInfo}): ${answerText}`, 'success');
                 await wait1(80);
             }
         }
@@ -1438,7 +1508,33 @@ async function fillCurrentPage() {
                     }
                     await wait1(100);
                 } else {
-                    addLogMessage(`题目 ${i + 1} 未找到匹配答案: ${cleanQuestionText.substring(0, 50)}...`, 'warning');
+                    // 内容匹配失败时的题号回退：阅读回答等题型库内无真实题干
+                    // （questionText 存的是答案本身），match 必为 null。
+                    // 用全局配对数组（与题号匹配模式同源）定位本容器首个输入框
+                    // 对应的题号，再直查答案库——确定性命中，不依赖题干文本
+                    const allPrep = Array.from(preparedElements);
+                    const allInp = Array.from(inputElements);
+                    let scopedNum = NaN;
+                    for (let pi = 0; pi < allInp.length; pi++) {
+                        if (scopeEl.contains(allInp[pi])) {
+                            const pn = allPrep[pi] ? parseInt(allPrep[pi].innerHTML) : NaN;
+                            if (!isNaN(pn) && pn > 0) scopedNum = pn;
+                            break;
+                        }
+                    }
+                    const resolvedFb = Number.isFinite(scopedNum)
+                        ? getAnswersForQuestionNum(scopedNum, containerInputs.length)
+                        : null;
+                    if (resolvedFb && resolvedFb.length > 0) {
+                        const fbFilled = await fillByAnswers(containerInputs, resolvedFb);
+                        filledCount += fbFilled;
+                        if (fbFilled > 0) {
+                            addLogMessage(`题目 ${scopedNum} 题号回退填入 (${fbFilled}个空): ${resolvedFb.slice(0, fbFilled).join(' / ')}`, 'success');
+                            await wait1(100);
+                        }
+                    } else {
+                        addLogMessage(`题目 ${i + 1} 未找到匹配答案: ${cleanQuestionText.substring(0, 50)}...`, 'warning');
+                    }
                 }
             }
         }

@@ -44,6 +44,7 @@ function cleanText(raw) {
   s = s.replace(/(?<=\S)\/(?=\s|\S)/g, ' ');     // 二级停顿（词间单斜杠）
   s = s.replace(/[‘’]/g, "'");         // 弯撇号 → 直撇号
   s = s.replace(/[“”]/g, '"');
+  s = s.replace(/\+/g, ' ');                   // 加号分词符（paper.xml编码残留，句中/标点后均可能出现，如 pick+up → pick up, cooking.+Our → cooking. Our）
   s = s.replace(/[\r\n\t]+/g, ' ');
   s = s.replace(/\s+/g, ' ');
   s = s.replace(/\s+([,.;:!?])/g, '$1');         // 去掉标点前的空格
