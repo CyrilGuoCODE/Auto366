@@ -166,7 +166,7 @@
 /* TUN 增强模式开关按钮（专业模式：仅图标） */
 .btn--tun-toggle {
     width: 32px;
-    height: 32px;
+    height: 36px;
     padding: 0;
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border-strong);
@@ -223,7 +223,7 @@
 /* 简单模式适配：取消固定尺寸，参与控制栏 hover 展开动画 */
 html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--tun-toggle {
     width: auto;
-    height: auto;
+    height: 36px;
     min-width: 0;
     padding: var(--space-sm) 10px;
     border-radius: var(--radius-md);

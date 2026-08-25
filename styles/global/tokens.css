@@ -72,7 +72,7 @@
     --color-text-muted: var(--color-gray-500);
     --color-text-heading: var(--color-gray-800);
     --color-text-inverse: var(--color-white);
-    --color-text-link: var(--color-primary-700);
+    --color-text-link: var(--color-primary-500);
     --color-primary: var(--color-primary-500);
     --color-primary-hover: var(--color-primary-600);
     --color-primary-active: var(--color-primary-700);
@@ -89,7 +89,7 @@
     --color-success-bg: var(--color-success-50);
     --color-success-text: var(--color-success-700);
     --color-error-bg: var(--color-danger-50);
-    --color-error-text: var(--color-danger-700);
+    --color-error-text: var(--color-danger-500);
     --color-error: var(--color-danger-500);
     --color-error-hover: var(--color-danger-600);
     --color-warn-bg: var(--color-warn-50);
