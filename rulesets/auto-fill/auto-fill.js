@@ -327,6 +327,40 @@ function loadBucketFromServer() {
                 // 直读 multiAnswerMap 将看不到撞车分区（multiAnswerGroups）里的答案
                 window.getAnswersForQuestionNum = getAnswersForQuestionNum;
 
+                // 调试：输出当前页面结构到日志（供开发者分析选择器）
+                window.__a366_dumpStructure = function() {
+                    function buildDOM(el, depth) {
+                        if (!el || el.nodeType !== 1 || depth > 8) return '';
+                        var lines = [];
+                        var indent = '  '.repeat(depth);
+                        var tag = el.tagName.toLowerCase();
+                        var cls = (el.className && typeof el.className === 'string') ? '.' + el.className.trim().split(/\s+/).filter(Boolean).join('.') : '';
+                        var id = el.id ? '#' + el.id : '';
+                        var text = '';
+                        for (var k = 0; k < el.childNodes.length; k++) {
+                            if (el.childNodes[k].nodeType === 3) text += el.childNodes[k].textContent;
+                        }
+                        text = text.trim();
+                        if (text.length > 60) text = text.substring(0, 60) + '...';
+                        lines.push(indent + tag + id + cls + (text ? ' "' + text + '"' : ''));
+                        if (el.children) {
+                            for (var c = 0; c < el.children.length; c++) {
+                                var childLines = buildDOM(el.children[c], depth + 1);
+                                if (childLines) lines.push(childLines);
+                            }
+                        }
+                        return lines.filter(Boolean).join('\n');
+                    };
+                    var output = buildDOM(document.querySelector('.swiper-slide-active') || document.body, 0);
+                    addLogMessage('=== 页面结构快照 ===', 'info');
+                    var parts = output.split('\n');
+                    for (var i = 0; i < parts.length; i += 50) {
+                        addLogMessage(parts.slice(i, i + 50).join('\n'), 'info');
+                    }
+                    addLogMessage('=== 快照结束，共 ' + parts.length + ' 行 ===', 'info');
+                    return output;
+                };
+
                 bucketLoaded = true;
                 bucketError = null;
                 updateAutoFillPanelStatus();
@@ -1070,8 +1104,6 @@ async function handleReadAlongQuestions() {
 
                 addLogMessage(`跟读朗读: 开始处理第 ${processedCount + 1} 题`, 'info');
 
-                // 匹配答案：优先完全匹配，其次子串匹配(长readText可能包含多个子答案)
-                const answerMatch = matchReadTextToAnswer(readText);
                 let answerIndex = -1;
             if (answerMatch) {
                 answerIndex = answerMatch.index + 1;
@@ -2233,6 +2265,27 @@ function createAutoFillPanel() {
         }
     });
     header.appendChild(consoleBtn);
+
+    const dumpBtn = document.createElement('button');
+    dumpBtn.textContent = 'Dump';
+    dumpBtn.title = '输出页面结构到日志（供开发者分析）';
+    dumpBtn.style.fontSize = '12px';
+    dumpBtn.style.padding = '2px 6px';
+    dumpBtn.style.cursor = 'pointer';
+    dumpBtn.style.background = 'rgba(128,0,128,0.8)';
+    dumpBtn.style.border = 'none';
+    dumpBtn.style.color = '#fff';
+    dumpBtn.style.borderRadius = '3px';
+    dumpBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof window.__a366_dumpStructure === 'function') {
+            window.__a366_dumpStructure();
+            addLogMessage('已输出页面结构到日志，请查看日志面板', 'info');
+        } else {
+            addLogMessage('调试工具未加载', 'error');
+        }
+    });
+    header.appendChild(dumpBtn);
     autoFillPanel.appendChild(header);
 
     const delayRow = document.createElement('div');
