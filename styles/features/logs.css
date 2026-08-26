@@ -151,6 +151,26 @@
     min-height: 0;
 }
 
+/* ===== 日志类型颜色（扁平纯色，无渐变，深/浅色两套） ===== */
+.traffic-monitor__log {
+    --log-color-normal: #475569;
+    --log-color-success: #16a34a;
+    --log-color-error: #dc2626;
+    --log-color-warning: #d97706;
+    --log-color-important: #7c3aed;
+    --log-color-info: #0891b2;
+}
+
+html[data-theme="dark"] .traffic-monitor__log {
+    --log-color-normal: #cbd5e1;
+    --log-color-success: #4ade80;
+    --log-color-error: #f87171;
+    --log-color-warning: #fbbf24;
+    --log-color-important: #c084fc;
+    --log-color-info: #22d3ee;
+}
+
+
 .log-item {
     padding: var(--space-xs) 0;
     border-bottom: 1px solid var(--color-bg-muted);
@@ -172,41 +192,45 @@
 }
 
 .log-item--important {
-    color: var(--color-warn-text);
+    color: var(--log-color-important);
     font-weight: var(--font-weight-medium);
 }
 
 .log-item--success {
-    color: var(--color-success-text);
+    color: var(--log-color-success);
     font-weight: var(--font-weight-medium);
 }
 
 .log-item--error {
-    color: var(--color-error-text);
+    color: var(--log-color-error);
     font-weight: var(--font-weight-medium);
 }
 
 .log-item--normal {
-    color: var(--color-text-heading);
+    color: var(--log-color-normal);
 }
 
 .log-item--rule-success {
-    color: var(--color-info-text);
+    color: var(--log-color-info);
     font-weight: normal;
 }
 
 .log-item--rule-error {
-    color: var(--color-error-text);
+    color: var(--log-color-error);
     font-weight: normal;
 }
 
 .log-item--warning {
-    color: var(--color-warn-text);
+    color: var(--log-color-warning);
     font-weight: var(--font-weight-medium);
 }
 
+.log-item--detail {
+    color: var(--log-color-info);
+}
+
 .log-item i {
-    color: var(--color-text-muted);
+    color: inherit;
     font-size: var(--text-lg);
     min-width: 14px;
 }
