@@ -17,7 +17,7 @@
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
     "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
     "targetFileName": "jc*.zip",
-    "injectScript": "auto-fill.js",
+    "injectScripts": ["auto-fill.js", "dev-console.js"],
     "downloadTimeout": 30000
   },
   {
