@@ -159,6 +159,7 @@
     --log-color-warning: #d97706;
     --log-color-important: #7c3aed;
     --log-color-info: #0891b2;
+    --log-rule-color: #ea580c;
 }
 
 html[data-theme="dark"] .traffic-monitor__log {
@@ -168,6 +169,7 @@ html[data-theme="dark"] .traffic-monitor__log {
     --log-color-warning: #fbbf24;
     --log-color-important: #c084fc;
     --log-color-info: #22d3ee;
+    --log-rule-color: #fdba74;
 }
 
 
@@ -233,6 +235,11 @@ html[data-theme="dark"] .traffic-monitor__log {
     color: inherit;
     font-size: var(--text-lg);
     min-width: 14px;
+}
+
+/* 命中当前启用规则集的请求：文字换为特殊色标记 */
+.log-item--rule-hit {
+    color: var(--log-rule-color);
 }
 
 .log-request {

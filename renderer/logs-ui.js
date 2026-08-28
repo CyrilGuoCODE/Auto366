@@ -219,7 +219,7 @@ class LogManager {
       iconClass = 'bi-check-circle';
     }
 
-    this.addLogItem(logText, logType, iconClass, requestId, timestamp);
+    this.addLogItem(logText, logType, iconClass, requestId, timestamp, !!data.ruleMatched);
   }
 
   // 添加重要日志
@@ -257,7 +257,7 @@ class LogManager {
   }
 
   // 添加日志项
-  addLogItem(text, type, iconClass = 'bi-circle', requestId = null, timestamp = null) {
+  addLogItem(text, type, iconClass = 'bi-circle', requestId = null, timestamp = null, isRuleHit = false) {
     const trafficLog = document.getElementById('trafficLog');
     if (!trafficLog) return;
 
@@ -266,6 +266,7 @@ class LogManager {
 
     if (requestId) {
       logItem.className = `log-item log-item--${type} log-item--clickable`;
+      if (isRuleHit) logItem.classList.add('log-item--rule-hit');
       logItem.dataset.requestId = requestId;
 
       const checkboxHtml = this.multiSelectMode

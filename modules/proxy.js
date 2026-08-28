@@ -358,6 +358,7 @@ class ProxyServer {
             requestInfo.responseBody = text;
           }
           requestInfo.bodySize = requestInfo.responseBody.length;
+          requestInfo.ruleMatched = this.urlMentionedByEnabledRules(fullUrl);
           this.safeIpcSend('traffic-log', requestInfo);
           requestInfo.originalResponse = buffer
           this.trafficCache.set(requestInfo.uuid, requestInfo);
@@ -1124,6 +1125,30 @@ class ProxyServer {
 
     const regex = new RegExp('^' + regexPattern + '$');
     return regex.test(url);
+  }
+
+  // 判断请求 URL 是否被当前开启的规则集提及（命中任一启用规则配置的 URL 字段）
+  // 用于在监听日志里把与规则相关的请求用特殊颜色标记出来
+  urlMentionedByEnabledRules(url) {
+    try {
+      for (const ruleset of this.rulesManager.getRules()) {
+        if (!ruleset.enabled) continue;
+        for (const rule of ruleset.rules) {
+          if (!rule.enabled) continue;
+          const fields = [rule.urlPattern, rule.urlZip, rule.urlFileinfo, rule.urlUpload, rule.urlRequest];
+          for (const field of fields) {
+            if (!field || typeof field !== 'string' || field.trim().length < 3) continue;
+            const trimmed = field.trim();
+            // 兼容通配符模式与普通子串（域名/路径）两种写法
+            if (this.urlMatchesPattern(url, trimmed)) return true;
+            if (url.includes(trimmed)) return true;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('检查规则提及 URL 失败:', error);
+    }
+    return false;
   }
 
   isRuleEffective(rule, ruleset) {
