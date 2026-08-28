@@ -984,6 +984,59 @@ class ProxyServer {
     return ['chatnut', 'qwen', 'doubao'].indexOf(String(this.aiModel || '').toLowerCase()) >= 0;
   }
 
+  // 测试 AI 兜底连接: 内置模型走 chatnut 免费链路, 自定义模型走 OpenAI 兼容接口
+  async testAiConnection() {
+    const model = String(this.aiModel || '');
+    if (this.isBuiltinAiModel()) {
+      const chatnut = require('./chatnut');
+      const t0 = Date.now();
+      const r = await chatnut.ask('你好，请回复：连接成功。', {
+        model,
+        timeout: 15000,
+      });
+      if (!r.text) throw new Error('内置 AI 返回内容为空');
+      return { success: true, model, ms: Date.now() - t0, detail: String(r.text).slice(0, 60) };
+    }
+
+    // 自定义 OpenAI 兼容接口
+    const baseUrl = (this.aiBaseUrl || '').trim();
+    if (!baseUrl) throw new Error('未配置 API 地址');
+    if (!this.aiApiKey) throw new Error('未配置 API Key');
+    const endpoint = new URL(baseUrl);
+    const lib = endpoint.protocol === 'https:' ? https : http;
+    const body = JSON.stringify({
+      model: this.aiModel || undefined,
+      messages: [{ role: 'user', content: '你好，请回复：连接成功。' }],
+      max_tokens: 20,
+    });
+    const t0 = Date.now();
+    const res = await new Promise((resolve, reject) => {
+      const req = lib.request(endpoint, {
+        method: 'POST',
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.aiApiKey,
+          'Content-Length': Buffer.byteLength(body),
+        },
+      }, (r) => {
+        let data = '';
+        r.on('data', (c) => { data += c; });
+        r.on('end', () => resolve({ status: r.statusCode, data }));
+      });
+      req.on('error', reject);
+      req.on('timeout', () => req.destroy(new Error('请求超时')));
+      req.end(body);
+    });
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`HTTP ${res.status}: ${res.data.slice(0, 200)}`);
+    }
+    let j;
+    try { j = JSON.parse(res.data); } catch (e) { throw new Error('响应不是有效 JSON'); }
+    const content = (j.choices && j.choices[0] && (j.choices[0].message && j.choices[0].message.content || j.choices[0].text)) || '';
+    return { success: true, model: this.aiModel || '', ms: Date.now() - t0, detail: String(content).slice(0, 60) };
+  }
+
   setGlmApiKey(key) {
     this.glmApiKey = key || '';
     // 同步到 glm-tts 模块
@@ -3138,6 +3191,14 @@ class ProxyServer {
 
     ipcMain.handle('get-ai-config', () => {
       return this.getAiConfig();
+    });
+
+    ipcMain.handle('test-ai-connection', async () => {
+      try {
+        return await this.testAiConnection();
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
     });
 
     ipcMain.handle('set-glm-api-key', async (event, key) => {

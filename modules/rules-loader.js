@@ -72,6 +72,13 @@ class RulesLoader {
                 rule.injectScript = scriptPath;
               }
             }
+            if (rule.type === 'zip-implant-dynamic' && Array.isArray(rule.injectScripts)) {
+              rule.injectScripts = rule.injectScripts.map(s => {
+                if (!s || s.startsWith('http') || path.isAbsolute(s)) return s;
+                const p = path.join(folderPath, s);
+                return fs.existsSync(p) ? p : s;
+              });
+            }
             if (rule.type === 'content-change' && rule.newContentFile && !path.isAbsolute(rule.newContentFile)) {
               const ccPath = path.join(folderPath, rule.newContentFile);
               if (fs.existsSync(ccPath)) {
