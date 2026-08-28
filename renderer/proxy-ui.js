@@ -266,6 +266,46 @@ class ProxyUI {
             this.logManager.addSuccessLog('AI 兜底配置已更新');
           });
         });
+
+        // 测试连接: 先同步最新配置, 再调用主进程发起真实请求并展示状态
+        const aiTestBtn = document.getElementById('aiTestBtn');
+        const aiTestStatus = document.getElementById('aiTestStatus');
+        const aiTestLabel = aiTestBtn && aiTestBtn.querySelector('span');
+        if (aiTestBtn) {
+          const renderTestStatus = (text, color) => {
+            if (!aiTestStatus) return;
+            aiTestStatus.textContent = text;
+            aiTestStatus.style.color = color;
+          };
+          const setBtnLabel = (text) => {
+            if (aiTestLabel) aiTestLabel.textContent = text;
+            else aiTestBtn.textContent = text;
+          };
+          aiTestBtn.addEventListener('click', async () => {
+            if (aiTestBtn.disabled) return;
+            aiTestBtn.disabled = true;
+            setBtnLabel('测试中...');
+            renderTestStatus('正在测试连接，请稍候...', 'var(--color-text-muted)');
+            try {
+              await pushAiConfig();
+              const result = await window.electronAPI.testAiConnection();
+              if (result && result.success) {
+                this.logManager.addSuccessLog(`AI 连接测试成功（${result.model}，${result.ms}ms）`);
+                renderTestStatus(`连接成功（${result.ms}ms）`, 'var(--color-success-text)');
+              } else {
+                const msg = (result && result.error) || '连接失败';
+                this.logManager.addErrorLog(`AI 连接测试失败: ${msg}`);
+                renderTestStatus(`连接失败: ${msg}`, 'var(--color-error-text)');
+              }
+            } catch (error) {
+              this.logManager.addErrorLog(`AI 连接测试异常: ${error.message}`);
+              renderTestStatus(`测试异常: ${error.message}`, 'var(--color-error-text)');
+            } finally {
+              aiTestBtn.disabled = false;
+              setBtnLabel('测试连接');
+            }
+          });
+        }
       }
 
       // 初始化 GLM-TTS API Key

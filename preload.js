@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAiApiKey: () => ipcRenderer.invoke('get-ai-api-key'),
   setAiConfig: (cfg) => ipcRenderer.invoke('set-ai-config', cfg),
   getAiConfig: () => ipcRenderer.invoke('get-ai-config'),
+  testAiConnection: () => ipcRenderer.invoke('test-ai-connection'),
   setGlmApiKey: (key) => ipcRenderer.invoke('set-glm-api-key', key),
   getGlmApiKey: () => ipcRenderer.invoke('get-glm-api-key'),
   getGlmVoices: () => ipcRenderer.invoke('get-glm-voices'),
