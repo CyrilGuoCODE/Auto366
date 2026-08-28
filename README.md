@@ -19,11 +19,11 @@ B站介绍视频：[www.bilibili.com/video/BV195xLzEESR/](https://www.bilibili.c
 
 ## Todo List待办清单
 
-### 新版本(v0.9.8补丁版本)已完成
+### 新版本(v0.9.9)已完成
 
-- [功能优化]优化了自动填空部分题型的兼容性问题(By A6TVhmj)
-- [功能优化]更新新手教程文案以及提示
-- [功能优化]优化TUN模式GEOIP数据库下载加速，并加入下载进度显示
+- [功能优化]优化深色模式设计，优化监听日志设计
+- [新功能]添加AI连接测试及UI(By Submerge)
+- [BUG修复]修复了自动填空的许多bug提升稳定性与兼容性(By A6TVhmj)
 
 ### BUG问题
 
@@ -80,7 +80,7 @@ npm run build
 
 ## 贡献指南
 
-[贡献指南](https://366.cyril.qzz.io/tutorial/contributing-guide)
+[贡献指南](https://366.cyril.zone/tutorial/contributingGuide)
 
 ## 许可证
 
@@ -88,8 +88,8 @@ npm run build
 
 但此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等。
 
-**隐私协议**：[隐私协议](https://366.cyril.qzz.io/tutorial/privacyPolicy)
+**隐私协议**：[隐私协议](https://366.cyril.zone/tutorial/privacyPolicy)
 
-**使用协议**：[使用协议](https://366.cyril.qzz.io/tutorial/termsOfService)
+**使用协议**：[使用协议](https://366.cyril.zone/tutorial/termsOfService)
 
 **免责声明**：本工具仅供学习和研究使用，使用者需自行承担使用风险，开发者不承担任何法律责任。

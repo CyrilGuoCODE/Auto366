@@ -2,5 +2,5 @@
   "name": "内置-通用自动填空",
   "description": "通用自动填空(现已适配选择题和跟读朗读题)",
   "compatible": false,
-  "version": 6
+  "version": 7
 }
