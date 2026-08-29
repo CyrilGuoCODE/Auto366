@@ -1070,6 +1070,7 @@ async function handleReadAlongQuestions() {
 
                 addLogMessage(`跟读朗读: 开始处理第 ${processedCount + 1} 题`, 'info');
 
+                const answerMatch = matchReadTextToAnswer(readText);
                 let answerIndex = -1;
             if (answerMatch) {
                 answerIndex = answerMatch.index + 1;
