@@ -39,7 +39,7 @@
     "enabled": true,
     "urlFileinfo": "*://fs.up366.cn/fileinfo/*",
     "urlZip": "*://cdn-ws.up366.cn/cn/files/feishu/**/*.zip",
-    "injectScript": "auto-pk.js",
+    "injectScripts": ["auto-pk.js", "dev-console.js"],
     "downloadTimeout": 30000
   }
 ]

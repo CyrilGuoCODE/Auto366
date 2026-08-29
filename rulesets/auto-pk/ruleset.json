@@ -2,5 +2,5 @@
   "name": "内置-自动单词PK",
   "description": "单词PK自动化（已支持选择题PK和拼写PK）",
   "compatible": false,
-  "version": 4
+  "version": 5
 }

@@ -741,6 +741,7 @@ class CommunityUI {
         description,
         author,
         groupRules,
+        includeInjection,
         (p) => {
           progressFill.style.width = `${30 + p * 0.7}%`;
           progressText.textContent = `上传中... ${Math.round(p)}%`;

@@ -146,8 +146,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onA366DownloadProgress: (callback) => ipcRenderer.on('a366-download-progress', (event, data) => callback(data)),
 
   // 社区规则集上传下载（通过IPC调用）
-  uploadRules: async (name, description, author, groupRules, updateUploadProgress) => {
-    return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules }, updateUploadProgress);
+  uploadRules: async (name, description, author, groupRules, includeInjection, updateUploadProgress) => {
+    return ipcRenderer.invoke('upload-rules', { name, description, author, groupRules, includeInjection }, updateUploadProgress);
   },
   downloadRuleFile: (url) => ipcRenderer.invoke('download-rule-file', url),
   openUrl: (url) => ipcRenderer.invoke('open-url', url),

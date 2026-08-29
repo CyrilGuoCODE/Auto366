@@ -3597,7 +3597,7 @@ class ProxyServer {
       }
     });
 
-    ipcMain.handle('upload-rules', async (event, { name, description, author, groupRules }) => {
+    ipcMain.handle('upload-rules', async (event, { name, description, author, groupRules, includeInjection }) => {
       try {
         const { v4: uploadUuid } = require('uuid');
         const FormData = require('form-data');
@@ -3607,12 +3607,17 @@ class ProxyServer {
         formData.append('description', description);
         formData.append('author', author);
 
-        for (const rule of groupRules) {
-          if (rule.type === 'zip-implant' && rule.zipImplant && !rule.zipImplant.startsWith('http')) {
-            const stream = fs.createReadStream(rule.zipImplant);
-            const filename = uploadUuid() + require('path').extname(rule.zipImplant);
-            formData.append('files', stream, { filename: filename });
-            rule.zipImplant = 'https://objectstorageapi.us-west-1.clawcloudrun.com/d9k8xp0t-auto366-ruleset/files/' + filename;
+        // "包含注入文件"复选框：仅勾选时上传 ZIP 植入文件并把本地路径改写为云端 URL。
+        // 未勾选（或旧版渲染进程未传该字段）时保持原有行为，即附带 ZIP 文件。
+        const includeInjectionFiles = includeInjection !== false;
+        if (includeInjectionFiles) {
+          for (const rule of groupRules) {
+            if (rule.type === 'zip-implant' && rule.zipImplant && !rule.zipImplant.startsWith('http')) {
+              const stream = fs.createReadStream(rule.zipImplant);
+              const filename = uploadUuid() + require('path').extname(rule.zipImplant);
+              formData.append('files', stream, { filename: filename });
+              rule.zipImplant = 'https://objectstorageapi.us-west-1.clawcloudrun.com/d9k8xp0t-auto366-ruleset/files/' + filename;
+            }
           }
         }
 
