@@ -690,7 +690,6 @@ async function fillChoiceQuestions() {
         }
 
         let targetAnswer = null;
-        let strategyUsed = '';
         let backendQuestionNum = null;
         let backendElementId = null;
         if (questionText) {
@@ -699,18 +698,16 @@ async function fillChoiceQuestions() {
                 // 最优匹配：优先完全相等，其次选 cleanText 最长(更具体)的选项，
                 // 避免正确答案 "to look" 被其子串 "look"(DOM 序靠前时)抢先命中
                 let bestOi = -1;
-                let bestExact = false;
                 let bestLen = -1;
                 for (let oi = 0; oi < optionsData.length; oi++) {
                     if (!answerMatchesOption(match.answer, optionsData[oi].cleanText)) continue;
                     const ansClean = match.answer.toLowerCase().replace(/\s+/g, '');
                     const optClean = optionsData[oi].cleanText.toLowerCase().replace(/\s+/g, '');
-                    if (ansClean === optClean) { bestOi = oi; bestExact = true; break; }
+                    if (ansClean === optClean) { bestOi = oi; break; }
                     if (optionsData[oi].cleanText.length > bestLen) { bestOi = oi; bestLen = optionsData[oi].cleanText.length; }
                 }
                 if (bestOi >= 0) {
                     targetAnswer = optionsData[bestOi].cleanText;
-                    strategyUsed = '策略1(内容匹配 ' + Math.round(match.similarity || 0) + '%)';
                     backendQuestionNum = match.questionNum;
                     backendElementId = match.elementId || null;
                 }
@@ -769,7 +766,6 @@ async function fillChoiceQuestions() {
                 targetAnswer = bestCandidate.answer;
                 backendElementId = bestCandidate.elementId || null;
             }
-            if (targetAnswer) strategyUsed = '策略2(选项反查)';
         }
 
         // 策略3(字母匹配)已移除：原实现遍历整个答案库找第一条纯字母答案，
@@ -803,7 +799,6 @@ async function fillChoiceQuestions() {
             // 在所有通过匹配的选项中选最优：完全相等 > cleanText 最长（更具体）。
             // 避免正确答案 "to look" 被其子串 "look"（DOM 序恰好靠前时）抢先命中
             let bestIdx = -1;
-            let bestExact = false;
             let bestLen = -1;
             for (let oi = 0; oi < optionsData.length; oi++) {
                 const od = optionsData[oi];
@@ -812,7 +807,7 @@ async function fillChoiceQuestions() {
                 const ansClean = answerText.replace(/\s+/g, '').toLowerCase();
                 const optClean = od.cleanText.replace(/\s+/g, '').toLowerCase();
                 if (ansClean === optClean) { bestIdx = oi; break; }
-                if (!bestExact && od.cleanText.length > bestLen) { bestIdx = oi; bestLen = od.cleanText.length; }
+                if (od.cleanText.length > bestLen) { bestIdx = oi; bestLen = od.cleanText.length; }
             }
             if (bestIdx === -1) continue;
             const od = optionsData[bestIdx];
@@ -853,7 +848,6 @@ async function fillChoiceQuestions() {
 
 function waitInterruptible(ms) {
     return new Promise(resolve => {
-        const check = () => { if (readAlongAborted) { resolve(); return; } };
         const timer = setTimeout(() => { resolve(); }, ms);
         const interval = setInterval(() => { if (readAlongAborted) { clearTimeout(timer); clearInterval(interval); resolve(); } }, 100);
     });
@@ -1088,7 +1082,6 @@ async function handleReadAlongQuestions() {
 
             const base = FillTimeMod.bucketBase();
             let ttsWavData = null;
-            let usedFallback = false;
 
             try {
                 let ttsReady = false;
@@ -1122,7 +1115,6 @@ async function handleReadAlongQuestions() {
 
             if (!ttsWavData) {
                 addLogMessage('跟读朗读: 使用浏览器语音合成回退', 'info');
-                usedFallback = true;
 
                 await speakWithSpeechSynthesis(readText);
                 vueClick(recorderBtn);

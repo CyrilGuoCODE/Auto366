@@ -130,7 +130,6 @@ class LogManager {
 
     items.forEach(item => {
       const text = item.textContent.toLowerCase();
-      const type = this.getLogItemType(item);
       const requestId = item.dataset.requestId;
       const requestData = requestId ? this.state.requestDataMap.get(requestId) : null;
 
@@ -583,8 +582,8 @@ class LogManager {
 
     if (toggleBtn) toggleBtn.addEventListener('click', () => this.toggleMultiSelect());
     if (cancelBtn) cancelBtn.addEventListener('click', () => this.exitMultiSelect());
-    if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.selectAllVisible(false));
-    if (selectReqBtn) selectReqBtn.addEventListener('click', () => this.selectAllVisible(true));
+    if (selectAllBtn) selectAllBtn.addEventListener('click', () => this.selectAllVisible());
+    if (selectReqBtn) selectReqBtn.addEventListener('click', () => this.selectAllVisible());
     if (invertBtn) invertBtn.addEventListener('click', () => this.invertSelection());
     if (clearBtn) clearBtn.addEventListener('click', () => this.clearSelection());
     if (exportBtn) exportBtn.addEventListener('click', () => this.exportSelected());
@@ -688,9 +687,8 @@ class LogManager {
     this.updateMultiSelectStatus();
   }
 
-  // mode=true 只选请求条目（有 requestId 的）；mode=false 全选可见可勾选项
-  // 由于不可点击的项压根没 checkbox，二者实际是一样的，只是 UI 措辞不同
-  selectAllVisible(onlyRequests = false) {
+  // 全选可见可勾选项（由于不可点击的项没有 checkbox，全选与全选请求条目效果相同）
+  selectAllVisible() {
     const trafficLog = document.getElementById('trafficLog');
     if (!trafficLog) return;
     const items = trafficLog.querySelectorAll('.log-item--clickable');

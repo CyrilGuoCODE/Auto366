@@ -300,8 +300,6 @@ class RulesUI {
 
   // 保存规则
   async saveRule() {
-    const form = document.getElementById('ruleForm');
-
     // 基本信息
     const rule = {
       id: this.state.currentEditingRule?.id || null,
@@ -506,7 +504,6 @@ class RulesUI {
 
     rulesets.forEach(group => {
       const groupRules = group.rules || [];
-      const statusClass = group.enabled ? 'is-enabled' : 'is-disabled';
       const isCollapsed = this.collapsedGroups.has(group.id);
       const contentClass = isCollapsed ? 'rule-group__content is-collapsed' : 'rule-group__content';
 
@@ -621,7 +618,6 @@ class RulesUI {
       // 规则的有效状态：规则本身启用 且 父规则集启用（如果有的话）
       const isEffective = rule.enabled && parentGroupEnabled;
       const statusClass = isEffective ? 'enabled' : 'disabled';
-      const typeClass = rule.type ? rule.type.replace('-', '') : '';
 
       // 如果父规则集被禁用，子规则的开关应该显示为禁用状态
       const isDisabledByParent = !parentGroupEnabled;

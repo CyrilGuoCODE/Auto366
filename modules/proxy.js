@@ -1341,9 +1341,7 @@ class ProxyServer {
             const zipUrlMatches = rule.urlZip ? this.urlMatchesPattern(url, rule.urlZip) : false;
             const isFileDownloadRequest = this._isFileDownloadRequest(url);
 
-            if (isFileInfoRequest && fileinfoUrlMatches) {
-              l.push(4);
-            } else if (zipUrlMatches && isFileDownloadRequest) {
+            if ((isFileInfoRequest && fileinfoUrlMatches) || (zipUrlMatches && isFileDownloadRequest)) {
               l.push(4);
             }
           }
@@ -3553,7 +3551,6 @@ class ProxyServer {
             }
           }
 
-          const originalCount = rulesToImport.length;
           rulesToImport = rulesToImport.filter(rule => {
             if (rule.name && existingRuleNames.includes(rule.name)) {
               return false;

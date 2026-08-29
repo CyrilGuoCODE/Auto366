@@ -98,7 +98,6 @@ class EventManager {
     let isResizing = false;
     let startX = 0;
     let startLeftWidth = 0;
-    let startRightWidth = 0;
 
     // 从localStorage加载保存的宽度比例
     const savedLeftFlex = localStorage.getItem('leftContentFlex') || '2';
@@ -112,10 +111,8 @@ class EventManager {
       startX = e.clientX;
 
       const leftRect = leftContent.getBoundingClientRect();
-      const rightRect = rightLogs.getBoundingClientRect();
 
       startLeftWidth = leftRect.width;
-      startRightWidth = rightRect.width;
 
       resizer.classList.add('is-resizing');
       document.body.style.cursor = 'col-resize';
@@ -175,7 +172,6 @@ class EventManager {
     let isDetailsResizing = false;
     let startX = 0;
     let startMonitorWidth = 0;
-    let startDetailsWidth = 0;
 
     if (!detailsResizer || !trafficMonitor || !requestDetails) return;
 
@@ -184,10 +180,8 @@ class EventManager {
       startX = e.clientX;
 
       const monitorRect = trafficMonitor.getBoundingClientRect();
-      const detailsRect = requestDetails.getBoundingClientRect();
 
       startMonitorWidth = monitorRect.width;
-      startDetailsWidth = detailsRect.width;
 
       detailsResizer.classList.add('is-resizing');
       document.body.style.cursor = 'col-resize';

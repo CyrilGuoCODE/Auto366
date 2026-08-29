@@ -112,7 +112,6 @@ class AnswersUI {
       `;
 
       answers.forEach((answer, index) => {
-        const answerId = `answer_${Date.now()}_${index}`;
         const answerText = answer.answer || '无答案';
 
         // 优先使用questionText字段，如果没有则使用question字段

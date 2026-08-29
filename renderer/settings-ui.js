@@ -285,7 +285,6 @@ class SettingsUI {
         container.parentElement.insertBefore(wrap, container.nextSibling);
         this._ttsHintEl = wrap;
         const btn = wrap.querySelector('#ttsModelDownloadBtn');
-        const fill = wrap.querySelector('#ttsModelDownloadFill');
         const status = wrap.querySelector('#ttsModelDownloadStatus');
         btn.addEventListener('click', async () => {
           btn.disabled = true;
