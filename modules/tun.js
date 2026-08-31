@@ -6,6 +6,9 @@ const https = require('https');
 const { URL } = require('url');
 
 // ---- GeoIP/GeoSite 数据库 ----
+// 主源：用户自己的静态域名（国内访问更快），缺失时回退 GitHub 加速镜像
+const GEO_MAIN_PREFIX = 'https://366static.submergme.xyz/tun';
+// GitHub 加速镜像（按序重试）
 const GEO_MIRRORS = [
   'https://gh-proxy.org/',
   'https://cdn.gh-proxy.org/',
@@ -145,19 +148,19 @@ ${processRules || '  - MATCH,DIRECT'}
 `;
   }
 
-  // 从 GitHub 加速镜像下载单个 Geo 数据库文件（支持重定向，写临时文件后原子替换）
+  // 从候选源下载单个 Geo 数据库文件（支持重定向，写临时文件后原子替换）
   // onProgress(received, total) 回调用于上报下载进度
-  _downloadGeoFile(file, dest, mirror, onProgress) {
+  _downloadGeoFile(url, dest, onProgress) {
     return new Promise((resolve, reject) => {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       const tmp = dest + '.tmp';
       try { fs.removeSync(tmp); } catch (e) { /* 忽略 */ }
 
-      const downloadFrom = (url) => {
-        const req = https.get(url, { headers: { 'User-Agent': 'Auto366' } }, (res) => {
+      const downloadFrom = (u) => {
+        const req = https.get(u, { headers: { 'User-Agent': 'Auto366' } }, (res) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             res.resume();
-            downloadFrom(new URL(res.headers.location, url).toString());
+            downloadFrom(new URL(res.headers.location, u).toString());
             return;
           }
           if (res.statusCode !== 200) {
@@ -195,11 +198,12 @@ ${processRules || '  - MATCH,DIRECT'}
         req.on('error', reject);
       };
 
-      downloadFrom(mirror + GEO_RELEASE_URL + file);
+      downloadFrom(url);
     });
   }
 
-  // 批量确保 Geo 数据库就绪：缺失（或文件过小）时从国内加速镜像下载到配置目录
+  // 批量确保 Geo 数据库就绪：缺失（或文件过小）时下载到配置目录
+  // 优先用户自己的静态域名（加速），失败按序回退 GitHub 加速镜像
   // failOnMissing=true 时任一文件失败即返回失败（用于启动前必须就绪的最小库）；
   // 否则失败仅告警不中断。下载开始/进度/完成均输出到日志面板
   async _ensureGeoDataFiles(files, failOnMissing) {
@@ -211,12 +215,18 @@ ${processRules || '  - MATCH,DIRECT'}
 
       this.safeIpcSend('rule-log', { type: 'info', message: `[TUN] 开始下载 Geo 数据库: ${item.file}` });
 
+      // 候选源：主源（自己域名）优先，再逐个回退 GitHub 加速镜像
+      const sources = [
+        { url: `${GEO_MAIN_PREFIX}/${item.file}`, label: '366static.submergme.xyz' },
+        ...GEO_MIRRORS.map(m => ({ url: m + GEO_RELEASE_URL + item.file, label: m })),
+      ];
+
       let ok = false;
       let lastErr = null;
       let lastPct = -1;
-      for (const mirror of GEO_MIRRORS) {
+      for (const source of sources) {
         try {
-          await this._downloadGeoFile(item.file, dest, mirror, (received, total) => {
+          await this._downloadGeoFile(source.url, dest, (received, total) => {
             const pct = total ? Math.min(100, Math.round((received / total) * 100)) : -1;
             if (pct >= 0 && pct - lastPct >= 2) {
               lastPct = pct;
@@ -232,18 +242,18 @@ ${processRules || '  - MATCH,DIRECT'}
           this.safeIpcSend('rule-log', {
             type: 'success',
             message: `[TUN] Geo 数据库下载完成: ${item.file}`,
-            details: `来源: ${mirror}`,
+            details: `来源: ${source.label}`,
           });
-          console.log(`[TUN] 已从镜像下载 Geo 数据库: ${item.file} (${mirror})`);
+          console.log(`[TUN] 已从 ${source.label} 下载 Geo 数据库: ${item.file}`);
           ok = true;
           break;
         } catch (e) {
           lastErr = e;
-          console.warn(`[TUN] 镜像 ${mirror} 下载 ${item.file} 失败: ${e.message}`);
+          console.warn(`[TUN] 源 ${source.label} 下载 ${item.file} 失败: ${e.message}`);
           this.safeIpcSend('rule-log', {
             type: 'error',
-            message: `[TUN] 镜像下载失败 ${item.file}`,
-            details: `${mirror}: ${e.message}`,
+            message: `[TUN] 源下载失败 ${item.file}`,
+            details: `${source.label}: ${e.message}`,
           });
         }
       }
@@ -256,7 +266,7 @@ ${processRules || '  - MATCH,DIRECT'}
       }
     }
     if (missing.length) {
-      return { success: false, message: 'Geo 数据库下载失败（国内加速镜像均不可达）: ' + missing.join(', ') };
+      return { success: false, message: 'Geo 数据库下载失败（主源与镜像均不可达）: ' + missing.join(', ') };
     }
     return { success: true };
   }
