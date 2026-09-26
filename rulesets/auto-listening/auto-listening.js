@@ -15,7 +15,12 @@
     // 跟主程序窗口不是同一个存储区。
     const BUCKET_URL = (window.__A366__ && window.__A366__.bucket) || 'http://127.0.0.1:5290';
     const ANSWER_PATH = '/listening-answer';
-    const TARGET_PATTERNS = ['听后选择-嵌套', '听后选择-整体'];
+    // questionData.js 提出来的是「听后选择」，page1 是「听后选择-嵌套/整体」。
+    // 只认后两个会把目录提取的选择题整卷丢掉。
+    function isChoiceAnswer(answer) {
+        if (Number(answer && answer.questionType) === 1) return true;
+        return /听后选择/.test(String(answer && answer.pattern || ''));
+    }
 
     const CSS_VARS = `
         --a366-primary: #007bff;
@@ -1303,7 +1308,7 @@
                 rawAnswers = data.answers;
             }
 
-            const filtered = rawAnswers.filter(a => TARGET_PATTERNS.includes(a.pattern));
+            const filtered = rawAnswers.filter(isChoiceAnswer);
             state.answerList = filtered;
 
             if (filtered.length > 0) {
@@ -1712,6 +1717,7 @@
 
     function normalizeText(str) {
         return String(str || '')
+            .replace(/<[^>]*>/g, ' ')
             .replace(/[\u2018\u2019]/g, "'")
             .replace(/[\u201C\u201D]/g, '"')
             .replace(/\s+/g, ' ')
@@ -2693,11 +2699,17 @@
     const SPEAKING_QTYPE_IDS = new Set([149, 237, 449, 529, 531, 554]);
 
     function isSpeakingPaper(answers) {
-        return answers.some(answer => {
+        const numbered = answers.some(answer => {
             const questionType = Number(answer && answer.questionType);
             const qtypeId = Number(answer && answer.qtypeId);
             return SPEAKING_QUESTION_TYPES.has(questionType) || SPEAKING_QTYPE_IDS.has(qtypeId);
         });
+        if (numbered) return true;
+        // questionData.js 的旧提取没有 questionType。北京听说卷题名是「听后转述」。
+        // 只在完全没有编号时看题名，避免基础听力里混入的听后回答被改判。
+        const hasType = answers.some(answer => answer && (answer.questionType != null || answer.qtypeId != null));
+        if (hasType) return false;
+        return answers.some(answer => /转述|复述/.test(String(answer && answer.pattern || '')));
     }
 
     /* 页面上有口语题容器 —— 答案接口还没准备好时的第二个判据 */
