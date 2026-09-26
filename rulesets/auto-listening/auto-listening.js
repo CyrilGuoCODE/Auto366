@@ -2162,13 +2162,32 @@
 
         async ensureAudioGraph(resume) {
             if (!this.ctx || this.ctx.state === 'closed') {
-                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const AC = window.AudioContext || window.webkitAudioContext;
+                // playback 缓冲比 interactive 不容易在录音器侧欠载，欠载时内核会把上一小段再送一遍。
+                try { this.ctx = new AC({ latencyHint: 'playback' }); }
+                catch (e) { this.ctx = new AC(); }
                 this.gain = this.ctx.createGain();
                 this.gain.gain.value = 1.0;
                 this.dest = this.ctx.createMediaStreamDestination();
                 this.gain.connect(this.dest);
+                // 音源停了以后目的地不能空转。空转时录音器会把最后一个字反复抄进后半段窗口。
+                this.clock = null;
+                try {
+                    this.clock = this.ctx.createConstantSource();
+                    this.clock.offset.value = 0;
+                    this.clock.connect(this.dest);
+                    this.clock.start();
+                } catch (e) { /* 没有 ConstantSource 时仍可灌音 */ }
                 this.stream = this.dest.stream;
                 this.tracks = new Set(this.stream.getAudioTracks());
+                const track = this.stream.getAudioTracks()[0];
+                if (track && track.applyConstraints) {
+                    track.applyConstraints({
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                    }).catch(() => {});
+                }
             }
             // early hook 阶段可能还没有用户手势，只创建并交出稳定的 stream；
             // 真正点“自动答题”或开始播放时再 resume。
@@ -2463,17 +2482,25 @@
                 if (!this.recording || seq !== this.recordSeq) return;
                 const src = this.ctx.createBufferSource();
                 src.buffer = audio;
-                // 与已经验证可用的 auto-fill 保持一致：录音窗口内持续有信号，
-                // 由考试栏/录音器结束事件负责 stop，避免时序偏差只录到静音。
-                src.loop = true;
+                // 生成文件本身是一遍干净朗读。loop=true 会在 60 秒窗口里把同一段再播一遍，
+                // 环回点还会被录音器掐成 “book book / al al”。跟读规则默认也是单次。
+                src.loop = false;
                 src.connect(this.gain);
                 this.source = src;
                 this.currentIndex = m.item.index;
-                src.start();
+                const itemIndex = m.item.index;
+                src.onended = () => {
+                    if (this.source === src) {
+                        addLog('听说: #' + itemIndex + ' 单次播放结束（' + audio.duration.toFixed(1) + 's），剩余录音窗保持静音', 'info');
+                    }
+                };
+                // 刚 resume 的上下文当前帧可能还没在跑，稍晚一点再 start，避免开头被吞或重送。
+                const when = this.ctx.currentTime + 0.05;
+                src.start(when);
                 // 只有真正 start 成功后才算已用。旧代码在 fetch 前就 add，翻页即永久漏题。
                 this.used.add(m.item.index);
                 const track = this.stream && this.stream.getAudioTracks()[0];
-                addLog('听说: 开录 → #' + m.item.index + '（' + reason + '，' + m.how + '，' +
+                addLog('听说: 开录 → #' + m.item.index + '（' + reason + '，' + m.how + '，单次 ' +
                     audio.duration.toFixed(1) + 's，取流 ' + this.gumCount + ' 次，AudioContext ' +
                     this.ctx.state + (track ? '，track ' + track.readyState : '') +
                     '）「' + m.item.text.slice(0, 46) + '」', 'success');
