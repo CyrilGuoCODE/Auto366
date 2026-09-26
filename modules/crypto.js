@@ -32,6 +32,25 @@ class CryptoManager {
       return null;
     }
   }
+
+  // psdata_partb/answer.json 实测格式（Pc.zip，12 个文件全部命中）：
+  //   魔数 "encr" + 4 字节头（各文件不同，如 a7 67 00 00 / 27 2b 00 00，不参与运算）
+  //   + 载荷按 01 02 03 04 05 06 07 08 循环异或。
+  // 解出来不是 JSON 就返回 null，明文文件不受影响。
+  decryptEncr(encryptedData) {
+    if (!Buffer.isBuffer(encryptedData) || encryptedData.length < 8) return null;
+    if (encryptedData.slice(0, 4).toString('latin1') !== 'encr') return null;
+
+    const payload = encryptedData.slice(8);
+    const key = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]);
+    const out = Buffer.alloc(payload.length);
+    for (let i = 0; i < payload.length; i++) out[i] = payload[i] ^ key[i % 8];
+
+    const text = out.toString('utf-8');
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+    return text;
+  }
 }
 
 module.exports = CryptoManager;

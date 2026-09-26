@@ -184,13 +184,29 @@ function cleanAnswersForTts(answers, opts) {
     pool = pool.filter(x => !isSilent(x.item.pattern));
 
     /*
-     * page1.js 把每道口语题的全部备选答案摊平成独立条目，
-     * questionData.js / answer.json 则给出带题号和 children 的结构化条目。
-     * 两者内容重叠。只要有结构化条目，就以它为准 —— 它带题号、顺序和 elementId，
-     * 是后续定位页面元素的唯一依据。
+     * 不能用 questionNo 判断「结构化」。
+     * 实测 Pc.zip：page1 的听后回答/朗读短文/故事复述没有 questionNo，
+     * 句子跟读的 answer.json 反而有。旧逻辑会把 12 道口语题全部丢掉，
+     * 只剩 9 句跟读，灌音就灌错题。
+     * 同一 elementId 已经有整篇或带 children 的条目时，丢掉句子级重复。
      */
-    const structured = pool.filter(x => x.item.questionNo != null);
-    if (structured.length) pool = structured;
+    const covered = new Set(
+      pool
+        .filter(x => {
+          const pattern = String(x.item.pattern || '');
+          return /朗读短文|转述|复述|听后回答/.test(pattern)
+            || (Array.isArray(x.item.children) && x.item.children.length);
+        })
+        .map(x => String(x.item.elementId || '').toUpperCase())
+        .filter(Boolean)
+    );
+    if (covered.size) {
+      pool = pool.filter(x => {
+        const id = String(x.item.elementId || '').toUpperCase();
+        if (!id || !covered.has(id)) return true;
+        return !/JSON句子跟读|JSON单词发音/.test(String(x.item.pattern || ''));
+      });
+    }
   }
 
   const out = [];

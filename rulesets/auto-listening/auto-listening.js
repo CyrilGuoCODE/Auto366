@@ -1846,6 +1846,10 @@
     };
 
     const SPEAK_PATTERNS = ['听后回答', '朗读短文', '听后转述', 'JSON句子跟读模式', '口语跟读', '故事复述'];
+    // 这份单元听说的录音窗不是统一的「请答题」：
+    // 模仿朗读是请答题，听选/回答是请回答，转述是请录音，询问是请作答。
+    const ANSWER_PHASE = /请答题|请回答|请录音|请作答|开始作答|正在录音|录音中/;
+    const STOP_PHASE = /请稍等|请等待|请听题|播放|准备|停止录音|结束|完成/;
 
     function spkVisible(el) {
         if (!el || !el.getBoundingClientRect) return false;
@@ -1898,7 +1902,7 @@
                 .replace(/&(?:nbsp|#160);/gi, ' ')
                 .replace(/&amp;/gi, ' and ')
                 .replace(/&(?:quot|apos|#39);/gi, "'")
-                .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+                .toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ').trim();
         },
 
         /* 答案里的字母不可信：卷面写着「作答时选项随机乱序」，只比正文 */
@@ -2132,9 +2136,11 @@
                         if (!c || c.length < 6) continue;
                         let s = 0;
                         if (c === p) s = 100;
+                        else if (c.indexOf(p) >= 0 && p.length >= 24) s = 96;
                         else if (p.indexOf(c) >= 0) s = 95;
                         else if (c.indexOf(p) >= 0) s = p.length / c.length * 90;
-                        // 同分取更长的：朗读短文整篇里含着每个单句
+                        // 页面只露出短文开头时，整篇包含页面文本，单句又被页面包含。
+                        // 整篇给 96，避免短句以 95 分抢走灌音。中文题干也保留，询问/转述才能对上。
                         if (s > s0 || (s === s0 && s > 0 && c.length > len0)) { s0 = s; best = it; len0 = c.length; }
                     }
                 }
@@ -2298,7 +2304,8 @@
                             const phase = self.currentBarText();
                             // 听后回答可能整组只 start 一次，而且 start 发生在“请听题”。
                             // 有明确相位时交给活动考试栏逐题触发；没有考试栏才直接兜底。
-                            if (!phase || /请答题|开始作答|正在录音|录音中/.test(phase)) {
+                            // 请回答 / 请录音 / 请作答也是录音窗，不能当成“先别灌”。
+                            if (!phase || ANSWER_PHASE.test(phase)) {
                                 self.onRecordStart('MediaRecorder.start');
                             }
                         }, 0);
@@ -2485,12 +2492,12 @@
             if (this._phaseTimer) clearTimeout(this._phaseTimer);
             this._phaseTimer = null;
 
-            if (/请答题|开始作答|正在录音|录音中/.test(text)) {
+            if (ANSWER_PHASE.test(text)) {
                 // MediaRecorder 被第三方库封装时的兜底。稍等 250ms，让题卡先完成切换。
                 this._phaseTimer = setTimeout(() => {
                     if (this.currentTexts().length) this.onRecordStart('考试栏:' + text);
                 }, 250);
-            } else if (/请稍等|请等待|请听题|播放|准备|结束|完成/.test(text)) {
+            } else if (STOP_PHASE.test(text)) {
                 this.onRecordStop('考试栏:' + text);
             }
         },
@@ -2513,13 +2520,13 @@
                 if (!this.running) return;
                 const t = this.currentBarText();
                 const question = this.currentTexts().join(' || ');
-                const answerPhase = /请答题|开始作答|正在录音|录音中/.test(t);
+                const answerPhase = ANSWER_PHASE.test(t);
 
                 if (t !== last) {
                     if (t) {
                         addLog('听说: 活动考试栏「' + t + '」', 'info');
                         this.handleBarPhase(t);
-                    } else if (/请答题|开始作答|正在录音|录音中/.test(last)) {
+                    } else if (ANSWER_PHASE.test(last)) {
                         this.onRecordStop('活动考试栏离开');
                     }
                 } else if (answerPhase && question && question !== lastQuestion) {

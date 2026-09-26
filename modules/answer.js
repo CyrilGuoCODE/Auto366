@@ -370,41 +370,59 @@ class AnswerExtractor {
             }
           }
 
-          // 朗读题
-          if (qtypeId === AnswerExtractor.QTYPE_READING && question.analysis && question.analysis.trim()) {
-            const analysisText = this.cleanHtmlText(question.analysis).trim();
+          // 朗读题。analysis 为空时题面在 question_text（本套卷模仿朗读就是这样）。
+          if (qtypeId === AnswerExtractor.QTYPE_READING) {
+            const analysisText = this.cleanHtmlText(question.analysis || '').trim()
+              || this.cleanHtmlText(question.question_text || '').trim();
             if (analysisText) {
               answers.push({
-                question: '朗读文本',
+                question: '朗读短文',
                 answer: analysisText,
                 content: `请朗读: ${analysisText}`,
-                questionText: analysisText.substring(0, 50) + (analysisText.length > 50 ? '...' : ''),
-                pattern: '朗读',
-                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+                questionText: analysisText,
+                pattern: '朗读短文',
+                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || ''),
+                elementId: question.question_id || undefined
               });
             }
           }
 
-          // 故事复述题
-          if (qtypeId === AnswerExtractor.QTYPE_RETELL && question.analysis && question.analysis.trim()) {
-            let analysisText = question.analysis
-              .replace(/<p[^>]*>答案[一二三四五六七八九十]+：<\/p>/g, '')
-              .replace(/<[^>]+>/g, '')
-              .trim();
-            analysisText = analysisText.replace(/\s+/g, ' ').trim();
-            if (analysisText) {
-              const firstAnswer = analysisText.split(/\s*答案[一二三四五六七八九十]+：\s*/)[0] || analysisText;
+          // 故事复述题。record_speak 里是几段范文（work/show 为空，不能走口语筛选项）。
+          // analysis 常把听力原文和参考答案拼在一起，优先用范文里最短的一段。
+          if (qtypeId === AnswerExtractor.QTYPE_RETELL) {
+            const paragraphs = [];
+            for (const item of question.record_speak || []) {
+              for (const part of String(item.content || '').split(/\n+/)) {
+                const cleaned = this.cleanHtmlText(part);
+                if (cleaned.length >= 80) paragraphs.push(cleaned);
+              }
+            }
+            let answerText = paragraphs.length
+              ? paragraphs.reduce((a, b) => (b.length < a.length ? b : a))
+              : '';
+            if (!answerText && question.analysis && question.analysis.trim()) {
+              let analysisText = question.analysis
+                .replace(/<p[^>]*>答案[一二三四五六七八九十]+：<\/p>/g, '')
+                .replace(/<[^>]+>/g, '')
+                .trim();
+              analysisText = analysisText.replace(/\s+/g, ' ').trim();
+              answerText = (analysisText.split(/\s*答案[一二三四五六七八九十]+：\s*/)[0] || analysisText).trim();
+            }
+            if (answerText) {
               const questionText = this.cleanHtmlText(question.question_text || '故事复述');
               answers.push({
                 question: questionText,
-                answer: firstAnswer.trim(),
-                content: `请复述: ${firstAnswer.trim()}`,
+                answer: answerText,
+                content: `请复述: ${answerText.substring(0, 100)}`,
                 questionText: questionText,
                 pattern: '故事复述',
-                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
+                mediaIndex: this.extractMediaIndexFromContent(question.media?.file || ''),
+                elementId: question.question_id || undefined
               });
             }
           }
+
+          answers.push(...this.extractNestedSpeakAnswers(question));
 
           // 听力填空题
           if (qtypeId === AnswerExtractor.QTYPE_FILL_BLANK) {
@@ -664,7 +682,19 @@ class AnswerExtractor {
     if (dirExtractResult.success && dirExtractResult.answers.length > 0) {
       // 使用 questionText 字段进行去重（与 sortAndDeduplicateAnswers 保持一致）
       const existingKeys = new Set(allAnswers.map(a => `${a.questionText || a.question}|${a.answer}`));
-      const newAnswers = dirExtractResult.answers.filter(a => !existingKeys.has(`${a.questionText || a.question}|${a.answer}`));
+      // 只去掉和 page1 听后回答同一题的加密 answer.json。
+      // 朗读/转述目录里的 answer.json 题号相同，但不能一起丢掉。
+      const pageSpeakIds = new Set(
+        allAnswers
+          .filter(a => a.pattern === '听后回答')
+          .map(a => String(a.elementId || '').toUpperCase())
+          .filter(Boolean)
+      );
+      const newAnswers = dirExtractResult.answers.filter(a => {
+        const elementId = String(a.elementId || '').toUpperCase();
+        if (a.pattern === '听后回答' && elementId && pageSpeakIds.has(elementId)) return false;
+        return !existingKeys.has(`${a.questionText || a.question}|${a.answer}`);
+      });
 
       if (newAnswers.length > 0) {
         dirAnswerCount = newAnswers.length;
@@ -1656,10 +1686,130 @@ class AnswerExtractor {
     }
   }
 
+  // 听选信息 / 回答问题 / 询问信息在 page1 里是 questions_list 的 question_type=12，
+  // qtype_id 为 529 或 149，参考答案在 record_speak（work=1 且 show=1）。
+  // 旧逻辑只认 237/531，所以这些题一条都提不出来。
+  extractNestedSpeakAnswers(question) {
+    const results = [];
+    const visit = (node) => {
+      if (!node || typeof node !== 'object') return;
+      if (Number(node.question_type) === 12 && Array.isArray(node.record_speak)) {
+        const usable = node.record_speak.filter(item => String(item.fake) !== '1');
+        const answers = this.pickSpeakAnswers(usable);
+        if (answers.length > 0) {
+          let questionText = this.cleanHtmlText(node.question_text || '');
+          const cut = questionText.search(/[（(]/);
+          if (cut > 8 && questionText.slice(0, cut).trim().endsWith('?')) {
+            questionText = questionText.slice(0, cut).trim();
+          }
+          if (!questionText) questionText = '听后回答';
+          const elementId = String(node.question_id || node.element_id || '').toUpperCase();
+          results.push({
+            question: questionText,
+            answer: questionText,
+            content: '点击展开全部回答',
+            questionText,
+            pattern: '听后回答',
+            mediaIndex: this.extractMediaIndexFromContent(node.media?.file || question.media?.file || ''),
+            elementId: elementId || undefined,
+            children: answers.map((answer, index) => ({
+              question: `第${index + 1}个答案`,
+              answer,
+              content: `请回答: ${answer}`,
+              pattern: '听后回答'
+            }))
+          });
+        }
+      }
+      for (const child of node.questions_list || []) visit(child);
+    };
+    visit(question);
+    return results;
+  }
+
+  readAnswerFileContent(filePath) {
+    const buf = fs.readFileSync(filePath);
+    if (buf.length >= 4 && buf.slice(0, 4).toString('latin1') === 'encr') {
+      const decrypted = this.cryptoManager.decryptEncr(buf);
+      if (decrypted) return decrypted;
+    }
+    return buf.toString('utf-8');
+  }
+
+  expandAnswerTemplate(text) {
+    if (!text) return '';
+    let s = String(text);
+    for (let i = 0; i < 4; i++) {
+      const next = s.replace(/[\[{]([^\[\]{}]*)[\]}]/g, (_, inner) => {
+        const parts = inner.split('/').map(part => part.trim()).filter(Boolean);
+        return parts[0] || '';
+      });
+      if (next === s) break;
+      s = next;
+    }
+    return this.cleanHtmlText(s);
+  }
+
+  // 加密 answer.json 解密后的结构（Pc.zip 12 个文件全部如此）：
+  //   Data.Question + Data.Answers[].text
+  //   AnswerQuestion：Question 是真题干，Answers 是参考答句
+  //   AskQuestion：Question 经常只是 "Why?"，真题干在 page1；这里仍提取，
+  //   同 elementId 已被 page1 收过时由 processZipAnswer 丢掉，避免重复。
+  extractPartbAnswerJson(jsonData, mediaIndex) {
+    const data = jsonData && jsonData.Data;
+    if (!data || !Array.isArray(data.Answers)) return [];
+    const looksLikePartb = jsonData.Type === 'partb'
+      || jsonData.QuestionType === 'AnswerQuestion'
+      || jsonData.QuestionType === 'AskQuestion'
+      || typeof data.Question === 'string';
+    if (!looksLikePartb) return [];
+
+    const texts = [];
+    const pushText = (raw) => {
+      const speakable = this.expandAnswerTemplate(raw);
+      if (speakable && speakable.length > 1) texts.push(speakable);
+    };
+    const items = data.Answers.filter(item => item && typeof item.text === 'string');
+    for (const item of items) {
+      if (item.rephrase === 1) continue;
+      pushText(item.text);
+    }
+    if (texts.length === 0) items.forEach(item => pushText(item.text));
+    if (texts.length === 0) return [];
+
+    const unique = [];
+    const seen = new Set();
+    for (const itemText of texts) {
+      const key = itemText.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(itemText);
+    }
+
+    let questionText = this.cleanHtmlText(data.Question || '') || '听后回答';
+    if (/^(why|what|how|when|where)\?$/i.test(questionText) && unique.some(item => item.trim().endsWith('?'))) {
+      questionText = unique.find(item => item.trim().endsWith('?')) || questionText;
+    }
+    return [{
+      question: questionText,
+      answer: questionText,
+      content: '点击展开全部回答',
+      questionText,
+      pattern: '听后回答',
+      mediaIndex: mediaIndex,
+      children: unique.map((answer, index) => ({
+        question: `第${index + 1}个答案`,
+        answer,
+        content: `请回答: ${answer}`,
+        pattern: '听后回答'
+      }))
+    }];
+  }
+
   extractAnswersFromFile(filePath) {
     try {
       const ext = path.extname(filePath).toLowerCase();
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = this.readAnswerFileContent(filePath);
 
       if (ext === '.json') {
         return this.extractFromJSON(content, filePath);
@@ -1777,6 +1927,9 @@ class AnswerExtractor {
           }
         });
       }
+
+      const partbAnswers = this.extractPartbAnswerJson(jsonData, mediaIndex);
+      if (partbAnswers.length > 0) answers.push(...partbAnswers);
     } catch (e) {
       return [];
     }
