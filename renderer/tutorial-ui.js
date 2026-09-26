@@ -5,6 +5,9 @@ class TutorialManager {
     this.currentPage = 0;
     this.totalPages = 6;
     this.selectedMode = 'simple';
+    this.prepPage = 3;
+    this.prepLeft = 0;
+    this.prepTimer = null;
   }
 
   init() {
@@ -25,6 +28,7 @@ class TutorialManager {
   }
 
   hideTutorial() {
+    this.clearPrepLock();
     const modal = document.getElementById('tutorialModal');
     if (modal) {
       modal.style.display = 'none';
@@ -47,6 +51,11 @@ class TutorialManager {
     modeCards.forEach(card => {
       card.onclick = () => this.handleModeSelect(card);
     });
+
+    const ackBox = document.getElementById('tutorialPrepAckBox');
+    if (ackBox) {
+      ackBox.onchange = () => this.paintPrepLock();
+    }
 
     const browseBtn = document.getElementById('tutorialBrowseCacheBtn');
     if (browseBtn) {
@@ -160,15 +169,65 @@ class TutorialManager {
 
     prevBtn.style.display = this.currentPage > 0 ? 'inline-block' : 'none';
 
-    if (this.currentPage === this.totalPages - 1) {
-      nextBtn.textContent = '开始使用';
+    if (this.currentPage === this.prepPage) {
+      this.startPrepLock();
     } else {
-      nextBtn.textContent = '下一步';
+      this.clearPrepLock();
+      nextBtn.disabled = false;
+      nextBtn.textContent = this.currentPage === this.totalPages - 1 ? '开始使用' : '下一步';
     }
 
     if (this.currentPage === 2) {
       this.startAutoFindCache();
     }
+  }
+
+  clearPrepLock() {
+    if (this.prepTimer) {
+      clearInterval(this.prepTimer);
+      this.prepTimer = null;
+    }
+  }
+
+  startPrepLock() {
+    this.clearPrepLock();
+    const box = document.getElementById('tutorialPrepAckBox');
+    const ack = document.getElementById('tutorialPrepAck');
+    this.prepLeft = 5;
+    if (box) {
+      box.checked = false;
+      box.disabled = true;
+    }
+    if (ack) ack.classList.add('is-locked');
+    this.paintPrepLock();
+    this.prepTimer = setInterval(() => {
+      this.prepLeft -= 1;
+      if (this.prepLeft <= 0) {
+        this.clearPrepLock();
+        if (box) box.disabled = false;
+        if (ack) ack.classList.remove('is-locked');
+      }
+      this.paintPrepLock();
+    }, 1000);
+  }
+
+  paintPrepLock() {
+    if (this.currentPage !== this.prepPage) return;
+    const nextBtn = document.getElementById('tutorialNextBtn');
+    const box = document.getElementById('tutorialPrepAckBox');
+    if (!nextBtn) return;
+    if (this.prepLeft > 0) {
+      nextBtn.disabled = true;
+      nextBtn.textContent = '请读完 ' + this.prepLeft;
+      return;
+    }
+    if (!box || !box.checked) {
+      nextBtn.disabled = true;
+      nextBtn.textContent = '请勾选确认';
+      return;
+    }
+    nextBtn.disabled = false;
+    nextBtn.textContent = '下一步';
   }
 
   async startAutoFindCache() {

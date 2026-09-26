@@ -1181,6 +1181,7 @@
                     <p class="modal__greeting">Hello!</p>
                     <h2 class="modal__title">欢迎使用 Auto366</h2>
                     <p class="modal__description">本教程将帮助你快速了解和使用 Auto366 的核心功能。</p>
+                    <p class="modal__read">请认真阅读，不要连点下一步。</p>
                 </div>
 
                 <!-- 第2页：选择UI模式 -->
@@ -1230,13 +1231,29 @@
                             <li><strong>开启代理</strong> - 在 Auto366 中启动代理服务器</li>
                             <li><strong>确保 TUN 模式开启</strong> - 打开"增强模式"开关</li>
                         </ul>
-                        <p class="modal__note">天学网设置不需要做任何更改。</p>
-                        <p class="modal__note">如果你已经做出了更改，请删除并还原天学网设置。</p>
                     </div>
-                    <div class="modal__hint">
-                        <span class="bi bi-info-circle"></span>
-                        <span>点击"下一步"继续</span>
+                    <div class="modal__prep">
+                        <div class="modal__prep-card is-bad">
+                            <div class="modal__prep-tag">不要这样做</div>
+                            <h3>去天学网里改设置</h3>
+                            <ul>
+                                <li>填写代理地址</li>
+                                <li>导入或替换证书</li>
+                            </ul>
+                        </div>
+                        <div class="modal__prep-card is-good">
+                            <div class="modal__prep-tag">请这样做</div>
+                            <h3>天学网保持原样</h3>
+                            <ul>
+                                <li>天学网设置不需要做任何更改</li>
+                                <li>如果已经改过，请删除并还原</li>
+                            </ul>
+                        </div>
                     </div>
+                    <label class="modal__prep-ack is-locked" id="tutorialPrepAck">
+                        <input type="checkbox" id="tutorialPrepAckBox" disabled>
+                        <span>我已阅读：不在天学网里改代理或证书。已经改过的，会删掉并还原。</span>
+                    </label>
                 </div>
 
                 <!-- 第5页：规则集使用 -->

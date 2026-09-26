@@ -344,3 +344,103 @@
     background: var(--color-bg-hover);
     border-color: var(--color-border-strong);
 }
+
+.modal--tutorial .modal__read {
+    margin: var(--space-xl) 0 0;
+    padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-md);
+    background: var(--color-warn-50);
+    border: 1px solid var(--color-warn-200);
+    color: var(--color-warn-700);
+    font-size: var(--text-base);
+    line-height: var(--leading-relaxed);
+    text-align: left;
+}
+
+.modal--tutorial .modal__prep {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+    text-align: left;
+}
+
+.modal--tutorial .modal__prep-card {
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+}
+
+.modal--tutorial .modal__prep-card.is-bad {
+    background: var(--color-danger-50);
+    border: 1px solid var(--color-danger-200);
+}
+
+.modal--tutorial .modal__prep-card.is-good {
+    background: var(--color-success-50);
+    border: 1px solid var(--color-success-200);
+}
+
+.modal--tutorial .modal__prep-tag {
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-bold);
+    margin-bottom: var(--space-xs);
+}
+
+.modal--tutorial .modal__prep-card.is-bad .modal__prep-tag {
+    color: var(--color-danger);
+}
+
+.modal--tutorial .modal__prep-card.is-good .modal__prep-tag {
+    color: var(--color-success-700);
+}
+
+.modal--tutorial .modal__prep-card h3 {
+    margin: 0 0 var(--space-sm);
+    font-size: var(--text-base);
+    color: var(--color-text-heading);
+}
+
+.modal--tutorial .modal__prep-card ul {
+    margin: 0;
+    padding-left: var(--space-xl);
+    font-size: var(--text-base);
+    line-height: var(--leading-relaxed);
+    color: var(--color-text);
+}
+
+.modal--tutorial .modal__prep-ack {
+    margin-top: var(--space-lg);
+    display: flex;
+    gap: var(--space-sm);
+    align-items: flex-start;
+    padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-muted);
+    font-size: var(--text-base);
+    line-height: var(--leading-relaxed);
+    text-align: left;
+    color: var(--color-text);
+}
+
+.modal--tutorial .modal__prep-ack.is-locked {
+    opacity: 0.5;
+}
+
+.modal--tutorial .modal__prep-ack input {
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+    flex: none;
+}
+
+.modal--tutorial .btn--primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+    .modal--tutorial .modal__prep {
+        grid-template-columns: 1fr;
+    }
+}
