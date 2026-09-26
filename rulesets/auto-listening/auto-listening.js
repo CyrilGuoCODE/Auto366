@@ -2572,6 +2572,8 @@
                 const kinds = {};
                 this.answers.forEach(a => { kinds[a.pattern] = (kinds[a.pattern] || 0) + 1; });
                 addLog('题型: ' + Object.keys(kinds).map(k => k + ' ' + kinds[k]).join(' / '), 'info');
+                const typeIds = [...new Set(this.answers.map(a => a.questionType).filter(v => v != null))];
+                if (typeIds.length) addLog('题型编号 question_type: ' + typeIds.join(', '), 'info');
             } else {
                 addLog('听说: 答案还没解出来，后台继续拉…', 'info');
             }
@@ -2684,12 +2686,18 @@
         } catch (e) { return []; }
     }
 
+    // 平台题型编号，不看中文 pattern。
+    // question_type：9 朗读，12 口头回答，13 转述。1 是选择，99 是容器，不算录音卷。
+    // qtype_id 是另一套目录号，只认已经会录音的那几个。
+    const SPEAKING_QUESTION_TYPES = new Set([9, 12, 13]);
+    const SPEAKING_QTYPE_IDS = new Set([149, 237, 449, 529, 531, 554]);
+
     function isSpeakingPaper(answers) {
-        const kinds = new Set(answers.map(a => a.pattern || ''));
-        // 听说卷必然包含「听后转述」；答案里没有转述就一律按听力面板处理，
-        // 即使混入了听后回答/朗读短文等口语题型，也不进听说界面。
-        if (![...kinds].some(k => k.indexOf('转述') >= 0)) return false;
-        return SPEAK_PATTERNS.some(p => [...kinds].some(k => k.indexOf(p) >= 0));
+        return answers.some(answer => {
+            const questionType = Number(answer && answer.questionType);
+            const qtypeId = Number(answer && answer.qtypeId);
+            return SPEAKING_QUESTION_TYPES.has(questionType) || SPEAKING_QTYPE_IDS.has(qtypeId);
+        });
     }
 
     /* 页面上有口语题容器 —— 答案接口还没准备好时的第二个判据 */

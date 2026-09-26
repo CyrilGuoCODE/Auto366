@@ -334,6 +334,8 @@ class AnswerExtractor {
                   content: `请回答: ${answerContent}`,
                   questionText: questionText,
                   pattern: '口语跟读',
+                  questionType: Number(question.question_type) || undefined,
+                  qtypeId: AnswerExtractor.QTYPE_SPEAKING,
                   mediaIndex: this.extractMediaIndexFromContent(question.media?.file || '')
                 });
               }
@@ -359,6 +361,8 @@ class AnswerExtractor {
                 content: `点击展开全部回答 (共${validAnswers.length}种)`,
                 questionText: questionText || '口语问答',
                 pattern: '口语问答',
+                questionType: Number(question.question_type) || undefined,
+                qtypeId: AnswerExtractor.QTYPE_ORAL_QUESTION,
                 mediaIndex: this.extractMediaIndexFromContent(question.media?.file || ''),
                 children: validAnswers.map((ans, i) => ({
                   question: `第${i + 1}个答案`,
@@ -381,6 +385,8 @@ class AnswerExtractor {
                 content: `请朗读: ${analysisText}`,
                 questionText: analysisText,
                 pattern: '朗读短文',
+                questionType: Number(question.question_type) || 9,
+                qtypeId: AnswerExtractor.QTYPE_READING,
                 mediaIndex: this.extractMediaIndexFromContent(question.media?.file || ''),
                 elementId: question.question_id || undefined
               });
@@ -416,6 +422,8 @@ class AnswerExtractor {
                 content: `请复述: ${answerText.substring(0, 100)}`,
                 questionText: questionText,
                 pattern: '故事复述',
+                questionType: Number(question.question_type) || 13,
+                qtypeId: AnswerExtractor.QTYPE_RETELL,
                 mediaIndex: this.extractMediaIndexFromContent(question.media?.file || ''),
                 elementId: question.question_id || undefined
               });
@@ -1536,6 +1544,7 @@ class AnswerExtractor {
             answer: question.question_text || '未知',
             content: `点击展开全部回答`,
             pattern: '听后回答',
+            questionType: Number(question.question_type) || undefined,
             mediaIndex: mediaIndex,
             children: []
           }
@@ -1560,6 +1569,7 @@ class AnswerExtractor {
         answer: questionObj.question_text || '未知',
         content: `点击展开全部回答`,
         pattern: '听后回答',
+        questionType: Number(questionObj.question_type) || undefined,
         mediaIndex: mediaIndex,
         children: []
       }
@@ -1592,6 +1602,7 @@ class AnswerExtractor {
           content: `请转述: ${fullContent.substring(0, 100)}...`,
           questionText: '请根据听力内容进行转述',
           pattern: '听后转述',
+          questionType: Number(questionObj.question_type) || 13,
           mediaIndex: mediaIndex
         });
       }
@@ -1610,6 +1621,7 @@ class AnswerExtractor {
           content: `请朗读: ${content}`,
           questionText: '请朗读以下短文',
           pattern: '朗读短文',
+          questionType: Number(questionObj.question_type) || undefined,
           mediaIndex: mediaIndex
         });
       }
@@ -1710,6 +1722,8 @@ class AnswerExtractor {
             content: '点击展开全部回答',
             questionText,
             pattern: '听后回答',
+            questionType: Number(node.question_type) || 12,
+            qtypeId: Number(node.qtype_id) || undefined,
             mediaIndex: this.extractMediaIndexFromContent(node.media?.file || question.media?.file || ''),
             elementId: elementId || undefined,
             children: answers.map((answer, index) => ({

@@ -57,6 +57,8 @@ test('page1 nested record_speak becomes 听后回答 with the real stem', () => 
     'They are made for people who cannot see things.'
   ]);
   assert.equal(spoken[0].elementId, 'C34F0AA845369C8B168F44F5A526A69F');
+  assert.equal(spoken[0].questionType, 12);
+  assert.equal(spoken[0].qtypeId, 529);
 });
 
 test('reading without analysis and retell model paragraph are extracted', () => {
@@ -87,7 +89,11 @@ test('reading without analysis and retell model paragraph are extracted', () => 
   const reading = answers.find(item => item.pattern === '朗读短文');
   const retell = answers.find(item => item.pattern === '故事复述');
   assert.equal(reading.answer, 'Archimedes was a famous scientist.');
+  assert.equal(reading.questionType, 9);
+  assert.equal(reading.qtypeId, 449);
   assert.match(retell.answer, /^Short model answer/);
+  assert.equal(retell.questionType, 13);
+  assert.equal(retell.qtypeId, 554);
   assert.equal(retell.answer.includes('听力原文'), false);
 });
 
