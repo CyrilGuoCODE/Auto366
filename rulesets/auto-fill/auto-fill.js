@@ -242,7 +242,8 @@ function loadBucketFromServer() {
                                 answerIndex: answerIndex,
                                 index: i.index,
                                 elementId: i.elementId,
-                                questionNum: questionNum
+                                questionNum: questionNum,
+                                options: Array.isArray(i.options) ? i.options : undefined
                             });
 
                             entryItems.push({
@@ -477,8 +478,8 @@ function findAnswerByContent(questionText) {
         const similarity = calculateTextSimilarity(questionText, matchText);
         if (similarity > bestScore && similarity > 60) {
             bestScore = similarity;
-            let questionNum = 0;
-            if (item.question && typeof item.question === 'string') {
+            let questionNum = item.questionNum || 0;
+            if (!questionNum && item.question && typeof item.question === 'string') {
                 const m = item.question.match(/第(\d+)题/);
                 if (m) questionNum = parseInt(m[1], 10);
             }
@@ -488,7 +489,8 @@ function findAnswerByContent(questionText) {
                 originalQuestion: matchText,
                 index: index,
                 elementId: item.elementId,
-                questionNum: questionNum
+                questionNum: questionNum,
+                options: item.options
             };
         }
     });
@@ -525,10 +527,118 @@ function getAnswersForQuestionNum(num, inputCount, elementId) {
     return null;
 }
 
+
+const CHOICE_OPTION_SELECTOR = '.u3-option__content.is-text, .u3-option__content--default, .u3-option-img, [class*="option-img"]';
+const CHOICE_NUMBER_SELECTOR = '.u3-question-no, .u3-question__no, [class*="question-no"], .u3-question-container__ques-order--number';
+
+function optionImageName(src) {
+    if (!src) return '';
+    let value = String(src);
+    try { value = decodeURIComponent(value); } catch (e) { /* 保留原样 */ }
+    const name = value.split('/').pop().split('?')[0].trim().toLowerCase();
+    return name && name !== 'null' ? name : '';
+}
+
+// 文字选项走原来的类名。图片选项常常没有 is-text / u3-option-img，
+// 只在选项节点里放一张 img。题干图不含选项类名，不会被收进来。
+function queryChoiceOptions(root) {
+    if (!root || !root.querySelectorAll) return [];
+    const found = [];
+    const seen = new Set();
+    const push = (el) => {
+        if (!el || seen.has(el)) return;
+        seen.add(el);
+        found.push(el);
+    };
+    root.querySelectorAll(CHOICE_OPTION_SELECTOR).forEach(push);
+    root.querySelectorAll('.u3-option, .u3-option__content, .u3-choice__question--options--option').forEach(el => {
+        if (el.querySelector('img')) push(el);
+    });
+    return found.filter(el => !found.some(other => other !== el && el.contains(other)));
+}
+
+function choiceOptionText(opt) {
+    const clone = opt.cloneNode(true);
+    clone.querySelectorAll('img, .u3-option__label, [class*="option__label"], .u3-audioPlayer, [slot*="audio"]').forEach(el => el.remove());
+    return clone.textContent.trim();
+}
+
+function readChoiceOption(opt, index) {
+    const img = opt.querySelector('img');
+    const src = img ? (img.getAttribute('src') || img.getAttribute('data-src') || '') : '';
+    const imageName = optionImageName(src);
+    const host = opt.closest ? (opt.closest('.u3-option, .u3-option-img') || opt) : opt;
+    const labelEl = host.querySelector ? host.querySelector('.u3-option__label, .u3-option-img__label, [class*="option__label"]') : null;
+    const labelText = labelEl ? labelEl.textContent.trim() : '';
+    const labelLetterMatch = labelText.match(/^([A-Fa-f])\b/);
+    const labelLetter = labelLetterMatch ? labelLetterMatch[1].toUpperCase() : '';
+    const visibleText = choiceOptionText(opt);
+    const isImage = opt.classList.contains('u3-option-img') || (!!imageName && !visibleText);
+    if (isImage) {
+        const letterLabel = labelLetter || String.fromCharCode(65 + index);
+        return { element: opt, rawText: imageName || letterLabel, cleanText: imageName, letterLabel, imageName, isImage: true };
+    }
+    const optTextEl = opt.querySelector('.u3-question-text');
+    const rawText = optTextEl ? optTextEl.textContent.trim() : (visibleText || opt.textContent.trim());
+    const letterMatch = rawText.match(/^([A-Fa-f])[.、\s]+/);
+    const letterLabel = labelLetter || (letterMatch ? letterMatch[1].toUpperCase() : '');
+    const cleanText = letterMatch ? rawText.substring(letterMatch[0].length).trim() : rawText;
+    return { element: opt, rawText, cleanText, letterLabel, imageName, isImage: false };
+}
+
+function clickChoiceOption(od) {
+    const el = od.element;
+    const target = el.querySelector('.u3-option-img__content')
+        || (od.isImage ? (el.querySelector('.u3-option__content') || el.querySelector('img') || el) : el);
+    target.click();
+}
+
+function splitChoiceLetters(answerText) {
+    const value = String(answerText || '').replace(/\s+/g, '');
+    if (/^[A-Fa-f]$/.test(value)) return [value.toUpperCase()];
+    if (/^[A-Fa-f]{2,8}$/.test(value)) return value.toUpperCase().split('');
+    return [];
+}
+
+function bankOptionsFor(elementId, questionNum) {
+    const eid = elementId ? String(elementId).toUpperCase() : '';
+    if (eid) {
+        const hit = rawAnswerData.find(item => item.elementId && String(item.elementId).toUpperCase() === eid && Array.isArray(item.options) && item.options.length);
+        if (hit) return hit.options;
+    }
+    if (questionNum) {
+        const hit = rawAnswerData.find(item => item.questionNum === questionNum && Array.isArray(item.options) && item.options.length);
+        if (hit) return hit.options;
+    }
+    return null;
+}
+
+
+function pickImageLetterIndex(letter, optionsData, bankOptions) {
+    let idx = -1;
+    if (Array.isArray(bankOptions)) {
+        const wanted = bankOptions.find(bo => String(bo.id || '').trim().toUpperCase() === letter);
+        const imageName = wanted ? optionImageName(wanted.image || wanted.src || '') : '';
+        if (imageName) {
+            idx = optionsData.findIndex(od => !od.element.classList.contains('is-checked') && od.imageName === imageName);
+        }
+    }
+    if (idx < 0) {
+        idx = optionsData.findIndex(od => !od.element.classList.contains('is-checked') && od.letterLabel === letter);
+    }
+    if (idx < 0) {
+        const letterIndex = letter.charCodeAt(0) - 'A'.charCodeAt(0);
+        if (letterIndex >= 0 && letterIndex < optionsData.length && !optionsData[letterIndex].element.classList.contains('is-checked')) {
+            idx = letterIndex;
+        }
+    }
+    return idx;
+}
+
 async function fillChoiceQuestions() {
     let filledCount = 0;
 
-    const optionElements = document.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img');
+    const optionElements = queryChoiceOptions(document);
     addLogMessage(`选择题检测: 找到 ${optionElements.length} 个选项元素`, 'info');
     if (optionElements.length === 0) return 0;
 
@@ -542,7 +652,7 @@ async function fillChoiceQuestions() {
         let container = null;
         let el = opt.parentElement;
         while (el && el !== document.body) {
-            const optCount = el.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img').length;
+            const optCount = queryChoiceOptions(el).length;
             if (optCount >= 2) {
                 container = el;
                 break;
@@ -552,10 +662,10 @@ async function fillChoiceQuestions() {
         if (!container) continue;
 
         let finalContainer = container;
-        const totalOpts = container.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img').length;
+        const totalOpts = queryChoiceOptions(container).length;
         if (totalOpts > 6) {
             for (const child of container.children) {
-                const childOpts = child.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img').length;
+                const childOpts = queryChoiceOptions(child).length;
                 if (childOpts >= 2 && childOpts <= 6) {
                     finalContainer = child;
                     break;
@@ -575,11 +685,11 @@ async function fillChoiceQuestions() {
 
     for (let qi = 0; qi < questionContainers.length; qi++) {
         const container = questionContainers[qi];
-        const options = container.querySelectorAll('.u3-option__content.is-text, .u3-option__content--default, .u3-option-img');
+        const options = queryChoiceOptions(container);
         if (options.length === 0) continue;
 
         let questionNum = 0;
-        const noEl = container.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"]');
+        const noEl = container.querySelector(CHOICE_NUMBER_SELECTOR);
         if (noEl) {
             const parsed = parseInt(noEl.textContent.trim());
             if (!isNaN(parsed) && parsed > 0) questionNum = parsed;
@@ -601,7 +711,7 @@ async function fillChoiceQuestions() {
         if (!questionNum) {
             let parent = container.parentElement;
             for (let up = 0; up < 5 && parent; up++) {
-                const parentNoEl = parent.querySelector('.u3-question-no, .u3-question__no, [class*="question-no"], .u3-input__prepared, .u3-input__prepead');
+                const parentNoEl = parent.querySelector(CHOICE_NUMBER_SELECTOR + ', .u3-input__prepared, .u3-input__prepead');
                 if (parentNoEl) {
                     const parsed = parseInt(parentNoEl.textContent.trim());
                     if (!isNaN(parsed) && parsed > 0) {
@@ -622,7 +732,7 @@ async function fillChoiceQuestions() {
         let questionText = '';
         const allTextEls = container.querySelectorAll('.u3-question-text');
         for (const textEl of allTextEls) {
-            if (textEl.closest('.u3-option__content')) continue;
+            if (textEl.closest('.u3-option__content, .u3-option, .u3-option-img')) continue;
             questionText = getCleanText(textEl);
             break;
         }
@@ -634,7 +744,7 @@ async function fillChoiceQuestions() {
             let parent = container.parentElement;
             for (let up = 0; up < 3 && parent; up++) {
                 const parentTextEl = parent.querySelector('.u3-question-text, .u3-question-stem, .u3-choice__question--text, [class*="question-text"]');
-                if (parentTextEl && !parentTextEl.closest('.u3-option__content')) {
+                if (parentTextEl && !parentTextEl.closest('.u3-option__content, .u3-option, .u3-option-img')) {
                     questionText = getCleanText(parentTextEl);
                     break;
                 }
@@ -645,25 +755,7 @@ async function fillChoiceQuestions() {
             questionText = container.getAttribute('data-question-text') || container.getAttribute('data-stem') || '';
         }
 
-        const optionsData = [];
-        let imgOptIndex = 0;
-        for (const opt of options) {
-            if (opt.classList.contains('u3-option-img')) {
-                const img = opt.querySelector('img');
-                const src = img ? (img.getAttribute('src') || '') : '';
-                const filename = src.split('/').pop().split('?')[0];
-                const letterLabel = String.fromCharCode(65 + imgOptIndex);
-                optionsData.push({ element: opt, rawText: filename, cleanText: filename, letterLabel });
-                imgOptIndex++;
-            } else {
-                const optTextEl = opt.querySelector('.u3-question-text');
-                const rawText = optTextEl ? optTextEl.textContent.trim() : opt.textContent.trim();
-                const letterMatch = rawText.match(/^([A-Fa-f])[.、\s]+/);
-                const letterLabel = letterMatch ? letterMatch[1].toUpperCase() : null;
-                const cleanText = letterMatch ? rawText.substring(letterMatch[0].length).trim() : rawText;
-                optionsData.push({ element: opt, rawText, cleanText, letterLabel });
-            }
-        }
+        const optionsData = Array.from(options).map((opt, index) => readChoiceOption(opt, index));
 
         const allChecked = optionsData.every(od => od.element.classList.contains('is-checked'));
         if (allChecked) continue;
@@ -673,6 +765,7 @@ async function fillChoiceQuestions() {
             const optLower = optCleanText.toLowerCase().trim();
             const ansClean = ansLower.replace(/\s+/g, '');
             const optClean = optLower.replace(/\s+/g, '');
+            if (!optClean) return false;
             if (ansClean === optClean) return true;
             if (ansClean.length <= optClean.length + 5 && ansClean.includes(optClean)) return true;
             if (ansLower.length > optLower.length + 5 && ansLower.startsWith(optLower)) return true;
@@ -708,6 +801,11 @@ async function fillChoiceQuestions() {
                 }
                 if (bestOi >= 0) {
                     targetAnswer = optionsData[bestOi].cleanText;
+                }
+                // 文字题只有选项对上才采信题号。全图片选项没有可比较的文字，
+                // 题干对上后仍要留下题号，否则字母/文件名点选拿不到答案。
+                const imageOnlyOptions = optionsData.length > 0 && optionsData.every(od => od.isImage);
+                if (bestOi >= 0 || imageOnlyOptions) {
                     backendQuestionNum = match.questionNum;
                     backendElementId = match.elementId || null;
                 }
@@ -811,10 +909,7 @@ async function fillChoiceQuestions() {
             }
             if (bestIdx === -1) continue;
             const od = optionsData[bestIdx];
-            const clickTarget = od.element.classList.contains('u3-option-img')
-                ? (od.element.querySelector('.u3-option-img__content') || od.element)
-                : od.element;
-            clickTarget.click();
+            clickChoiceOption(od);
             filledCount++;
             addLogMessage(`选择题 ${questionNum} 选中: ${od.rawText}`, 'success');
             await wait1(50);
@@ -822,21 +917,23 @@ async function fillChoiceQuestions() {
         }
 
         if (!matched) {
-            const letterAnswers = allAnswersForQuestion.filter(a => /^[A-Fa-f]$/.test(a.trim()));
-            for (const letter of letterAnswers) {
-                const letterIndex = letter.trim().toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
-                if (letterIndex < optionsData.length) {
-                    const od = optionsData[letterIndex];
-                    if (!od.element.classList.contains('is-checked')) {
-                        const clickTarget = od.element.classList.contains('u3-option-img')
-                            ? (od.element.querySelector('.u3-option-img__content') || od.element)
-                            : od.element;
-                        clickTarget.click();
-                        filledCount++;
-                        addLogMessage(`选择题 ${questionNum} 按字母 ${letter.trim().toUpperCase()} 选中: ${od.rawText}`, 'success');
-                        await wait1(50);
-                    }
-                }
+            const bankOptions = bankOptionsFor(backendElementId, lookupNum);
+            const imageOnly = optionsData.length > 0 && optionsData.every(od => od.isImage);
+            const letters = [];
+            for (const answerText of allAnswersForQuestion) {
+                const parts = splitChoiceLetters(answerText);
+                if (parts.length === 1) letters.push(parts[0]);
+                else if (parts.length > 1 && imageOnly) letters.push(...parts);
+            }
+            for (const letter of letters) {
+                const idx = pickImageLetterIndex(letter, optionsData, bankOptions);
+                if (idx < 0) continue;
+                const od = optionsData[idx];
+                clickChoiceOption(od);
+                filledCount++;
+                addLogMessage(`选择题 ${questionNum} 按字母 ${letter} 选中: ${od.rawText}`, 'success');
+                await wait1(50);
+                matched = true;
             }
         }
     }

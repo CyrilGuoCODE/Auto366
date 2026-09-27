@@ -2253,10 +2253,16 @@ class AnswerExtractor {
           }
 
           const optionMatches = [...elementContent.matchAll(/<option\b[^>]*\bid\s*=\s*"([^"]*)"[^>]*>([\s\S]*?)<\/option>/gi)];
-          const options = optionMatches.map(optionMatch => ({
-            id: optionMatch[1],
-            text: this.cleanHtmlText(this.cleanCdata(optionMatch[2])).trim()
-          }));
+          const options = optionMatches.map(optionMatch => {
+            const raw = this.cleanCdata(optionMatch[2]);
+            const imgMatch = raw.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
+            return {
+              id: optionMatch[1],
+              text: this.cleanHtmlText(raw).trim(),
+              // 结构图这类选项没有文字，只留 src。后面按文件名点选，不能把字母答案换成空文本
+              image: imgMatch ? imgMatch[1] : ''
+            };
+          });
 
           const answerInfo = {
             question: `第${questionNo}题`,
@@ -2279,7 +2285,10 @@ class AnswerExtractor {
           }
 
           if (options.length > 0) {
-            const optionsText = options.map(opt => `${opt.id}. ${opt.text}`).join('\n');
+            const optionsText = options.map(opt => {
+              const imageName = opt.image ? opt.image.split('/').pop().split('?')[0] : '';
+              return `${opt.id}. ${opt.text || imageName}`;
+            }).join('\n');
             answerInfo.content = `题目: ${questionText}\n\n选项:\n${optionsText}`;
             answerInfo.options = options;
             if (attachmentAnswers.length === 0) {
