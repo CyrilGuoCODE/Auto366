@@ -530,6 +530,9 @@ function getAnswersForQuestionNum(num, inputCount, elementId) {
 
 const CHOICE_OPTION_SELECTOR = '.u3-option__content.is-text, .u3-option__content--default, .u3-option-img, [class*="option-img"]';
 const CHOICE_NUMBER_SELECTOR = '.u3-question-no, .u3-question__no, [class*="question-no"], .u3-question-container__ques-order--number';
+// 装饰件：序号角标与遮罩层的类名里也含 "option-img"，会被上面的子串选择器误收。
+// 它们既没有图也没有文字，混进来会让"全图片选项"判定失效、字母兜底点到装饰物上。
+const CHOICE_OPTION_DECOR = /(__content-order|__content-mask)$/;
 
 function optionImageName(src) {
     if (!src) return '';
@@ -554,7 +557,8 @@ function queryChoiceOptions(root) {
     root.querySelectorAll('.u3-option, .u3-option__content, .u3-choice__question--options--option').forEach(el => {
         if (el.querySelector('img')) push(el);
     });
-    return found.filter(el => !found.some(other => other !== el && el.contains(other)));
+    const real = found.filter(el => !CHOICE_OPTION_DECOR.test(String(el.className || '').trim()));
+    return real.filter(el => !real.some(other => other !== el && el.contains(other)));
 }
 
 function choiceOptionText(opt) {
