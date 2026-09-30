@@ -2220,10 +2220,22 @@ class AnswerExtractor {
           const parsedNo = questionNoText !== null ? parseInt(questionNoText.trim(), 10) : NaN;
           const questionNo = Number.isFinite(parsedNo) && parsedNo > 0 ? parsedNo : fallbackNo;
 
-          const questionText = this.cleanHtmlText(rawQuestionText || '')
+          let questionText = this.cleanHtmlText(rawQuestionText || '')
             .replace(/\{\{\d+\}\}/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
+          // 半句批改的 question_text 只有 {{n}}，问句在同题 directions。
+          // 只在清掉空之后题干为空、且题型是 16 时采用，不覆盖完形和五选五。
+          if (!questionText) {
+            const questionType = parseInt(this.readXmlTag(elementContent, 'question_type') || '', 10);
+            if (questionType === 16) {
+              const directionsText = this.cleanHtmlText(this.readXmlTag(elementContent, 'directions') || '')
+                .replace(/\{\{\d+\}\}/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+              if (directionsText) questionText = directionsText;
+            }
+          }
 
           // attachment 里的 <item> 才是真答案；knowledge 是知识点标签，不能当答案用
           const attachmentRaw = this.readXmlTag(elementContent, 'attachment');

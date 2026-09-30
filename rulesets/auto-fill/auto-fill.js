@@ -1364,10 +1364,13 @@ function queryPrepared(root) {
 async function fillCurrentPage() {
     const isU3InputPage = !!document.querySelector('.u3-input__content--input');
 
+    // 半句批改的评分框也是 u3-input，但页面题号和全卷题号不是一回事。
+    // 交给后面的专用路径，不让通用填空按页面题号写进去。
+    const inHalfSentence = (el) => !!(el && el.closest && el.closest('.sentence_rewriting'));
     const getInputs = (root) => {
         const a = root.getElementsByClassName('u3-input__content--input');
-        if (a && a.length) return a;
-        return root.getElementsByClassName('u3-input__content');
+        const list = (a && a.length) ? a : root.getElementsByClassName('u3-input__content');
+        return Array.from(list).filter(el => !inHalfSentence(el));
     };
 
     const setElValue = (el, v) => {
@@ -1442,6 +1445,7 @@ async function fillCurrentPage() {
         let count = 0;
         for (const ta of areas) {
             if (ta.readOnly || ta.disabled) continue;
+            if (inHalfSentence(ta)) continue;
             // 向上找到同时包含题干文本与输入框的组件根节点
             let comp = ta.closest('.u3-translate');
             if (!comp || !comp.querySelector('.u3-translate__text')) {
@@ -1495,9 +1499,82 @@ async function fillCurrentPage() {
         return count;
     };
 
+
+    // 半句批改（section.sentence_rewriting）。
+    // 当前页面的评分框是翻译区里的 input.u3-input__content--input，不是 textarea。
+    // 页面上的题号不能拿来对全卷题号：这份卷子页面标 16 的框，试卷题号是 12。
+    // 先按 data-compase-id 对元素 ID，再按问句内容匹配。不走题号回退。
+    const answersForElementId = (id) => {
+        if (!id || !window.elementAnswerMap) return null;
+        const map = window.elementAnswerMap;
+        if (map.has(id)) return map.get(id).map(a => a.answer).filter(Boolean);
+        const want = String(id).toUpperCase();
+        for (const [key, list] of map) {
+            if (String(key).toUpperCase() === want) return list.map(a => a.answer).filter(Boolean);
+        }
+        return null;
+    };
+    const cleanRewriteStem = (value) => String(value || '')
+        .replace(/分值\d+分\s*/g, '')
+        .replace(/[（(]\s*\d+\s*[)）]\s*[_\u2014—-]{2,}/g, ' ')
+        .replace(/\{\{\d+\}\}/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const fillHalfSentence = async () => {
+        const sections = document.querySelectorAll('.sentence_rewriting');
+        if (!sections.length) return 0;
+        let count = 0;
+        for (const sec of sections) {
+            const field = sec.querySelector('textarea.u3-translate__textarea')
+                || sec.querySelector('.u3-translate__area-cont input.u3-input__content--input')
+                || sec.querySelector('.u3-translate__area-cont .u3-input__content--input')
+                || sec.querySelector('.u3-translate__area-cont input[type="text"]');
+            if (!field || field.readOnly || field.disabled) continue;
+            const idEl = sec.querySelector('[data-compase-id]');
+            const elementId = idEl ? (idEl.getAttribute('data-compase-id') || '') : '';
+            const stemEl = sec.querySelector('.u3-translate__text');
+            const stem = cleanRewriteStem(stemEl ? stemEl.textContent : '');
+            let answerText = null;
+            let via = '';
+            const byId = answersForElementId(elementId);
+            if (byId && byId.length) {
+                answerText = byId[0];
+                via = '元素ID';
+            }
+            if (!answerText && stem) {
+                const match = findAnswerByContent(stem);
+                if (match && match.answer) {
+                    answerText = match.answer;
+                    via = '问句';
+                }
+            }
+            if (!answerText) {
+                addLogMessage(`半句批改 未匹配到答案: ${(stem || elementId).substring(0, 40)}`, 'warning');
+                continue;
+            }
+            if (!/[A-Za-z]/.test(answerText)) {
+                addLogMessage(`半句批改 答案不是英文，已跳过: ${answerText.substring(0, 40)}`, 'warning');
+                continue;
+            }
+            if (setElValue(field, answerText)) {
+                if ((field.tagName || '').toLowerCase() === 'input') {
+                    try {
+                        field.focus();
+                        field.dispatchEvent(new FocusEvent('blur'));
+                    } catch (e) {}
+                }
+                count++;
+                addLogMessage(`半句批改 填入答案 (${via}): ${answerText}`, 'success');
+                await wait1(80);
+            }
+        }
+        return count;
+    };
+
     const choiceFilledCount = supportChoiceQuestions ? await fillChoiceQuestions() : 0;
 
-    const preparedElements = getPreparedElements(document);
+    const preparedElements = Array.from(getPreparedElements(document)).filter(el => !inHalfSentence(el));
     const inputElements = getInputs(document);
 
     let filledCount = 0;
@@ -1643,6 +1720,7 @@ async function fillCurrentPage() {
             // 只取输入框元素，避免容器 div 与子 input 双重匹配导致 textContent 替换销毁 DOM
             let slideInputs = activeSlide.querySelectorAll('.u3-input__content--input');
             if (!slideInputs.length) slideInputs = activeSlide.querySelectorAll('.u3-input__content');
+            slideInputs = Array.from(slideInputs).filter(el => !inHalfSentence(el));
             if (slideInputs.length > 0 && realNum > 0) {
                 modeInputs = Array.from(slideInputs);
                 modePrepared = Array.from(slideInputs).map(() => ({ innerHTML: String(realNum) }));
@@ -1694,6 +1772,12 @@ async function fillCurrentPage() {
         filledCount += await fillTranslateQuestions();
     } catch (e) {
         addLogMessage('整句批改填充异常(已跳过): ' + (e && e.message || e), 'error');
+    }
+
+    try {
+        filledCount += await fillHalfSentence();
+    } catch (e) {
+        addLogMessage('半句批改填充异常(已跳过): ' + (e && e.message || e), 'error');
     }
 
     if (filledCount > 0) {
