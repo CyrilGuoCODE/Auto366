@@ -5,11 +5,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-sm) var(--space-xl);
-    box-shadow: var(--shadow-sm);
+    padding: var(--space-sm) var(--space-lg);
     flex-shrink: 0;
-    overflow: hidden;
-    gap: var(--space-lg);
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-lg);
 }
 
 .control-panel__group {
@@ -244,5 +243,4 @@ html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--tun-toggle:a
 html[data-ui="simple"][data-simple-page="app"] .control-panel .btn--tun-toggle > span {
     display: block;
 }
-
 

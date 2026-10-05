@@ -17,8 +17,9 @@
 /* 功能模块（仅作用于各自容器内部） */
 @import "./features/control-panel.css";
 @import "./features/answers.css";
+@import "./features/answer-learning.css";
 @import "./features/rules.css";
-@import "./features/community.css";
+@import "./features/extension-rules.css";
 @import "./features/settings.css";
 @import "./features/logs.css";
 @import "./features/tun.css";
@@ -32,3 +33,5 @@
 @import "./overlay/modal-update.css";
 @import "./overlay/modal-donation.css";
 @import "./overlay/agreement.css";
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }

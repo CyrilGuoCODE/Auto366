@@ -1,0 +1,30 @@
+/* Settings-page section; no separate dialog. */
+.answer-learning { min-width: 0; }
+.answer-learning [hidden] { display: none !important; }
+.answer-learning__toggle { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 1.5; }
+.answer-learning__section {
+    display: grid;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+.answer-learning__section > label { font-weight: var(--font-weight-medium); }
+.answer-learning__row, .answer-learning__actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.answer-learning__row select { flex: 1; min-width: 180px; width: auto; }
+.answer-learning__status { margin: 12px 0 0; font-size: var(--text-sm); line-height: var(--leading-relaxed); }
+.answer-learning__preview {
+    margin: var(--space-md) 0 0;
+    padding: var(--space-md);
+    max-height: 240px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--color-bg-muted);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+}
+.answer-learning__preview:empty { display: none; }
+
+.answer-learning__toggle + .answer-learning__toggle { margin-top: 10px; }
+.answer-learning__discovery { margin-top: 12px; font-size: var(--text-sm); }
+.answer-learning__discovery ul { padding-left: 18px; max-height: 140px; overflow: auto; overflow-wrap: anywhere; }
+.answer-learning__discovery li { margin-block: 6px; }

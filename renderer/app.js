@@ -1,18 +1,21 @@
+import { createLogger } from './services/logger.js';
+const moduleLog = createLogger('界面');
+import { initializeSettings } from './services/settings.js';
+import settingsStorage from './services/settings.js';
 // 导入所有模块
 import StateManager from './state.js';
-import EventManager from './events.js';
-import LogManager from './logs-ui.js';
-import ProxyUI from './proxy-ui.js';
-import AnswersUI from './answers-ui.js';
-import RulesUI from './rules-ui.js';
-import CommunityUI from './community-ui.js';
-import SettingsUI from './settings-ui.js';
-import FileUI from './file-ui.js';
-import TutorialManager from './tutorial-ui.js';
-import AgreementUI from './agreement-ui.js';
-import SpeedUI from './speed-ui.js';
-import ThemeUI from './theme-ui.js';
-import TtsApprovalUI from './tts-approval-ui.js';
+import EventManager from './shell/events.js';
+import LogManager from './panels/logs/index.js';
+import ProxyUI from './panels/proxy/index.js';
+import AnswersUI from './pages/answers/index.js';
+import RulesUI from './pages/rules/index.js';
+import ExtensionRulesUI from './pages/extensions/index.js';
+import SettingsUI from './pages/settings/index.js';
+import TutorialManager from './dialogs/tutorial.js';
+import AgreementUI from './dialogs/agreement.js';
+import SpeedUI from './pages/speed/index.js';
+import ThemeUI from './shell/theme.js';
+import TtsApprovalUI from './dialogs/approval.js';
 
 class Auto366App {
   constructor() {
@@ -22,9 +25,8 @@ class Auto366App {
     this.proxyUI = new ProxyUI(this.state, this.logManager);
     this.answersUI = new AnswersUI(this.state, this.logManager);
     this.rulesUI = new RulesUI(this.state, this.logManager);
-    this.communityUI = new CommunityUI(this.state, this.logManager);
+    this.extensionRulesUI = new ExtensionRulesUI(this.state, this.logManager);
     this.settingsUI = new SettingsUI(this.state, this.logManager);
-    this.fileUI = new FileUI(this.state, this.logManager);
     this.tutorialUI = new TutorialManager(this.state, this.logManager);
     this.agreementUI = new AgreementUI();
     this.speedUI = new SpeedUI();
@@ -35,6 +37,7 @@ class Auto366App {
   // 初始化应用
   async init() {
     try {
+      await initializeSettings();
       // 暴露方法到全局（必须在最前面，因为HTML中的onclick依赖这些方法）
       this.exposeMethods();
 
@@ -56,35 +59,14 @@ class Auto366App {
       // 初始化答案UI
       this.answersUI.initAnswersUI();
 
-      // 初始化文件管理UI
-      this.fileUI.initFileUI();
-
       // 初始化规则事件监听器
       this.rulesUI.initRuleEventListeners();
 
-      // 初始化社区规则集
-      this.communityUI.initCommunityRulesets();
+      // 初始化扩展规则集
+      this.extensionRulesUI.initExtensionRulesets();
 
-      // 初始化缓存设置
-      this.settingsUI.initCacheSettings();
-
-      // 初始化更新设置
-      this.settingsUI.initUpdateSettings();
-
-      // 初始化规则设置
-      this.settingsUI.initRulesSettings();
-
-      // 初始化数据分析设置
-      this.settingsUI.initAnalyticsSettings();
-
-      // 初始化颜色模式设置
-      this.settingsUI.initThemeSettings();
-
-      // 初始化 TUN 强制软包模式设置
-      this.settingsUI.initTunSettings();
-
-      // 初始化 TTS 语音生成设置
-      this.settingsUI.initTtsSettings();
+      // 设置页自行装配 AI、缓存、资源、TTS 等设置。
+      this.settingsUI.init();
 
       // 初始化 TTS 预清洗审批弹窗
       this.ttsApprovalUI.init();
@@ -102,50 +84,48 @@ class Auto366App {
       try {
         await this.rulesUI.loadRules();
       } catch (error) {
-        console.error('加载规则失败:', error);
+        moduleLog.error('加载规则失败:', error);
       }
 
-      // 尝试加载社区规则集
+      // 尝试加载扩展规则集
       try {
-        await this.communityUI.loadCommunityRulesets();
+        await this.extensionRulesUI.loadExtensionRulesets();
       } catch (error) {
-        console.error('加载社区规则集失败:', error);
+        moduleLog.error('加载扩展规则集失败:', error);
       }
 
       // 显示赞赏弹窗
-      this.showDonationModal();
-
-      // 自动启动代理
-      setTimeout(() => {
-        this.proxyUI.startProxy();
-      }, 1000);
+      if (settingsStorage.getItem('tutorial-completed') === 'true') this.showDonationModal();
 
       // 自动启动天学网进程监控
       if (window.electronAPI.startProcessMonitor) {
         window.electronAPI.startProcessMonitor();
       }
 
-      // 初始化新手教程
-      this.tutorialUI.init();
-
       // 初始化协议检查（必须在教程之前，协议未同意则不能使用）
       this.agreementUI.initEventListeners();
       await this.agreementUI.checkAndShow();
+      this.tutorialUI.init();
+      const autoStart = () => {
+        if (settingsStorage.getItem('tutorial-completed') === 'true' && settingsStorage.getItem('auto-start-proxy') !== 'false') this.proxyUI.startProxy();
+      };
+      if (!document.getElementById('agreement-overlay')?.classList.contains('is-visible')) autoStart();
+      else document.addEventListener('agreement-accepted', autoStart, { once: true });
 
-      this.logManager.addInfoLog('提示：出现“当前客户端版本过低，请下载最新版客户端后重试！”报错时请在天学网设置中关闭代理并使用Auto366增强模式');
+      this.logManager.addInfoLog('提示：新版天学网必须使用增强模式。遇到异常先清缓存并重启；仍报兼容或连接错误时，回退旧版天学网、还原天学网设置，再启动代理并使用增强模式', "界面");
 
       // 追踪应用启动完成
       this.captureEvent('app_initialized');
 
     } catch (error) {
-      console.error('应用初始化失败:', error);
-      this.logManager.addErrorLog('应用初始化失败: ' + error.message);
+      moduleLog.error('应用初始化失败:', error);
+      this.logManager.addErrorLog('应用初始化失败: ' + error.message, "界面");
     }
   }
 
   // 初始化全局设置
   initGlobalSettings() {
-    const cachePath = localStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
+    const cachePath = settingsStorage.getItem('cache-path') || 'D:\\Up366StudentFiles';
     if (window.electronAPI && window.electronAPI.setCachePath) {
       window.electronAPI.setCachePath(cachePath);
     }
@@ -191,11 +171,11 @@ class Auto366App {
         
         if (uiMode === 'simple') {
           document.documentElement.setAttribute('data-simple-page', 'menu');
-          await this.communityUI.renderSimpleHomeRulesets();
+          await this.rulesUI.renderSimpleHomeRulesets();
         }
       }
     } catch (error) {
-      console.error('初始化UI模式失败:', error);
+      moduleLog.error('初始化UI模式失败:', error);
     }
   }
 
@@ -218,7 +198,7 @@ class Auto366App {
 
     // 监听响应错误
     window.electronAPI.onResponseError((event, data) => {
-      this.logManager.addErrorLog(`响应错误: ${data.error} - ${data.url}`);
+      this.logManager.addErrorLog(`响应错误: ${data.error} - ${data.url}`, "界面");
     });
 
     // 监听重要请求
@@ -228,12 +208,12 @@ class Auto366App {
 
     // 监听下载发现
     window.electronAPI.onDownloadFound((event, data) => {
-      this.logManager.addSuccessLog(`发现下载链接: ${data.url}`);
+      this.logManager.addSuccessLog(`发现下载链接: ${data.url}`, "界面");
     });
 
     // 监听处理错误
     window.electronAPI.onProcessError((event, data) => {
-      this.logManager.addErrorLog(data.error);
+      this.logManager.addErrorLog(data.error, "界面");
     });
 
     // 监听答案提取
@@ -242,7 +222,7 @@ class Auto366App {
 
       // 输出答案文件位置
       if (data.file) {
-        this.logManager.addSuccessLog(`答案文件已保存到: ${data.file}`);
+        this.logManager.addSuccessLog(`答案文件已保存到: ${data.file}`, "界面");
       }
     });
 
@@ -253,7 +233,7 @@ class Auto366App {
 
     // 监听代理错误
     window.electronAPI.onProxyError((event, data) => {
-      this.logManager.addErrorLog(data.message);
+      this.logManager.addErrorLog(data.message, "界面");
       // 如果代理出错，重置按钮状态
       const toggleBtn = document.getElementById('toggleProxyBtn');
       const captureBtn = document.getElementById('startCaptureBtn');
@@ -321,7 +301,7 @@ class Auto366App {
 
     window.electronAPI.chooseImplantZip(async (filePath) => {
       if (!filePath) {
-        this.logManager.addErrorLog('未选择文件');
+        this.logManager.addErrorLog('未选择文件', "界面");
         return;
       }
       const zipImplantInput = document.getElementById('zipImplant');
@@ -335,17 +315,17 @@ class Auto366App {
   async downloadResponse(uuid) {
     let res = await window.electronAPI.downloadFile(uuid);
     if (res === 1) {
-      this.logManager.addSuccessLog('文件下载成功');
+      this.logManager.addSuccessLog('文件下载成功', "界面");
     } else {
-      this.logManager.addErrorLog('文件下载失败');
+      this.logManager.addErrorLog('文件下载失败', "界面");
     }
   }
 
   // 显示赞赏弹窗
   showDonationModal() {
-    const launchCount = localStorage.getItem('launchCount') || 0;
+    const launchCount = settingsStorage.getItem('launchCount') || 0;
     const newCount = parseInt(launchCount) + 1;
-    localStorage.setItem('launchCount', newCount.toString());
+    settingsStorage.setItem('launchCount', newCount.toString());
 
     // 每5次启动显示一次
     if (newCount % 5 === 0) {
@@ -475,21 +455,21 @@ class Auto366App {
       enterSimpleRuleset: (groupId) => this.rulesUI.enterSimpleRuleset(groupId),
       deleteSimpleRuleset: (groupId) => this.rulesUI.deleteSimpleRuleset(groupId),
       
-      // 社区规则集
-      loadCommunityRulesets: (reset) => this.communityUI.loadCommunityRulesets(reset),
-      searchRulesets: () => this.communityUI.searchRulesets(),
-      refreshRulesets: () => this.communityUI.refreshRulesets(),
-      previousPage: () => this.communityUI.previousPage(),
-      nextPage: () => this.communityUI.nextPage(),
-      showRulesetDetail: (rulesetId) => this.communityUI.showRulesetDetail(rulesetId),
-      hideRulesetDetailModal: () => this.communityUI.hideRulesetDetailModal(),
-      installRuleset: (rulesetId) => this.communityUI.installRuleset(rulesetId),
+      // 扩展规则集
+      loadExtensionRulesets: (reset) => this.extensionRulesUI.loadExtensionRulesets(reset),
+      searchRulesets: () => this.extensionRulesUI.searchRulesets(),
+      refreshRulesets: () => this.extensionRulesUI.refreshRulesets(),
+      previousPage: () => this.extensionRulesUI.previousPage(),
+      nextPage: () => this.extensionRulesUI.nextPage(),
+      showRulesetDetail: (rulesetId) => this.extensionRulesUI.showRulesetDetail(rulesetId),
+      hideRulesetDetailModal: () => this.extensionRulesUI.hideRulesetDetailModal(),
+      installRuleset: (rulesetId) => this.extensionRulesUI.installRuleset(rulesetId),
       
       // 日志管理
       addTrafficLog: (data) => this.logManager.addTrafficLog(data),
-      addSuccessLog: (message) => this.logManager.addSuccessLog(message),
-      addErrorLog: (message) => this.logManager.addErrorLog(message),
-      addInfoLog: (message) => this.logManager.addInfoLog(message),
+      addSuccessLog: (message) => this.logManager.addSuccessLog(message, "界面"),
+      addErrorLog: (message) => this.logManager.addErrorLog(message, "界面"),
+      addInfoLog: (message) => this.logManager.addInfoLog(message, "界面"),
       clearLogs: () => this.logManager.clearLogs(),
       
       // 设置管理
@@ -517,18 +497,18 @@ window.closeDonationModal = function() {
 
 // 初始化应用
 window.addEventListener('DOMContentLoaded', async () => {
-  console.log('DOM 加载完成，开始初始化应用...');
+  moduleLog.log('DOM 加载完成，开始初始化应用...');
   try {
     const app = new Auto366App();
     window.app = app;
-    console.log('Auto366App 实例创建成功');
+    moduleLog.log('Auto366App 实例创建成功');
     app.exposeMethods();
-    console.log('方法暴露成功');
+    moduleLog.log('方法暴露成功');
     await app.init();
-    console.log('应用初始化完成');
+    moduleLog.log('应用初始化完成');
   } catch (error) {
-    console.error('应用初始化失败:', error);
-    console.error('错误堆栈:', error.stack);
+    moduleLog.error('应用初始化失败:', error);
+    moduleLog.error('错误堆栈:', error.stack);
     // 在页面上显示错误信息
     const errorElement = document.createElement('div');
     errorElement.style.cssText = `

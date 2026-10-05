@@ -1,0 +1,698 @@
+import { createLogger } from '../../services/logger.js';
+const moduleLog = createLogger('代理');
+import settingsStorage from '../../services/settings.js';
+class ProxyUI {
+  constructor(state, logManager) {
+    this.state = state;
+    this.logManager = logManager;
+    this._up366BtnLongPressTimer = null;
+    this._up366BtnClosing = false;
+    this._up366BtnMouseDown = false;
+    this._up366BtnPressStartTime = 0;
+    this._up366BtnLongPressTriggered = false;
+  }
+
+  // 初始化代理控制
+  initProxyControl() {
+    const toggleBtn = document.getElementById('toggleProxyBtn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        this.toggleProxy();
+      });
+    }
+
+    // 初始化清理缓存按钮
+    const clearCacheBtn = document.getElementById('clearCacheBtn');
+    if (clearCacheBtn) {
+      clearCacheBtn.addEventListener('click', () => {
+        window.universalAnswerFeature.handleClearCache();
+      });
+    }
+
+    // 初始化一键打开天学网按钮（支持单击/长按/状态切换）
+    this._initOpenUp366Btn();
+
+    // 初始化答案获取开关
+    const answerCaptureToggle = document.getElementById('answerCaptureEnabled');
+    if (answerCaptureToggle) {
+      this.initAnswerCaptureToggle(answerCaptureToggle);
+    }
+
+    // 初始化代理端口设置
+    this.initProxyPortSettings();
+
+    // 初始化 TUN 增强模式开关（控制栏）
+    this.initTunToggle();
+  }
+
+  // 初始化 TUN 增强模式开关（控制栏图标按钮）
+  initTunToggle() {
+    const tunBtn = document.getElementById('toggleTunBtn');
+    if (!tunBtn) return;
+
+    // 应用启动时 TUN 尚未运行，按钮初始为关闭状态
+    this.updateTunButtonState(false);
+
+    // 点击切换 TUN
+    tunBtn.addEventListener('click', async () => {
+      if (tunBtn.disabled) return;
+      const willEnable = !tunBtn.classList.contains('is-active');
+      tunBtn.disabled = true;
+      try {
+        const result = willEnable
+          ? await window.electronAPI.startTun()
+          : await window.electronAPI.stopTun();
+        if (result.success) {
+          this.updateTunButtonState(willEnable);
+          // 记录自动启动偏好：开启则下次自动启动，关闭则不自动启动
+          settingsStorage.setItem('tun-autostart', willEnable ? 'true' : 'false');
+          this.logManager.addSuccessLog(result.message, "代理");
+          // 通知设置页同步复选框状态
+          document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running: willEnable } }));
+        } else {
+          this.logManager.addErrorLog(`TUN ${willEnable ? '启动' : '停止'}失败: ${result.message}`, "代理");
+        }
+      } catch (error) {
+        this.logManager.addErrorLog(`TUN 操作失败: ${error.message}`, "代理");
+      } finally {
+        tunBtn.disabled = false;
+      }
+    });
+
+    // 监听设置页/自动启动触发的状态变化，同步按钮
+    document.addEventListener('tun-state-changed', (e) => {
+      this.updateTunButtonState(e.detail.running);
+    });
+  }
+
+  // 更新 TUN 按钮视觉状态
+  updateTunButtonState(running) {
+    const tunBtn = document.getElementById('toggleTunBtn');
+    if (!tunBtn) return;
+    const iconClass = running ? 'bi-lightning-charge-fill' : 'bi-lightning-charge';
+    if (running) {
+      tunBtn.classList.add('is-active');
+      tunBtn.title = 'TUN 增强模式（开启）';
+    } else {
+      tunBtn.classList.remove('is-active');
+      tunBtn.title = 'TUN 增强模式（关闭）';
+    }
+    tunBtn.innerHTML = `<i class="bi ${iconClass}"></i><span>增强模式</span>`;
+  }
+
+  // 代理启动后自动启动 TUN
+  _autoStartTun() {
+    const autostart = settingsStorage.getItem('tun-autostart');
+    if (autostart !== null && autostart !== 'true') return;
+    // 延迟一会确保代理完全就绪
+    setTimeout(async () => {
+      try {
+        const status = await window.electronAPI.getTunStatus();
+        if (status.running) return;
+        const result = await window.electronAPI.startTun();
+        if (result.success) {
+          this.updateTunButtonState(true);
+          this.logManager.addSuccessLog('TUN 增强模式已自动启动', "代理");
+          // 通知设置页同步复选框状态
+          document.dispatchEvent(new CustomEvent('tun-state-changed', { detail: { running: true } }));
+        }
+      } catch (e) {
+        // 静默失败
+      }
+    }, 1000);
+  }
+
+  // 初始化答案获取开关
+  async initAnswerCaptureToggle(toggleElement) {
+    try {
+      // 从主进程获取当前状态
+      const isEnabled = await window.electronAPI.getAnswerCaptureEnabled();
+      toggleElement.checked = isEnabled;
+
+      // 监听开关变化
+      toggleElement.addEventListener('change', async () => {
+        const enabled = toggleElement.checked;
+
+        try {
+          await window.electronAPI.setAnswerCaptureEnabled(enabled);
+
+          if (enabled) {
+            this.logManager.addSuccessLog('答案获取已启用', "代理");
+          } else {
+            this.logManager.addInfoLog('答案获取已禁用', "代理");
+          }
+        } catch (error) {
+          this.logManager.addErrorLog(`设置答案获取开关失败: ${error.message}`, "代理");
+          // 恢复开关状态
+          toggleElement.checked = !enabled;
+        }
+      });
+    } catch (error) {
+      moduleLog.error('初始化答案获取开关失败:', error);
+      // 默认启用
+      toggleElement.checked = true;
+    }
+  }
+
+  // 初始化代理端口设置
+  async initProxyPortSettings() {
+    try {
+      // 初始化代理端口
+      const currentProxyPort = await window.electronAPI.getProxyPort();
+
+      // 保存端口到localStorage，供其他脚本使用
+      settingsStorage.setItem('proxy-port', currentProxyPort.toString());
+
+      const proxyPortInput = document.getElementById('proxyPortInput');
+      if (proxyPortInput) {
+        proxyPortInput.value = currentProxyPort;
+
+        // 监听代理端口输入变化
+        proxyPortInput.addEventListener('change', async () => {
+          const newPort = parseInt(proxyPortInput.value);
+          if (newPort >= 1024 && newPort <= 65535) {
+            await this.changeProxyPort(newPort);
+          } else {
+            this.logManager.addErrorLog('端口号必须在1024-65535之间', "代理");
+            proxyPortInput.value = currentProxyPort;
+          }
+        });
+      }
+
+      // 初始化答案服务器端口
+      const currentBucketPort = await window.electronAPI.getBucketPort();
+
+      // 保存答案服务器端口到localStorage，供其他脚本使用
+      settingsStorage.setItem('bucket-port', currentBucketPort.toString());
+
+      const bucketPortInput = document.getElementById('bucketPortInput');
+      if (bucketPortInput) {
+        bucketPortInput.value = currentBucketPort;
+
+        // 监听答案服务器端口输入变化
+        bucketPortInput.addEventListener('change', async () => {
+          const newPort = parseInt(bucketPortInput.value);
+          if (newPort >= 1024 && newPort <= 65535) {
+            await this.changeBucketPort(newPort);
+          } else {
+            this.logManager.addErrorLog('端口号必须在1024-65535之间', "代理");
+            bucketPortInput.value = currentBucketPort;
+          }
+        });
+      }
+
+    } catch (error) {
+      moduleLog.error('初始化代理端口设置失败:', error);
+    }
+  }
+
+  // 显示端口修改对话框
+  showPortChangeDialog() {
+    const currentPort = document.getElementById('proxyPortInput')?.value || '5291';
+
+    // 创建自定义对话框
+    this.createPortChangeModal(currentPort);
+  }
+
+  // 创建端口修改模态对话框
+  createPortChangeModal(currentPort) {
+    // 移除已存在的对话框
+    const existingModal = document.getElementById('portChangeModal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // 创建模态对话框HTML
+    const modalHTML = `
+      <div id="portChangeModal" class="modal">
+        <div class="modal__content">
+          <div class="modal__header">
+            <h3>修改代理端口</h3>
+            <button class="btn--close" onclick="this.closest('.modal').remove()">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+          <div class="modal__body">
+            <div class="form-group">
+              <label for="newPortInput">新端口号 (1024-65535):</label>
+              <input type="number" id="newPortInput" class="form-input" 
+                     value="${currentPort}" min="1024" max="65535" 
+                     placeholder="请输入端口号">
+            </div>
+          </div>
+          <div class="modal__footer">
+            <button class="btn--ghost" onclick="this.closest('.modal').remove()">
+              取消
+            </button>
+            <button class="btn--primary" id="confirmPortChange">
+              确定
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 添加到页面
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // 绑定确定按钮事件
+    const confirmBtn = document.getElementById('confirmPortChange');
+    const newPortInput = document.getElementById('newPortInput');
+
+    confirmBtn.addEventListener('click', () => {
+      const newPort = parseInt(newPortInput.value);
+      if (newPort >= 1024 && newPort <= 65535) {
+        this.changeProxyPort(newPort);
+        document.getElementById('portChangeModal').remove();
+      } else {
+        this.logManager.addErrorLog('端口号必须在1024-65535之间', "代理");
+        newPortInput.focus();
+      }
+    });
+
+    // 绑定回车键事件
+    newPortInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        confirmBtn.click();
+      }
+    });
+
+    // 自动聚焦并选中输入框内容
+    setTimeout(() => {
+      newPortInput.focus();
+      newPortInput.select();
+    }, 100);
+  }
+
+  // 切换代理状态
+  async toggleProxy() {
+    if (this.state.isProxyRunning) {
+      await this.stopProxy();
+    } else {
+      this.startProxy();
+    }
+  }
+
+  // 启动代理
+  startProxy() {
+    const toggleBtn = document.getElementById('toggleProxyBtn');
+
+    // 更新按钮状态
+    if (toggleBtn) {
+      toggleBtn.disabled = true;
+      toggleBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>启动中...</span>';
+    }
+
+    if (window.electronAPI && window.electronAPI.captureEvent) {
+      window.electronAPI.captureEvent('proxy_start_requested');
+    }
+
+    window.electronAPI.startAnswerProxy();
+    this.logManager.addInfoLog('正在启动代理服务器...', "代理");
+
+    // 设置超时检查，如果代理没有启动，显示错误信息
+    setTimeout(() => {
+      if (!this.state.isProxyRunning) {
+        this.logManager.addErrorLog('代理服务器启动超时，请检查网络或端口占用', "代理");
+        if (toggleBtn) {
+          toggleBtn.disabled = false;
+          toggleBtn.innerHTML = '<i class="bi bi-play-circle"></i><span>启动代理</span>';
+          toggleBtn.className = 'btn--primary';
+        }
+      }
+    }, 10000); // 10秒超时
+  }
+
+  // 停止代理
+  stopProxy() {
+    return new Promise((resolve) => {
+      const toggleBtn = document.getElementById('toggleProxyBtn');
+
+      // 更新按钮状态，防止重复点击
+      if (toggleBtn) {
+        toggleBtn.disabled = true;
+        toggleBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>停止中...</span>';
+      }
+
+      window.electronAPI.stopAnswerProxy();
+      this.logManager.addInfoLog('正在停止代理服务器...', "代理");
+
+      // 设置停止开始时间
+      const stopStartTime = Date.now();
+      let timeoutId = null;
+      let resolved = false;
+
+      // 监听代理状态变化
+      const checkStopped = () => {
+        if (resolved) return;
+
+        if (!this.state.isProxyRunning) {
+          resolved = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          this.logManager.addSuccessLog('代理服务器已成功停止', "代理");
+          resolve();
+          return;
+        }
+
+        // 检查是否超过最大等待时间
+        const elapsed = Date.now() - stopStartTime;
+        if (elapsed < 8000) { // 8秒内继续检查
+          setTimeout(checkStopped, 200); // 每200ms检查一次
+        }
+      };
+
+      // 开始检查
+      checkStopped();
+
+      // 设置超时处理
+      timeoutId = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+
+        if (this.state.isProxyRunning) {
+          this.logManager.addErrorLog('代理服务器停止超时，请尝试手动关闭进程或重启应用', "代理");
+
+          // 强制更新状态为停止
+          this.state.isProxyRunning = false;
+          this.updateProxyStatus({
+            running: false,
+            message: '代理服务器停止超时'
+          });
+        } else {
+          this.logManager.addInfoLog('代理服务器已停止', "代理");
+        }
+
+        resolve(); // 即使超时也要resolve，避免阻塞后续操作
+      }, 8000); // 8秒超时
+    });
+  }
+
+  // 更新代理状态
+  updateProxyStatus(data) {
+    const statusElement = document.getElementById('proxyStatus');
+    const toggleBtn = document.getElementById('toggleProxyBtn');
+
+    if (data.running) {
+      this.state.isProxyRunning = true;
+      const host = data.host || '127.0.0.1';
+      const port = data.port || '5291';
+      statusElement.textContent = `已开启在 ${host}:${port}`;
+      statusElement.className = 'control-panel__status-value badge--running';
+
+      if (toggleBtn) {
+        toggleBtn.disabled = false;
+        toggleBtn.innerHTML = '<i class="bi bi-stop-circle"></i><span>停止代理</span>';
+        toggleBtn.className = 'btn--danger';
+      }
+
+      this.logManager.addInfoLog(`代理服务器已启动，监听地址: ${host}:${port}`, "代理");
+
+      // 代理启动后，若用户已开启 TUN 自动启动偏好，则自动启动 TUN
+      this._autoStartTun();
+    } else {
+      this.state.isProxyRunning = false;
+      statusElement.textContent = '已停止';
+      statusElement.className = 'control-panel__status-value badge--stopped';
+
+      if (toggleBtn) {
+        toggleBtn.disabled = false;
+        toggleBtn.innerHTML = '<i class="bi bi-play-circle"></i><span>启动代理</span>';
+        toggleBtn.className = 'btn--primary';
+      }
+
+      this.logManager.addInfoLog('代理服务器已停止', "代理");
+    }
+  }
+
+  // 修改代理端口
+  async changeProxyPort(port) {
+    try {
+      const result = await window.electronAPI.setProxyPort(port);
+      if (result.success) {
+        // 保存端口到localStorage，供其他脚本使用
+        settingsStorage.setItem('proxy-port', port.toString());
+
+        // 更新设置页面的输入框
+        const proxyPortInput = document.getElementById('proxyPortInput');
+        if (proxyPortInput) {
+          proxyPortInput.value = port;
+        }
+
+        this.logManager.addSuccessLog(`代理端口已修改为: ${port}`, "代理");
+
+        // 如果代理正在运行，重启代理服务器
+        if (this.state.isProxyRunning) {
+          this.logManager.addInfoLog('正在重启代理服务器...', "代理");
+          try {
+            await this.stopProxy();
+            // 等待一小段时间确保完全停止
+            await new Promise(resolve => setTimeout(resolve, 500));
+            this.startProxy();
+          } catch (error) {
+            this.logManager.addErrorLog(`重启代理服务器失败: ${error.message}`, "代理");
+            // 如果停止失败，仍然尝试启动
+            this.logManager.addInfoLog('尝试强制启动代理服务器...', "代理");
+            this.startProxy();
+          }
+        }
+      } else {
+        this.logManager.addErrorLog(`修改端口失败: ${result.error}`, "代理");
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`修改端口失败: ${error.message}`, "代理");
+    }
+  }
+
+  // 修改答案服务器端口
+  async changeBucketPort(port) {
+    try {
+      const result = await window.electronAPI.setBucketPort(port);
+      if (result.success) {
+        // 保存端口到localStorage，供其他脚本使用
+        settingsStorage.setItem('bucket-port', port.toString());
+
+        // 更新设置页面的输入框
+        const bucketPortInput = document.getElementById('bucketPortInput');
+        if (bucketPortInput) {
+          bucketPortInput.value = port;
+        }
+
+        this.logManager.addSuccessLog(`答案服务器端口已修改为: ${port}`, "代理");
+
+        // 如果代理正在运行，重启代理服务器以应用新的答案服务器端口
+        if (this.state.isProxyRunning) {
+          this.logManager.addInfoLog('正在重启代理服务器以应用新的答案服务器端口...', "代理");
+          try {
+            await this.stopProxy();
+            // 等待一小段时间确保完全停止
+            await new Promise(resolve => setTimeout(resolve, 500));
+            this.startProxy();
+          } catch (error) {
+            this.logManager.addErrorLog(`重启代理服务器失败: ${error.message}`, "代理");
+            // 如果停止失败，仍然尝试启动
+            this.logManager.addInfoLog('尝试强制启动代理服务器...', "代理");
+            this.startProxy();
+          }
+        }
+      } else {
+        this.logManager.addErrorLog(`修改答案服务器端口失败: ${result.error}`, "代理");
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`修改答案服务器端口失败: ${error.message}`, "代理");
+    }
+  }
+
+  // 更新捕获状态
+  updateCaptureStatus(data) {
+    const statusElement = document.getElementById('captureStatus');
+    const startBtn = document.getElementById('startCaptureBtn');
+    const stopBtn = document.getElementById('stopCaptureBtn');
+
+    if (data.capturing) {
+      statusElement.textContent = '监听中';
+      statusElement.className = 'control-panel__status-value badge--running';
+      if (startBtn) startBtn.disabled = true;
+      if (stopBtn) stopBtn.disabled = false;
+      this.logManager.addSuccessLog('网络监听已启动', "代理");
+    } else {
+      statusElement.textContent = '未开始';
+      statusElement.className = 'control-panel__status-value badge--stopped';
+      if (startBtn) startBtn.disabled = false;
+      if (stopBtn) stopBtn.disabled = true;
+      this.logManager.addInfoLog('网络监听已停止', "代理");
+    }
+  }
+
+  _initOpenUp366Btn() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    btn.addEventListener('mousedown', (e) => this._onUp366BtnMouseDown(e));
+    btn.addEventListener('mouseup', (e) => this._onUp366BtnMouseUp(e));
+    btn.addEventListener('mouseleave', () => this._onUp366BtnMouseLeave());
+    btn.addEventListener('animationend', (e) => {
+      if (e.target.classList.contains('btn__progress-bar') && e.target.classList.contains('is-active')) {
+        this._onCloseProgressComplete();
+      }
+    });
+  }
+
+  _onUp366BtnMouseDown(e) {
+    if (e.button !== 0) return;
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+    if (btn.classList.contains('is-closing')) return;
+
+    this._up366BtnMouseDown = true;
+    this._up366BtnPressStartTime = Date.now();
+    this._up366BtnLongPressTriggered = false;
+
+    if (btn.classList.contains('is-restart')) {
+      this._up366BtnLongPressTimer = setTimeout(() => {
+        this._up366BtnLongPressTriggered = true;
+        this._enterClosingState();
+      }, 300);
+    }
+  }
+
+  _onUp366BtnMouseUp(e) {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._clearLongPressTimer();
+
+    if (this._up366BtnLongPressTriggered || this._up366BtnClosing) {
+      this._up366BtnMouseDown = false;
+      return;
+    }
+
+    if (this._up366BtnMouseDown) {
+      if (btn.classList.contains('is-restart')) {
+        const pressDuration = Date.now() - this._up366BtnPressStartTime;
+        if (pressDuration >= 300) {
+          this._enterClosingState();
+        } else {
+          this._handleRestartClick();
+        }
+      } else {
+        this._handleOpenClick();
+      }
+    }
+
+    this._up366BtnMouseDown = false;
+  }
+
+  _onUp366BtnMouseLeave() {
+    this._clearLongPressTimer();
+
+    if (this._up366BtnClosing) {
+      this._cancelClosingState();
+    }
+
+    this._up366BtnMouseDown = false;
+  }
+
+  _clearLongPressTimer() {
+    if (this._up366BtnLongPressTimer) {
+      clearTimeout(this._up366BtnLongPressTimer);
+      this._up366BtnLongPressTimer = null;
+    }
+  }
+
+  _enterClosingState() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._up366BtnClosing = true;
+    btn.className = 'btn--action is-closing';
+    btn.querySelector('span').textContent = '关闭天学网';
+    btn.querySelector('i').className = 'bi bi-power';
+
+    const bar = btn.querySelector('.btn__progress-bar');
+    if (bar) {
+      bar.classList.add('is-active');
+    }
+  }
+
+  _cancelClosingState() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._up366BtnClosing = false;
+
+    const bar = btn.querySelector('.btn__progress-bar');
+    if (bar) {
+      bar.classList.remove('is-active');
+      void bar.offsetWidth;
+    }
+
+    btn.className = 'btn--action is-restart';
+    btn.querySelector('span').textContent = '重启天学网';
+    btn.querySelector('i').className = 'bi bi-arrow-repeat';
+  }
+
+  async _onCloseProgressComplete() {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn) return;
+
+    this._up366BtnClosing = false;
+
+    const bar = btn.querySelector('.btn__progress-bar');
+    if (bar) {
+      bar.classList.remove('is-active');
+    }
+
+    btn.classList.add('is-done');
+
+    this.logManager.addInfoLog('正在强制关闭天学网...', "代理");
+    const killResult = await window.electronAPI.killUp366();
+    if (killResult && killResult.success) {
+      this.logManager.addSuccessLog('天学网已强制关闭', "代理");
+    } else {
+      this.logManager.addErrorLog(`关闭天学网失败: ${killResult?.error || '未知错误'}`, "代理");
+    }
+  }
+
+  async _handleRestartClick() {
+    this.logManager.addInfoLog('正在强制关闭天学网...', "代理");
+    const killResult = await window.electronAPI.killUp366();
+    if (killResult && killResult.success) {
+      this.logManager.addSuccessLog('天学网已强制关闭，正在重新启动...', "代理");
+    } else {
+      this.logManager.addInfoLog('正在重新启动天学网...', "代理");
+    }
+    const openResult = await window.electronAPI.openUp366();
+    if (openResult && openResult.success) {
+      this.logManager.addSuccessLog('天学网已重新启动', "代理");
+    } else {
+      this.logManager.addErrorLog(`打开天学网失败: ${openResult?.error || '未找到天学网安装路径'}`, "代理");
+    }
+  }
+
+  async _handleOpenClick() {
+    this.logManager.addInfoLog('正在打开天学网...', "代理");
+    const result = await window.electronAPI.openUp366();
+    if (result && result.success) {
+      this.logManager.addSuccessLog('天学网已启动', "代理");
+    } else {
+      this.logManager.addErrorLog(`打开天学网失败: ${result?.error || '未找到天学网安装路径，请确认已安装天学网'}`, "代理");
+    }
+  }
+
+  updateUp366BtnState(data) {
+    const btn = document.getElementById('openUp366Btn');
+    if (!btn || this._up366BtnClosing) return;
+
+    if (data.currentState === true) {
+      btn.className = 'btn--action is-restart';
+      btn.querySelector('i').className = 'bi bi-arrow-repeat';
+      btn.querySelector('span').textContent = '重启天学网';
+    } else {
+      btn.className = 'btn--action';
+      btn.querySelector('i').className = 'bi bi-box-arrow-up-right';
+      btn.querySelector('span').textContent = '打开天学网';
+    }
+  }
+}
+
+export default ProxyUI;

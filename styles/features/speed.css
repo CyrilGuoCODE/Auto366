@@ -1,12 +1,13 @@
 /* ===== 进程加速页面 ===== */
 
-/* view-panel 内的加速页: 绝对铺满, 不受 flex 高度歧义影响 */
+/* 标题栏使用公共样式，内容填充标题下方的剩余空间。 */
 #speed-view {
   padding: 0;
 }
 .speed-page {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;

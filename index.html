@@ -12,7 +12,8 @@
         (function () {
             try {
                 var t = localStorage.getItem('a366-theme');
-                if (t === 'system' || (t !== 'light' && t !== 'dark')) {
+                if (t !== 'system' && t !== 'dark' && t !== 'light') t = 'system';
+                if (t === 'system') {
                     t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
                 document.documentElement.setAttribute('data-theme', t);
@@ -133,9 +134,9 @@
                 <i class="bi bi-list-ul"></i>
                 <span>规则管理</span>
             </div>
-            <div class="sidebar__item" data-view="community">
+            <div class="sidebar__item" data-view="extensions">
                 <i class="bi bi-cloud-download"></i>
-                <span>社区规则集</span>
+                <span>扩展规则集</span>
             </div>
             <div class="sidebar__item" data-view="speed">
                 <i class="bi bi-speedometer2"></i>
@@ -284,8 +285,8 @@
                     <div class="view-panel__header">
                         <h3>规则管理</h3>
                         <div class="view-panel__controls">
-                            <button type="button" id="simple-open-community-from-rules" class="btn--ghost"
-                                title="社区规则集">
+                            <button type="button" id="simple-open-extensions-from-rules" class="btn--ghost"
+                                title="扩展规则集">
                                 <i class="bi bi-cloud-download"></i>
                             </button>
                             <button id="addRuleGroupBtn" class="btn--primary">
@@ -303,30 +304,26 @@
                     </div>
                 </div>
 
-                <!-- 社区规则集视图 -->
-                <div class="view-panel" id="community-view">
+                <!-- 扩展规则集视图 -->
+                <div class="view-panel" id="extensions-view">
                     <div class="view-panel__header">
-                        <h3>社区规则集</h3>
+                        <h3>扩展规则集</h3>
                         <div class="view-panel__controls">
-                            <button id="uploadRulesetBtn" class="btn--primary" title="上传规则集到社区">
-                                <i class="bi bi-cloud-upload"></i>
-                                <span>上传规则集</span>
-                            </button>
                             <button id="refreshRulesetsBtn" class="btn--ghost" title="刷新规则集列表">
                                 <i class="bi bi-arrow-clockwise"></i>
                                 <span>刷新</span>
                             </button>
                         </div>
                     </div>
-                    <div class="community-view">
-                        <div class="community-view__search">
-                            <div class="community-view__search-box">
+                    <div class="extensions-view">
+                        <div class="extensions-view__search">
+                            <div class="extensions-view__search-box">
                                 <input type="text" id="rulesetSearchInput" class="form-input" placeholder="搜索规则集...">
                                 <button id="searchRulesetsBtn" class="btn--primary" aria-label="搜索规则集">
                                     <i class="bi bi-search"></i>
                                 </button>
                             </div>
-                            <div class="community-view__filters">
+                            <div class="extensions-view__filters">
                                 <select id="sortBySelect" class="form-input" aria-label="排序方式">
                                     <option value="created_at">按创建时间</option>
                                     <option value="downloads">按下载量</option>
@@ -338,18 +335,18 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="community-view__list" id="rulesetsContainer">
-                            <div class="community-view__loading">
+                        <div class="extensions-view__list" id="rulesetsContainer">
+                            <div class="extensions-view__loading">
                                 <i class="bi bi-hourglass-split"></i>
                                 <p>正在加载规则集...</p>
                             </div>
                         </div>
-                        <div class="community-view__pagination" id="paginationControls" style="display: none;">
+                        <div class="extensions-view__pagination" id="paginationControls" style="display: none;">
                             <button id="prevPageBtn" class="btn--ghost" disabled>
                                 <i class="bi bi-chevron-left"></i>
                                 <span>上一页</span>
                             </button>
-                            <span id="pageInfo" class="community-view__page-info">第 1 页</span>
+                            <span id="pageInfo" class="extensions-view__page-info">第 1 页</span>
                             <button id="nextPageBtn" class="btn--ghost">
                                 <span>下一页</span>
                                 <i class="bi bi-chevron-right"></i>
@@ -364,8 +361,10 @@
                         <h3>设置</h3>
                     </div>
                     <div class="settings-content">
-                        <div class="setting-group settings__mode--professional">
-                            <h4>UI模式</h4>
+<div class="settings-entry settings__mode--professional">
+<h4 class="settings-entry__label">界面模式</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <button type="button" id="settings-switch-to-simple" class="btn--ghost">
                                     <i class="bi bi-grid-1x2"></i>
@@ -373,9 +372,13 @@
                                 </button>
                             </div>
                             <div class="setting-item__description">简化UI，适合普通人使用。</div>
-                        </div>
-                        <div class="setting-group settings__mode--simple">
-                            <h4>UI模式</h4>
+
+</div>
+</div>
+<div class="settings-entry settings__mode--simple">
+<h4 class="settings-entry__label">界面模式</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <button type="button" id="settings-switch-to-professional" class="btn--ghost">
                                     <i class="bi bi-sliders"></i>
@@ -383,9 +386,13 @@
                                 </button>
                             </div>
                             <div class="setting-item__description">显示侧边栏与完整多视图界面，适合技术人员。</div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>颜色模式</h4>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">外观</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <label for="themeSelect">主题:</label>
                                 <select id="themeSelect" class="form-input">
@@ -395,23 +402,22 @@
                                 </select>
                             </div>
                             <div class="setting-item__description">选择"跟随系统"将自动适配系统深浅色设置。</div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>缓存路径</h4>
-                            <div class="setting-item">
-                                <input type="text" id="cachePathInput" class="form-input" placeholder="选择缓存路径">
-                                <button id="browseCacheBtn" class="btn--ghost">
-                                    <i class="bi bi-folder"></i>
-                                    <span>浏览</span>
-                                </button>
-                                <button id="autoFindCacheBtn" class="btn--ghost">
-                                    <i class="bi bi-search"></i>
-                                    <span>自动寻找</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>代理设置</h4>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">新手教程</h4>
+<div class="settings-entry__body">
+
+                            <button id="replayTutorialBtn" class="btn--ghost">跟着按钮重新学一遍</button>
+                            <p class="setting-item__description">逐步定位实际按钮，最后用小测验检查常见问题。</p>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">代理设置</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <label for="proxyPortInput">代理端口:</label>
                                 <input type="number" id="proxyPortInput" class="form-input" value="5291" min="1024"
@@ -439,66 +445,13 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>AI 兜底</h4>
-                            <div class="setting-item">
-                                <label for="aiPresetSelect">服务商:</label>
-                                <select id="aiPresetSelect" class="form-input">
-                                    <optgroup label="内置免费">
-                                        <option value="doubao">doubao</option>
-                                        <option value="qwen">qwen</option>
-                                        <option value="chatnut">chatnut</option>
-                                    </optgroup>
-                                    <optgroup label="自定义">
-                                        <option value="custom">自定义</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                            <div class="setting-item" id="aiBaseUrlRow">
-                                <label for="aiBaseUrlInput">API 地址:</label>
-                                <input type="text" id="aiBaseUrlInput" class="form-input" placeholder="https://api.deepseek.com/chat/completions">
-                            </div>
-                            <div class="setting-item" id="aiApiKeyRow">
-                                <label for="aiApiKeyInput">API Key:</label>
-                                <input type="password" id="aiApiKeyInput" class="form-input" placeholder="sk-...">
-                            </div>
-                            <div class="setting-item" id="aiModelRow">
-                                <label for="aiModelInput">模型名称:</label>
-                                <input type="text" id="aiModelInput" class="form-input" placeholder="模型名称">
-                            </div>
-                            <div class="setting-item">
-                                <label>连接测试:</label>
-                                <button type="button" id="aiTestBtn" class="btn--ghost">
-                                    <i class="bi bi-plug"></i>
-                                    <span>测试连接</span>
-                                </button>
-                                <span id="aiTestStatus" class="setting-item__description"></span>
-                            </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>音色克隆</h4>
-                            <div class="setting-item">
-                                <label for="glmApiKeyInput">GLM-TTS Key:</label>
-                                <input type="password" id="glmApiKeyInput" class="form-input" placeholder="智谱API密钥...">
-                            </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>缓存设置</h4>
-                            <div class="setting-item">
-                                <div class="setting-item__content">
-                                    <label>
-                                        <input type="checkbox" id="keepCacheFiles">
-                                        <span>保留答案提取缓存文件</span>
-                                    </label>
-                                    <div class="setting-item__description">
-                                        启用后，答案提取过程中的临时文件将不会被自动删除，便于调试和查看
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>TUN 强制软包模式</h4>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">增强模式</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <div class="setting-item__content">
                                     <label>
@@ -525,9 +478,109 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="setting-group setting-group--tts">
-                            <h4>TTS 语音生成</h4>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">缓存目录</h4>
+<div class="settings-entry__body">
+
+                            <div class="setting-item">
+                                <input type="text" id="cachePathInput" class="form-input" placeholder="选择缓存路径">
+                                <button id="browseCacheBtn" class="btn--ghost">
+                                    <i class="bi bi-folder"></i>
+                                    <span>浏览</span>
+                                </button>
+                                <button id="autoFindCacheBtn" class="btn--ghost">
+                                    <i class="bi bi-search"></i>
+                                    <span>自动寻找</span>
+                                </button>
+                            </div>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">提取缓存</h4>
+<div class="settings-entry__body">
+
+                            <div class="setting-item">
+                                <div class="setting-item__content">
+                                    <label>
+                                        <input type="checkbox" id="keepCacheFiles">
+                                        <span>保留答案提取缓存文件</span>
+                                    </label>
+                                    <div class="setting-item__description">
+                                        启用后，答案提取过程中的临时文件将不会被自动删除，便于调试和查看
+                                    </div>
+                                </div>
+                            </div>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">规则兼容性</h4>
+<div class="settings-entry__body">
+                            <div class="setting-item">
+                                <div class="setting-item__content">
+                                    <label>
+                                        <input type="checkbox" id="compatibilityProtection">
+                                        <span>启用规则集兼容性保护</span>
+                                    </label>
+                                    <div class="setting-item__description">
+                                        启用后，开启包含注入规则（ZIP注入/动态注入）的规则集时，会自动关闭其他不兼容的规则集，并在日志中提示
+                                    </div>
+                                </div>
+                            </div>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">AI 服务</h4>
+<div class="settings-entry__body">
+
+                            <p id="aiProviderHint" class="setting-item__description"></p>
+                            <div class="setting-item">
+                                <label for="aiPresetSelect">服务商:</label>
+                                <select id="aiPresetSelect" class="form-input">
+                                    <optgroup label="内置免费 · 无需 API Key">
+                                        <option value="doubao">豆包（内置）</option>
+                                        <option value="qwen">通义千问（内置）</option>
+                                        <option value="chatnut">Chatnut（内置）</option>
+                                        <option value="cehpoint">Cehpoint AI（内置）</option>
+                                    </optgroup>
+                                    <optgroup label="自定义">
+                                        <option value="custom">自定义兼容接口</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="setting-item" id="aiBaseUrlRow">
+                                <label for="aiBaseUrlInput">API 地址:</label>
+                                <input type="text" id="aiBaseUrlInput" class="form-input" placeholder="https://api.deepseek.com/chat/completions">
+                            </div>
+                            <div class="setting-item" id="aiApiKeyRow">
+                                <label for="aiApiKeyInput">API Key:</label>
+                                <input type="password" id="aiApiKeyInput" class="form-input" placeholder="可选；免鉴权接口留空" autocomplete="off">
+                            </div>
+                            <div class="setting-item" id="aiModelRow">
+                                <label for="aiModelInput">模型名称:</label>
+                                <input type="text" id="aiModelInput" class="form-input" placeholder="模型名称">
+                            </div>
+                            <div class="setting-item">
+                                <label>连接测试:</label>
+                                <button type="button" id="aiTestBtn" class="btn--ghost">
+                                    <i class="bi bi-plug"></i>
+                                    <span>测试连接</span>
+                                </button>
+                                <span id="aiTestStatus" class="setting-item__description" role="status" aria-live="polite"></span>
+                            </div>
+
+</div>
+</div>
+<section class="settings-entry answer-learning" id="answerLearningSettings" aria-label="AI 答案获取"></section>
+<div class="settings-entry settings-entry--tts">
+<h4 class="settings-entry__label">TTS 语音生成</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <label for="ttsEngineSelect">TTS引擎:</label>
                                 <select id="ttsEngineSelect" class="form-input">
@@ -574,23 +627,44 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>规则设置</h4>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">云端语音密钥</h4>
+<div class="settings-entry__body">
+
+                            <div class="setting-item">
+                                <label for="glmApiKeyInput">GLM-TTS Key:</label>
+                                <input type="password" id="glmApiKeyInput" class="form-input" placeholder="智谱API密钥...">
+                            </div>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">日志记录</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <div class="setting-item__content">
                                     <label>
-                                        <input type="checkbox" id="compatibilityProtection">
-                                        <span>启用规则集兼容性保护</span>
+                                        <input type="checkbox" id="logRecordingEnabled">
+                                        <span>将运行日志保存到本地</span>
                                     </label>
-                                    <div class="setting-item__description">
-                                        启用后，开启包含注入规则（ZIP注入/动态注入）的规则集时，会自动关闭其他不兼容的规则集，并在日志中提示
-                                    </div>
+                                    <div class="setting-item__description">默认关闭。终端与界面仍正常显示；开启后保存 UTF-8 日志，不自动保存抓包正文和请求头。</div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>数据分析</h4>
+                            <div class="setting-item">
+                                <button type="button" id="openLogDirectory" class="btn--ghost">打开日志目录</button>
+                            </div>
+                            <div id="logRecordingStatus" class="setting-item__description" role="status"></div>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">数据分析</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <div class="setting-item__content">
                                     <label>
@@ -602,9 +676,13 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>更新设置</h4>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">应用更新</h4>
+<div class="settings-entry__body">
+
                             <div class="setting-item">
                                 <div class="setting-item__content">
                                     <label>
@@ -627,9 +705,13 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="setting-group">
-                            <h4>关于与支持</h4>
+
+</div>
+</div>
+<div class="settings-entry">
+<h4 class="settings-entry__label">关于与支持</h4>
+<div class="settings-entry__body">
+
                             <h5>关于</h5>
                             <h6>免责声明：本工具仅供学习和研究使用并且<strong>完全免费提供</strong>，使用者需自行承担使用风险，开发者不承担任何法律责任。</h6>
                             <h6>版权声明：此项目严格禁止其他个体将本项目用于商业用途，包括但不限于转卖、推广以及各类牟利行为等！</h6>
@@ -677,12 +759,17 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
+
+</div>
+</div>
+</div>
                 </div>
 
                 <!-- 进程加速 -->
                 <div class="view-panel view-panel--speed" id="speed-view">
+                    <div class="view-panel__header">
+                        <h3>进程加速</h3>
+                    </div>
                     <div class="speed-page">
                         <div class="speed-page__content">
                             <div class="speed-page__display">
@@ -1113,195 +1200,27 @@
         </div>
     </div>
 
-    <!-- 上传规则集模态框 -->
-    <div class="modal" id="uploadRulesetModal" style="display: none;">
-        <div class="modal__content">
-            <div class="modal__header">
-                <h3>上传规则集到社区</h3>
-                <button class="btn--close" id="closeUploadRulesetModal">
-                    <i class="bi bi-x"></i>
-                </button>
-            </div>
-            <div class="modal__body">
-                <form id="uploadRulesetForm">
-                    <div class="form-group">
-                        <label for="uploadRulesetSelect">选择规则集</label>
-                        <select id="uploadRulesetSelect" class="form-input" required>
-                            <option value="">请选择要上传的规则集</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="uploadRulesetName">规则集名称</label>
-                        <input type="text" id="uploadRulesetName" class="form-input" placeholder="输入规则集名称" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="uploadRulesetDescription">规则集描述</label>
-                        <textarea id="uploadRulesetDescription" class="form-input" placeholder="输入规则集描述" rows="4"
-                            required></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="uploadRulesetAuthor">作者</label>
-                        <input type="text" id="uploadRulesetAuthor" class="form-input" placeholder="输入作者名称" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="uploadIncludeInjection">
-                            <span>包含注入文件（如果规则集中有ZIP注入规则）</span>
-                        </label>
-                    </div>
-
-                    <div class="upload-progress" id="uploadProgress" style="display: none;">
-                        <div class="progress-bar">
-                            <div class="upload-progress__fill" id="uploadProgressFill"></div>
-                        </div>
-                        <div class="upload-progress__text" id="uploadProgressText">准备上传...</div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal__footer">
-                <button type="button" class="btn--ghost" id="cancelUploadRulesetBtn">取消</button>
-                <button type="submit" form="uploadRulesetForm" class="btn--primary" id="submitUploadRulesetBtn">
-                    <i class="bi bi-cloud-upload"></i>
-                    <span>上传规则集</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- 新手教程模态框 -->
-    <div class="modal" id="tutorialModal" style="display: none;">
-        <div class="modal__content modal--tutorial">
-            <div class="modal__body">
-                <!-- 第1页：欢迎 -->
-                <div class="modal__page" data-page="0">
-                    <p class="modal__greeting">Hello!</p>
-                    <h2 class="modal__title">欢迎使用 Auto366</h2>
-                    <p class="modal__description">本教程将帮助你快速了解和使用 Auto366 的核心功能。</p>
-                    <p class="modal__read">请认真阅读，不要连点下一步。</p>
-                </div>
-
-                <!-- 第2页：选择UI模式 -->
-                <div class="modal__page" data-page="1" style="display: none;">
-                    <h2 class="modal__title">选择操作界面</h2>
-                    <p class="modal__description">你想以什么界面操作此软件？</p>
-                    <div class="modal__mode-options">
-                        <div class="modal__mode-card is-selected" data-mode="simple">
-                            <div class="modal__mode-card-icon">
-                                <span class="bi bi-grid-1x2"></span>
-                            </div>
-                            <h3>简易模式</h3>
-                            <p>简化UI，适合普通人使用。</p>
-                        </div>
-                        <div class="modal__mode-card" data-mode="professional">
-                            <div class="modal__mode-card-icon">
-                                <span class="bi bi-sliders"></span>
-                            </div>
-                            <h3>专业模式</h3>
-                            <p>显示侧边栏与完整多视图界面，适合技术人员。</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 第3页：设置天学网缓存 -->
-                <div class="modal__page" data-page="2" style="display: none;">
-                    <h2 class="modal__title">设置天学网缓存</h2>
-                    <p class="modal__description" id="tutorialCacheDesc">正在自动寻找天学网缓存目录...</p>
-                    <div class="modal__finding-status">
-                        <div class="modal__spinner" id="tutorialCacheSpinner"></div>
-                        <span id="tutorialCacheStatus">正在搜索...</span>
-                    </div>
-                    <div class="modal__cache-wrap" id="tutorialCachePathWrap" style="display: none;">
-                        <input type="text" id="tutorialCachePathInput" class="modal__cache-input" readonly>
-                        <button type="button" id="tutorialBrowseCacheBtn" class="modal__browse-btn">
-                            <span>浏览</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 第4页：使用前准备（代理 + TUN 模式） -->
-                <div class="modal__page" data-page="3" style="display: none;">
-                    <h2 class="modal__title">使用前准备</h2>
-                    <div class="modal__text">
-                        <p>每次使用时，请确认以下两点：</p>
-                        <ul class="modal__features">
-                            <li><strong>开启代理</strong> - 在 Auto366 中启动代理服务器</li>
-                            <li><strong>确保 TUN 模式开启</strong> - 打开"增强模式"开关</li>
-                        </ul>
-                    </div>
-                    <div class="modal__prep">
-                        <div class="modal__prep-card is-bad">
-                            <div class="modal__prep-tag">不要这样做</div>
-                            <h3>去天学网里改设置</h3>
-                            <ul>
-                                <li>填写代理地址</li>
-                                <li>导入或替换证书</li>
-                            </ul>
-                        </div>
-                        <div class="modal__prep-card is-good">
-                            <div class="modal__prep-tag">请这样做</div>
-                            <h3>天学网保持原样</h3>
-                            <ul>
-                                <li>天学网设置不需要做任何更改</li>
-                                <li>如果已经改过，请删除并还原</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <label class="modal__prep-ack is-locked" id="tutorialPrepAck">
-                        <input type="checkbox" id="tutorialPrepAckBox" disabled>
-                        <span>我已阅读：不在天学网里改代理或证书。已经改过的，会删掉并还原。</span>
-                    </label>
-                </div>
-
-                <!-- 第5页：规则集使用 -->
-                <div class="modal__page" data-page="4" style="display: none;">
-                    <h2 class="modal__title">规则集使用</h2>
-                    <div class="modal__text">
-                        <p>规则集是 Auto366 的功能开关：想自动完成哪种题型，就启用对应的规则集。</p>
-                        <ul class="modal__features">
-                            <li><strong>通用自动填空</strong> - 选择题、填空题、跟读朗读题</li>
-                            <li><strong>自动单词PK</strong> - 选择题PK、拼写PK</li>
-                            <li><strong>自动听力</strong> - 初中、高中听说题</li>
-                            <li><strong>类填空听力</strong> - 类填空型听力题</li>
-                            <li><strong>自动百舸争流</strong> - 龙舟/百舸争流活动（请使用旧版天学网）</li>
-                        </ul>
-                        <p class="modal__note">使用方法：打开"规则管理"页面，启用你要用的规则集，然后清除缓存并重启天学网。</p>
-                        <p class="modal__note"><strong>注意：</strong>一次只启用一个规则集，防止冲突；更换规则集时，需先清除缓存并重启天学网。</p>
-                    </div>
-                </div>
-
-                <!-- 第6页：教程完成 -->
-                <div class="modal__page" data-page="5" style="display: none;">
-                    <div class="modal__icon-wrap">
-                        <div class="modal__icon-circle is-success">
-                            <span class="modal__check-icon">
-                                <span class="bi bi-check-lg"></span>
-                            </span>
-                        </div>
-                    </div>
-                    <h2 class="modal__title">教程已完成</h2>
-                    <p class="modal__description">你已了解 Auto366 的基本功能，现在可以开始使用了！</p>
-                </div>
+    <div id="tutorialModal" class="tutorial-tour" hidden>
+        <div class="tutorial-tour__shade" aria-hidden="true"></div>
+        <div class="tutorial-tour__shade" aria-hidden="true"></div>
+        <div class="tutorial-tour__shade" aria-hidden="true"></div>
+        <div class="tutorial-tour__shade" aria-hidden="true"></div>
+        <div class="tutorial-tour__spotlight" hidden aria-hidden="true"></div>
+        <section class="tutorial-tour__card" role="dialog" aria-label="新手操作指引" aria-describedby="tutorialDescription">
+            <div class="tutorial-tour__top"><span id="tutorialStepCount"></span><span>新手指引</span></div>
+            <p id="tutorialGreeting" class="tutorial-tour__greeting" hidden>Hello!</p>
+            <h2 id="tutorialTitle"></h2>
+            <p id="tutorialDescription"></p>
+            <label id="tutorialAcknowledge" class="tutorial-tour__ack" hidden><input id="tutorialUnderstood" type="checkbox"><span></span></label>
+            <div id="tutorialQuiz"></div>
+            <p id="tutorialFeedback" role="status" aria-live="polite"></p>
+            <div class="tutorial-tour__actions">
+                <button type="button" id="tutorialPrevBtn" class="btn--ghost">上一步</button>
+                <button type="button" id="tutorialLocateBtn" class="btn--ghost">定位按钮</button>
+                <button type="button" id="tutorialNextBtn" class="btn--primary">下一步</button>
             </div>
-            <div class="modal__footer">
-                <div class="modal__progress">
-                    <span class="modal__progress-dot is-active" data-dot="0"></span>
-                    <span class="modal__progress-dot" data-dot="1"></span>
-                    <span class="modal__progress-dot" data-dot="2"></span>
-                    <span class="modal__progress-dot" data-dot="3"></span>
-                    <span class="modal__progress-dot" data-dot="4"></span>
-                    <span class="modal__progress-dot" data-dot="5"></span>
-                </div>
-                <div class="modal__actions">
-                    <button type="button" class="btn--ghost" id="tutorialPrevBtn"
-                        style="display: none;">上一步</button>
-                    <button type="button" class="btn--primary" id="tutorialNextBtn">下一步</button>
-                </div>
-            </div>
-        </div>
+        </section>
     </div>
 
     <script type="module" src="renderer/app.js"></script>

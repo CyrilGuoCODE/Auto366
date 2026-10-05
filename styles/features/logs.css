@@ -646,3 +646,5 @@ html[data-theme="dark"] .traffic-monitor__log {
     background: var(--color-primary-500, #2196f3);
     color: var(--color-text-inverse);
 }
+
+.log-item__actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }

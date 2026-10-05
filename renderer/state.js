@@ -11,12 +11,6 @@ class StateManager {
     this.currentEditingRule = null;
     this.currentRuleGroupId = null;
     this.selectedLogItem = null;
-    this.communityRulesets = [];
-    this.currentRulesetDetail = null;
-    this.currentPage = 0;
-    this.pageSize = 10;
-    this.hasMorePages = false;
-    this.isLoadingRulesets = false;
   }
 
   // 切换视图
@@ -60,9 +54,9 @@ class StateManager {
       // 由 rules-ui 模块处理
     }
 
-    // 如果切换到社区规则集视图，加载规则集列表
-    if (viewName === 'community') {
-      // 由 community-ui 模块处理
+    // 如果切换到扩展规则集视图，加载规则集列表
+    if (viewName === 'extensions') {
+      // 由 rules/extensions 模块处理
     }
 
     // 同步简单模式控制面板状态
@@ -83,7 +77,7 @@ class StateManager {
     let activeId = null;
     if (viewName === 'answers') {
       activeId = 'simple-open-answers';
-    } else if (viewName === 'rules' || viewName === 'community') {
+    } else if (viewName === 'rules' || viewName === 'extensions') {
       activeId = 'simple-open-rules';
     } else if (viewName === 'speed') {
       activeId = 'simple-open-speed';

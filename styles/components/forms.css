@@ -14,14 +14,14 @@
 
 .form-input {
     width: 100%;
-    padding: 10px var(--space-md);
+    padding: 8px var(--space-md);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     font-size: var(--text-lg);
     background: var(--color-bg-panel);
     /* 表单控件不继承 body 的 color, UA 默认黑字在深色模式下看不见, 需显式跟随主题 */
     color: var(--color-text);
-    transition: all var(--ease-normal);
+    transition: border-color var(--ease-fast), box-shadow var(--ease-fast);
     box-sizing: border-box;
 }
 

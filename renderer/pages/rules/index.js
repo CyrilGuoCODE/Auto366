@@ -1,0 +1,760 @@
+import { createLogger } from '../../services/logger.js';
+const moduleLog = createLogger('规则');
+import settingsStorage from '../../services/settings.js';
+import editorMethods from './editor.js';
+import Utils from '../../utils.js';
+
+class RulesUI {
+  constructor(state, logManager) {
+    this.state = state;
+    this.logManager = logManager;
+    // 复杂 UI 下被收起的规则集 ID 集合
+    this.collapsedGroups = new Set();
+    try {
+      const saved = settingsStorage.getItem('collapsedRuleGroups');
+      if (saved) {
+        const ids = JSON.parse(saved);
+        if (Array.isArray(ids)) {
+          this.collapsedGroups = new Set(ids);
+        }
+      }
+    } catch (e) {
+      this.collapsedGroups = new Set();
+    }
+  }
+
+  // 初始化规则事件监听器
+  initRuleEventListeners() {
+    // 添加规则集按钮
+    const addRuleGroupBtn = document.getElementById('addRuleGroupBtn');
+    if (addRuleGroupBtn) {
+      addRuleGroupBtn.addEventListener('click', () => {
+        this.showRuleGroupModal();
+      });
+    }
+
+    // 规则集模态框事件
+    const closeRuleGroupModal = document.getElementById('closeRuleGroupModal');
+    if (closeRuleGroupModal) {
+      closeRuleGroupModal.addEventListener('click', () => {
+        this.hideRuleGroupModal();
+      });
+    }
+
+    const cancelRuleGroupBtn = document.getElementById('cancelRuleGroupBtn');
+    if (cancelRuleGroupBtn) {
+      cancelRuleGroupBtn.addEventListener('click', () => {
+        this.hideRuleGroupModal();
+      });
+    }
+
+    const ruleGroupForm = document.getElementById('ruleGroupForm');
+    if (ruleGroupForm) {
+      ruleGroupForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.saveRuleGroup();
+      });
+    }
+
+    const ruleGroupModal = document.getElementById('ruleGroupModal');
+    if (ruleGroupModal) {
+      ruleGroupModal.addEventListener('click', (e) => {
+        if (e.target === ruleGroupModal) {
+          this.hideRuleGroupModal();
+        }
+      });
+    }
+
+    // 关闭规则模态框按钮
+    const closeRuleModal = document.getElementById('closeRuleModal');
+    if (closeRuleModal) {
+      closeRuleModal.addEventListener('click', () => {
+        this.hideRuleModal();
+      });
+    }
+
+    // 取消按钮
+    const cancelRuleBtn = document.getElementById('cancelRuleBtn');
+    if (cancelRuleBtn) {
+      cancelRuleBtn.addEventListener('click', () => {
+        this.hideRuleModal();
+      });
+    }
+
+    // 规则类型选择
+    const ruleType = document.getElementById('ruleType');
+    if (ruleType) {
+      ruleType.addEventListener('change', (e) => {
+        this.showRuleFields(e.target.value);
+      });
+    }
+
+    // 浏览ZIP文件按钮
+    const browseZipBtn = document.getElementById('browseZipBtn');
+    if (browseZipBtn) {
+      browseZipBtn.addEventListener('click', () => {
+        this.browseZipFile();
+      });
+    }
+
+    // 规则表单提交
+    const ruleForm = document.getElementById('ruleForm');
+    if (ruleForm) {
+      ruleForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.saveRule();
+      });
+    }
+
+    // 模态框背景点击关闭
+    const ruleModal = document.getElementById('ruleModal');
+    if (ruleModal) {
+      ruleModal.addEventListener('click', (e) => {
+        if (e.target === ruleModal) {
+          this.hideRuleModal();
+        }
+      });
+    }
+  }
+
+  // 加载规则
+  async loadRules() {
+    try {
+      const rules = await window.electronAPI.getRules();
+      this.displayRules(rules);
+    } catch (error) {
+      this.logManager.addErrorLog(`加载规则失败: ${error.message}`, "规则");
+      this.displayRules([]);
+    }
+  }
+
+  // 显示规则
+  displayRules(rulesets) {
+    const rulesContent = document.querySelector('#rules-view .rules-content');
+    const isSimple = document.documentElement.getAttribute('data-ui') === 'simple';
+
+    if (!rulesets || rulesets.length === 0) {
+      rulesContent.innerHTML = `
+        <div class="rules-list__empty">
+          <i class="bi bi-collection"></i>
+          <p>暂无规则集配置</p>
+          <p class="text--muted">点击上方按钮添加新规则集</p>
+        </div>
+      `;
+      return;
+    }
+
+    if (isSimple) {
+      if (rulesets.length === 0) {
+        rulesContent.innerHTML = `
+          <div class="rules-list__empty">
+          <i class="bi bi-collection"></i>
+          <p>暂无规则集</p>
+          <p class="text--muted">请到扩展规则集安装</p>
+          </div>
+        `;
+        return;
+      }
+      const html = rulesets.map(group => `
+        <div class="rule-group rule-group--clickable${group.enabled ? ' rule-group--enabled' : ''}" data-group-id="${group.id}" onclick="universalAnswerFeature.enterSimpleRuleset('${group.id}')">
+          <div class="rule-group__header">
+            <div class="rule-group__info">
+              <div class="rule-group__name">
+                <i class="bi bi-collection"></i>
+                ${group.name || '未命名规则集'}
+              </div>
+              ${group.description ? `<div class="rule-group__description">${group.description}</div>` : ''}
+            </div>
+            <div class="rule-group__actions">
+              <button class="btn--rule btn--delete" onclick="event.stopPropagation();universalAnswerFeature.deleteSimpleRuleset('${group.id}')" title="删除规则集">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      rulesContent.innerHTML = `<div class="rules-list">${html}</div>`;
+      return;
+    }
+
+    let html = '<div class="rules-list">';
+
+    rulesets.forEach(group => {
+      const groupRules = group.rules || [];
+      const isCollapsed = this.collapsedGroups.has(group.id);
+      const contentClass = isCollapsed ? 'rule-group__content is-collapsed' : 'rule-group__content';
+
+      html += `
+        <div class="rule-group" data-group-id="${group.id}">
+          <div class="rule-group__header" data-group-id="${group.id}">
+            <div class="rule-group__info">
+              <div class="rule-group__name">
+                <i class="bi bi-collection"></i>
+                ${group.name || '未命名规则集'}
+                <label class="toggle">
+                  <input type="checkbox" ${group.enabled ? 'checked' : ''}
+                         onchange="universalAnswerFeature.toggleRule('${group.id}', this.checked)">
+                  <span class="toggle__slider"></span>
+                </label>
+                <span class="rules-list__count">(${groupRules.length} 个规则)</span>
+              </div>
+              ${group.description ? `<div class="rule-group__description">${group.description}</div>` : ''}
+              ${group.author ? `<div class="rule-group__author">作者: ${group.author}</div>` : ''}
+            </div>
+            <div class="rule-group__actions">
+              <button class="btn--rule btn--add-rule" onclick="event.stopPropagation();universalAnswerFeature.showRuleModal(null, '${group.id}')" title="添加规则">
+                <i class="bi bi-plus"></i>
+              </button>
+              <button class="btn--rule btn--edit" onclick="event.stopPropagation();universalAnswerFeature.editRuleGroup('${group.id}')" title="编辑规则集">
+                <i class="bi bi-pencil"></i>
+              </button>
+              ${this.hasTriggersInGroup(groupRules) ? `
+              <button class="btn--rule btn--reset" onclick="event.stopPropagation();universalAnswerFeature.resetRuleTriggers('${group.id}')" title="重置触发次数">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              ` : ''}
+              <button class="btn--rule btn--delete" onclick="event.stopPropagation();universalAnswerFeature.deleteRule('${group.id}')" title="删除规则集">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+          <div class="${contentClass}">
+            ${this.generateGroupRulesHtml(groupRules, group.enabled, group.id)}
+          </div>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+    rulesContent.innerHTML = html;
+
+    // 绑定复杂 UI 规则集标题行展开/收起事件
+    this._bindRuleGroupCollapseEvents(rulesContent);
+  }
+
+  // 绑定规则集标题行点击展开/收起
+  _bindRuleGroupCollapseEvents(container) {
+    const headers = container.querySelectorAll('.rule-group__header');
+    headers.forEach(header => {
+      header.addEventListener('click', (e) => {
+        // 点击按钮、开关、操作区时不触发收起/展开
+        if (e.target.closest('.rule-group__actions')) return;
+        if (e.target.closest('.toggle')) return;
+        if (e.target.closest('button')) return;
+        if (e.target.closest('input')) return;
+        if (e.target.closest('label')) return;
+
+        const groupId = header.getAttribute('data-group-id');
+        if (!groupId) return;
+        this._toggleRuleGroupCollapse(groupId, header);
+      });
+    });
+  }
+
+  // 切换单个规则集展开/收起状态
+  _toggleRuleGroupCollapse(groupId, headerEl) {
+    const groupEl = headerEl.closest('.rule-group');
+    if (!groupEl) return;
+    const contentEl = groupEl.querySelector('.rule-group__content');
+    const willCollapse = !this.collapsedGroups.has(groupId);
+
+    if (willCollapse) {
+      this.collapsedGroups.add(groupId);
+      contentEl?.classList.add('is-collapsed');
+    } else {
+      this.collapsedGroups.delete(groupId);
+      contentEl?.classList.remove('is-collapsed');
+    }
+
+    // 持久化折叠状态
+    try {
+      settingsStorage.setItem('collapsedRuleGroups', JSON.stringify(Array.from(this.collapsedGroups)));
+    } catch (e) {
+      // 忽略存储失败
+    }
+  }
+
+  // 检查规则组是否有触发次数限制
+  hasTriggersInGroup(rules) {
+    return rules && rules.some(rule => rule.maxTriggers !== undefined && rule.maxTriggers > 0);
+  }
+
+  // 生成规则组HTML
+  generateGroupRulesHtml(rules, parentGroupEnabled = true, groupId = '') {
+    if (!rules || rules.length === 0) {
+      return `
+        <div class="rules-list__group-empty">
+          <i class="bi bi-info-circle"></i>
+          <span>暂无规则</span>
+        </div>
+      `;
+    }
+
+    let html = '';
+    rules.forEach(rule => {
+      // 规则的有效状态：规则本身启用 且 父规则集启用（如果有的话）
+      const isEffective = rule.enabled && parentGroupEnabled;
+      const statusClass = isEffective ? 'enabled' : 'disabled';
+
+      // 如果父规则集被禁用，子规则的开关应该显示为禁用状态
+      const isDisabledByParent = !parentGroupEnabled;
+
+      html += `
+        <div class="rule-item is-${statusClass}" data-rule-id="${rule.id}" data-ruleset-id="${parentGroupEnabled ? '' : ''}">
+          <div class="rule-item__header">
+            <div class="rule-item__info">
+              <div class="rule-item__name">
+                ${rule.name || '未命名规则'}
+                <label class="toggle ${isDisabledByParent ? 'is-disabled' : ''}">
+                  <input type="checkbox" ${rule.enabled ? 'checked' : ''} 
+                         ${isDisabledByParent ? 'disabled' : ''}
+                         onchange="universalAnswerFeature.toggleRule('${rule.id}', this.checked, '${groupId}')"
+                         title="${isDisabledByParent ? '规则集已禁用，无法单独启用此规则' : ''}">
+                  <span class="toggle__slider"></span>
+                </label>
+              </div>
+              ${rule.description ? `<div class="rule-item__description">${rule.description}</div>` : ''}
+            </div>
+            <div class="rule-item__actions">
+              <button class="btn--rule btn--edit" onclick="universalAnswerFeature.editRule('${rule.id}', '${groupId}')" title="编辑">
+                <i class="bi bi-pencil"></i>
+              </button>
+              ${rule.maxTriggers ? `
+              <button class="btn--rule btn--reset" onclick="universalAnswerFeature.resetRuleTriggers('${rule.id}', '${groupId}')" title="重置触发次数">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              ` : ''}
+              <button class="btn--rule btn--delete" onclick="universalAnswerFeature.deleteRule('${rule.id}', '${groupId}')" title="删除">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+          <div class="rule-item__config">
+            ${this.formatRuleConfig(rule)}
+          </div>
+        </div>
+      `;
+    });
+
+    return html;
+  }
+
+  // 编辑规则集
+  async editRuleGroup(groupId) {
+    try {
+      const rulesets = await window.electronAPI.getRules();
+      const group = rulesets.find(rs => rs.id === groupId);
+      if (group) {
+        this.showRuleGroupModal(group);
+      } else {
+        this.logManager.addErrorLog('规则集不存在', "规则");
+      }
+    } catch (error) {
+      moduleLog.error('获取规则集失败:', error);
+      this.logManager.addErrorLog('获取规则集失败: ' + error.message, "规则");
+    }
+  }
+
+  // 获取规则类型文本
+  getRuleTypeText(type) {
+    const typeMap = {
+      'content-change': '内容修改',
+      'zip-implant': 'ZIP注入',
+      'zip-implant-dynamic': '动态注入',
+      'answer-upload': '答案上传',
+      'post-change-time': '修改时间',
+      'tts-generate': 'TTS语音生成'
+    };
+    return typeMap[type] || type || '未知类型';
+  }
+
+  // 格式化规则配置
+  formatRuleConfig(rule) {
+    let html = '<div class="rule-item__config-items">';
+
+    if (rule.type === 'content-change') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlPattern || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">修改类型:</span>
+          <span class="rule-item__config-value">${this.getChangeTypeLabel(rule.changeType)}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">原始内容:</span>
+          <span class="rule-item__config-value">${rule.originalContent || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">新内容:</span>
+          <span class="rule-item__config-value">${rule.newContent || '未设置'}</span>
+        </div>
+        ${rule.maxTriggers ? `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
+      `;
+    } else if (rule.type === 'zip-implant') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">文件信息URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlFileinfo || '未设置（匹配所有fileinfo请求）'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">ZIP URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlZip || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">目标文件名:</span>
+          <span class="rule-item__config-value">${rule.targetFileName || '未设置（匹配所有文件）'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">注入文件:</span>
+          <span class="rule-item__config-value">${rule.zipImplant || '未设置'}</span>
+        </div>
+        ${rule.maxTriggers ? `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
+      `;
+    } else if (rule.type === 'zip-implant-dynamic') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">文件信息URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlFileinfo || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">ZIP URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlZip || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">目标文件名:</span>
+          <span class="rule-item__config-value">${rule.targetFileName || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">注入脚本:</span>
+          <span class="rule-item__config-value">${rule.injectScript || '默认(auto-listening.js)'}${rule.injectScripts && rule.injectScripts.length ? ' (多脚本: ' + rule.injectScripts.join(', ') + ')' : ''}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">下载超时:</span>
+          <span class="rule-item__config-value">${rule.downloadTimeout ? rule.downloadTimeout + 'ms' : '30000ms(默认)'}</span>
+        </div>
+        ${rule.maxTriggers ? `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
+      `;
+    } else if (rule.type === 'answer-upload') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">上传URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlUpload || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">上传类型:</span>
+          <span class="rule-item__config-value">${rule.uploadType === 'original' ? '原始数据' : '提取的答案'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">服务器位置:</span>
+          <span class="rule-item__config-value">${rule.serverLocate || '未设置'}</span>
+        </div>
+        ${rule.maxTriggers ? `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">触发次数:</span>
+          <span class="rule-item__config-value">${rule.currentTriggers || 0}/${rule.maxTriggers}</span>
+        </div>
+        ` : ''}
+      `;
+    } else if (rule.type === 'post-change-time') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">URL匹配:</span>
+          <span class="rule-item__config-value">${rule.urlRequest || '未设置'}</span>
+        </div>
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">目标秒数:</span>
+          <span class="rule-item__config-value">${rule.targetSeconds || 1212}</span>
+        </div>
+      `;
+    } else if (rule.type === 'tts-generate') {
+      html += `
+        <div class="rule-item__config-item">
+          <span class="rule-item__config-label">TTS基础路径:</span>
+          <span class="rule-item__config-value">${rule.ttsBasePath || '/tts'}</span>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  // 获取修改类型标签
+  getChangeTypeLabel(changeType) {
+    const labels = {
+      'request-body': '请求体',
+      'response-body': '响应体',
+      'request-headers': '请求头',
+      'response-headers': '响应头'
+    };
+    return labels[changeType] || changeType || '未设置';
+  }
+
+  // 编辑规则
+  async editRule(ruleId, rulesetId = null) {
+    try {
+      const rulesets = await window.electronAPI.getRules();
+      let rule = null;
+      let groupId = rulesetId;
+      if (rulesetId) {
+        const rs = rulesets.find(rs => rs.id === rulesetId);
+        if (rs) {
+          rule = rs.rules.find(r => r.id === ruleId);
+        }
+      } else {
+        for (const rs of rulesets) {
+          const found = rs.rules.find(r => r.id === ruleId);
+          if (found) {
+            rule = found;
+            groupId = rs.id;
+            break;
+          }
+        }
+      }
+      if (rule) {
+        this.showRuleModal(rule, groupId);
+      } else {
+        this.logManager.addErrorLog('规则不存在', "规则");
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`加载规则失败: ${error.message}`, "规则");
+    }
+  }
+
+  // 删除规则
+  async deleteRule(ruleId, rulesetId = null) {
+    if (!confirm('确定要删除这个规则吗？此操作不可撤销。')) {
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.deleteRule(ruleId, rulesetId);
+      if (result.success) {
+        this.logManager.addSuccessLog('规则删除成功', "规则");
+        this.loadRules();
+        this.renderSimpleHomeRulesets().catch(() => {})
+      } else {
+        this.logManager.addErrorLog(`规则删除失败: ${result.error}`, "规则");
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`规则删除失败: ${error.message}`, "规则");
+    }
+  }
+
+  // 重置规则触发次数
+  async resetRuleTriggers(ruleId, rulesetId = null) {
+    if (!confirm('确定要重置此规则的触发次数吗？')) {
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.resetRuleTriggers(ruleId, rulesetId);
+      if (result.success) {
+        this.logManager.addSuccessLog('触发次数重置成功', "规则");
+        this.loadRules();
+        this.renderSimpleHomeRulesets().catch(() => {});
+      } else {
+        this.logManager.addErrorLog(`触发次数重置失败: ${result.error}`, "规则");
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`触发次数重置失败: ${error.message}`, "规则");
+    }
+  }
+
+  // 切换规则状态
+  async toggleRule(ruleId, enabled, rulesetId = null) {
+    try {
+      const compatibilityProtectionEnabled = settingsStorage.getItem('compatibility-protection-enabled') !== 'false';
+
+      const result = await window.electronAPI.toggleRule(ruleId, enabled, compatibilityProtectionEnabled, rulesetId);
+      if (result.success) {
+        this.logManager.addSuccessLog(`规则已${enabled ? '启用' : '禁用'}`, "规则");
+
+        if (enabled && result.disabledGroups && result.disabledGroups.length > 0) {
+          const names = result.disabledGroups.join('、');
+          this.logManager.addInfoLog(`已自动关闭不兼容规则集：${names}`, "规则");
+        }
+
+        this.loadRules();
+        this.renderSimpleHomeRulesets().catch(() => {});
+      } else {
+        this.logManager.addErrorLog(`规则状态更新失败: ${result.error}`, "规则");
+        const checkbox = document.querySelector(`input[onchange*="${ruleId}"]`);
+        if (checkbox) {
+          checkbox.checked = !enabled;
+        }
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`规则状态更新失败: ${error.message}`, "规则");
+      const checkbox = document.querySelector(`input[onchange*="${ruleId}"]`);
+      if (checkbox) {
+        checkbox.checked = !enabled;
+      }
+    }
+  }
+
+  browseZipFile() {
+    window.electronAPI.openImplantZipChoosing();
+  }
+
+  // 进入简单模式规则集
+  async enterSimpleRuleset(groupId) {
+    if (!await this.applyExclusiveRuleset(groupId)) return;
+    document.documentElement.setAttribute('data-ui', 'simple');
+    document.documentElement.setAttribute('data-simple-page', 'app');
+    this.state.switchView('answers');
+  }
+
+  // 应用排他规则集
+  async applyExclusiveRuleset(groupId) {
+    let rulesets;
+    try {
+      rulesets = await window.electronAPI.getRules();
+    } catch (e) {
+      this.logManager.addErrorLog(`读取规则失败: ${e.message}`, "规则");
+      return;
+    }
+    const target = rulesets.find(rs => rs.id === groupId);
+    if (!target) {
+      this.logManager.addErrorLog('未找到该规则集', "规则");
+      return;
+    }
+
+    const compatibilityProtectionEnabled = settingsStorage.getItem('compatibility-protection-enabled') !== 'false';
+
+    let isCompatible = true;
+    if (target.compatible !== undefined && target.compatible !== null) {
+      isCompatible = target.compatible;
+    } else {
+      const hasInjection = (target.rules || []).some(r => r.type === 'zip-implant' || r.type === 'zip-implant-dynamic');
+      isCompatible = !hasInjection;
+    }
+
+    let changed = false;
+    const disabledGroups = [];
+    const updated = rulesets.map(rs => {
+      if (rs.id === groupId) {
+        if (!rs.enabled) {
+          changed = true;
+          return { ...rs, enabled: true };
+        }
+        return rs;
+      }
+      if (compatibilityProtectionEnabled && !isCompatible && rs.enabled) {
+        changed = true;
+        disabledGroups.push(rs.name || rs.id);
+        return { ...rs, enabled: false };
+      }
+      return rs;
+    });
+    if (changed) {
+      const res = await window.electronAPI.saveResponseRules(updated);
+      if (!res || !res.success) {
+        this.logManager.addErrorLog('保存规则集开关失败', "规则");
+        return;
+      }
+      this.logManager.addSuccessLog(`已启用规则集：${target.name || groupId}`, "规则");
+      if (disabledGroups.length > 0) {
+        const names = disabledGroups.join('、');
+        this.logManager.addInfoLog(`已自动关闭不兼容规则集：${names}`, "规则");
+      }
+    }
+    const ui = document.documentElement.getAttribute('data-ui');
+    await this.renderSimpleHomeRulesets();
+    if (ui === 'simple' && this.state.currentView === 'rules') {
+      await this.loadRules();
+    }
+    return true;
+  }
+
+  // 渲染简单模式主页规则集
+  async renderSimpleHomeRulesets() {
+    if (document.documentElement.getAttribute('data-ui') !== 'simple') {
+      return;
+    }
+    const grid = document.getElementById('simple-ruleset-grid');
+    const emptyEl = document.getElementById('simple-ruleset-empty');
+    if (!grid) {
+      return;
+    }
+    let rulesets;
+    try {
+      rulesets = await window.electronAPI.getRules();
+    } catch (e) {
+      grid.innerHTML = '';
+      if (emptyEl) {
+        emptyEl.hidden = false;
+        emptyEl.textContent = '无法加载规则集列表';
+      }
+      return;
+    }
+    if (rulesets.length === 0) {
+      grid.innerHTML = '';
+      if (emptyEl) {
+        emptyEl.hidden = false;
+        emptyEl.textContent = '暂无已安装的规则集，请在专业模式下从扩展规则集安装或导入。';
+      }
+      return;
+    }
+    if (emptyEl) {
+      emptyEl.hidden = true;
+    }
+    grid.innerHTML = rulesets.map((g) => {
+      const name = Utils.escapeHtml(g.name || '未命名规则集');
+      const desc = Utils.escapeHtml(g.description || '无描述');
+      const gid = Utils.escapeHtml(String(g.id));
+      const active = g.enabled ? ' simple-home__card is-active' : ' simple-home__card';
+      return `<button type="button" class="${active}" data-group-id="${gid}"><h3>${name}</h3><p>${desc}</p></button>`;
+    }).join('');
+    grid.querySelectorAll('.simple-home__card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const gid = card.getAttribute('data-group-id');
+        if (gid) {
+          this.enterSimpleRuleset(gid);
+        }
+      });
+    });
+  }
+
+  // 删除简单模式规则集
+  async deleteSimpleRuleset(groupId) {
+    if (!confirm('确定删除这个规则集吗？这会同时删除规则集中的规则。')) {
+      return;
+    }
+    try {
+      const result = await window.electronAPI.deleteRule(groupId);
+      if (result && result.success) {
+        this.logManager.addSuccessLog('规则集删除成功', "规则");
+        await this.renderSimpleHomeRulesets();
+        if (this.state.currentView === 'rules') {
+          await this.loadRules();
+        }
+      } else {
+        this.logManager.addErrorLog(`规则集删除失败: ${result ? result.error : '未知错误'}`, "规则");
+      }
+    } catch (error) {
+      this.logManager.addErrorLog(`规则集删除失败: ${error.message}`, "规则");
+    }
+  }
+}
+
+// Submodules share this feature's instance; existing method contracts stay unchanged.
+Object.assign(RulesUI.prototype, editorMethods);
+export default RulesUI;

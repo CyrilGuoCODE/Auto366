@@ -141,6 +141,8 @@ html[data-ui="simple"] .btn--port-change {
 }
 
 .simple-home__card {
+    font: inherit;
+    text-align: left;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-lg);
     padding: var(--space-lg);
@@ -414,15 +416,11 @@ html[data-ui="simple"] .traffic-monitor__details {
     height: 45%;
 }
 
-html[data-ui="simple"] #uploadRulesetBtn {
-    display: none !important;
-}
-
 html[data-ui="simple"] #addRuleGroupBtn {
     display: none !important;
 }
 
-html[data-ui="simple"] #simple-open-community-from-rules {
+html[data-ui="simple"] #simple-open-extensions-from-rules {
     display: inline-flex !important;
 }
 
@@ -539,4 +537,14 @@ html[data-ui="simple"] .settings__mode--professional {
     #simple-home .simple-home__grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* Keep the original home layout while allowing the menu to scroll above its footer. */
+html[data-ui="simple"][data-simple-page="menu"] .simple-home__container { flex: 1; min-height: 0; }
+html[data-ui="simple"][data-simple-page="menu"] #simple-home .simple-home__footer .simple-home__footer { position: static; padding-inline: 0; border-inline: 0; background: transparent; }
+@media (max-width: 768px), (max-height: 640px) {
+    html[data-ui="simple"][data-simple-page="menu"] #simple-home { overflow: auto; }
+    html[data-ui="simple"][data-simple-page="menu"] .simple-home__container { flex: none; }
+    html[data-ui="simple"][data-simple-page="menu"] #simple-main-menu { flex: none; overflow: visible; padding-bottom: 0; }
+    html[data-ui="simple"][data-simple-page="menu"] .simple-home__footer { position: static; }
 }

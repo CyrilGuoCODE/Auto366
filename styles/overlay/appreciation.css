@@ -19,16 +19,16 @@
     gap: var(--space-sm);
     padding: var(--space-md) var(--space-xl);
     background: var(--color-danger-400);
+    border: 1px solid transparent;
     color: var(--color-white);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    box-shadow: var(--shadow-lg);
+    box-shadow: none;
     -webkit-user-select: none;
     user-select: none;
 }
 
 .appreciation__icon:hover {
-    box-shadow: var(--shadow-xl);
     background: var(--color-danger-500);
 }
 
@@ -39,7 +39,7 @@
 }
 
 .appreciation__icon--heart.appreciation__icon--qq {
-    fill: var(--color-white);
+    fill: currentColor;
 }
 
 .appreciation__text {
@@ -126,3 +126,7 @@
 #settings-view .appreciation {
     margin: var(--space-md) 0 0;
 }
+
+/* Restore the home page's original appreciation buttons without changing settings. */
+.simple-home .appreciation__icon { border: 0; border-radius: var(--radius-full); box-shadow: var(--shadow-lg); }
+.simple-home .appreciation__icon:hover { box-shadow: var(--shadow-xl); }

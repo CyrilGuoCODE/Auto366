@@ -1,36 +1,31 @@
-const { app, ipcMain, dialog, BrowserWindow, shell } = require('electron');
-const { createClient } = require('@supabase/supabase-js');
+const moduleLog = require('./modules/logging').create('应用');
+const logging = require('./modules/logging');
+logging.initialize();
+const { app, dialog, BrowserWindow, shell } = require('electron');
+const ipcMain = require('./modules/register').forModule('app');
 
-const WindowManager = require('./modules/window');
-const ProxyServer = require('./modules/proxy');
-const CertificateManager = require('./modules/cert');
-const RulesManager = require('./modules/rules');
-const FileManager = require('./modules/file');
-const UpdateManager = require('./modules/update');
-const RulesLoader = require('./modules/rules-loader');
-const ProcessMonitor = require('./modules/process-monitor');
-const AnalyticsManager = require('./modules/analytics');
-const AgreementManager = require('./modules/agreement');
-const TunManager = require('./modules/tun');
-const SpeedManager = require('./modules/speed-manager');
-const TtsManager = require('./modules/tts');
-const ResourceDownloader = require('./modules/resource-downloader');
-
-const SUPABASE_URL = 'https://myenzpblosjnrtvicdor.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15ZW56cGJsb3NqbnJ0dmljZG9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NjAxMzAsImV4cCI6MjA4MzUzNjEzMH0.XkwQ72RmH8l1_krYc_IdPXsFk5pwL5JXQ3mDZ-ax3mU';
-const SUPABASE_BUCKET = 'auto366-share';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const WindowManager = require('./modules/window/index');
+const ProxyServer = require('./modules/proxy/index');
+const AiManager = require('./modules/ai');
+const CertificateManager = require('./modules/proxy/cert');
+const RulesManager = require('./modules/rules/index');
+const FileManager = require('./modules/file/index');
+const UpdateManager = require('./modules/app/update');
+const RulesLoader = require('./modules/rules/loader');
+const ProcessMonitor = require('./modules/app/monitor');
+const AnalyticsManager = require('./modules/app/analytics');
+const AgreementManager = require('./modules/app/agreement');
+const TunManager = require('./modules/proxy/tun');
+const SpeedManager = require('./modules/speed');
+const TtsManager = require('./modules/tts/index');
+const ResourceDownloader = require('./modules/resources/index');
 
 let mainWindow;
 let proxyServer;
-let windowManager;
-let rulesManager;
-let fileManager;
+let aiManager;
 let updateManager;
-let rulesLoader;
 let processMonitor;
 let analyticsManager;
-let agreementManager;
 let tunManager;
 let speedManager;
 let ttsManager;
@@ -38,76 +33,56 @@ let resourceDownloader;
 
 process.on('uncaughtException', (error) => {
   if (error.code === 'ECONNRESET') {
-    console.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
+    moduleLog.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
     return;
   }
-  console.error(error);
+  moduleLog.error(error);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  if (reason.code === 'ECONNRESET') {
-    console.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
+process.on('unhandledRejection', (reason) => {
+  if (reason?.code === 'ECONNRESET') {
+    moduleLog.log('网络连接被重置，这可能是因为远程服务器主动关闭了连接');
     return;
   }
-  console.error(reason);
-});
-
-ipcMain.handle('open-directory-choosing', async () => {
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-  if (!result.canceled) {
-    return result.filePaths[0];
-  }
-  return null;
-});
-
-ipcMain.on('open-file-choosing', async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ['openFile'],
-    filters: [
-      { name: 'All Files', extensions: ['*'] },
-      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
-      { name: 'Videos', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv'] },
-      { name: 'Archives', extensions: ['zip', 'rar', '7z', 'tar', 'gz'] },
-      { name: 'Documents', extensions: ['pdf', 'doc', 'docx', 'txt', 'rtf'] },
-      { name: 'JSON Files', extensions: ['json'] },
-      { name: 'XML Files', extensions: ['xml'] },
-      { name: 'HTML Files', extensions: ['html', 'htm'] }
-    ]
-  });
-  if (!result.canceled) mainWindow.webContents.send('choose-file', result.filePaths[0]);
-});
-
-ipcMain.on('open-implant-zip-choosing', async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ['openFile'],
-    filters: [
-      { name: 'Zip Files', extensions: ['zip'] }
-    ]
-  });
-  if (!result.canceled) mainWindow.webContents.send('choose-implant-zip', result.filePaths[0]);
+  moduleLog.error(reason);
 });
 
 app.whenReady().then(async () => {
+  logging.register();
+  require('./modules/config').register(() => {
+    logging.restorePreferences();
+    proxyServer?.loadConfig();
+    aiManager?.loadConfig();
+    ttsManager?._loadConfig();
+    updateManager?.checkForUpdatesOnStartup();
+  });
   // 初始化数据分析
   analyticsManager = new AnalyticsManager();
   analyticsManager.init();
   analyticsManager.registerIpcHandlers();
   analyticsManager.capture('app_launched');
 
-  windowManager = new WindowManager();
+  const windowManager = new WindowManager();
   mainWindow = windowManager.createWindow();
 
   updateManager = new UpdateManager(mainWindow);
-  updateManager.checkForUpdatesOnStartup();
 
   const certManager = new CertificateManager();
-  rulesManager = new RulesManager();
+  const rulesManager = new RulesManager();
   ttsManager = new TtsManager();
+  aiManager = new AiManager();
   proxyServer = new ProxyServer(certManager, rulesManager, analyticsManager, ttsManager);
-  fileManager = new FileManager(process.cwd());
-  rulesLoader = new RulesLoader(app.getAppPath());
+  proxyServer.answerLearning = new (require('./modules/answers/learning'))({
+    getAiConfig: () => aiManager.getAiConfig(),
+    notify: (channel, data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
+    }
+  });
+  proxyServer.answerLearning.register();
+  const fileManager = new FileManager(process.cwd());
+  const rulesLoader = new RulesLoader(app.getAppPath());
   processMonitor = new ProcessMonitor();
-  agreementManager = new AgreementManager();
+  const agreementManager = new AgreementManager();
   agreementManager.init();
   resourceDownloader = new ResourceDownloader();
   resourceDownloader.init();  // 创建目录 + 迁移旧版 TTS/TUN 资源
@@ -118,40 +93,34 @@ app.whenReady().then(async () => {
   ttsManager.init(app.getAppPath(), mainWindow, rulesManager);
   ttsManager.setResourceDownloader(resourceDownloader);
 
+  proxyServer.localServer = new (require('./modules/local-server'))({
+    proxy: proxyServer, ai: aiManager, tts: ttsManager,
+    output: proxyServer.answerOutput, appPath: process.cwd(),
+  });
+
   windowManager.registerIpcHandlers();
   rulesManager.registerIpcHandlers();
-  proxyServer.registerIpcHandlers(dialog, mainWindow, supabase, SUPABASE_BUCKET, rulesManager);
-  fileManager.registerIpcHandlers(mainWindow, windowManager);
+  proxyServer.registerIpcHandlers(dialog, mainWindow);
+  require('./modules/injection/ipc').call(proxyServer.injection);
+  aiManager.registerIpcHandlers();
+  require('./modules/answers/sharing')();
+  require('./modules/rules/extensions')({ appPath: process.cwd() });
+  fileManager.registerIpcHandlers(mainWindow);
+  require('./modules/answers/export')({ files: fileManager, windowManager });
   processMonitor.registerIpcHandlers(mainWindow);
   tunManager.registerIpcHandlers(mainWindow);
   speedManager.registerIpcHandlers(mainWindow);
   ttsManager.registerIpcHandlers(mainWindow);
   resourceDownloader.registerIpcHandlers(mainWindow);
 
-  // 注册代理启动/停止的分析追踪
-  ipcMain.on('start-answer-proxy', () => {
-    analyticsManager.capture('proxy_started');
-  });
-  ipcMain.on('stop-answer-proxy', () => {
-    analyticsManager.capture('proxy_stopped');
-  });
+  certManager.registerIpcHandlers();
 
-  ipcMain.handle('reset-certificate', async () => {
-    try {
-      return await certManager.resetCertificate();
-    } catch (error) {
-      return { success: false, deleted: 0, imported: false, errors: [error.message] };
-    }
-  });
-
-  ipcMain.handle('restart-app', () => {
+  ipcMain.handle('restart-app', async () => {
     app.relaunch();
-    app.exit(0);
+    app.quit();
   });
 
-  ipcMain.handle('open-url', (event, url) => {
-    shell.openExternal(url);
-  });
+  ipcMain.handle('open-url', (event, url) => shell.openExternal(url));
 
   await rulesLoader.loadBuiltinRulesets(rulesManager);
 
@@ -160,21 +129,40 @@ app.whenReady().then(async () => {
       mainWindow = windowManager.createWindow();
     }
   });
+}).catch(error => {
+  moduleLog.error('应用启动失败：', error);
+  dialog.showErrorBox('Auto366 启动失败', error.stack || String(error));
+  app.quit();
 });
 
-app.on('before-quit', async () => {
-  if (tunManager) {
-    tunManager.stop();
-  }
-  if (speedManager) {
-    speedManager.stop();
-  }
-  if (ttsManager) {
-    ttsManager.stop();
-  }
-  if (analyticsManager) {
-    analyticsManager.capture('app_closed');
-    await analyticsManager.shutdown();
+let cleanupStarted = false;
+let cleanupFinished = false;
+app.on('before-quit', async event => {
+  if (cleanupFinished) return;
+  event.preventDefault();
+  if (cleanupStarted) return;
+  cleanupStarted = true;
+  try {
+    proxyServer?.answerLearning?.dispose();
+    for (const manager of [resourceDownloader, processMonitor, tunManager, proxyServer, speedManager, ttsManager]) {
+      try { if (manager) await manager.stop(); }
+      catch (error) { moduleLog.error('停止后台模块失败：', error); }
+    }
+    await proxyServer?.trafficCache.dispose();
+    if (analyticsManager) {
+      analyticsManager.capture('app_closed');
+      // Analytics must not hold the application open indefinitely during shutdown.
+      let timer;
+      try {
+        await Promise.race([analyticsManager.shutdown(), new Promise(resolve => { timer = setTimeout(resolve, 3000); })]);
+      } finally { clearTimeout(timer); }
+    }
+  } catch (error) {
+    moduleLog.error('退出清理失败：', error);
+  } finally {
+    try { await logging.close(); }
+    catch (error) { moduleLog.error('关闭日志失败：', error); }
+    finally { cleanupFinished = true; app.quit(); }
   }
 });
 
