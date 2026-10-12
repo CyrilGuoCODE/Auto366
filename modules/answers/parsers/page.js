@@ -12,6 +12,70 @@ extractJsonFromPageConfig(content) {
     return null;
   },
 
+// 北京听说卷把题目包在 questionList[].questionObj 里。没有这层的旧卷原样返回。
+unwrapQuestionEntry(entry) {
+    if (!entry || typeof entry !== 'object' || !entry.questionObj || typeof entry.questionObj !== 'object') {
+      return entry;
+    }
+    const question = { ...entry.questionObj };
+    if (question.question_score == null || question.question_score === '') {
+      const score = String(entry.questionScore || '')
+        .split(',')
+        .reduce((sum, value) => sum + (Number(value) || 0), 0);
+      if (score) question.question_score = score;
+    }
+    return question;
+  },
+
+// 听后记录的词在 answers_list，不在 answer_text。空 content 的 options 只是占位，不能当选项。
+collectRecordBlanks(question) {
+    const blanks = [];
+    const seen = new Set();
+    const visit = (node) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node.answers_list)) {
+        for (const item of node.answers_list) {
+          const content = this.cleanHtmlText(item && item.content || '');
+          if (!content) continue;
+          const id = Number(item.id) || blanks.length + 1;
+          const elementId = String(item.element_id || node.question_id || '');
+          const key = elementId + '|' + id + '|' + content;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          blanks.push({
+            id,
+            content,
+            elementId,
+            questionType: Number(node.question_type) || 4,
+            qtypeId: Number(node.qtype_id) || Number(question && question.qtype_id) || undefined
+          });
+        }
+      }
+      for (const child of node.questions_list || []) visit(child);
+    };
+    visit(question);
+    blanks.sort((a, b) => a.id - b.id);
+    return blanks;
+  },
+
+recordAnswersFromQuestion(question, mediaFile) {
+    const blanks = this.collectRecordBlanks(question);
+    if (!blanks.length) return [];
+    const mediaIndex = this.extractMediaIndexFromContent(mediaFile || question.media?.file || '');
+    return blanks.map(blank => ({
+      question: `听后记录 (${blank.id})`,
+      answer: blank.content,
+      content: `请填写: ${blank.content}`,
+      questionText: `听后记录 (${blank.id})`,
+      pattern: '听后记录',
+      questionType: blank.questionType,
+      qtypeId: blank.qtypeId,
+      mediaIndex,
+      elementId: blank.elementId || undefined,
+      blankIndex: blank.id
+    }));
+  },
+
 extractFromPage1(pageConfig) {
     const answers = [];
     try {
@@ -22,7 +86,7 @@ extractFromPage1(pageConfig) {
 
       // 结构1: pageConfig.questionList（直接层级，如口语问答题型）
       if (pageConfig.questionList && Array.isArray(pageConfig.questionList)) {
-        allQuestionLists.push(...pageConfig.questionList);
+        allQuestionLists.push(...pageConfig.questionList.map(entry => this.unwrapQuestionEntry(entry)));
       }
 
       // 结构2: slides[].questionList（嵌套层级，如选择题题型）
@@ -32,13 +96,15 @@ extractFromPage1(pageConfig) {
         if (!Array.isArray(group)) continue;
         for (const slide of group) {
           if (slide && Array.isArray(slide.questionList)) {
-            allQuestionLists.push(...slide.questionList);
+            allQuestionLists.push(...slide.questionList.map(entry => this.unwrapQuestionEntry(entry)));
           }
         }
       }
 
       for (const question of allQuestionLists) {
           const qtypeId = question.qtype_id;
+
+          answers.push(...this.recordAnswersFromQuestion(question));
 
           // 选择题（已有逻辑）
           if (question.answer_text && question.options && question.options.length > 0) {
@@ -264,6 +330,9 @@ extractFromJSRaw(jsStr, fileName, questionFile = null) {
   },
 
 detectExactType(questionObj) {
+    // 听后记录的子题带着空 content 的 options。先认 answers_list，否则会被当成听后选择然后丢光。
+    if (this.collectRecordBlanks(questionObj).length) return '听后记录';
+
     if ((questionObj.questions_list && questionObj.questions_list.length > 0 &&
       questionObj.questions_list[0].options && questionObj.questions_list[0].options.length > 0) ||
       (questionObj.options && questionObj.options.length > 0 && questionObj.answer_text)) {
@@ -517,6 +586,8 @@ parseQuestionFile(fileContent, mediaIndex) {
       const detectedType = this.detectExactType(questionObj);
 
       switch (detectedType) {
+        case '听后记录':
+          return this.recordAnswersFromQuestion(questionObj);
         case '听后选择':
           return this.parseChoiceQuestions(questionObj, mediaIndex);
         case '听后回答':

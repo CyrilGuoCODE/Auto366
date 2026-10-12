@@ -1952,6 +1952,67 @@
             return this.choicePlan;
         },
 
+        recordItems() {
+            return this.answers
+                .filter(a => a && a.pattern === '听后记录' && a.answer)
+                .slice()
+                .sort((a, b) => (Number(a.blankIndex) || 0) - (Number(b.blankIndex) || 0));
+        },
+
+        setBlankValue(el, value) {
+            try {
+                const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+                if (desc && desc.set) desc.set.call(el, value);
+                else el.value = value;
+            } catch (e) {
+                el.value = value;
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+        },
+
+        fillRecords(quiet) {
+            const items = this.recordItems();
+            if (!items.length) return 0;
+            const byId = new Map();
+            items.forEach(item => {
+                const id = String(item.elementId || '').toLowerCase();
+                if (id) byId.set(id, item);
+            });
+            const hosts = [...document.querySelectorAll('.u3compo-fillblanks-table-pc')];
+            if (!hosts.length) {
+                if (!quiet && this._recordMiss !== 'nohost') {
+                    this._recordMiss = 'nohost';
+                    addLog('听后记录: 页面上还没有填空组件，进入该题后会再试', 'warn');
+                }
+                return 0;
+            }
+            let wrote = 0;
+            hosts.forEach(host => {
+                const inputs = [...host.querySelectorAll('input.u3-blank')].filter(el => !el.disabled && !el.readOnly);
+                const paired = inputs.map((el, index) => {
+                    const holder = el.closest('.u3-sub-cont');
+                    const id = String(holder && holder.getAttribute('element-id') || '').toLowerCase();
+                    return { el, item: (id && byId.get(id)) || null, index };
+                });
+                const useOrder = paired.length === items.length && paired.every(pair => !pair.item);
+                paired.forEach(pair => {
+                    const item = pair.item || (useOrder ? items[pair.index] : null);
+                    if (!item) return;
+                    const want = String(item.answer);
+                    if (pair.el.value === want) return;
+                    this.setBlankValue(pair.el, want);
+                    wrote++;
+                });
+            });
+            if (wrote) {
+                this._recordMiss = '';
+                if (!quiet) addLog('听后记录: 已填 ' + wrote + ' 空', 'success');
+            }
+            return wrote;
+        },
+
         fillChoices(quiet) {
             if (!this.choices.length) {
                 if (!quiet) addLog('听说: 还没有听后选择的答案' + (this.answers.length ? '（这份卷子里没有）' : '（答案还没到）'), 'warn');
@@ -2029,7 +2090,9 @@
         startChoiceWatcher() {
             if (this._choiceTimer) return;
             this._choiceTimer = setInterval(() => {
-                if (this.running) this.fillChoices(true);
+                if (!this.running) return;
+                this.fillChoices(true);
+                this.fillRecords(true);
             }, 700);
         },
 
@@ -2589,8 +2652,10 @@
 
         renderPanelStatus() {
             const wrong = Math.min(this.choices.length, state.targetWrongCount || 0);
+            const records = this.answers.filter(a => a.pattern === '听后记录').length;
             this.setStatus('听说卷 · 共 ' + this.answers.length + ' 条 · 听后选择 ' + this.choices.length +
-                ' 道' + (wrong ? ' · 控分计划答错 ' + wrong + ' 道' : '') +
+                ' 道' + (records ? ' · 听后记录 ' + records + ' 空' : '') +
+                (wrong ? ' · 控分计划答错 ' + wrong + ' 道' : '') +
                 ' · 口语 ' + this.used.size + ' 条已处理');
         },
 
@@ -2599,7 +2664,7 @@
         createUI() {
             createUI('speaking');
             this.setAnswers(this.answers);
-            addLog('规则集 v10（听说界面，' + (this.detectedBy || '答案题型') + '）· bucket ' + BUCKET_URL +
+            addLog('规则集 v11（听说界面，' + (this.detectedBy || '答案题型') + '）· bucket ' + BUCKET_URL +
                 (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
             if (this.answers.length) {
                 const kinds = {};
@@ -2657,6 +2722,7 @@
                 if (!this.running) return;
 
                 const filled = this.fillChoices(false);
+                this.fillRecords(false);
                 this.startChoiceWatcher();
                 this.setStatus('选择题已处理' + (filled ? ' ' + filled + ' 道' : '') + ' · 等待朗读音频');
 
@@ -2768,7 +2834,7 @@
             Speaking.init(d.answers, d.by);
         } else {
             createUI();
-            addLog('规则集 v10（基础听力界面，' + d.by + '）· bucket ' + BUCKET_URL +
+            addLog('规则集 v11（基础听力界面，' + d.by + '）· bucket ' + BUCKET_URL +
                 (window.__A366__ ? '（代理注入）' : '（默认端口）'), 'info');
         }
     }
